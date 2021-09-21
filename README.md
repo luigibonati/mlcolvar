@@ -1,8 +1,8 @@
 mlcvs
 ==============================
 [//]: # (Badges)
-[![GitHub Actions Build Status](https://github.com/luigibonati/mlcvs/workflows/CI/badge.svg)](https://github.com/REPLACE_WITH_OWNER_ACCOUNT/mlcvs/actions?query=workflow%3ACI)
-[![codecov](https://codecov.io/gh/luigibonati/mlcvs/branch/master/graph/badge.svg)](https://codecov.io/gh/REPLACE_WITH_OWNER_ACCOUNT/mlcvs/branch/master)
+[![GitHub Actions Build Status](https://github.com/luigibonati/mlcvs/workflows/CI/badge.svg)](https://github.com/luigibonati/mlcvs/actions?query=workflow%3ACI)
+[![codecov](https://codecov.io/gh/luigibonati/mlcvs/branch/master/graph/badge.svg)](https://codecov.io/gh/luigibonati/mlcvs/branch/master)
 
 
 Machine learning collective variables
