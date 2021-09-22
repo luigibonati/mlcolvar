@@ -3,6 +3,8 @@
 # Add imports here
 from .lda import *
 from .io import *
+from .optim import *
+from .nn import *
 
 # Handle versioneer
 from ._version import get_versions
