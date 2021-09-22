@@ -2,6 +2,7 @@ name: test
 channels:
 
   - conda-forge
+  - pytorch
 
   - defaults
 dependencies:
@@ -17,7 +18,7 @@ dependencies:
     # Package dependencies
   - numpy
   - pandas
-  - torch
+  - pytorch
   - matplotlib
 
     # Pip-only installs
