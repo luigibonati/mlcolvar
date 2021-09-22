@@ -1,6 +1,5 @@
 """Linear discriminant analysis-based CVs."""
 
-from .io import colvar_to_pandas
 import torch
 import numpy as np
 
