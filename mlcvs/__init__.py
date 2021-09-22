@@ -2,6 +2,7 @@
 
 # Add imports here
 from .lda import *
+from .io import *
 
 # Handle versioneer
 from ._version import get_versions
