@@ -25,11 +25,13 @@ class NeuralNetworkCV(torch.nn.Module):
         Normalize inputs
     normOut: bool
         Normalize outputs
-    output_hidden: bool
-        Output hidden layer instead of CVs
 
     Methods
     -------
+    forward(x)
+        Compute model output
+    forward_nn(x)
+        Compute nn module output
     set_device(device)
         Set torch.device
     set_optimizer(opt)
@@ -107,7 +109,6 @@ class NeuralNetworkCV(torch.nn.Module):
         # options
         self.normIn = False
         self.normOut = False
-        self.output_hidden = False
         
         #type and device
         self.dtype_ = torch.float32
@@ -117,6 +118,52 @@ class NeuralNetworkCV(torch.nn.Module):
         #optimizer
         self.opt_ = None
         self.earlystopping_ = None
+
+    # Forward pass
+    def forward_nn(self, x: torch.tensor) -> (torch.tensor):
+        """
+        Compute outputs of neural network module
+        
+        Parameters
+        ----------
+        x : torch.tensor
+            input data
+
+        Returns
+        -------
+        z : torch.tensor
+            NN output
+
+        See Also
+        --------
+        forward : compute forward pass of the mdoel
+        """
+        if(self.normIn):
+            x = self._normalize(x,self.MeanIn,self.RangeIn)   
+        z = self.nn(x)
+        return z
+      
+    def forward(self, x: torch.tensor) -> (torch.tensor):
+        """
+        Default forward method, in base class it is an alias to `forward_nn`
+        
+        Parameters
+        ----------
+        x : torch.tensor
+            input data
+
+        Returns
+        -------
+        z : torch.tensor
+            NN output
+
+        See Also
+        --------
+        forward_nn : compute forward pass of NN module
+
+        """
+        z = self.forward_nn(x)
+        return z
 
     # Device / optimizer / earlystopping
 
@@ -216,11 +263,6 @@ class NeuralNetworkCV(torch.nn.Module):
         ----------
         x : torch.tensor
             reference set over which compute the standardization
-
-        Returns
-        -------
-        out : dictionary
-            Parameters
         """
         #disable normOut for unbiased cv evaluation
         self.normOut = False
