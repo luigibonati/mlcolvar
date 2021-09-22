@@ -6,18 +6,19 @@ import torch
 
 class EarlyStopping():
     """
-    Early stopping to stop the training when the loss does not improve after
+    Early stopping the training when the loss does not improve after
     a number of epochs.
     
     Examples
     --------
-    >>> early_stopping = EarlyStopping(patience=10,min_delta=0,consecutive=True,log=False,save_best=True)
-    >>> while not early_stopping.early_stop:
-    >>>     train_loss = ...
-    >>>     valid_loss = ...
-    >>>     early_stopping(valid_loss,model)
-    >>> best_valid_loss = early_stopping.best_valid
-    >>> best_model = early_stopping.best_model 
+    early_stopping = EarlyStopping(patience=10,min_delta=0,consecutive=True,log=False,save_best=True)
+    while not early_stopping.early_stop:
+        train_loss = ...
+        valid_loss = ...
+        early_stopping(valid_loss,model)
+
+    best_valid_loss = early_stopping.best_valid
+    best_model = early_stopping.best_model 
     """
 
     def __init__(self, patience=5, min_delta=0, consecutive=True, log = False, save_best=True):
