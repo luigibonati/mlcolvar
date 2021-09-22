@@ -14,6 +14,12 @@ dependencies:
   - pytest-cov
   - codecov
 
+    # Package dependencies
+  - numpy
+  - pandas
+  - torch
+  - matplotlib
+
     # Pip-only installs
   #- pip:
   #  - codecov

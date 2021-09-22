@@ -1,6 +1,5 @@
 """Linear discriminant analysis based CVs."""
 
-from matplotlib import pyplot as plt
 from mlcvs.io import colvar_to_pandas
 import torch
 import numpy as np
@@ -275,7 +274,7 @@ class LinearDiscriminantAnalysis:
                     print(f'{self.features_names_[j]},',end='')
             print("\b COEFFICIENTS=",end='') 
             for j in range(self.d_):
-                print(np.round(self.evecs_[j,i].numpy(),6),end=',')
+                print(np.round(self.evecs_[j,i].cpu().numpy(),6),end=',')
             print('\b PERIODIC=NO')
 
 
@@ -283,7 +282,7 @@ if __name__ == "__main__":
 
     # Set device and dtype
     dtype = torch.float32
-    device = torch.device('cpu') #torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') #torch.device('cpu') #
 
     # Load data
     dataA = colvar_to_pandas(folder='mlcvs/data/2d-basins/',filename='COLVAR_stateA')
