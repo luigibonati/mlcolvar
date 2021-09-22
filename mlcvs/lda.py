@@ -1,12 +1,12 @@
-"""Linear discriminant analysis based CVs."""
+"""Linear discriminant analysis-based CVs."""
 
-from mlcvs.io import colvar_to_pandas
+from .io import colvar_to_pandas
 import torch
 import numpy as np
 
-class LinearDiscriminantAnalysis:
+class LinearDiscriminant:
     """
-    Linear Discriminant Analysis
+    Linear Discriminant CV
 
     Attributes
     ----------
@@ -44,6 +44,10 @@ class LinearDiscriminantAnalysis:
         self.features_names_ = None
         self.lambda_ = 1e-6
 
+        # Initialize device and dtype
+        self.dtype_ = torch.float32
+        self.device_ = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
     def LDA(self, H, label, save_params = True):
         """
         Internal method which performs LDA and saves parameters.
@@ -76,8 +80,8 @@ class LinearDiscriminantAnalysis:
         #Total scatter matrix (cov matrix over all observations)
         S_t = H_bar.t().matmul(H_bar) / (N - 1)
         #Define within scatter matrix and compute it
-        S_w = torch.Tensor().new_zeros((d, d), device = device, dtype = dtype)    
-        S_w_inv = torch.Tensor().new_zeros((d, d), device = device, dtype = dtype)
+        S_w = torch.Tensor().new_zeros((d, d), device = self.device_, dtype = self.dtype_)    
+        S_w_inv = torch.Tensor().new_zeros((d, d), device = self.device_, dtype = self.dtype_)
         #Loop over classes to compute means and covs
         for i in categ:
             #check which elements belong to class i
@@ -93,14 +97,14 @@ class LinearDiscriminantAnalysis:
         S_b = S_t - S_w
 
         # Regularize S_w
-        S_w = S_w + self.lambda_ * torch.diag(torch.Tensor().new_ones((d), device = device, dtype = dtype))
+        S_w = S_w + self.lambda_ * torch.diag(torch.Tensor().new_ones((d), device = self.device_, dtype = self.dtype_))
 
         # -- Generalized eigenvalue problem: S_b * v_i = lambda_i * Sw * v_i --
 
         # (1) use cholesky decomposition for S_w
         L = torch.cholesky(S_w,upper=False)
 
-        # (2) define new matrix using cholesky decomposition and 
+        # (2) define new matrix using cholesky decomposition
         L_t = torch.t(L)
         L_ti = torch.inverse(L_t)
         L_i = torch.inverse(L)
@@ -116,7 +120,7 @@ class LinearDiscriminantAnalysis:
         eigvecs = torch.matmul(L_ti,eigvecs)
 
         #normalize them
-        for i in range(eigvecs.shape[1]): # maybe change in sum along axis?
+        for i in range(eigvecs.shape[1]): # TODO maybe change in sum along axis?
             norm=eigvecs[:,i].pow(2).sum().sqrt()
             eigvecs[:,i].div_(norm)
         #set the first component positive
@@ -134,22 +138,6 @@ class LinearDiscriminantAnalysis:
         
         return eigvals
 
-    #TODO REMOVE THIS UTILITY
-    def np_to_torch(self,x,dtype=None):
-        """
-        Utility which converts numpy array to torch.Tensor
-        
-        Parameters
-        ----------
-        x : Numpy array
-            Input
-        Returns
-        -------
-        y : array-like of shape (n_samples, n_classes-1)
-            LDA projections.
-        """
-        return torch.tensor(x,dtype=dtype)
-
     def fit(self,X,y):
         """
         Fit LDA given data and classes.
@@ -163,9 +151,9 @@ class LinearDiscriminantAnalysis:
         """
         
         if type(X) != torch.Tensor:
-            X = self.np_to_torch(X,dtype=torch.float32)
+            X = torch.tensor(X,dtype=self.dtype_,device=self.device_)
         if type(y) != torch.Tensor:
-            y = self.np_to_torch(y)
+            y = torch.tensor(y,device=self.device_) #class labels are integers
         _ = self.LDA(X,y)
     
     def transform(self,X):
@@ -183,7 +171,7 @@ class LinearDiscriminantAnalysis:
             LDA projections.
         """
         if type(X) != torch.Tensor:
-            X = self.np_to_torch(X,dtype=torch.float32)
+            X = torch.tensor(X,dtype=self.dtype_,device=self.device_)
             
         s = torch.matmul(X,self.evecs_)
     
@@ -219,7 +207,7 @@ class LinearDiscriminantAnalysis:
             Parameters
         """
         out = dict()
-        if self.feature_names_ is not None:
+        if self.features_names_ is not None:
             out['features'] = self.features_names_
         out['eigenvalues']=self.evals_
         out['eigenvectors']=self.evecs_
@@ -262,53 +250,33 @@ class LinearDiscriminantAnalysis:
         out : string
             PLUMED input file
         """
+        out = "" 
         for i in range(len(self.evals_)):
             if len(self.evals_)==1:
-                print('lda: COMBINE ARG=', end='')
+                #print('lda: COMBINE ARG=', end='')
+                out += 'lda: COMBINE ARG='
             else:
-                print(f'lda{i+1}: COMBINE ARG=', end='')
+                #print(f'lda{i+1}: COMBINE ARG=', end='')
+                out += f'lda{i+1}: COMBINE ARG='
             for j in range(self.d_):
                 if self.features_names_ is None:
-                    print(f'x{j},',end='')
+                    #print(f'x{j},',end='')
+                    out += f'x{j},'
                 else:
-                    print(f'{self.features_names_[j]},',end='')
-            print("\b COEFFICIENTS=",end='') 
+                    #print(f'{self.features_names_[j]},',end='')
+                    out += f'{self.features_names_[j]},'
+            #print("\b COEFFICIENTS=",end='') 
+            out = out [:-1]
+            out += " COEFFICIENTS="
             for j in range(self.d_):
-                print(np.round(self.evecs_[j,i].cpu().numpy(),6),end=',')
-            print('\b PERIODIC=NO')
+                #print(np.round(self.evecs_[j,i].cpu().numpy(),6),end=',')
+                out += str(np.round(self.evecs_[j,i].cpu().numpy(),6))+','
+            #print('\b PERIODIC=NO')
+            out = out [:-1]
+            out += ' PERIODIC=NO'
+        return out 
 
 
-if __name__ == "__main__":
-
-    # Set device and dtype
-    dtype = torch.float32
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') #torch.device('cpu') #
-
-    # Load data
-    dataA = colvar_to_pandas(folder='mlcvs/data/2d-basins/',filename='COLVAR_stateA')
-    dataB = colvar_to_pandas(folder='mlcvs/data/2d-basins/',filename='COLVAR_stateB')
-
-    # Create input dataset
-    xA = dataA.filter(regex='p.*').values
-    xB = dataB.filter(regex='p.*').values
-    names = dataA.filter(regex='p.*').columns.values
-
-    # Create labels
-    yA = np.zeros(len(dataA))
-    yB = np.ones(len(dataB))
-
-    x = np.concatenate([xA,xB],axis=0)
-    Y = np.concatenate([yA,yB],axis=0)
-
-    # Transform to Pytorch Tensors
-    x = torch.tensor(x,dtype=dtype,device=device)
-    Y = torch.tensor(Y,dtype=dtype,device=device)
-    
-    # Perform LDA
-    lda = LinearDiscriminantAnalysis()
-    lda.set_features_names(names)
-    lda.fit(x,Y)
-
-    lda.plumed_input()
+#if __name__ == "__main__":
 
 
