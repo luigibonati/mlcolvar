@@ -343,7 +343,7 @@ class NeuralNetworkCV(torch.nn.Module):
                 print("{0:<{width}d}".format(value,width=spacing[i]),end='')
                 
             if (type(value) == torch.Tensor) or (type(value) == torch.nn.parameter.Parameter) :
-                value = value.numpy()
+                value = value.cpu().numpy()
                 if value.shape == ():
                     print("{0:<{width}.{dec}f}".format(value,width=spacing[i],dec=decimals),end='')
                 else:
