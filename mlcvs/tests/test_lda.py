@@ -6,7 +6,7 @@ Unit and regression test for the lda module.
 import torch
 import numpy as np
 from mlcvs.io import colvar_to_pandas
-from mlcvs.lda import LinearDiscriminant
+from mlcvs.lda import LDA, LDA_CV
 
 def test_lda_basins():
     """Perform LDA on 2d-basins data folder."""
@@ -21,6 +21,7 @@ def test_lda_basins():
     xA = dataA.filter(regex='p.*').values
     xB = dataB.filter(regex='p.*').values
     names = dataA.filter(regex='p.*').columns.values
+    n_features = xA.shape[1]
 
     # Create labels
     yA = np.zeros(len(dataA))
@@ -33,14 +34,31 @@ def test_lda_basins():
     #X = torch.tensor(X,dtype=dtype,device=device)
     #y = torch.tensor(y,dtype=dtype,device=device)
     
-    # Perform LDA
-    lda = LinearDiscriminant()
-    lda.set_features_names(names)
+    # Define model 
+    lda = LDA_CV(n_features)
+    # Set features name (for PLUMED input)
+    lda.set_params({'features_names': names})
+
+    # Fit LDA
     lda.fit(X,y)
 
-    input = lda.plumed_input()
-    expected_input = "lda: COMBINE ARG=p.x,p.y COEFFICIENTS=0.657474,-0.753477 PERIODIC=NO"
+    # Project
+    x_test = np.ones(2)
+    y_test = lda(x_test)
+
+    y_test = y_test.cpu()[0]
+    y_test_expected = torch.tensor(-0.0960027)
     
+    #ASSERT 
+    print(type(y_test),type(y_test_expected))
+    assert y_test_expected == y_test
+
+    # Check PLUMED INPUT
+
+    input = lda.plumed_input()
+    expected_input = "lda_cv: COMBINE ARG=p.x,p.y COEFFICIENTS=0.657474,-0.75347 PERIODIC=NO"
+    
+    # ASSERT
     assert expected_input == input
 
 if __name__ == "__main__":
