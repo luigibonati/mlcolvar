@@ -176,19 +176,31 @@ class LinearCV:
         out : string
             PLUMED input file
         """
+        # count number of output components
+        weights = self.w.cpu().numpy()
+        offset = self.b.cpu().numpy()
+        n_cv = 1 if weights.ndim == 1 else weights.shape[1]
+
         out = "" 
-        for i in range(len(self.evals_)):
-            if len(self.evals_)==1:
-                out += 'lda: COMBINE ARG='
+        for i in range(n_cv):
+            if n_cv==1:
+                out += f'{self.name_}: COMBINE ARG='
             else:
-                out += f'lda{i+1}: COMBINE ARG='
-            for j in range(self.d_):
-                    out += f'{self.features_names_[j]},'
+                out += f'{self.name_}{i+1}: COMBINE ARG='
+            for j in range(self.n_features):
+                    out += f'{self.features_names[j]},'
             out = out [:-1]
+
             out += " COEFFICIENTS="
-            for j in range(self.d_):
-                out += str(np.round(self.evecs_[j,i].cpu().numpy(),6))+','
+            for j in range(self.n_features):
+                out += str(np.round(weights[j,i],6))+','
             out = out [:-1]
+            if not np.all(offset == 0):
+                out += " PARAMETERS="
+                for j in range(self.n_features):
+                    out += str(np.round(offset[j,i],6))+','
+            out = out [:-1]
+
             out += ' PERIODIC=NO'
         return out 
 
