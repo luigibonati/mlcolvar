@@ -3,11 +3,13 @@ Unit and regression test for the lda module.
 """
 
 # Import package, test suite, and other packages as needed
+import pytest
 import torch
 import numpy as np
 from mlcvs.io import colvar_to_pandas
 from mlcvs.lda import DeepLDA
 
+@pytest.mark.slow
 def test_deeplda_basins():
     """Perform DeepLDA on 2d-basins data folder."""
     dtype = torch.float32
