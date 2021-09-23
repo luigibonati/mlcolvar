@@ -2,7 +2,7 @@
 
 import torch
 import numpy as np
-from .nn import NeuralNetworkCV
+from .models import NeuralNetworkCV
 from torch.utils.data import Dataset, DataLoader
 
 class LinearDiscriminant:
