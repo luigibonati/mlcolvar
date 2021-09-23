@@ -39,7 +39,10 @@ def test_lda_basins():
     lda.fit(X,y)
 
     input = lda.plumed_input()
-    
     expected_input = "lda: COMBINE ARG=p.x,p.y COEFFICIENTS=0.657474,-0.753477 PERIODIC=NO"
     
     assert expected_input == input
+
+if __name__ == "__main__":
+    # Do something if this file is invoked on its own
+    test_lda_basins()
