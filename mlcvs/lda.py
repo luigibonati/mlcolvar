@@ -2,12 +2,12 @@
 
 import torch
 import numpy as np
-from .models import NeuralNetworkCV
+from .models import LinearCV, NeuralNetworkCV
 from torch.utils.data import Dataset, DataLoader
 
-class LinearDiscriminant:
+class LDA:
     """
-    Linear Discriminant CV
+    Fisher's discriminant base class.
 
     Attributes
     ----------
@@ -24,18 +24,8 @@ class LinearDiscriminant:
         
     Methods
     -------
-    fit(x,label)
-        Fit LDA given data and classes
-    transform(x)
-        Project data to maximize class separation
-    fit_transform(x,label)
-        Fit LDA and project data 
-    get_params()
-        Return saved parameters
-    set_features_names(names)
-        Set features names
-    plumed_input()
-        Generate PLUMED input file
+    LDA(H,y,save_params):
+        Perform LDA
     """
 
     def __init__(self):
@@ -54,7 +44,7 @@ class LinearDiscriminant:
         # Initialize device and dtype
         self.dtype_ = torch.float32
         self.device_ = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
+    
     def LDA(self, H, label, save_params = True):
         """
         Internal method which performs LDA and saves parameters.
@@ -143,7 +133,44 @@ class LinearDiscriminant:
             self.S_b_ = S_b
             self.S_w_ = S_w
         
-        return eigvals
+        return eigvals,eigvecs
+
+class LDA_CV(LinearCV,LDA):
+    """
+    Linear Discriminant CV
+
+    Attributes
+    ----------
+    d_ : int
+        Number of classes
+    evals_ : torch.Tensor
+        LDA eigenvalues
+    evecs_ : torch.Tensor
+        LDA eignvectors
+    S_b_ : torch.Tensor
+        Between scatter matrix
+    S_w_ : torch.Tensor
+        Within scatter matrix
+        
+    Methods
+    -------
+    TODO adjust class inheritance
+    fit(x,label)
+        Fit LDA given data and classes
+    transform(x)
+        Project data to maximize class separation
+    fit_transform(x,label)
+        Fit LDA and project data 
+    get_params()
+        Return saved parameters
+    plumed_input()
+        Generate PLUMED input file
+    """
+
+    def __init__(self, n_features):
+        super().__init__(n_features=n_features)
+
+        self.name_ = 'lda_cv'
 
     def fit(self,X,y):
         """
@@ -161,7 +188,9 @@ class LinearDiscriminant:
             X = torch.tensor(X,dtype=self.dtype_,device=self.device_)
         if type(y) != torch.Tensor:
             y = torch.tensor(y,device=self.device_) #class labels are integers
-        _ = self.LDA(X,y)
+        _,eigvecs = self.LDA(X,y)
+        #save parameters for estimator
+        self.w = eigvecs
     
     def transform(self,X):
         """
@@ -180,7 +209,7 @@ class LinearDiscriminant:
         if type(X) != torch.Tensor:
             X = torch.tensor(X,dtype=self.dtype_,device=self.device_)
             
-        s = torch.matmul(X,self.evecs_)
+        s = torch.matmul(X,self.w)
     
         return s
         
@@ -203,24 +232,6 @@ class LinearDiscriminant:
         
         self.fit(X,y)
         return self.transform(X)
-
-    def get_params(self):
-        """
-        Return saved parameters.
-        
-        Returns
-        -------
-        out : dictionary
-            Parameters
-        """
-        out = dict()
-        if self.features_names_ is not None:
-            out['features'] = self.features_names_
-        out['eigenvalues']=self.evals_
-        out['eigenvectors']=self.evecs_
-        out['S_between']=self.S_b_
-        out['S_within']=self.S_w_
-        return out
     
     def set_regularization(self,sw_reg):
         """
@@ -238,55 +249,7 @@ class LinearDiscriminant:
         """
         self.sw_reg = 0.05
 
-    def set_features_names(self,names):
-        """
-        Set names of the features (useful for creating PLUMED input file)
-
-        Parameters
-        ----------
-        reg : array-like of shape (n_descriptors)
-            Features names
-        
-        """
-        self.features_names_ = names
-
-    def plumed_input(self):
-        """
-        Generate PLUMED input file
-        
-        Returns
-        -------
-        out : string
-            PLUMED input file
-        """
-        out = "" 
-        for i in range(len(self.evals_)):
-            if len(self.evals_)==1:
-                #print('lda: COMBINE ARG=', end='')
-                out += 'lda: COMBINE ARG='
-            else:
-                #print(f'lda{i+1}: COMBINE ARG=', end='')
-                out += f'lda{i+1}: COMBINE ARG='
-            for j in range(self.d_):
-                if self.features_names_ is None:
-                    #print(f'x{j},',end='')
-                    out += f'x{j},'
-                else:
-                    #print(f'{self.features_names_[j]},',end='')
-                    out += f'{self.features_names_[j]},'
-            #print("\b COEFFICIENTS=",end='') 
-            out = out [:-1]
-            out += " COEFFICIENTS="
-            for j in range(self.d_):
-                #print(np.round(self.evecs_[j,i].cpu().numpy(),6),end=',')
-                out += str(np.round(self.evecs_[j,i].cpu().numpy(),6))+','
-            #print('\b PERIODIC=NO')
-            out = out [:-1]
-            out += ' PERIODIC=NO'
-        return out 
-
-
-class DeepLDA(NeuralNetworkCV,LinearDiscriminant):
+class DeepLDA(NeuralNetworkCV,LDA):
     """
     Neural network based discriminant CV. 
     Perform a non-linear featurization of the inputs with a neural-network and optimize it as to maximize Fisher's discriminant ratio.
