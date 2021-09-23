@@ -1,7 +1,196 @@
-"""Base neural network class."""
+"""Collective variables base models."""
 
 import torch
+import numpy as np
 from . import optim
+
+class LinearCV:
+    """
+    Linear CV base class.
+
+    Attributes
+    ----------
+    d_ : int
+        Number of classes
+    evals_ : torch.Tensor
+        LDA eigenvalues
+    evecs_ : torch.Tensor
+        LDA eignvectors
+    S_b_ : torch.Tensor
+        Between scatter matrix
+    S_w_ : torch.Tensor
+        Within scatter matrix
+        
+    Methods
+    -------
+    fit(x,label)
+        Fit LDA given data and classes
+    transform(x)
+        Project data to maximize class separation
+    fit_transform(x,label)
+        Fit LDA and project data 
+    get_params()
+        Return saved parameters
+    set_features_names(names)
+        Set features names
+    plumed_input()
+        Generate PLUMED input file
+    """
+
+    def __init__(self, n_features):
+        super().__init__()
+
+        # Initialize parameters
+        self.n_features = n_features
+        self.w = torch.ones(n_features)
+        self.b = torch.zeros(n_features)
+
+        # Device and dtype
+        self.dtype_ = torch.float32
+        self.device_ = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        
+        # Generic attributes
+        self.name_ = 'LinearCV'
+        self.features_names = ['x'+str(i) for i in range(n_features)]
+                                                    
+        # Flags 
+
+    def __call__(self, X):
+        """
+        Alias for transform.
+        
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features) or (n_features)
+            Inference data.
+               
+        Returns
+        -------
+        s : array-like of shape (n_samples, n_classes-1)
+            Linear projection along `self.weights_`.
+
+        See Also
+        --------
+        transform : project data along linear combination
+        """
+        return self.transform(X)
+
+    def fit(self):
+        """
+        Fit estimator (abstract method). 
+        """
+        pass
+    
+    def transform(self,X):
+        """
+        Project data along model.
+        
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features) or (n_features)
+            Inference data.
+               
+        Returns
+        -------
+        s : array-like of shape (n_samples, n_classes-1)
+            Linear projection.
+        """
+        if type(X) != torch.Tensor:
+            X = torch.tensor(X,dtype=self.dtype_,device=self.device_)
+            
+        s = torch.matmul(X-self.b,self.w)
+    
+        return s
+        
+    def fit_transform(self,X):
+        """
+        Call fit and then transform (abstract method).
+        
+        Parameters
+        ----------
+        
+        Returns
+        -------
+
+        """
+        pass
+
+    def set_weights(self, w):
+        """
+        Set weights of linear combination.
+        
+        Parameters
+        ----------
+        w : torch.tensor
+            weights
+
+        """
+        self.w = w   
+
+    def set_offset(self, b):
+        """
+        Set linear offset
+        
+        Parameters
+        ----------
+        b : torch.tensor
+            offset
+
+        """
+        self.b = b
+
+    def get_params(self):
+        """
+        Return saved parameters.
+        
+        Returns
+        -------
+        out : namedtuple
+            Parameters
+        """
+        return vars(self)
+    
+    def set_params(self,dict_params):
+        """
+        Set parameters.
+
+        Parameters
+        ----------
+        dict_params : dictionary
+            Parameters
+        
+        """
+
+        for key in dict_params.keys():
+            if hasattr(self,key):
+                setattr(self,key,dict_params[key])
+            else:
+                raise AttributeError(f'{self.__class__.__name__} has no attribute {key}.')
+
+    def plumed_input(self):
+        """
+        Generate PLUMED input file
+        
+        Returns
+        -------
+        out : string
+            PLUMED input file
+        """
+        out = "" 
+        for i in range(len(self.evals_)):
+            if len(self.evals_)==1:
+                out += 'lda: COMBINE ARG='
+            else:
+                out += f'lda{i+1}: COMBINE ARG='
+            for j in range(self.d_):
+                    out += f'{self.features_names_[j]},'
+            out = out [:-1]
+            out += " COEFFICIENTS="
+            for j in range(self.d_):
+                out += str(np.round(self.evecs_[j,i].cpu().numpy(),6))+','
+            out = out [:-1]
+            out += ' PERIODIC=NO'
+        return out 
 
 class NeuralNetworkCV(torch.nn.Module):
     """
@@ -255,7 +444,7 @@ class NeuralNetworkCV(torch.nn.Module):
         self.MeanIn = Mean
         self.RangeIn = Range
 
-    def standardize_outputs(self, input: torch.Tensor, print_info=False):
+    def standardize_outputs(self, input: torch.Tensor, print_values=False):
         """
         Enable the standardization of outputs based on max and min over set.
         

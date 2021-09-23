@@ -4,7 +4,7 @@
 from .lda import *
 from .io import *
 from .optim import *
-from .nn import *
+from .models import *
 
 # Handle versioneer
 from ._version import get_versions
