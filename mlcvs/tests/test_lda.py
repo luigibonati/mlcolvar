@@ -14,12 +14,12 @@ dtype = torch.float32
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 @pytest.fixture(scope="module")
-def load_dataset():
+def load_dataset_2d_model():
     """Load 2d-basins dataset"""
 
     # Load colvar files as pandas dataframes
-    dataA = colvar_to_pandas(folder='mlcvs/data/2d-basins/',filename='COLVAR_stateA')
-    dataB = colvar_to_pandas(folder='mlcvs/data/2d-basins/',filename='COLVAR_stateB')
+    dataA = colvar_to_pandas(folder='mlcvs/data/2d_model/',filename='COLVAR_stateA')
+    dataB = colvar_to_pandas(folder='mlcvs/data/2d_model/',filename='COLVAR_stateB')
 
     # Create input datasets
     xA = dataA.filter(regex='p.*').values
@@ -34,9 +34,10 @@ def load_dataset():
     X = np.concatenate([xA,xB],axis=0)
     y = np.concatenate([yA,yB],axis=0)
 
-    # Shuffle (not used in test)
-    #p = np.random.permutation(len(X))
-    #X, y = X[p], y[p]
+    # Shuffle 
+    np.random.seed(1)
+    p = np.random.permutation(len(X))
+    X, y = X[p], y[p]
 
     # Convert np to torch 
     X = torch.tensor(X,dtype=dtype,device=device)
@@ -44,11 +45,52 @@ def load_dataset():
 
     return X,y,names
 
-def test_lda_basins(load_dataset):
-    """Perform LDA on 2d-basins data folder."""
+@pytest.mark.parametrize("n_classes", [2, 3]) 
+def test_lda_nclasses(n_classes):
+    """Perform LDA on toy dataset."""
+
+    n_data = 100 
+    n_features = 3
+
+    # Generate classes
+    np.random.seed(1)
+
+    x_list = []
+    y_list = []
+
+    for i in range(n_classes):
+        mean = [1 if j==i else 0 for j in range(n_features)]
+        cov = 0.2*np.eye(n_features)
+        
+        x_i = np.random.multivariate_normal(mean, cov, n_data)
+        y_i = i * np.ones(len(x_i))
+
+        x_list.append(x_i)
+        y_list.append(y_i)
+
+    # Concatenate
+    X = np.concatenate(x_list,axis=0)
+    y = np.concatenate(y_list,axis=0)
+
+    # Define model 
+    n_features = X.shape[1]
+    lda = LDA_CV(n_features)
+
+    # Fit and transform LDA
+    result = lda.fit_transform(X,y)
+
+    # Project
+    x_test = torch.tensor(n_features).to(device)
+    y_test = lda(x_test)
+    y_test_expected = torch.tensor([0.2407] if n_classes == 2 else [ 0.2316, -0.1087]).to(device)
+
+    assert (y_test_expected - y_test).abs().sum() < 1e-4
+
+def test_lda_2d_model(load_dataset_2d_model):
+    """Perform LDA on 2d_model data folder."""
 
     # Load dataset
-    X,y,features_names = load_dataset
+    X,y,features_names = load_dataset_2d_model
     
     # Define model 
     n_features = X.shape[1]
@@ -63,8 +105,8 @@ def test_lda_basins(load_dataset):
     x_test = np.ones(2)
     y_test = lda(x_test)
 
-    y_test = y_test.cpu()[0]
-    y_test_expected = torch.tensor(-0.0960027)
+    y_test = y_test[0]
+    y_test_expected = torch.tensor(-0.0960027).to(device)
     assert (torch.abs(y_test_expected - y_test) < 1e-5)
 
     # Check PLUMED INPUT
@@ -72,16 +114,15 @@ def test_lda_basins(load_dataset):
     expected_input = "lda_cv: COMBINE ARG=p.x,p.y COEFFICIENTS=0.657474,-0.75347 PERIODIC=NO"
     assert expected_input == input
 
-def test_deeplda():
-    """Define a DeepLDA object."""
+@pytest.mark.parametrize("n_classes", [2, 3]) 
+def test_deeplda_nclasses(n_classes):
+    """Define a DeepLDA object with different number of classes."""
     
     # define dataset
     n_data = 100 
     n_features = 10
-    n_classes = 2 
     X = torch.rand((n_data,n_features)).to(device)
     y = torch.randint(low=0,high=n_classes,size=(n_data,))
-    print(y)
 
     # split train/test
     ntrain = int(n_data*0.8)
@@ -113,20 +154,18 @@ def test_deeplda():
     with torch.no_grad():
         loss = model.evaluate_dataset(train_data,save_params=True)
     y2test = model(xtest)
-    print(model.w.shape)
-    print(y2test)
 
     # ASSERT if shape == n_classes-1
     expected_y2_shape = torch.rand(n_classes-1).shape
     assert y2test.shape == expected_y2_shape
 
 @pytest.mark.slow
-@pytest.mark.skip
-def test_deeplda_train(load_dataset):
+#@pytest.mark.skip
+def test_deeplda_train_2d_model(load_dataset_2d_model):
     """Perform DeepLDA on 2d-basins data folder."""
     
     # load dataset
-    X,y,features_names = load_dataset
+    X,y,features_names = load_dataset_2d_model
 
     # split train/test
     ntrain = 800
@@ -156,12 +195,29 @@ def test_deeplda_train(load_dataset):
 
     # REGULARIZATION
     model.set_optimizer(opt)
-    model.set_earlystopping(patience=40,min_delta=0.,consecutive=False,save_best_model=True)
+    model.set_earlystopping(patience=10,min_delta=0.,consecutive=False,save_best_model=True)
     model.set_regularization(sw_reg=sw_reg)
 
     # TRAIN
-    model.train(train_data,valid_data,info=True,log_every=10)
+    model.train(train_data,valid_data,info=True,log_every=100)
 
+    # FORWARD 
+    xtest = torch.rand(X.size(1)).to(device)
+    with torch.no_grad():
+        ytest = model(xtest)
+
+    # ASSERT SHAPE OUTPUT
+    expected_y_shape = torch.rand(1).shape
+    assert ytest.shape == expected_y_shape
+
+    # COMPARE SINGLE TENSOR AND BATCH OF SIZE 1
+    xtest2 = xtest.unsqueeze(0)
+
+    with torch.no_grad():
+        ytest2 = model(xtest2)
+
+    expected_y2_shape = torch.rand(1).shape
+    assert torch.equal(ytest,ytest2[0])
 
 #if __name__ == "__main__":
     # Do something if this file is invoked on its own
