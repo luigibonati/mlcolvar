@@ -35,7 +35,8 @@ class LDA:
         self.evecs_ = None
         self.S_b_ = None
         self.S_w_ = None
-        self.d_ = None
+        self.d_ = None #num features for LDA
+        self.n_classes = None
         self.features_names_ = None
 
         # Regularization
@@ -66,12 +67,13 @@ class LDA:
         
         #sizes
         N, d = H.shape
-        
-        #classes
-        categ = torch.unique(label)
-        n_categ = len(categ)
         self.d_ = d
-        
+
+        #classes
+        classes = torch.unique(label)
+        n_classes = len(classes)
+        self.n_classes = n_classes
+
         # Mean centered observations for entire population
         H_bar = H - torch.mean(H, 0, True)
         #Total scatter matrix (cov matrix over all observations)
@@ -80,7 +82,7 @@ class LDA:
         S_w = torch.Tensor().new_zeros((d, d), device = self.device_, dtype = self.dtype_)    
         S_w_inv = torch.Tensor().new_zeros((d, d), device = self.device_, dtype = self.dtype_)
         #Loop over classes to compute means and covs
-        for i in categ:
+        for i in classes:
             #check which elements belong to class i
             H_i = H[torch.nonzero(label == i).view(-1)]
             # compute mean centered obs of class i
@@ -91,7 +93,7 @@ class LDA:
                 continue
 
             #LDA
-            S_w += H_i_bar.t().matmul(H_i_bar) / ((N_i - 1) * n_categ)
+            S_w += H_i_bar.t().matmul(H_i_bar) / ((N_i - 1) * n_classes)
 
             #TODO ADD HLDA OPTION
             ######HLDA
@@ -135,8 +137,8 @@ class LDA:
         eigvecs.mul_( torch.sign(eigvecs[0,:]).unsqueeze(0).expand_as(eigvecs) )
         
         #keep only C-1 eigvals and eigvecs
-        eigvals = eigvals[:n_categ-1]
-        eigvecs = eigvecs[:,:n_categ-1] #.reshape(eigvecs.shape[0],n_categ-1)
+        eigvals = eigvals[:n_classes-1]
+        eigvecs = eigvecs[:,:n_classes-1]
         if save_params:
             self.evals_ = eigvals
             self.evecs_ = eigvecs
@@ -321,7 +323,18 @@ class DeepLDA_CV(NeuralNetworkCV,LDA):
         eigvals,eigvecs = self.LDA(H, y, save_params)
         if save_params:
             self.w = eigvecs
-        loss = - eigvals[0] # TODO GENERALIZE TO MULTICLASS
+
+        #TODO add sum option for multiclass
+
+        # if two classes loss is equal to the single eigenvalue
+        if self.n_classes == 2:
+            loss = -eigvals
+        # if more than two classes loss equal to the smallest of the C-1 eigenvalues
+        elif self.n_classes > 2:
+            loss = -eigvals[self.n_classes-2]
+        else:
+            raise ValueError('The number of classes for LDA must be greater than 1')
+
         if self.lorentzian_reg > 0:
             loss += self.regularization_lorentzian(H)
         return loss
