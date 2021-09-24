@@ -2,6 +2,7 @@
 
 import torch
 import numpy as np
+from torch._C import Value
 from . import optim
 
 class LinearCV:
@@ -503,11 +504,19 @@ class NeuralNetworkCV(torch.nn.Module):
     def _normalize(self, x: torch.Tensor, Mean: torch.Tensor, Range: torch.Tensor) -> (torch.Tensor):
         ''' Compute standardized inputs/outputs '''
 
-        batch_size = x.size(0)
-        x_size = x.size(1)
+        # if shape ==
 
-        Mean_ = Mean.unsqueeze(0).expand(batch_size, x_size)
-        Range_ = Range.unsqueeze(0).expand(batch_size, x_size)
+        if x.ndim == 2:
+            batch_size = x.size(0)
+            x_size = x.size(1)
+
+            Mean_ = Mean.unsqueeze(0).expand(batch_size, x_size)
+            Range_ = Range.unsqueeze(0).expand(batch_size, x_size)
+        elif x.ndim == 1:
+            Mean_ = Mean
+            Range_ = Range
+        else:
+            raise ValueError('Input tensor must of shape (n_features) or (n_batch,n_features).')
 
         return x.sub(Mean_).div(Range_)
     
