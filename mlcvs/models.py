@@ -37,17 +37,20 @@ class LinearCV:
         Generate PLUMED input file
     """
 
-    def __init__(self, n_features):
+    def __init__(self, n_features, device = 'auto', dtype = torch.float32 ):
         super().__init__()
+
+        # Device and dtype
+        self.dtype_ = dtype
+        if device == 'auto':
+            self.device_ = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        else:
+            self.device_ = device
 
         # Initialize parameters
         self.n_features = n_features
-        self.w = torch.ones(n_features)
-        self.b = torch.zeros(n_features)
-
-        # Device and dtype
-        self.dtype_ = torch.float32
-        self.device_ = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.w = torch.eye(n_features, dtype = self.dtype_, device = self.device_)
+        self.b = torch.zeros(n_features, dtype = self.dtype_, device = self.device_)
         
         # Generic attributes
         self.name_ = 'LinearCV'
@@ -83,7 +86,7 @@ class LinearCV:
     
     def transform(self,X):
         """
-        Project data along model.
+        Project data along linear components.
         
         Parameters
         ----------
@@ -93,11 +96,11 @@ class LinearCV:
         Returns
         -------
         s : array-like of shape (n_samples, n_classes-1)
-            Linear projection.
+            Linear projection of inputs. 
         """
         if type(X) != torch.Tensor:
             X = torch.tensor(X,dtype=self.dtype_,device=self.device_)
-            
+
         s = torch.matmul(X-self.b,self.w)
     
         return s
@@ -125,7 +128,7 @@ class LinearCV:
             weights
 
         """
-        self.w = w   
+        self.w = w.to(self.device_) 
 
     def set_offset(self, b):
         """
@@ -137,7 +140,7 @@ class LinearCV:
             offset
 
         """
-        self.b = b
+        self.b = b.to(self.device_) 
 
     def get_params(self):
         """
@@ -264,7 +267,7 @@ class NeuralNetworkCV(torch.nn.Module):
     )
     """
 
-    def __init__(self, layers , activation='relu'):
+    def __init__(self, layers , activation='relu', device = 'auto', dtype = torch.float32 ):
         '''
         Define a neural network module given the list of layers.
         
@@ -301,25 +304,37 @@ class NeuralNetworkCV(torch.nn.Module):
             else:
                 modules.append( torch.nn.Linear(layers[i], layers[i+1]) )
 
-        # nn
-        self.nn = torch.nn.Sequential(*modules)
+        # Device and dtype
+        self.dtype_ = dtype
+        if device == 'auto':
+            self.device_ = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        else:
+            self.device_ = device
 
-        # n_input 
-        self.n_input = layers[0]
+        # Initialize parameters
+        self.nn = torch.nn.Sequential(*modules)
+        self.n_features = layers[0]
+        self.n_hidden = layers[-1]
+
+        # Linear projection output
+        weight = torch.eye(self.n_hidden, dtype = self.dtype_, device = self.device_)
+        offset = torch.zeros(self.n_hidden, dtype = self.dtype_, device = self.device_)
+        self.register_buffer('w', weight)
+        self.register_buffer('b', offset)
         
-        # options
+        # Flags 
         self.normIn = False
         self.normOut = False
+        self.output_hidden = False
         
-        #type and device
-        self.dtype_ = torch.float32
-        self.device_ = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.to(self.device_)
-        
-        #optimizer
+        # Optimizer
         self.opt_ = None
         self.earlystopping_ = None
 
+        # Generic attributes
+        self.name_ = 'NN_CV'
+        self.features_names = ['x'+str(i) for i in range(self.n_features)]
+        
     # Forward pass
     def forward_nn(self, x: torch.tensor) -> (torch.tensor):
         """
@@ -346,8 +361,8 @@ class NeuralNetworkCV(torch.nn.Module):
       
     def forward(self, x: torch.tensor) -> (torch.tensor):
         """
-        Default forward method, in base class it is an alias to `forward_nn`
-        
+        Compute model output. First propagate input through the NN and then linear projection.
+
         Parameters
         ----------
         x : torch.tensor
@@ -356,7 +371,7 @@ class NeuralNetworkCV(torch.nn.Module):
         Returns
         -------
         z : torch.tensor
-            NN output
+            CVs
 
         See Also
         --------
@@ -364,21 +379,30 @@ class NeuralNetworkCV(torch.nn.Module):
 
         """
         z = self.forward_nn(x)
+        if (not self.output_hidden ):
+            z = self.transform(z)
         return z
 
-    # Device / optimizer / earlystopping
-
-    def set_device(self,device):
+    def transform(self,X):
         """
-        Set desired device: torch.device('cpu') or torch.device('cuda').
-
+        Project data along linear components.
+        
         Parameters
         ----------
-        device : torch.device
-            Device object
+        X : array-like of shape (n_samples, n_features) or (n_features)
+            Inference data.
+               
+        Returns
+        -------
+        s : array-like of shape (n_samples, n_classes-1)
+            Linear projection of inputs. 
         """
-        self.device_ = device
-        self.to(device)
+
+        s = torch.matmul(X-self.b,self.w)
+    
+        return s
+
+    # Optimizer
 
     def set_optimizer(self,opt):
         """
@@ -393,7 +417,7 @@ class NeuralNetworkCV(torch.nn.Module):
         
     def _default_optimizer(self):
         """
-        Set default optimizer (ADAM).
+        Initialize default optimizer (ADAM).
         """
         self.opt_ = torch.optim.Adam(self.parameters())
         
@@ -487,19 +511,34 @@ class NeuralNetworkCV(torch.nn.Module):
 
         return x.sub(Mean_).div(Range_)
     
-    # Parameters
+        # Parameters
 
     def get_params(self):
         """
-        Template function for attached parameters.
+        Return saved parameters.
         
         Returns
         -------
-        out : dictionary
+        out : namedtuple
             Parameters
         """
-        out = dict()
-        return out
+        return vars(self)
+    
+    def set_params(self,dict_params):
+        """
+        Set parameters.
+
+        Parameters
+        ----------
+        dict_params : dictionary
+            Parameters
+        """
+
+        for key in dict_params.keys():
+            if hasattr(self,key):
+                setattr(self,key,dict_params[key])
+            else:
+                raise AttributeError(f'{self.__class__.__name__} has no attribute {key}.')
     
     # Info
 
