@@ -39,8 +39,8 @@ class LinearCV:
         Generate PLUMED input file
     """
 
-    def __init__(self, n_features, device = 'auto', dtype = torch.float32 ):
-        super().__init__()
+    def __init__(self, n_features, device = 'auto', dtype = torch.float32, **kwargs ):
+        super().__init__(**kwargs)
 
         # Device and dtype
         self.dtype_ = dtype
@@ -269,7 +269,7 @@ class NeuralNetworkCV(torch.nn.Module):
     )
     """
 
-    def __init__(self, layers , activation='relu', device = 'auto', dtype = torch.float32 ):
+    def __init__(self, layers , activation='relu', device = 'auto', dtype = torch.float32, **kwargs):
         '''
         Define a neural network module given the list of layers.
         
@@ -281,7 +281,7 @@ class NeuralNetworkCV(torch.nn.Module):
             Activation function (relu, tanh, elu, linear) 
 
         '''
-        super().__init__()
+        super().__init__(**kwargs)
 
         #get activation function
         activ=None
