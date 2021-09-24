@@ -136,8 +136,7 @@ class LDA:
         
         #keep only C-1 eigvals and eigvecs
         eigvals = eigvals[:n_categ-1]
-        eigvecs = eigvecs[:,:n_categ-1]#.reshape(eigvecs.shape[0],n_categ-1)
-
+        eigvecs = eigvecs[:,:n_categ-1] #.reshape(eigvecs.shape[0],n_categ-1)
         if save_params:
             self.evals_ = eigvals
             self.evecs_ = eigvecs
@@ -319,7 +318,9 @@ class DeepLDA_CV(NeuralNetworkCV,LDA):
         loss : torch.tensor
             loss function
         """
-        eigvals = self.LDA(H, y, save_params)
+        eigvals,eigvecs = self.LDA(H, y, save_params)
+        if save_params:
+            self.w = eigvecs
         loss = - eigvals[0] # TODO GENERALIZE TO MULTICLASS
         if self.lorentzian_reg > 0:
             loss += self.regularization_lorentzian(H)
