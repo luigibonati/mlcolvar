@@ -89,8 +89,19 @@ class LDA:
             N_i = H_i.shape[0]
             if N_i == 0:
                 continue
-            S_w += H_i_bar.t().matmul(H_i_bar) / ((N_i - 1) * n_categ)       
 
+            #LDA
+            S_w += H_i_bar.t().matmul(H_i_bar) / ((N_i - 1) * n_categ)
+
+            #TODO ADD HLDA OPTION
+            ######HLDA
+            #inv_i = H_i_bar.t().matmul(H_i_bar) / ((N_i - 1) * categ)
+            #S_w_inv += inv_i.pinverse()       
+        
+        #S_w = S_w_inv.pinverse()
+        #END HLDA#########           
+
+        # Compute S_b from total scatter matrix
         S_b = S_t - S_w
 
         # Regularize S_w
@@ -167,8 +178,8 @@ class LDA_CV(LinearCV,LDA):
         Generate PLUMED input file
     """
 
-    def __init__(self, n_features):
-        super().__init__(n_features=n_features)
+    def __init__(self, n_features, device = 'auto', dtype = torch.float32):
+        super().__init__(n_features=n_features, device = device, dtype = dtype)
 
         self.name_ = 'lda_cv'
 
@@ -191,27 +202,6 @@ class LDA_CV(LinearCV,LDA):
         _,eigvecs = self.LDA(X,y)
         #save parameters for estimator
         self.w = eigvecs
-    
-    def transform(self,X):
-        """
-        Project data to maximize class separation.
-        
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features) or (n_features)
-            Inference data.
-               
-        Returns
-        -------
-        s : array-like of shape (n_samples, n_classes-1)
-            LDA projections.
-        """
-        if type(X) != torch.Tensor:
-            X = torch.tensor(X,dtype=self.dtype_,device=self.device_)
-            
-        s = torch.matmul(X,self.w)
-    
-        return s
         
     def fit_transform(self,X,y):
         """
@@ -249,7 +239,7 @@ class LDA_CV(LinearCV,LDA):
         """
         self.sw_reg = 0.05
 
-class DeepLDA(NeuralNetworkCV,LDA):
+class DeepLDA_CV(NeuralNetworkCV,LDA):
     """
     Neural network based discriminant CV. 
     Perform a non-linear featurization of the inputs with a neural-network and optimize it as to maximize Fisher's discriminant ratio.
@@ -285,10 +275,10 @@ class DeepLDA(NeuralNetworkCV,LDA):
         Generate PLUMED input file
     """
 
-    def __init__(self, layers, activation = 'relu'):
-        super().__init__(layers=layers,activation=activation)
+    def __init__(self, layers, activation = 'relu', device = 'auto', dtype = torch.float32):
+        super().__init__(layers=layers,activation=activation,  device = device, dtype = dtype)
 
-        #lorentzian reg
+        #lorentzian regularization
         self.lorentzian_reg = 0 
         self.sw_reg = 0.05
         
@@ -297,51 +287,6 @@ class DeepLDA(NeuralNetworkCV,LDA):
         self.loss_train = []
         self.loss_valid = []
         self.log_header = True
-
-        #output
-        self.output_hidden = False
-           
-    def get_params(self):
-        """
-        Return attached parameters.
-        
-        Returns
-        -------
-        out : dictionary
-            Parameters
-        """
-        out = dict()
-        out['device']=self.device_
-        out['Sw regularization']=self.sw_reg
-        out['Lorentzian regularization']=self.lorentzian_reg
-        out['Early Stopping']=True if self.earlystopping_ is not None else False
-        out['Input standardization']=self.normIn
-        out['# epochs']=self.epochs
-        return out
-
-    def forward(self, x: torch.tensor) -> (torch.tensor):
-        """
-        Compute model output. First propagate input through the NN and then apply LDA.
-
-        Parameters
-        ----------
-        x : torch.tensor
-            input data
-
-        Returns
-        -------
-        z : torch.tensor
-            CVs
-
-        See Also
-        --------
-        forward_nn : compute forward pass of NN module
-
-        """
-        z = self.forward_nn(x)
-        if (not self.output_hidden ):
-            z = self.transform(z)
-        return z
 
     def regularization_lorentzian(self, x):
         """
@@ -471,7 +416,7 @@ class DeepLDA(NeuralNetworkCV,LDA):
         standardize_inputs: bool
             whether to standardize input data
         batch_size: bool, optional
-            number of points per batch (default = -1 --> single batch)
+            number of points per batch (default = -1, single batch)
         nepochs: int, optional
             number of epochs (default = 1000)
         log_every: int, optional
@@ -523,11 +468,19 @@ class DeepLDA(NeuralNetworkCV,LDA):
 
 class ColvarDataset(Dataset):
     """
-    COLVAR dataset
-    
-    """
+    Auxiliary dataset to generate a dataloader.
+
+    """ 
 
     def __init__(self, colvar_list):
+        """
+        Initialize dataset 
+
+        Parameters
+        ----------
+        colvar_list : list of arrays
+            input data (also with classes)
+        """ 
         self.nstates = len( colvar_list )
         self.colvar = colvar_list
         
@@ -539,9 +492,3 @@ class ColvarDataset(Dataset):
         for i in range(self.nstates):
             x += (self.colvar[i][idx],)
         return x
-    
-#useful for cycling over the test dataset if it is smaller than the training set
-def cycle(iterable):
-    while True:
-        for x in iterable:
-            yield x
