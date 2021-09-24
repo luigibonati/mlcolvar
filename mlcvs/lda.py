@@ -6,6 +6,7 @@ import torch
 from .models import LinearCV, NeuralNetworkCV
 from torch.utils.data import Dataset, DataLoader
 
+
 class LDA:
     """
     Fisher's discriminant base class.
@@ -22,7 +23,7 @@ class LDA:
         Between scatter matrix
     S_w_ : torch.Tensor
         Within scatter matrix
-        
+
     Methods
     -------
     LDA(H,y,save_params):
@@ -37,7 +38,7 @@ class LDA:
         self.evecs_ = None
         self.S_b_ = None
         self.S_w_ = None
-        self.d_ = None #num features for LDA
+        self.d_ = None  # num features for LDA
         self.n_classes = None
         self.features_names_ = None
 
@@ -46,46 +47,46 @@ class LDA:
 
         # Initialize device and dtype
         self.dtype_ = torch.float32
-        self.device_ = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    
-    def LDA(self, H, label, save_params = True):
+        self.device_ = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    def LDA(self, H, label, save_params=True):
         """
         Internal method which performs LDA and saves parameters.
-        
+
         Parameters
         ----------
         H : array-like of shape (n_samples, n_features)
             Training data.
-        label : array-like of shape (n_samples,) 
-            Classes labels. 
+        label : array-like of shape (n_samples,)
+            Classes labels.
         save_params: bool, optional
             Whether to store parameters in model
-            
+
         Returns
         -------
         evals : array of shape (n_classes-1)
             LDA eigenvalues.
         """
-        
-        #sizes
+
+        # sizes
         N, d = H.shape
         self.d_ = d
 
-        #classes
+        # classes
         classes = torch.unique(label)
         n_classes = len(classes)
         self.n_classes = n_classes
 
         # Mean centered observations for entire population
         H_bar = H - torch.mean(H, 0, True)
-        #Total scatter matrix (cov matrix over all observations)
+        # Total scatter matrix (cov matrix over all observations)
         S_t = H_bar.t().matmul(H_bar) / (N - 1)
-        #Define within scatter matrix and compute it
-        S_w = torch.Tensor().new_zeros((d, d), device = self.device_, dtype = self.dtype_)    
-        #S_w_inv = torch.Tensor().new_zeros((d, d), device = self.device_, dtype = self.dtype_)
-        #Loop over classes to compute means and covs
+        # Define within scatter matrix and compute it
+        S_w = torch.Tensor().new_zeros((d, d), device=self.device_, dtype=self.dtype_)
+        # S_w_inv = torch.Tensor().new_zeros((d, d), device = self.device_, dtype = self.dtype_)
+        # Loop over classes to compute means and covs
         for i in classes:
-            #check which elements belong to class i
+            # check which elements belong to class i
             H_i = H[torch.nonzero(label == i).view(-1)]
             # compute mean centered obs of class i
             H_i_bar = H_i - torch.mean(H_i, 0, True)
@@ -94,62 +95,65 @@ class LDA:
             if N_i == 0:
                 continue
 
-            #LDA
+            # LDA
             S_w += H_i_bar.t().matmul(H_i_bar) / ((N_i - 1) * n_classes)
 
-            #TODO ADD HLDA OPTION
+            # TODO ADD HLDA OPTION
             ######HLDA
-            #inv_i = H_i_bar.t().matmul(H_i_bar) / ((N_i - 1) * categ)
-            #S_w_inv += inv_i.pinverse()       
-        
-        #S_w = S_w_inv.pinverse()
-        #END HLDA#########           
+            # inv_i = H_i_bar.t().matmul(H_i_bar) / ((N_i - 1) * categ)
+            # S_w_inv += inv_i.pinverse()
+
+        # S_w = S_w_inv.pinverse()
+        # END HLDA#########
 
         # Compute S_b from total scatter matrix
         S_b = S_t - S_w
 
         # Regularize S_w
-        S_w = S_w + self.sw_reg * torch.diag(torch.Tensor().new_ones((d), device = self.device_, dtype = self.dtype_))
+        S_w = S_w + self.sw_reg * torch.diag(
+            torch.Tensor().new_ones((d), device=self.device_, dtype=self.dtype_)
+        )
 
         # -- Generalized eigenvalue problem: S_b * v_i = lambda_i * Sw * v_i --
 
         # (1) use cholesky decomposition for S_w
-        L = torch.cholesky(S_w,upper=False)
+        L = torch.cholesky(S_w, upper=False)
 
         # (2) define new matrix using cholesky decomposition
         L_t = torch.t(L)
         L_ti = torch.inverse(L_t)
         L_i = torch.inverse(L)
-        S_new = torch.matmul(torch.matmul(L_i,S_b),L_ti)
+        S_new = torch.matmul(torch.matmul(L_i, S_b), L_ti)
 
-        #(3) find eigenvalues and vectors of S_new
-        eigvals, eigvecs = torch.symeig(S_new,eigenvectors=True)
-        #sort
+        # (3) find eigenvalues and vectors of S_new
+        eigvals, eigvecs = torch.symeig(S_new, eigenvectors=True)
+        # sort
         eigvals, indices = torch.sort(eigvals, 0, descending=True)
-        eigvecs = eigvecs[:,indices]
-        
-        #(4) return to original eigenvectors
-        eigvecs = torch.matmul(L_ti,eigvecs)
+        eigvecs = eigvecs[:, indices]
 
-        #normalize them
-        for i in range(eigvecs.shape[1]): # TODO maybe change in sum along axis?
-            norm=eigvecs[:,i].pow(2).sum().sqrt()
-            eigvecs[:,i].div_(norm)
-        #set the first component positive
-        eigvecs.mul_( torch.sign(eigvecs[0,:]).unsqueeze(0).expand_as(eigvecs) )
-        
-        #keep only C-1 eigvals and eigvecs
-        eigvals = eigvals[:n_classes-1]
-        eigvecs = eigvecs[:,:n_classes-1]
+        # (4) return to original eigenvectors
+        eigvecs = torch.matmul(L_ti, eigvecs)
+
+        # normalize them
+        for i in range(eigvecs.shape[1]):  # TODO maybe change in sum along axis?
+            norm = eigvecs[:, i].pow(2).sum().sqrt()
+            eigvecs[:, i].div_(norm)
+        # set the first component positive
+        eigvecs.mul_(torch.sign(eigvecs[0, :]).unsqueeze(0).expand_as(eigvecs))
+
+        # keep only C-1 eigvals and eigvecs
+        eigvals = eigvals[: n_classes - 1]
+        eigvecs = eigvecs[:, : n_classes - 1]
         if save_params:
             self.evals_ = eigvals
             self.evecs_ = eigvecs
             self.S_b_ = S_b
             self.S_w_ = S_w
-        
-        return eigvals,eigvecs
 
-class LDA_CV(LinearCV,LDA):
+        return eigvals, eigvecs
+
+
+class LDA_CV(LinearCV, LDA):
     """
     Linear Discriminant CV
 
@@ -165,7 +169,7 @@ class LDA_CV(LinearCV,LDA):
         Between scatter matrix
     S_w_ : torch.Tensor
         Within scatter matrix
-        
+
     Methods
     -------
     TODO adjust class inheritance
@@ -174,59 +178,59 @@ class LDA_CV(LinearCV,LDA):
     transform(x)
         Project data to maximize class separation
     fit_transform(x,label)
-        Fit LDA and project data 
+        Fit LDA and project data
     get_params()
         Return saved parameters
     plumed_input()
         Generate PLUMED input file
     """
 
-    def __init__(self, n_features, device = 'auto', dtype = torch.float32):
-        super().__init__(n_features=n_features, device = device, dtype = dtype)
+    def __init__(self, n_features, device="auto", dtype=torch.float32):
+        super().__init__(n_features=n_features, device=device, dtype=dtype)
 
-        self.name_ = 'lda_cv'
+        self.name_ = "lda_cv"
 
-    def fit(self,X,y):
+    def fit(self, X, y):
         """
         Fit LDA given data and classes.
-        
+
         Parameters
         ----------
         X : array-like of shape (n_samples, n_features)
             Training data.
-        y : array-like of shape (n_samples,) 
-            Classes labels. 
+        y : array-like of shape (n_samples,)
+            Classes labels.
         """
-        
+
         if type(X) != torch.Tensor:
-            X = torch.tensor(X,dtype=self.dtype_,device=self.device_)
+            X = torch.tensor(X, dtype=self.dtype_, device=self.device_)
         if type(y) != torch.Tensor:
-            y = torch.tensor(y,device=self.device_) #class labels are integers
-        _,eigvecs = self.LDA(X,y)
-        #save parameters for estimator
+            y = torch.tensor(y, device=self.device_)  # class labels are integers
+        _, eigvecs = self.LDA(X, y)
+        # save parameters for estimator
         self.w = eigvecs
-        
-    def fit_transform(self,X,y):
+
+    def fit_transform(self, X, y):
         """
         Fit LDA and project data.
-        
+
         Parameters
         ----------
         X : array-like of shape (n_samples, n_features)
             Training data.
-        y : array-like of shape (n_samples,) 
-            Classes labels. 
-        
+        y : array-like of shape (n_samples,)
+            Classes labels.
+
         Returns
         -------
         s : array-like of shape (n_samples, n_classes-1)
             LDA projections.
         """
-        
-        self.fit(X,y)
+
+        self.fit(X, y)
         return self.transform(X)
-    
-    def set_regularization(self,sw_reg):
+
+    def set_regularization(self, sw_reg):
         """
         Set regularization for within-scatter matrix.
 
@@ -237,14 +241,15 @@ class LDA_CV(LinearCV,LDA):
 
         Notes
         -----
-        .. math:: S_w = S_w + \mathtt{sw_reg}\ \mathbf{1}. 
-        
+        .. math:: S_w = S_w + \mathtt{sw_reg}\ \mathbf{1}.
+
         """
         self.sw_reg = 0.05
 
-class DeepLDA_CV(NeuralNetworkCV,LDA):
+
+class DeepLDA_CV(NeuralNetworkCV, LDA):
     """
-    Neural network based discriminant CV. 
+    Neural network based discriminant CV.
     Perform a non-linear featurization of the inputs with a neural-network and optimize it as to maximize Fisher's discriminant ratio.
 
     Attributes
@@ -259,7 +264,7 @@ class DeepLDA_CV(NeuralNetworkCV,LDA):
         Between scatter matrix
     S_w_ : torch.Tensor
         Within scatter matrix
-        
+
     Methods
     -------
     forward(x)
@@ -269,7 +274,7 @@ class DeepLDA_CV(NeuralNetworkCV,LDA):
     train()
         Train NN
     evaluate_dataset(x,label)
-        Fit LDA and project data 
+        Fit LDA and project data
     get_params()
         Return saved parameters
     set_features_names(names) #TODO Add
@@ -278,14 +283,16 @@ class DeepLDA_CV(NeuralNetworkCV,LDA):
         Generate PLUMED input file
     """
 
-    def __init__(self, layers, activation = 'relu', device = 'auto', dtype = torch.float32):
-        super().__init__(layers=layers,activation=activation,  device = device, dtype = dtype)
+    def __init__(self, layers, activation="relu", device="auto", dtype=torch.float32):
+        super().__init__(
+            layers=layers, activation=activation, device=device, dtype=dtype
+        )
 
-        #lorentzian regularization
-        self.lorentzian_reg = 0 
+        # lorentzian regularization
+        self.lorentzian_reg = 0
         self.sw_reg = 0.05
-        
-        #training logs
+
+        # training logs
         self.epochs = 0
         self.loss_train = []
         self.loss_valid = []
@@ -293,18 +300,18 @@ class DeepLDA_CV(NeuralNetworkCV,LDA):
 
     def regularization_lorentzian(self, x):
         """
-        Compute lorentzian regularization on NN outputs. 
+        Compute lorentzian regularization on NN outputs.
 
         Parameters
         ----------
         x : float
             input data
         """
-        reg_loss = x.pow(2).sum().div( x.size(0) )
-        reg_loss_lor = - self.lorentzian_reg / (1+(reg_loss-1).pow(2))
+        reg_loss = x.pow(2).sum().div(x.size(0))
+        reg_loss_lor = -self.lorentzian_reg / (1 + (reg_loss - 1).pow(2))
         return reg_loss_lor
-    
-    def loss_function(self,H,y,save_params=False):
+
+    def loss_function(self, H, y, save_params=False):
         """
         Loss function for the DeepLDA CV. Correspond to maximizing the eigenvalue(s) of LDA plus a regularization on the NN outputs.
 
@@ -322,25 +329,25 @@ class DeepLDA_CV(NeuralNetworkCV,LDA):
         loss : torch.tensor
             loss function
         """
-        eigvals,eigvecs = self.LDA(H, y, save_params)
+        eigvals, eigvecs = self.LDA(H, y, save_params)
         if save_params:
             self.w = eigvecs
 
-        #TODO add sum option for multiclass
+        # TODO add sum option for multiclass
 
         # if two classes loss is equal to the single eigenvalue
         if self.n_classes == 2:
             loss = -eigvals
         # if more than two classes loss equal to the smallest of the C-1 eigenvalues
         elif self.n_classes > 2:
-            loss = -eigvals[self.n_classes-2]
+            loss = -eigvals[self.n_classes - 2]
         else:
-            raise ValueError('The number of classes for LDA must be greater than 1')
+            raise ValueError("The number of classes for LDA must be greater than 1")
 
         if self.lorentzian_reg > 0:
             loss += self.regularization_lorentzian(H)
         return loss
-        
+
     def train_epoch(self, loader):
         """
         Function for training an epoch.
@@ -352,18 +359,18 @@ class DeepLDA_CV(NeuralNetworkCV,LDA):
         """
         for data in loader:
             # =================get data===================
-            X,y = data[0].float().to(self.device_),data[1].long().to(self.device_)
+            X, y = data[0].float().to(self.device_), data[1].long().to(self.device_)
             # =================forward====================
             H = self.forward_nn(X)
             # =================lda loss===================
-            loss = self.loss_function(H,y,save_params=False)
+            loss = self.loss_function(H, y, save_params=False)
             # =================backprop===================
             self.opt_.zero_grad()
             loss.backward()
             self.opt_.step()
         # ===================log======================
-        self.epochs +=1
-        
+        self.epochs += 1
+
     def evaluate_dataset(self, data, save_params=False):
         """
         Loss function for the DeepLDA CV. Correspond to maximizing the eigenvalue(s) of LDA plus a regularization on the NN outputs.
@@ -379,14 +386,14 @@ class DeepLDA_CV(NeuralNetworkCV,LDA):
         -------
         loss : torch.tensor
             loss function
-        """   
+        """
         with torch.no_grad():
-            X,y = data[0].float().to(self.device_),data[1].long().to(self.device_)
-            H  = self.forward_nn(X)
-            loss = self.loss_function(H,y,save_params)
+            X, y = data[0].float().to(self.device_), data[1].long().to(self.device_)
+            H = self.forward_nn(X)
+            loss = self.loss_function(H, y, save_params)
         return loss
 
-    def set_regularization(self, sw_reg = 0.02, lorentzian_reg = None):
+    def set_regularization(self, sw_reg=0.02, lorentzian_reg=None):
         """
         Set magnitude of regularizations for the training:
         - add identity matrix multiplied by `sw_reg` to within scatter S_w.
@@ -407,19 +414,28 @@ class DeepLDA_CV(NeuralNetworkCV,LDA):
         .. [1] Luigi Bonati, Valerio Rizzi, and Michele Parrinello, J. Phys. Chem. Lett. 11, 2998-3004 (2020).
 
         - S_w
-        .. math:: S_w = S_w + \mathtt{sw_reg}\ \mathbf{1}. 
-        
+        .. math:: S_w = S_w + \mathtt{sw_reg}\ \mathbf{1}.
+
         - Lorentzian
         TODO Add equation
-        
+
         """
         self.sw_reg = sw_reg
         if lorentzian_reg is None:
-            self.lorentzian_reg = 2./sw_reg
+            self.lorentzian_reg = 2.0 / sw_reg
         else:
             self.lorentzian_reg = lorentzian_reg
-            
-    def train(self, train_data, valid_data=None, standardize_inputs=True, batch_size=-1, nepochs=1000, log_every=1, info=False):
+
+    def train(
+        self,
+        train_data,
+        valid_data=None,
+        standardize_inputs=True,
+        batch_size=-1,
+        nepochs=1000,
+        log_every=1,
+        info=False,
+    ):
         """
         Train Deep-LDA CVs.
 
@@ -441,65 +457,73 @@ class DeepLDA_CV(NeuralNetworkCV,LDA):
             print debug info (default = False)
         """
 
-        #check optimizer
+        # check optimizer
         if self.opt_ is None:
             self.default_optimizer()
-        
-        #create dataloader
+
+        # create dataloader
         train_dataset = ColvarDataset(train_data)
-        if batch_size==-1:
-            batch_size=len(train_data[0])
+        if batch_size == -1:
+            batch_size = len(train_data[0])
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
-        #standardize inputs
+        # standardize inputs
         if standardize_inputs:
             self.standardize_inputs(train_data[0])
-            
-        #print info
+
+        # print info
         if info:
             self.print_info()
-        
-        #train
+
+        # train
         for ep in range(nepochs):
             self.train_epoch(train_loader)
-            
-            loss_train = self.evaluate_dataset(train_data,save_params=True)
+
+            loss_train = self.evaluate_dataset(train_data, save_params=True)
             loss_valid = self.evaluate_dataset(valid_data)
             self.loss_train.append(loss_train)
             self.loss_valid.append(loss_valid)
-            
-            #earlystopping
+
+            # earlystopping
             if self.earlystopping_ is not None:
-                self.earlystopping_(loss_valid,self.parameters)
-                
-            #log
-            if ((ep+1) % log_every == 0) or ( self.earlystopping_.early_stop ):
-                self.print_log({'Epoch':ep+1,'Train Loss':loss_train,'Valid Loss':loss_valid},
-                               spacing=[6,12,12],decimals=2)
-                
-            #check whether to stop
+                self.earlystopping_(loss_valid, self.parameters)
+
+            # log
+            if ((ep + 1) % log_every == 0) or (self.earlystopping_.early_stop):
+                self.print_log(
+                    {
+                        "Epoch": ep + 1,
+                        "Train Loss": loss_train,
+                        "Valid Loss": loss_valid,
+                    },
+                    spacing=[6, 12, 12],
+                    decimals=2,
+                )
+
+            # check whether to stop
             if (self.earlystopping_ is not None) and (self.earlystopping_.early_stop):
                 self.parameters = self.earlystopping_.best_model
                 break
+
 
 class ColvarDataset(Dataset):
     """
     Auxiliary dataset to generate a dataloader.
 
-    """ 
+    """
 
     def __init__(self, colvar_list):
         """
-        Initialize dataset 
+        Initialize dataset
 
         Parameters
         ----------
         colvar_list : list of arrays
             input data (also with classes)
-        """ 
-        self.nstates = len( colvar_list )
+        """
+        self.nstates = len(colvar_list)
         self.colvar = colvar_list
-        
+
     def __len__(self):
         return len(self.colvar[0])
 

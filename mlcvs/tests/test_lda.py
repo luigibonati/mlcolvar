@@ -7,49 +7,51 @@ import pytest
 import torch
 import numpy as np
 from mlcvs.io import colvar_to_pandas
-from mlcvs.lda import LDA_CV, DeepLDA_CV 
+from mlcvs.lda import LDA_CV, DeepLDA_CV
 
-# set global variables 
+# set global variables
 dtype = torch.float32
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 @pytest.fixture(scope="module")
 def load_dataset_2d_model():
     """Load 2d-basins dataset"""
 
     # Load colvar files as pandas dataframes
-    dataA = colvar_to_pandas(folder='mlcvs/data/2d_model/',filename='COLVAR_stateA')
-    dataB = colvar_to_pandas(folder='mlcvs/data/2d_model/',filename='COLVAR_stateB')
+    dataA = colvar_to_pandas(folder="mlcvs/data/2d_model/", filename="COLVAR_stateA")
+    dataB = colvar_to_pandas(folder="mlcvs/data/2d_model/", filename="COLVAR_stateB")
 
     # Create input datasets
-    xA = dataA.filter(regex='p.*').values
-    xB = dataB.filter(regex='p.*').values
-    names = dataA.filter(regex='p.*').columns.values
+    xA = dataA.filter(regex="p.*").values
+    xB = dataB.filter(regex="p.*").values
+    names = dataA.filter(regex="p.*").columns.values
 
     # Create labels
     yA = np.zeros(len(dataA))
     yB = np.ones(len(dataB))
 
     # Concatenate
-    X = np.concatenate([xA,xB],axis=0)
-    y = np.concatenate([yA,yB],axis=0)
+    X = np.concatenate([xA, xB], axis=0)
+    y = np.concatenate([yA, yB], axis=0)
 
-    # Shuffle 
+    # Shuffle
     np.random.seed(1)
     p = np.random.permutation(len(X))
     X, y = X[p], y[p]
 
-    # Convert np to torch 
-    X = torch.tensor(X,dtype=dtype,device=device)
-    y = torch.tensor(y,dtype=dtype,device=device)
+    # Convert np to torch
+    X = torch.tensor(X, dtype=dtype, device=device)
+    y = torch.tensor(y, dtype=dtype, device=device)
 
-    return X,y,names
+    return X, y, names
 
-@pytest.mark.parametrize("n_classes", [2, 3]) 
+
+@pytest.mark.parametrize("n_classes", [2, 3])
 def test_lda_nclasses(n_classes):
     """Perform LDA on toy dataset."""
 
-    n_data = 100 
+    n_data = 100
     n_features = 3
 
     # Generate classes
@@ -59,9 +61,9 @@ def test_lda_nclasses(n_classes):
     y_list = []
 
     for i in range(n_classes):
-        mean = [1 if j==i else 0 for j in range(n_features)]
-        cov = 0.2*np.eye(n_features)
-        
+        mean = [1 if j == i else 0 for j in range(n_features)]
+        cov = 0.2 * np.eye(n_features)
+
         x_i = np.random.multivariate_normal(mean, cov, n_data)
         y_i = i * np.ones(len(x_i))
 
@@ -69,37 +71,40 @@ def test_lda_nclasses(n_classes):
         y_list.append(y_i)
 
     # Concatenate
-    X = np.concatenate(x_list,axis=0)
-    y = np.concatenate(y_list,axis=0)
+    X = np.concatenate(x_list, axis=0)
+    y = np.concatenate(y_list, axis=0)
 
-    # Define model 
+    # Define model
     n_features = X.shape[1]
     lda = LDA_CV(n_features)
 
     # Fit and transform LDA
-    result = lda.fit_transform(X,y)
+    result = lda.fit_transform(X, y)
 
     # Project
     x_test = torch.tensor(n_features).to(device)
     y_test = lda(x_test)
-    y_test_expected = torch.tensor([0.2407] if n_classes == 2 else [ 0.2316, -0.1087]).to(device)
+    y_test_expected = torch.tensor(
+        [0.2407] if n_classes == 2 else [0.2316, -0.1087]
+    ).to(device)
 
     assert (y_test_expected - y_test).abs().sum() < 1e-4
+
 
 def test_lda_2d_model(load_dataset_2d_model):
     """Perform LDA on 2d_model data folder."""
 
     # Load dataset
-    X,y,features_names = load_dataset_2d_model
-    
-    # Define model 
+    X, y, features_names = load_dataset_2d_model
+
+    # Define model
     n_features = X.shape[1]
     lda = LDA_CV(n_features)
     # Set features names (for PLUMED input)
-    lda.set_params({'features_names': features_names})
+    lda.set_params({"features_names": features_names})
 
     # Fit LDA
-    lda.fit(X,y)
+    lda.fit(X, y)
 
     # Project
     x_test = np.ones(2)
@@ -107,34 +112,37 @@ def test_lda_2d_model(load_dataset_2d_model):
 
     y_test = y_test[0]
     y_test_expected = torch.tensor(-0.0960027).to(device)
-    assert (torch.abs(y_test_expected - y_test) < 1e-5)
+    assert torch.abs(y_test_expected - y_test) < 1e-5
 
     # Check PLUMED INPUT
     input = lda.plumed_input()
-    expected_input = "lda_cv: COMBINE ARG=p.x,p.y COEFFICIENTS=0.657474,-0.75347 PERIODIC=NO"
+    expected_input = (
+        "lda_cv: COMBINE ARG=p.x,p.y COEFFICIENTS=0.657474,-0.75347 PERIODIC=NO"
+    )
     assert expected_input == input
 
-@pytest.mark.parametrize("n_classes", [2, 3]) 
+
+@pytest.mark.parametrize("n_classes", [2, 3])
 def test_deeplda_nclasses(n_classes):
     """Define a DeepLDA object with different number of classes."""
-    
+
     # define dataset
-    n_data = 100 
+    n_data = 100
     n_features = 10
-    X = torch.rand((n_data,n_features)).to(device)
-    y = torch.randint(low=0,high=n_classes,size=(n_data,))
+    X = torch.rand((n_data, n_features)).to(device)
+    y = torch.randint(low=0, high=n_classes, size=(n_data,))
 
     # split train/test
-    ntrain = int(n_data*0.8)
-    nvalid = int(n_data*0.2)
-    train_data = [X[:ntrain],y[:ntrain]]
-    valid_data = [X[ntrain:ntrain+nvalid],y[ntrain:ntrain+nvalid]]
+    ntrain = int(n_data * 0.8)
+    nvalid = int(n_data * 0.2)
+    train_data = [X[:ntrain], y[:ntrain]]
+    valid_data = [X[ntrain : ntrain + nvalid], y[ntrain : ntrain + nvalid]]
 
     # Architecture
     hidden_nodes = "20,20,5"
-    nodes = [int(x) for x in hidden_nodes.split(',')]
+    nodes = [int(x) for x in hidden_nodes.split(",")]
     nodes.insert(0, X.shape[1])
-    n_hidden=nodes[-1]
+    n_hidden = nodes[-1]
 
     # Model
     model = DeepLDA_CV(nodes, device=device)
@@ -143,7 +151,7 @@ def test_deeplda_nclasses(n_classes):
     # Define input
     xtest = torch.ones(n_features).to(device)
 
-    # Forward 
+    # Forward
     ytest = model(xtest)
 
     # ASSERT if shape == n_hidden
@@ -152,56 +160,59 @@ def test_deeplda_nclasses(n_classes):
 
     # Compute lda and set params; new forward
     with torch.no_grad():
-        loss = model.evaluate_dataset(train_data,save_params=True)
+        loss = model.evaluate_dataset(train_data, save_params=True)
     y2test = model(xtest)
 
     # ASSERT if shape == n_classes-1
-    expected_y2_shape = torch.rand(n_classes-1).shape
+    expected_y2_shape = torch.rand(n_classes - 1).shape
     assert y2test.shape == expected_y2_shape
 
+
 @pytest.mark.slow
-#@pytest.mark.skip
+# @pytest.mark.skip
 def test_deeplda_train_2d_model(load_dataset_2d_model):
     """Perform DeepLDA on 2d-basins data folder."""
-    
+
     # load dataset
-    X,y,features_names = load_dataset_2d_model
+    X, y, features_names = load_dataset_2d_model
 
     # split train/test
     ntrain = 800
     nvalid = 200
 
-    standardize_inputs = True #@param {type:"boolean"}
+    standardize_inputs = True  # @param {type:"boolean"}
 
-    train_data = [X[:ntrain],y[:ntrain]]
-    valid_data = [X[ntrain:ntrain+nvalid],y[ntrain:ntrain+nvalid]]
+    train_data = [X[:ntrain], y[:ntrain]]
+    valid_data = [X[ntrain : ntrain + nvalid], y[ntrain : ntrain + nvalid]]
 
     hidden_nodes = "30,30,5"
-    nodes = [int(x) for x in hidden_nodes.split(',')]
+    nodes = [int(x) for x in hidden_nodes.split(",")]
     nodes.insert(0, X.shape[1])
-    n_hidden=nodes[-1]
+    n_hidden = nodes[-1]
 
     # -- Parameters --
-    lrate = 0.001 
-    sw_reg = 0.05 
+    lrate = 0.001
+    sw_reg = 0.05
     l2_reg = 1e-5
 
     # MODEL
     model = DeepLDA_CV(nodes, device=device)
     model.to(device)
 
-    #OPTIMIZER
+    # OPTIMIZER
     opt = torch.optim.Adam(model.parameters(), lr=lrate, weight_decay=l2_reg)
 
     # REGULARIZATION
     model.set_optimizer(opt)
-    model.set_earlystopping(patience=10,min_delta=0.,consecutive=False,save_best_model=True)
+    model.set_earlystopping(
+        patience=10, min_delta=0.0, consecutive=False, save_best_model=True
+    )
     model.set_regularization(sw_reg=sw_reg)
 
     # TRAIN
-    model.train(train_data,valid_data,info=True,log_every=100)
+    model.train(train_data, valid_data, info=True, log_every=100)
 
-    # FORWARD 
+    # FORWARD
     xtest = torch.rand(X.size(1)).to(device)
     with torch.no_grad():
         ytest = model(xtest)
@@ -217,9 +228,10 @@ def test_deeplda_train_2d_model(load_dataset_2d_model):
         ytest2 = model(xtest2)
 
     expected_y2_shape = torch.rand(1).shape
-    assert torch.equal(ytest,ytest2[0])
+    assert torch.equal(ytest, ytest2[0])
 
-#if __name__ == "__main__":
-    # Do something if this file is invoked on its own
-    #test_lda_basins()
-    #test_deeplda_train()
+
+# if __name__ == "__main__":
+# Do something if this file is invoked on its own
+# test_lda_basins()
+# test_deeplda_train()
