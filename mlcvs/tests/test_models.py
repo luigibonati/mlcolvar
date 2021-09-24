@@ -18,7 +18,7 @@ def test_LinearCV(n_input,dev):
 
     # Set device
     device = torch.device(dev)
-    if not torch.cuda.is_available():
+    if (dev == 'cuda') and (not torch.cuda.is_available() ):
         pytest.skip("cuda not available")
 
     # Define model
@@ -51,7 +51,7 @@ def test_NeuralNetworkCV(n_input,dev):
 
     # Set device
     device = torch.device(dev)
-    if not torch.cuda.is_available():
+    if (dev == 'cuda') and (not torch.cuda.is_available() ):
         pytest.skip("cuda not available")
 
     # Parameters
