@@ -72,7 +72,56 @@ def test_lda_basins(load_dataset):
     expected_input = "lda_cv: COMBINE ARG=p.x,p.y COEFFICIENTS=0.657474,-0.75347 PERIODIC=NO"
     assert expected_input == input
 
+def test_deeplda():
+    """Define a DeepLDA object."""
+    
+    # define dataset
+    n_data = 100 
+    n_features = 10
+    n_classes = 2 
+    X = torch.rand((n_data,n_features)).to(device)
+    y = torch.randint(low=0,high=n_classes,size=(n_data,))
+    print(y)
+
+    # split train/test
+    ntrain = int(n_data*0.8)
+    nvalid = int(n_data*0.2)
+    train_data = [X[:ntrain],y[:ntrain]]
+    valid_data = [X[ntrain:ntrain+nvalid],y[ntrain:ntrain+nvalid]]
+
+    # Architecture
+    hidden_nodes = "20,20,5"
+    nodes = [int(x) for x in hidden_nodes.split(',')]
+    nodes.insert(0, X.shape[1])
+    n_hidden=nodes[-1]
+
+    # Model
+    model = DeepLDA_CV(nodes, device=device)
+    model.to(device)
+
+    # Define input
+    xtest = torch.ones(n_features).to(device)
+
+    # Forward 
+    ytest = model(xtest)
+
+    # ASSERT if shape == n_hidden
+    expected_y_shape = torch.rand(n_hidden).shape
+    assert ytest.shape == expected_y_shape
+
+    # Compute lda and set params; new forward
+    with torch.no_grad():
+        loss = model.evaluate_dataset(train_data,save_params=True)
+    y2test = model(xtest)
+    print(model.w.shape)
+    print(y2test)
+
+    # ASSERT if shape == n_classes-1
+    expected_y2_shape = torch.rand(n_classes-1).shape
+    assert y2test.shape == expected_y2_shape
+
 @pytest.mark.slow
+@pytest.mark.skip
 def test_deeplda_train(load_dataset):
     """Perform DeepLDA on 2d-basins data folder."""
     
@@ -88,15 +137,15 @@ def test_deeplda_train(load_dataset):
     train_data = [X[:ntrain],y[:ntrain]]
     valid_data = [X[ntrain:ntrain+nvalid],y[ntrain:ntrain+nvalid]]
 
-    hidden_nodes = "30,30,5" #@param {type:"raw"}
+    hidden_nodes = "30,30,5"
     nodes = [int(x) for x in hidden_nodes.split(',')]
     nodes.insert(0, X.shape[1])
     n_hidden=nodes[-1]
 
     # -- Parameters --
-    lrate = 0.001 #@param {type:"slider", min:0.0001, max:0.005, step:0.0001}
-    sw_reg = 0.05 #@param {type:"number"}
-    l2_reg = 1e-5 #@param {type:"number"}
+    lrate = 0.001 
+    sw_reg = 0.05 
+    l2_reg = 1e-5
 
     # MODEL
     model = DeepLDA_CV(nodes, device=device)
