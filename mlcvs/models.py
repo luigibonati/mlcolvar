@@ -1,8 +1,9 @@
 """Collective variables base models."""
 
+__all__ = ["LinearCV", "NeuralNetworkCV"]
+
 import torch
 import numpy as np
-from torch._C import Value
 from . import optim
 
 class LinearCV:

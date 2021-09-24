@@ -1,5 +1,7 @@
 """Machine learning collective variables"""
 
+# __all__ = ["lda", "io", "optim", "models"]
+
 # Add imports here
 from .lda import *
 from .io import *

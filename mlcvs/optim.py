@@ -1,8 +1,8 @@
 """Utils for NN optimization."""
 
-import torch
+__all__ = ["EarlyStopping"]
 
-# TRAINING
+import torch
 
 class EarlyStopping():
     """
@@ -61,7 +61,7 @@ class EarlyStopping():
     def __call__(self, val_loss, model=None, epoch=None):
 
         # IF first epoch: initialize
-        if self.best_loss == None:
+        if self.best_loss is None:
             self.best_loss = val_loss
 
         # IF valid_loss decreases

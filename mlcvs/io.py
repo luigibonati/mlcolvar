@@ -1,5 +1,7 @@
 """Input/output functions."""
 
+__all__ = ["colvar_to_pandas"]
+
 import pandas as pd
 
 def colvar_to_pandas(filename='COLVAR',folder='./',sep=' '):

@@ -1,7 +1,8 @@
 """Linear discriminant analysis-based CVs."""
 
+__all__ = ["LDA_CV","DeepLDA_CV"]
+
 import torch
-import numpy as np
 from .models import LinearCV, NeuralNetworkCV
 from torch.utils.data import Dataset, DataLoader
 
@@ -80,7 +81,7 @@ class LDA:
         S_t = H_bar.t().matmul(H_bar) / (N - 1)
         #Define within scatter matrix and compute it
         S_w = torch.Tensor().new_zeros((d, d), device = self.device_, dtype = self.dtype_)    
-        S_w_inv = torch.Tensor().new_zeros((d, d), device = self.device_, dtype = self.dtype_)
+        #S_w_inv = torch.Tensor().new_zeros((d, d), device = self.device_, dtype = self.dtype_)
         #Loop over classes to compute means and covs
         for i in classes:
             #check which elements belong to class i
