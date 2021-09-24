@@ -262,6 +262,7 @@ class NeuralNetworkCV(torch.nn.Module):
     Examples
     --------
     Create a neural-network with 20 inputs, one hidden layer with 10 nodes and 5 outputs
+    
     >>> net = NeuralNetworkCV(layers=[20,10,5], activation = 'relu')
     >>> net
     NeuralNetworkCV(
@@ -271,6 +272,7 @@ class NeuralNetworkCV(torch.nn.Module):
         (2): Linear(in_features=10, out_features=5, bias=True)
       )
     )
+
     """
 
     def __init__(
