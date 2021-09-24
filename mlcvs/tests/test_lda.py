@@ -65,7 +65,7 @@ def test_lda_basins(load_dataset):
 
     y_test = y_test.cpu()[0]
     y_test_expected = torch.tensor(-0.0960027)
-    assert y_test_expected == y_test
+    assert (torch.abs(y_test_expected - y_test) < 1e-5)
 
     # Check PLUMED INPUT
     input = lda.plumed_input()
