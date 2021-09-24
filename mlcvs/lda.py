@@ -1,6 +1,6 @@
 """Linear discriminant analysis-based CVs."""
 
-__all__ = ["LDA_CV","DeepLDA_CV"]
+__all__ = ["LDA_CV", "DeepLDA_CV"]
 
 import torch
 from .models import LinearCV, NeuralNetworkCV
@@ -29,8 +29,9 @@ class LDA:
         Perform LDA
     """
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
         # initialize attributes
         self.evals_ = None
         self.evecs_ = None
