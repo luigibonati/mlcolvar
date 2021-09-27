@@ -9,7 +9,7 @@ from torch.utils.data import Dataset, DataLoader
 
 class LDA:
     """
-    Fisher's discriminant base class.
+    Fisher's discriminant class.
 
     Attributes
     ----------
@@ -26,7 +26,7 @@ class LDA:
 
     Methods
     -------
-    LDA(H,y,save_params):
+    compute_LDA(H,y,save_params):
         Perform LDA
     """
 
@@ -49,7 +49,7 @@ class LDA:
         self.dtype_ = torch.float32
         self.device_ = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    def LDA(self, H, label, save_params=True):
+    def compute_LDA(self, H, label, save_params=True):
         """
         Internal method which performs LDA and saves parameters.
 
@@ -153,7 +153,7 @@ class LDA:
         return eigvals, eigvecs
 
 
-class LDA_CV(LinearCV, LDA):
+class LDA_CV(LinearCV):
     """
     Linear Discriminant CV
 
@@ -185,10 +185,11 @@ class LDA_CV(LinearCV, LDA):
         Generate PLUMED input file
     """
 
-    def __init__(self, n_features, device="auto", dtype=torch.float32):
-        super().__init__(n_features=n_features, device=device, dtype=dtype)
+    def __init__(self, n_features, device="auto", dtype=torch.float32, **kwargs):
+        super().__init__(n_features=n_features, device=device, dtype=dtype, **kwargs)
 
         self.name_ = "lda_cv"
+        self.lda = LDA()
 
     def fit(self, X, y):
         """
@@ -206,7 +207,7 @@ class LDA_CV(LinearCV, LDA):
             X = torch.tensor(X, dtype=self.dtype_, device=self.device_)
         if type(y) != torch.Tensor:
             y = torch.tensor(y, device=self.device_)  # class labels are integers
-        _, eigvecs = self.LDA(X, y)
+        _, eigvecs = self.lda.compute_LDA(X, y)
         # save parameters for estimator
         self.w = eigvecs
 
@@ -247,7 +248,7 @@ class LDA_CV(LinearCV, LDA):
         self.sw_reg = 0.05
 
 
-class DeepLDA_CV(NeuralNetworkCV, LDA):
+class DeepLDA_CV(NeuralNetworkCV):
     """
     Neural network based discriminant CV.
     Perform a non-linear featurization of the inputs with a neural-network and optimize it as to maximize Fisher's discriminant ratio.
@@ -283,10 +284,11 @@ class DeepLDA_CV(NeuralNetworkCV, LDA):
         Generate PLUMED input file
     """
 
-    def __init__(self, layers, activation="relu", device="auto", dtype=torch.float32):
+    def __init__(self, layers, activation="relu", device="auto", dtype=torch.float32, **kwargs):
         super().__init__(
-            layers=layers, activation=activation, device=device, dtype=dtype
+            layers=layers, activation=activation, device=device, dtype=dtype, **kwargs
         )
+        self.lda = LDA()
 
         # lorentzian regularization
         self.lorentzian_reg = 0
@@ -329,18 +331,18 @@ class DeepLDA_CV(NeuralNetworkCV, LDA):
         loss : torch.tensor
             loss function
         """
-        eigvals, eigvecs = self.LDA(H, y, save_params)
+        eigvals, eigvecs = self.lda.compute_LDA(H, y, save_params)
         if save_params:
             self.w = eigvecs
 
         # TODO add sum option for multiclass
 
         # if two classes loss is equal to the single eigenvalue
-        if self.n_classes == 2:
+        if self.lda.n_classes == 2:
             loss = -eigvals
         # if more than two classes loss equal to the smallest of the C-1 eigenvalues
-        elif self.n_classes > 2:
-            loss = -eigvals[self.n_classes - 2]
+        elif self.lda.n_classes > 2:
+            loss = -eigvals[self.lda.n_classes - 2]
         else:
             raise ValueError("The number of classes for LDA must be greater than 1")
 
