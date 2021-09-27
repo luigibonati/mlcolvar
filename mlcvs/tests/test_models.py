@@ -24,13 +24,14 @@ def test_LinearCV(n_input, dev):
 
     # Define model
     # n_input = 2
-    cv = LinearCV(n_features=n_input, device=device)
+    cv = LinearCV(n_features=n_input,device=device)
+    cv.to(device)
 
     # Define inputs
     x = torch.ones(n_input).to(device)
 
     # Propagate with default values
-    y = cv.transform(x)
+    y = cv(x)
     expected_y = torch.tensor([1.0 for _ in range(n_input)]).to(device)
     # ASSERT arrays
     assert torch.equal(y, expected_y)

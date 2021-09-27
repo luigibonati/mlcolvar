@@ -168,10 +168,9 @@ class LDA_CV(LinearCV):
 
     Methods
     -------
-    fit(x,label)
+    train(x,label)
         Fit LDA given data and classes
-    fit_transform(x,label)
-        Fit LDA and project data
+
 
     + LinearCV TODO CHECK
     """
@@ -192,7 +191,7 @@ class LDA_CV(LinearCV):
         self.name_ = "lda_cv"
         self.lda = LDA()
 
-    def fit(self, X, y):
+    def train(self, X, y):
         """
         Fit LDA given data and classes.
 
@@ -211,26 +210,6 @@ class LDA_CV(LinearCV):
         _, eigvecs = self.lda.compute_LDA(X, y)
         # save parameters for estimator
         self.w = eigvecs
-
-    def fit_transform(self, X, y):
-        """
-        Fit LDA and project data.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Training data.
-        y : array-like of shape (n_samples,)
-            Classes labels.
-
-        Returns
-        -------
-        s : array-like of shape (n_samples, n_classes-1)
-            LDA projections.
-        """
-
-        self.fit(X, y)
-        return self.transform(X)
 
     def set_regularization(self, sw_reg):
         """
@@ -280,7 +259,7 @@ class DeepLDA_CV(NeuralNetworkCV):
     train()
         Train Deep-LDA CVs.
     evaluate_dataset(x,label)
-        Fit LDA and project data
+        Evaluate loss function on dataset.
     """
 
     def __init__(self, layers, activation="relu", device="auto", dtype=torch.float32, **kwargs):

@@ -79,7 +79,7 @@ def test_lda_nclasses(n_classes):
     lda = LDA_CV(n_features)
 
     # Fit and transform LDA
-    result = lda.fit_transform(X, y)
+    result = lda.train_forward(X, y)
 
     # Project
     x_test = torch.tensor(n_features).to(device)
@@ -104,7 +104,7 @@ def test_lda_2d_model(load_dataset_2d_model):
     lda.set_params({"features_names": features_names})
 
     # Fit LDA
-    lda.fit(X, y)
+    lda.train(X, y)
 
     # Project
     x_test = np.ones(2)

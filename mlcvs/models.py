@@ -28,15 +28,15 @@ class LinearCV(torch.nn.Module):
     -------
     __init__(n_features)
         Create a linear model.
-    fit(x, ...)
+    train()
         Fit model (abstract)
-    transform(x)
+    forward(X)
         Project data along linear model
-    fit_transform(x,label)
+    train_forward(X,y)
         Fit and project data 
     get_params()
         Return saved parameters
-    set_params()
+    set_params(dict)
         Set parameters via dictionaries
     set_weights(w)
         Set coefficients
@@ -69,34 +69,14 @@ class LinearCV(torch.nn.Module):
 
         # Flags
 
-    def forward(self, X):
-        """
-        Alias for transform.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features) or (n_features)
-            Inference data.
-
-        Returns
-        -------
-        s : array-like of shape (n_samples, n_weights)
-            Linear combination of inputs.
-
-        See Also
-        --------
-        transform : project data along linear combination
-        """
-        return self.transform(X)
-
-    def fit(self):
+    def train(self):
         """
         Fit estimator (abstract method).
         """
-        Warning("Fit method not implemented for base class.")
+        Warning("Train method not implemented for base class.")
         pass
 
-    def transform(self, X):
+    def forward(self, X):
         """
         Project data along linear components.
 
@@ -117,7 +97,7 @@ class LinearCV(torch.nn.Module):
 
         return s
 
-    def fit_transform(self, X):
+    def train_forward(self, X, y):
         """
         Call fit and then transform (abstract method).
 
@@ -128,7 +108,8 @@ class LinearCV(torch.nn.Module):
         -------
 
         """
-        pass
+        self.train(X, y)
+        return self.forward(X)
 
     def set_weights(self, w):
         """
@@ -257,7 +238,7 @@ class NeuralNetworkCV(torch.nn.Module):
         Compute model output.
     forward_nn(x)
         Compute NN output.
-    transform(h)
+    linear_projection(H)
         Apply linear projection to NN output.
     set_optimizer(opt)
         Save optimizer
@@ -410,16 +391,16 @@ class NeuralNetworkCV(torch.nn.Module):
         """
         z = self.forward_nn(x)
         if not self.output_hidden:
-            z = self.transform(z)
+            z = self.linear_projection(z)
         return z
 
-    def transform(self, X):
+    def linear_projection(self, H):
         """
         Apply linear projection to NN output.
 
         Parameters
         ----------
-        X : array-like of shape (n_samples, n_features) or (n_features)
+        H : array-like of shape (n_samples, n_features) or (n_features)
             Inference data.
 
         Returns
@@ -428,7 +409,7 @@ class NeuralNetworkCV(torch.nn.Module):
             Linear projection of inputs.
         """
 
-        s = torch.matmul(X - self.b, self.w)
+        s = torch.matmul(H - self.b, self.w)
 
         return s
 
