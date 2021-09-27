@@ -7,16 +7,16 @@ import pandas as pd
 
 def colvar_to_pandas(filename="COLVAR", folder="./", sep=" "):
     """
-    Load a PLUMED colvar file and save it to a dataframe.
+    Load a PLUMED file and save it to a dataframe.
 
     Parameters
     ----------
     filename : string, optional
-        Collective variables file
+        PLUMED output file
     folder : string, optional
-        Folder
+        Folder (default = "./")
     sep: string, optional
-        Fields separator
+        Fields separator (default = " ")
 
     Returns
     -------
@@ -24,9 +24,14 @@ def colvar_to_pandas(filename="COLVAR", folder="./", sep=" "):
         Collective variables dataframe
     """
     skip_rows = 1
+    # Read header 
     headers = pd.read_csv(
         folder + filename, sep=" ", skipinitialspace=True, nrows=0
-    ).columns[2:]
+    )
+    # Discard #! FIELDS
+    headers = headers.columns[2:]
+
+    # Load dataframe and use headers for columns names
     df = pd.read_csv(
         folder + filename,
         sep=sep,

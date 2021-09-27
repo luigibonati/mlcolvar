@@ -13,16 +13,20 @@ class LDA:
 
     Attributes
     ----------
-    d_ : int
+    n_features : int
+        Number of features
+    n_classes : int
         Number of classes
     evals_ : torch.Tensor
         LDA eigenvalues
     evecs_ : torch.Tensor
-        LDA eignvectors
+        LDA eigenvectors
     S_b_ : torch.Tensor
         Between scatter matrix
     S_w_ : torch.Tensor
         Within scatter matrix
+    sw_reg : float
+        Regularization to S_w matrix
 
     Methods
     -------
@@ -38,7 +42,7 @@ class LDA:
         self.evecs_ = None
         self.S_b_ = None
         self.S_w_ = None
-        self.d_ = None  # num features for LDA
+        self.n_features = None  # num features for LDA
         self.n_classes = None
         self.features_names_ = None
 
@@ -51,7 +55,7 @@ class LDA:
 
     def compute_LDA(self, H, label, save_params=True):
         """
-        Internal method which performs LDA and saves parameters.
+        Performs LDA and saves parameters.
 
         Parameters
         ----------
@@ -70,7 +74,7 @@ class LDA:
 
         # sizes
         N, d = H.shape
-        self.d_ = d
+        self.n_features = d
 
         # classes
         classes = torch.unique(label)
@@ -155,37 +159,34 @@ class LDA:
 
 class LDA_CV(LinearCV):
     """
-    Linear Discriminant CV
+    Linear Discriminant-based collective variable.
 
     Attributes
     ----------
-    d_ : int
-        Number of classes
-    evals_ : torch.Tensor
-        LDA eigenvalues
-    evecs_ : torch.Tensor
-        LDA eignvectors
-    S_b_ : torch.Tensor
-        Between scatter matrix
-    S_w_ : torch.Tensor
-        Within scatter matrix
+    lda: LDA object
+        Linear discriminant analysis instance.
 
     Methods
     -------
-    TODO adjust class inheritance
     fit(x,label)
         Fit LDA given data and classes
-    transform(x)
-        Project data to maximize class separation
     fit_transform(x,label)
         Fit LDA and project data
-    get_params()
-        Return saved parameters
-    plumed_input()
-        Generate PLUMED input file
+
+    + LinearCV TODO CHECK
     """
 
     def __init__(self, n_features, device="auto", dtype=torch.float32, **kwargs):
+        """
+        Create a LDA_CV object
+
+        Parameters
+        ----------
+        n_features : int
+            Number of input features
+        **kwargs : dict
+            Additional parameters for LinearCV object
+        """
         super().__init__(n_features=n_features, device=device, dtype=dtype, **kwargs)
 
         self.name_ = "lda_cv"
@@ -245,7 +246,7 @@ class LDA_CV(LinearCV):
         .. math:: S_w = S_w + \mathtt{sw_reg}\ \mathbf{1}.
 
         """
-        self.sw_reg = 0.05
+        self.lda.sw_reg = 0.05
 
 
 class DeepLDA_CV(NeuralNetworkCV):
@@ -255,44 +256,53 @@ class DeepLDA_CV(NeuralNetworkCV):
 
     Attributes
     ----------
-    d_ : int
+    lda : LDA object
         Number of classes
-    evals_ : torch.Tensor
-        LDA eigenvalues
-    evecs_ : torch.Tensor
-        LDA eignvectors
-    S_b_ : torch.Tensor
-        Between scatter matrix
-    S_w_ : torch.Tensor
-        Within scatter matrix
+    lorentzian_reg: float
+        Magnitude of lorentzian regularization
+    epochs : int
+        Number of performed epochs of training
+    loss_train : list
+        Loss function for train data over training. 
+    loss-valid : list
+        Loss function for validation data over training.
 
     Methods
     -------
-    forward(x)
-        Compute DeepLDA CV
+    __init__(layers,activation,**kwargs)
+        Create a DeepLDA_CV object
     set_regularization(sw_reg,lorentzian_reg)
         Set magnitudes of regularizations.
+    regularization_lorentzian(H)
+        Apply regularization to NN output.
+    loss_function(H,y)
+        Loss function for the DeepLDA CV.
     train()
-        Train NN
+        Train Deep-LDA CVs.
     evaluate_dataset(x,label)
         Fit LDA and project data
-    get_params()
-        Return saved parameters
-    set_features_names(names) #TODO Add
-        Set features names
-    plumed_input() #TODO add
-        Generate PLUMED input file
     """
 
     def __init__(self, layers, activation="relu", device="auto", dtype=torch.float32, **kwargs):
+        """
+        Create a DeepLDA_CV object
+
+        Parameters
+        ----------
+        n_features : int
+            Number of input features
+        **kwargs : dict
+            Additional parameters for LinearCV object
+        """
+        
         super().__init__(
             layers=layers, activation=activation, device=device, dtype=dtype, **kwargs
         )
+        self.name_ = "deeplda_cv"
         self.lda = LDA()
 
         # lorentzian regularization
         self.lorentzian_reg = 0
-        self.sw_reg = 0.05
 
         # training logs
         self.epochs = 0
@@ -300,7 +310,40 @@ class DeepLDA_CV(NeuralNetworkCV):
         self.loss_valid = []
         self.log_header = True
 
-    def regularization_lorentzian(self, x):
+    def set_regularization(self, sw_reg=0.02, lorentzian_reg=None):
+        """
+        Set magnitude of regularizations for the training:
+        - add identity matrix multiplied by `sw_reg` to within scatter S_w.
+        - add lorentzian regularization to NN outputs with magnitude `lorentzian_reg`
+
+        If `lorentzian_reg` is None, set it equal to `2./sw_reg`.
+
+        Parameters
+        ----------
+        sw_reg : float
+            Regularization value for S_w.
+        lorentzian_reg: float
+            Regularization for lorentzian on NN outputs.
+
+        Notes
+        -----
+        These regularizations are described in [1]_.
+        .. [1] Luigi Bonati, Valerio Rizzi, and Michele Parrinello, J. Phys. Chem. Lett. 11, 2998-3004 (2020).
+
+        - S_w
+        .. math:: S_w = S_w + \mathtt{sw_reg}\ \mathbf{1}.
+
+        - Lorentzian
+        TODO Add equation
+
+        """
+        self.lda.sw_reg = sw_reg
+        if lorentzian_reg is None:
+            self.lorentzian_reg = 2.0 / sw_reg
+        else:
+            self.lorentzian_reg = lorentzian_reg
+
+    def regularization_lorentzian(self, H):
         """
         Compute lorentzian regularization on NN outputs.
 
@@ -309,7 +352,7 @@ class DeepLDA_CV(NeuralNetworkCV):
         x : float
             input data
         """
-        reg_loss = x.pow(2).sum().div(x.size(0))
+        reg_loss = H.pow(2).sum().div(H.size(0))
         reg_loss_lor = -self.lorentzian_reg / (1 + (reg_loss - 1).pow(2))
         return reg_loss_lor
 
@@ -352,7 +395,7 @@ class DeepLDA_CV(NeuralNetworkCV):
 
     def train_epoch(self, loader):
         """
-        Function for training an epoch.
+        Auxiliary function for training an epoch.
 
         Parameters
         ----------
@@ -372,61 +415,6 @@ class DeepLDA_CV(NeuralNetworkCV):
             self.opt_.step()
         # ===================log======================
         self.epochs += 1
-
-    def evaluate_dataset(self, data, save_params=False):
-        """
-        Loss function for the DeepLDA CV. Correspond to maximizing the eigenvalue(s) of LDA plus a regularization on the NN outputs.
-
-        Parameters
-        ----------
-        data : array-like (data,labels)
-            validation dataset
-        save_params: bool
-            save the eigenvalues/vectors of LDA into the model
-
-        Returns
-        -------
-        loss : torch.tensor
-            loss function
-        """
-        with torch.no_grad():
-            X, y = data[0].float().to(self.device_), data[1].long().to(self.device_)
-            H = self.forward_nn(X)
-            loss = self.loss_function(H, y, save_params)
-        return loss
-
-    def set_regularization(self, sw_reg=0.02, lorentzian_reg=None):
-        """
-        Set magnitude of regularizations for the training:
-        - add identity matrix multiplied by `sw_reg` to within scatter S_w.
-        - add lorentzian regularization to NN outputs with magnitude `lorentzian_reg`
-
-        If `lorentzian_reg` is None, set it equal to `2./sw_reg`.
-
-        Parameters
-        ----------
-        sw_reg : float
-            Regularization value for S_w.
-        lorentzian_reg: float
-            Regularization for lorentzian on NN outputs.
-
-        Notes
-        -----
-        These regularizations are described in [1]_.
-        .. [1] Luigi Bonati, Valerio Rizzi, and Michele Parrinello, J. Phys. Chem. Lett. 11, 2998-3004 (2020).
-
-        - S_w
-        .. math:: S_w = S_w + \mathtt{sw_reg}\ \mathbf{1}.
-
-        - Lorentzian
-        TODO Add equation
-
-        """
-        self.sw_reg = sw_reg
-        if lorentzian_reg is None:
-            self.lorentzian_reg = 2.0 / sw_reg
-        else:
-            self.lorentzian_reg = lorentzian_reg
 
     def train(
         self,
@@ -506,6 +494,28 @@ class DeepLDA_CV(NeuralNetworkCV):
             if (self.earlystopping_ is not None) and (self.earlystopping_.early_stop):
                 self.parameters = self.earlystopping_.best_model
                 break
+
+    def evaluate_dataset(self, data, save_params=False):
+        """
+        Evaluate loss function on dataset.
+
+        Parameters
+        ----------
+        data : array-like (data,labels)
+            validation dataset
+        save_params: bool
+            save the eigenvalues/vectors of LDA into the model
+
+        Returns
+        -------
+        loss : torch.tensor
+            loss value
+        """
+        with torch.no_grad():
+            X, y = data[0].float().to(self.device_), data[1].long().to(self.device_)
+            H = self.forward_nn(X)
+            loss = self.loss_function(H, y, save_params)
+        return loss
 
 
 class ColvarDataset(Dataset):

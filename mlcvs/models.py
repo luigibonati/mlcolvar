@@ -13,29 +13,35 @@ class LinearCV:
 
     Attributes
     ----------
-    d_ : int
-        Number of classes
-    evals_ : torch.Tensor
-        LDA eigenvalues
-    evecs_ : torch.Tensor
-        LDA eignvectors
-    S_b_ : torch.Tensor
-        Between scatter matrix
-    S_w_ : torch.Tensor
-        Within scatter matrix
+    w : torch.Tensor
+        Weights array of linear model
+    b : torch.Tensor
+        Offset array 
+    n_features : int
+        Number of input features
+    features_names : list
+        List of input features names
+    device_ : torch.Device
+        Device used for the model
 
     Methods
     -------
-    fit(x,label)
-        Fit LDA given data and classes
+    __init__(n_features)
+        Create a linear model.
+    fit(x, ...)
+        Fit model (abstract)
     transform(x)
-        Project data to maximize class separation
+        Project data along linear model
     fit_transform(x,label)
-        Fit LDA and project data
+        Fit and project data 
     get_params()
         Return saved parameters
-    set_features_names(names)
-        Set features names
+    set_params()
+        Set parameters via dictionaries
+    set_weights(w)
+        Set coefficients
+    set_offset(b)
+        Set linear model
     plumed_input()
         Generate PLUMED input file
     """
@@ -72,8 +78,8 @@ class LinearCV:
 
         Returns
         -------
-        s : array-like of shape (n_samples, n_classes-1)
-            Linear projection along `self.weights_`.
+        s : array-like of shape (n_samples, n_weights)
+            Linear combination of inputs.
 
         See Also
         --------
@@ -85,6 +91,7 @@ class LinearCV:
         """
         Fit estimator (abstract method).
         """
+        Warning("Fit method not implemented for base class.")
         pass
 
     def transform(self, X):
@@ -220,9 +227,9 @@ class NeuralNetworkCV(torch.nn.Module):
     Attributes
     ----------
     nn : nn.Module
-        Neural network module
-    n_input: int
-        No. of inputs
+        Neural network object
+    n_features : int
+        Number of input features
     dtype_: torch.dtype
         Type of tensors
     device_: torch.device
@@ -235,15 +242,21 @@ class NeuralNetworkCV(torch.nn.Module):
         Normalize inputs
     normOut: bool
         Normalize outputs
+    outputHidden: bool
+        Output NN last layer rather than CVs
+    features_names : list
+        List of input features names
 
     Methods
     -------
+    __init__(layers,activation,device,dtype)
+        Create a neural network object.
     forward(x)
-        Compute model output
+        Compute model output.
     forward_nn(x)
-        Compute nn module output
-    set_device(device)
-        Set torch.device
+        Compute NN output.
+    transform(h)
+        Apply linear projection to NN output.
     set_optimizer(opt)
         Save optimizer
     set_earlystopping(patience,min_delta, ...)
@@ -253,7 +266,9 @@ class NeuralNetworkCV(torch.nn.Module):
     standardize_outputs(x)
         Standardize outputs over dataset
     get_params()
-        Return attached parameters
+        Return saved parameters
+    set_params()
+        Set parameters via dictionaries
     print_info()
         Display information about model
     print_log()
@@ -287,6 +302,7 @@ class NeuralNetworkCV(torch.nn.Module):
             Number of neurons per layer
         activation : string
             Activation function (relu, tanh, elu, linear)
+        devi
 
         """
         super().__init__(**kwargs)
@@ -350,7 +366,7 @@ class NeuralNetworkCV(torch.nn.Module):
     # Forward pass
     def forward_nn(self, x: torch.tensor) -> (torch.tensor):
         """
-        Compute outputs of neural network module
+        Compute NN output.
 
         Parameters
         ----------
@@ -373,7 +389,7 @@ class NeuralNetworkCV(torch.nn.Module):
 
     def forward(self, x: torch.tensor) -> (torch.tensor):
         """
-        Compute model output. First propagate input through the NN and then linear projection.
+        Compute model output.
 
         Parameters
         ----------
@@ -397,7 +413,7 @@ class NeuralNetworkCV(torch.nn.Module):
 
     def transform(self, X):
         """
-        Project data along linear components.
+        Apply linear projection to NN output.
 
         Parameters
         ----------
@@ -485,7 +501,7 @@ class NeuralNetworkCV(torch.nn.Module):
 
     def standardize_inputs(self, x: torch.Tensor, print_values=False):
         """
-        Enable the standardization of inputs based on max and min over set.
+        Standardize inputs over dataset (based on max and min).
 
         Parameters
         ----------
@@ -501,7 +517,7 @@ class NeuralNetworkCV(torch.nn.Module):
 
     def standardize_outputs(self, input: torch.Tensor, print_values=False):
         """
-        Enable the standardization of outputs based on max and min over set.
+        Standardize outputs over dataset (based on max and min).
 
         Parameters
         ----------
@@ -522,7 +538,23 @@ class NeuralNetworkCV(torch.nn.Module):
     def _normalize(
         self, x: torch.Tensor, Mean: torch.Tensor, Range: torch.Tensor
     ) -> (torch.Tensor):
-        """Compute standardized inputs/outputs"""
+        """
+        Compute standardized inputs/outputs (internal).
+
+        Parameters
+        ----------
+        x: torch.Tensor
+            input/output
+        Mean: torch.Tensor
+            mean values to be subtracted.
+        Range: torch.Tensor
+            interval range to be divided by.
+
+        Returns
+        -------
+        out : torch.Tensor
+            standardized inputs/outputs
+        """
 
         # if shape ==
 
@@ -576,7 +608,9 @@ class NeuralNetworkCV(torch.nn.Module):
     # Info
 
     def print_info(self):
-        """Display information about model"""
+        """
+        Display information about model.
+        """
 
         print("================INFO================")
         print("[MODEL]")
