@@ -7,7 +7,7 @@ import numpy as np
 from . import optim
 
 
-class LinearCV:
+class LinearCV(torch.nn.Module):
     """
     Linear CV base class.
 
@@ -58,8 +58,10 @@ class LinearCV:
 
         # Initialize parameters
         self.n_features = n_features
-        self.w = torch.eye(n_features, dtype=self.dtype_, device=self.device_)
-        self.b = torch.zeros(n_features, dtype=self.dtype_, device=self.device_)
+        weight = torch.eye(n_features, dtype=self.dtype_, device=self.device_)
+        offset = torch.zeros(n_features, dtype=self.dtype_, device=self.device_)
+        self.register_buffer("w", weight)
+        self.register_buffer("b", offset)
 
         # Generic attributes
         self.name_ = "LinearCV"
@@ -67,7 +69,7 @@ class LinearCV:
 
         # Flags
 
-    def __call__(self, X):
+    def forward(self, X):
         """
         Alias for transform.
 
