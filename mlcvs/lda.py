@@ -34,15 +34,23 @@ class LDA:
         Perform LDA
     """
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, harmonic_lda = False):
+        """
+        Create a LDA object
+
+        Parameters
+        ----------
+        harmonic_lda : bool
+            Harmonic variant of LDA
+        """
 
         # initialize attributes
+        self.harmonic_lda = harmonic_lda
         self.evals_ = None
         self.evecs_ = None
         self.S_b_ = None
         self.S_w_ = None
-        self.n_features = None  # num features for LDA
+        self.n_features = None 
         self.n_classes = None
 
         # Regularization
@@ -86,7 +94,8 @@ class LDA:
         S_t = H_bar.t().matmul(H_bar) / (N - 1)
         # Define within scatter matrix and compute it
         S_w = torch.Tensor().new_zeros((d, d), device=self.device_, dtype=self.dtype_)
-        # S_w_inv = torch.Tensor().new_zeros((d, d), device = self.device_, dtype = self.dtype_)
+        if self.harmonic_lda:
+            S_w_inv = torch.Tensor().new_zeros((d, d), device = self.device_, dtype = self.dtype_)
         # Loop over classes to compute means and covs
         for i in classes:
             # check which elements belong to class i
@@ -101,13 +110,13 @@ class LDA:
             # LDA
             S_w += H_i_bar.t().matmul(H_i_bar) / ((N_i - 1) * n_classes)
 
-            # TODO ADD HLDA OPTION
-            ######HLDA
-            # inv_i = H_i_bar.t().matmul(H_i_bar) / ((N_i - 1) * categ)
-            # S_w_inv += inv_i.pinverse()
+            # HLDA
+            if self.harmonic_lda:
+                inv_i = H_i_bar.t().matmul(H_i_bar) / ((N_i - 1) * n_classes)
+                S_w_inv += inv_i.inverse()
 
-        # S_w = S_w_inv.pinverse()
-        # END HLDA#########
+        if self.harmonic_lda:
+            S_w = S_w_inv.inverse()
 
         # Compute S_b from total scatter matrix
         S_b = S_t - S_w
@@ -174,7 +183,7 @@ class LDA_CV(LinearCV):
     + LinearCV TODO CHECK
     """
 
-    def __init__(self, n_features, device="auto", dtype=torch.float32, **kwargs):
+    def __init__(self, n_features, harmonic_lda = False, device="auto", dtype=torch.float32, **kwargs):
         """
         Create a LDA_CV object
 
@@ -182,13 +191,15 @@ class LDA_CV(LinearCV):
         ----------
         n_features : int
             Number of input features
+        harmonic_lda : bool
+            Build a HLDA CV.
         **kwargs : dict
-            Additional parameters for LinearCV object
+            Additional parameters for LinearCV object 
         """
         super().__init__(n_features=n_features, device=device, dtype=dtype, **kwargs)
 
-        self.name_ = "lda_cv"
-        self.lda = LDA()
+        self.name_ = "hlda_cv" if harmonic_lda else "lda_cv"
+        self.lda = LDA(harmonic_lda)
 
     def train(self, X, y):
         """

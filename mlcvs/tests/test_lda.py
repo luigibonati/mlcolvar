@@ -48,7 +48,8 @@ def load_dataset_2d_model():
 
 
 @pytest.mark.parametrize("n_classes", [2, 3])
-def test_lda_nclasses(n_classes):
+@pytest.mark.parametrize("is_harmonic_lda", [False, True])
+def test_lda_harmonic_nclasses(n_classes,is_harmonic_lda):
     """Perform LDA on toy dataset."""
 
     n_data = 100
@@ -76,7 +77,7 @@ def test_lda_nclasses(n_classes):
 
     # Define model
     n_features = X.shape[1]
-    lda = LDA_CV(n_features)
+    lda = LDA_CV(n_features,harmonic_lda=is_harmonic_lda)
 
     # Fit and transform LDA
     result = lda.train_forward(X, y)
@@ -84,14 +85,19 @@ def test_lda_nclasses(n_classes):
     # Project
     x_test = torch.tensor(n_features).to(device)
     y_test = lda(x_test)
-    y_test_expected = torch.tensor(
-        [0.2407] if n_classes == 2 else [0.2316, -0.1087]
-    ).to(device)
-
+    if is_harmonic_lda:
+        y_test_expected = torch.tensor(
+            [0.0709] if n_classes == 2 else [0.1525, -0.2786]
+        ).to(device)
+    else:
+        y_test_expected = torch.tensor(
+            [0.2407] if n_classes == 2 else [0.2316, -0.1087]
+        ).to(device)
+    print(y_test)
     assert (y_test_expected - y_test).abs().sum() < 1e-4
 
-
-def test_lda_2d_model(load_dataset_2d_model):
+@pytest.mark.parametrize("is_harmonic_lda", [False, True])
+def test_lda_train_2d_model_harmonic(load_dataset_2d_model,is_harmonic_lda):
     """Perform LDA on 2d_model data folder."""
 
     # Load dataset
@@ -99,7 +105,7 @@ def test_lda_2d_model(load_dataset_2d_model):
 
     # Define model
     n_features = X.shape[1]
-    lda = LDA_CV(n_features)
+    lda = LDA_CV(n_features,harmonic_lda = is_harmonic_lda)
     # Set features names (for PLUMED input)
     lda.set_params({"feature_names": feature_names})
 
@@ -109,15 +115,19 @@ def test_lda_2d_model(load_dataset_2d_model):
     # Project
     x_test = np.ones(2)
     y_test = lda(x_test)
+    
+    print(y_test.cpu().numpy())
+    y_test_expected = torch.tensor(
+                        [-0.0356541] if is_harmonic_lda else [-0.0960027] 
+                      ).to(device)
 
-    y_test = y_test[0]
-    y_test_expected = torch.tensor(-0.0960027).to(device)
     assert torch.abs(y_test_expected - y_test) < 1e-5
 
     # Check PLUMED INPUT
     input = lda.plumed_input()
     expected_input = (
-        "lda_cv: COMBINE ARG=p.x,p.y COEFFICIENTS=0.657474,-0.75347 PERIODIC=NO"
+        "hlda_cv: COMBINE ARG=p.x,p.y COEFFICIENTS=0.689055,-0.72470 PERIODIC=NO" if is_harmonic_lda
+        else "lda_cv: COMBINE ARG=p.x,p.y COEFFICIENTS=0.657474,-0.75347 PERIODIC=NO"
     )
     assert expected_input == input
 
@@ -167,6 +177,13 @@ def test_deeplda_nclasses(n_classes):
     expected_y2_shape = torch.rand(n_classes - 1).shape
     assert y2test.shape == expected_y2_shape
 
+    # Check PLUMED INPUT
+    model.set_params({'feature_names' : [f'd{i}' for i in range(n_features)] })
+    input = model.plumed_input()
+    expected_input = (
+        "deeplda_cv: PYTORCH_MODEL FILE=model.pt ARG=d0,d1,d2,d3,d4,d5,d6,d7,d8,d9"
+    )
+    assert expected_input == input
 
 @pytest.mark.slow
 # @pytest.mark.skip

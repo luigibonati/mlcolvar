@@ -663,8 +663,8 @@ class NeuralNetworkCV(torch.nn.Module):
 
         out = ""
         out += f"{self.name_}: PYTORCH_MODEL FILE=model.pt ARG="
-        for j in range(n_cv):
-            out += f"{self.feature_names[j]},"
+        for feat in self.feature_names:
+            out += f"{feat},"
         out = out[:-1]
 
         return out
