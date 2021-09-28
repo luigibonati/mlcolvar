@@ -44,7 +44,6 @@ class LDA:
         self.S_w_ = None
         self.n_features = None  # num features for LDA
         self.n_classes = None
-        self.features_names_ = None
 
         # Regularization
         self.sw_reg = 1e-6

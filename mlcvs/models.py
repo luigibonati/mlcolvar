@@ -19,7 +19,7 @@ class LinearCV(torch.nn.Module):
         Offset array 
     n_features : int
         Number of input features
-    features_names : list
+    feature_names : list
         List of input features names
     device_ : torch.Device
         Device used for the model
@@ -65,7 +65,7 @@ class LinearCV(torch.nn.Module):
 
         # Generic attributes
         self.name_ = "LinearCV"
-        self.features_names = ["x" + str(i) for i in range(n_features)]
+        self.feature_names = ["x" + str(i) for i in range(n_features)]
 
         # Flags
 
@@ -186,7 +186,7 @@ class LinearCV(torch.nn.Module):
             else:
                 out += f"{self.name_}{i+1}: COMBINE ARG="
             for j in range(self.n_features):
-                out += f"{self.features_names[j]},"
+                out += f"{self.feature_names[j]},"
             out = out[:-1]
 
             out += " COEFFICIENTS="
@@ -227,7 +227,7 @@ class NeuralNetworkCV(torch.nn.Module):
         Normalize outputs
     outputHidden: bool
         Output NN last layer rather than CVs
-    features_names : list
+    feature_names : list
         List of input features names
 
     Methods
@@ -250,12 +250,12 @@ class NeuralNetworkCV(torch.nn.Module):
         Standardize outputs over dataset
     get_params()
         Return saved parameters
-    set_params()
+    set_params(dict)
         Set parameters via dictionaries
     print_info()
         Display information about model
-    print_log()
-        Utility function for training log
+    plumed_input()
+        Generate PLUMED input file
 
     Examples
     --------
@@ -344,7 +344,7 @@ class NeuralNetworkCV(torch.nn.Module):
 
         # Generic attributes
         self.name_ = "NN_CV"
-        self.features_names = ["x" + str(i) for i in range(self.n_features)]
+        self.feature_names = ["x" + str(i) for i in range(self.n_features)]
 
     # Forward pass
     def forward_nn(self, x: torch.tensor) -> (torch.tensor):
@@ -647,3 +647,24 @@ class NeuralNetworkCV(torch.nn.Module):
                     for v in value:
                         print("{0:<6.3f}".format(v), end=" ")
         print("")
+
+    def plumed_input(self):
+        """
+        Generate PLUMED input file
+
+        Returns
+        -------
+        out : string
+            PLUMED input file
+        """
+
+        weights = self.w.cpu().numpy()
+        n_cv = 1 if weights.ndim == 1 else weights.shape[1]
+
+        out = ""
+        out += f"{self.name_}: PYTORCH_MODEL FILE=model.pt ARG="
+        for j in range(n_cv):
+            out += f"{self.feature_names[j]},"
+        out = out[:-1]
+
+        return out

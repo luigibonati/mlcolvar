@@ -95,13 +95,13 @@ def test_lda_2d_model(load_dataset_2d_model):
     """Perform LDA on 2d_model data folder."""
 
     # Load dataset
-    X, y, features_names = load_dataset_2d_model
+    X, y, feature_names = load_dataset_2d_model
 
     # Define model
     n_features = X.shape[1]
     lda = LDA_CV(n_features)
     # Set features names (for PLUMED input)
-    lda.set_params({"features_names": features_names})
+    lda.set_params({"feature_names": feature_names})
 
     # Fit LDA
     lda.train(X, y)
@@ -174,7 +174,7 @@ def test_deeplda_train_2d_model(load_dataset_2d_model):
     """Perform DeepLDA on 2d-basins data folder."""
 
     # load dataset
-    X, y, features_names = load_dataset_2d_model
+    X, y, feature_names = load_dataset_2d_model
 
     # split train/test
     ntrain = 800
