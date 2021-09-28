@@ -181,7 +181,7 @@ def test_deeplda_nclasses(n_classes):
     model.set_params({'feature_names' : [f'd{i}' for i in range(n_features)] })
     input = model.plumed_input()
     expected_input = (
-        "deeplda_cv: PYTORCH_MODEL FILE=model.pt ARG=d0,d1,d2,d3,d4,d5,d6,d7,d8,d9"
+        "deeplda_cv: PYTORCH_MODEL FILE=model.ptc ARG=d0,d1,d2,d3,d4,d5,d6,d7,d8,d9"
     )
     assert expected_input == input
 
@@ -229,6 +229,9 @@ def test_deeplda_train_2d_model(load_dataset_2d_model):
     # TRAIN
     model.train(train_data, valid_data, info=True, log_every=100)
 
+    # standardize outputs
+    model.standardize_outputs(train_data[0])
+
     # FORWARD
     xtest = torch.rand(X.size(1)).to(device)
     with torch.no_grad():
@@ -247,8 +250,85 @@ def test_deeplda_train_2d_model(load_dataset_2d_model):
     expected_y2_shape = torch.rand(1).shape
     assert torch.equal(ytest, ytest2[0])
 
+    # EXPORT CHECKPOINT AND LOAD (see function below for comments)
+    model.export(folder='mlcvs/tests/__pycache__/')
+    model_loaded = DeepLDA_CV(nodes, device=device)
+    model_loaded.to(device)
 
-# if __name__ == "__main__":
-# Do something if this file is invoked on its own
-# test_lda_basins()
-# test_deeplda_train()
+    with torch.no_grad():
+        loss = model_loaded.evaluate_dataset(train_data, save_params=True) 
+        model_loaded.standardize_outputs(train_data[0])
+
+    model_loaded.load_checkpoint('mlcvs/tests/__pycache__/model_checkpoint.pt') 
+
+    # New forward
+    ytest_loaded = model_loaded(xtest)
+
+    print(model_loaded.opt_)
+    # Assert results
+    assert torch.equal(ytest, ytest_loaded)
+
+def test_deeplda_export_load():
+    """Test export / loading functions."""
+
+    # define dataset
+    n_data = 100
+    n_features = 10
+    n_classes = 2 
+    X = torch.rand((n_data, n_features)).to(device)
+    y = torch.randint(low=0, high=n_classes, size=(n_data,))
+
+    # split train/test
+    ntrain = int(n_data * 0.8)
+    nvalid = int(n_data * 0.2)
+    train_data = [X[:ntrain], y[:ntrain]]
+    valid_data = [X[ntrain : ntrain + nvalid], y[ntrain : ntrain + nvalid]]
+
+    # Architecture
+    hidden_nodes = "20,20,5"
+    nodes = [int(x) for x in hidden_nodes.split(",")]
+    nodes.insert(0, X.shape[1])
+    n_hidden = nodes[-1]
+
+    # Model
+    model = DeepLDA_CV(nodes, device=device)
+    model.to(device)
+
+    # Compute lda and set params
+    with torch.no_grad():
+        loss = model.evaluate_dataset(train_data, save_params=True)
+    # Fake assignment
+    model.set_params({'epochs' : 1 })
+
+    # Define input and forward
+    xtest = torch.ones(n_features).to(device)
+    ytest = model(xtest)
+
+    # Export model
+    model.export(folder='mlcvs/tests/__pycache__/')
+
+    # (1) --- Load checkpoint into new model
+    model_loaded = DeepLDA_CV(nodes, device=device)
+    model_loaded.to(device)
+
+    # Note: it requires the correct shape for w and b of linear projection TODO
+    # Workaround: make a fake LDA assignment
+    with torch.no_grad():
+        loss = model_loaded.evaluate_dataset(train_data, save_params=True) 
+
+    model_loaded.load_checkpoint('mlcvs/tests/__pycache__/model_checkpoint.pt') 
+
+    # New forward
+    ytest_loaded = model_loaded(xtest)
+
+    # Assert results
+    assert torch.equal(ytest, ytest_loaded)
+    # Assert parameters loading
+    assert model.get_params()['epochs'] == model_loaded.get_params()['epochs'] 
+
+    # (2) --- Load TorchScript model
+    model_traced = torch.jit.load('mlcvs/tests/__pycache__/model.ptc')
+    ytest_traced = model_traced(xtest)
+
+    # Assert results
+    assert torch.equal(ytest, ytest_traced)

@@ -2,8 +2,10 @@
 
 __all__ = ["LinearCV", "NeuralNetworkCV"]
 
+from attr import Attribute
 import torch
 import numpy as np
+from warnings import warn
 from . import optim
 
 
@@ -254,6 +256,10 @@ class NeuralNetworkCV(torch.nn.Module):
         Set parameters via dictionaries
     print_info()
         Display information about model
+    export(folder,checkpoint_name,traced_name)
+        Save checkpoint for Pytorch and Torchscript model
+    load_checkpoint(checkpoint_path)
+        Load checkpoint
     plumed_input()
         Generate PLUMED input file
 
@@ -333,9 +339,16 @@ class NeuralNetworkCV(torch.nn.Module):
         self.register_buffer("w", weight)
         self.register_buffer("b", offset)
 
-        # Flags
+        # Input and output normalization
         self.normIn = False
         self.normOut = False
+
+        MeanIn = torch.zeros(self.n_features, dtype=self.dtype_, device=self.device_)
+        RangeIn = torch.ones(self.n_features, dtype=self.dtype_, device=self.device_)
+        self.register_buffer("MeanIn", MeanIn)
+        self.register_buffer("RangeIn", RangeIn)
+
+        # Flags
         self.output_hidden = False
 
         # Optimizer
@@ -392,6 +405,8 @@ class NeuralNetworkCV(torch.nn.Module):
         z = self.forward_nn(x)
         if not self.output_hidden:
             z = self.linear_projection(z)
+        if self.normOut:
+            z = self._normalize(z, self.MeanOut, self.RangeOut)
         return z
 
     def linear_projection(self, H):
@@ -495,7 +510,7 @@ class NeuralNetworkCV(torch.nn.Module):
         Mean, Range = self._compute_mean_range(x, print_values)
 
         self.normIn = True
-        self.MeanIn = Mean
+        self.MeanIn = Mean 
         self.RangeIn = Range
 
     def standardize_outputs(self, input: torch.Tensor, print_values=False):
@@ -514,9 +529,14 @@ class NeuralNetworkCV(torch.nn.Module):
 
         Mean, Range = self._compute_mean_range(x, print_values)
 
+        if hasattr(self,"MeanOut"):
+            self.MeanOut = Mean
+            self.RangeOut = Range
+        else:
+            self.register_buffer("MeanOut", Mean)
+            self.register_buffer("RangeOut", Range)
+
         self.normOut = True
-        self.MeanOut = Mean
-        self.RangeOut = Range
 
     def _normalize(
         self, x: torch.Tensor, Mean: torch.Tensor, Range: torch.Tensor
@@ -648,6 +668,75 @@ class NeuralNetworkCV(torch.nn.Module):
                         print("{0:<6.3f}".format(v), end=" ")
         print("")
 
+    def export(self, folder, checkpoint_name = 'model_checkpoint.pt', 
+                             traced_name = 'model.ptc'):
+        """
+        Save checkpoint for Pytorch and Torchscript model.
+
+        Parameters
+        ----------
+        folder : str
+            export folder
+        checkpoint_name : str
+            name of Pytorch checkpoint
+        libtorch_name : str
+            name of traced model (for Libtorch)
+
+        Notes
+        -----
+        As there is not yet a convention on naming extensions of models, we follow here the following:
+            - .pt for PyTorch models
+            - .ptc for PyTorch Compiled (i.e. Torchscript) models
+        
+        """
+
+        # == Export checkpoint ==
+        torch.save({
+                    # FLAGS
+                    'normIn': self.normIn,
+                    'normOut': self.normOut,
+                    'feature_names': self.feature_names,
+                    # STATE DICT
+                    'model_state_dict': self.state_dict(),
+                    'optimizer_state_dict': self.opt_.state_dict() if self.opt_ is not None else None,
+                    # TRAINING LCURVES
+                    'epochs': self.epochs if hasattr(self, 'epochs') else None,
+                    'loss_train': self.loss_train if hasattr(self, 'loss_train') else None,
+                    'loss_valid': self.loss_valid if hasattr(self, 'loss_valid') else None,   
+                    }, folder+checkpoint_name)
+
+        # == Export jit model ==
+        fake_input = torch.zeros(self.n_features,dtype=self.dtype_, device=self.device_) #.reshape(1,self.n_features) #TODO check with plumed interface
+        mod = torch.jit.trace(self, fake_input)
+        mod.save(folder+traced_name)
+
+    def load_checkpoint(self, checkpoint_path):
+        """
+        Load checkpoint.
+
+        Parameters
+        ----------
+        checkpoint_path : str
+            location of checkpoint (.pt)
+
+        """
+        checkpoint = torch.load(checkpoint_path)
+
+        # STATE DICT
+        self.load_state_dict(checkpoint['model_state_dict'])
+
+        if checkpoint['optimizer_state_dict'] is not None:
+            try:
+                self.opt_.load_state_dict(checkpoint['optimizer_state_dict'])
+            except AttributeError as e:
+                warn('Optimizer not set. Initializing default one.')
+                self._default_optimizer()
+                self.opt_.load_state_dict(checkpoint['optimizer_state_dict'])
+            
+        for key,val in checkpoint.items():
+            if hasattr(self, key):
+                setattr(self, key, val)
+
     def plumed_input(self):
         """
         Generate PLUMED input file
@@ -662,7 +751,7 @@ class NeuralNetworkCV(torch.nn.Module):
         n_cv = 1 if weights.ndim == 1 else weights.shape[1]
 
         out = ""
-        out += f"{self.name_}: PYTORCH_MODEL FILE=model.pt ARG="
+        out += f"{self.name_}: PYTORCH_MODEL FILE=model.ptc ARG="
         for feat in self.feature_names:
             out += f"{feat},"
         out = out[:-1]
