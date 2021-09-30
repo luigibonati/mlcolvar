@@ -176,9 +176,10 @@ class LDA_CV(LinearCV):
 
     Methods
     -------
-    train(x,label)
+    train(X,y)
         Fit LDA given data and classes
-
+    train_forward(X,y)
+        Fit LDA and project along components
 
     + LinearCV TODO CHECK
     """
@@ -220,6 +221,26 @@ class LDA_CV(LinearCV):
         _, eigvecs = self.lda.compute_LDA(X, y)
         # save parameters for estimator
         self.w = eigvecs
+
+    def train_forward(self, X, y):
+        """
+        Fit LDA and project along components.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data.
+        y : array-like of shape (n_samples,)
+            Classes labels.
+
+        Returns
+        -------
+        s : array-like of shape (n_samples, n_classes-1)
+            Linear projection of inputs.
+
+        """
+        self.train(X, y)
+        return self.forward(X)
 
     def set_regularization(self, sw_reg):
         """

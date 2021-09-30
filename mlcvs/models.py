@@ -2,7 +2,6 @@
 
 __all__ = ["LinearCV", "NeuralNetworkCV"]
 
-from attr import Attribute
 import torch
 import numpy as np
 from warnings import warn
@@ -30,12 +29,8 @@ class LinearCV(torch.nn.Module):
     -------
     __init__(n_features)
         Create a linear model.
-    train()
-        Fit model (abstract)
     forward(X)
         Project data along linear model
-    train_forward(X,y)
-        Fit and project data 
     get_params()
         Return saved parameters
     set_params(dict)
@@ -71,13 +66,6 @@ class LinearCV(torch.nn.Module):
 
         # Flags
 
-    def train(self):
-        """
-        Fit estimator (abstract method).
-        """
-        Warning("Train method not implemented for base class.")
-        pass
-
     def forward(self, X):
         """
         Project data along linear components.
@@ -98,20 +86,6 @@ class LinearCV(torch.nn.Module):
         s = torch.matmul(X - self.b, self.w)
 
         return s
-
-    def train_forward(self, X, y):
-        """
-        Call fit and then transform (abstract method).
-
-        Parameters
-        ----------
-
-        Returns
-        -------
-
-        """
-        self.train(X, y)
-        return self.forward(X)
 
     def set_weights(self, w):
         """
@@ -746,9 +720,6 @@ class NeuralNetworkCV(torch.nn.Module):
         out : string
             PLUMED input file
         """
-
-        weights = self.w.cpu().numpy()
-        n_cv = 1 if weights.ndim == 1 else weights.shape[1]
 
         out = ""
         out += f"{self.name_}: PYTORCH_MODEL FILE=model.ptc ARG="
