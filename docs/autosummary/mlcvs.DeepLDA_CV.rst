@@ -13,7 +13,6 @@
 
    .. autosummary::
    
-      ~DeepLDA_CV.LDA
       ~DeepLDA_CV.__init__
       ~DeepLDA_CV.add_module
       ~DeepLDA_CV.apply
@@ -25,12 +24,15 @@
       ~DeepLDA_CV.double
       ~DeepLDA_CV.eval
       ~DeepLDA_CV.evaluate_dataset
+      ~DeepLDA_CV.export
       ~DeepLDA_CV.extra_repr
       ~DeepLDA_CV.float
       ~DeepLDA_CV.forward
       ~DeepLDA_CV.forward_nn
       ~DeepLDA_CV.get_params
       ~DeepLDA_CV.half
+      ~DeepLDA_CV.linear_projection
+      ~DeepLDA_CV.load_checkpoint
       ~DeepLDA_CV.load_state_dict
       ~DeepLDA_CV.loss_function
       ~DeepLDA_CV.modules
@@ -39,6 +41,7 @@
       ~DeepLDA_CV.named_modules
       ~DeepLDA_CV.named_parameters
       ~DeepLDA_CV.parameters
+      ~DeepLDA_CV.plumed_input
       ~DeepLDA_CV.print_info
       ~DeepLDA_CV.print_log
       ~DeepLDA_CV.register_backward_hook
@@ -60,7 +63,6 @@
       ~DeepLDA_CV.to
       ~DeepLDA_CV.train
       ~DeepLDA_CV.train_epoch
-      ~DeepLDA_CV.transform
       ~DeepLDA_CV.type
       ~DeepLDA_CV.xpu
       ~DeepLDA_CV.zero_grad

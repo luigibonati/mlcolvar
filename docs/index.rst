@@ -4,8 +4,8 @@
    contain the root `toctree` directive.
 
 mlcvs: Machine Learning Collective Variables
-=========================================================
-mlcvs is a Python package designed to devise collective variables for enhanced sampling simulations. 
+============================================
+mlcvs is a Python package for building data-driven collective variables for enhanced sampling simulations. 
 
 .. toctree::
    :maxdepth: 2
@@ -13,8 +13,6 @@ mlcvs is a Python package designed to devise collective variables for enhanced s
 
    getting_started
    api
-
-
 
 Indices and tables
 ==================

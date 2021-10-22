@@ -23,12 +23,15 @@
       ~NeuralNetworkCV.cuda
       ~NeuralNetworkCV.double
       ~NeuralNetworkCV.eval
+      ~NeuralNetworkCV.export
       ~NeuralNetworkCV.extra_repr
       ~NeuralNetworkCV.float
       ~NeuralNetworkCV.forward
       ~NeuralNetworkCV.forward_nn
       ~NeuralNetworkCV.get_params
       ~NeuralNetworkCV.half
+      ~NeuralNetworkCV.linear_projection
+      ~NeuralNetworkCV.load_checkpoint
       ~NeuralNetworkCV.load_state_dict
       ~NeuralNetworkCV.modules
       ~NeuralNetworkCV.named_buffers
@@ -36,6 +39,7 @@
       ~NeuralNetworkCV.named_modules
       ~NeuralNetworkCV.named_parameters
       ~NeuralNetworkCV.parameters
+      ~NeuralNetworkCV.plumed_input
       ~NeuralNetworkCV.print_info
       ~NeuralNetworkCV.print_log
       ~NeuralNetworkCV.register_backward_hook
@@ -54,7 +58,6 @@
       ~NeuralNetworkCV.state_dict
       ~NeuralNetworkCV.to
       ~NeuralNetworkCV.train
-      ~NeuralNetworkCV.transform
       ~NeuralNetworkCV.type
       ~NeuralNetworkCV.xpu
       ~NeuralNetworkCV.zero_grad

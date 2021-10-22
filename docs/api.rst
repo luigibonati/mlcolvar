@@ -1,12 +1,14 @@
 API Documentation
 =================
 
+.. currentmodule:: mlcvs
+
 .. autosummary::
    :toctree: autosummary
 
-   mlcvs.LinearCV
-   mlcvs.NeuralNetworkCV
+   LinearCV
+   NeuralNetworkCV
 
-   mlcvs.LDA_CV
-   mlcvs.DeepLDA_CV
+   LDA_CV
+   DeepLDA_CV
 

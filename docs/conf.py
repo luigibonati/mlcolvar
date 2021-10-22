@@ -23,8 +23,7 @@ import mlcvs
 # -- Project information -----------------------------------------------------
 
 project = 'mlcvs'
-copyright = ("2021, Luigi Bonati. Project structure based on the "
-             "Computational Molecular Science Python Cookiecutter version 1.6")
+copyright = ("2021, Luigi Bonati.")
 author = 'Luigi Bonati'
 
 # The short X.Y version
@@ -50,6 +49,8 @@ extensions = [
     'sphinx.ext.napoleon',
     'sphinx.ext.intersphinx',
     'sphinx.ext.extlinks',
+    'sphinx.ext.doctest',
+    'sphinx_copybutton',
 ]
 
 autosummary_generate = True
@@ -90,13 +91,22 @@ pygments_style = 'default'
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'sphinx_rtd_theme'
+#html_theme = 'sphinx_rtd_theme'
+html_theme = 'furo'
+
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
 #
 # html_theme_options = {}
+html_theme_options = {
+    "light_css_variables": {
+        "color-brand-primary": "red",
+        "color-brand-content": "#CC3333",
+        "color-admonition-background": "#cc6b33",
+    },
+}
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
