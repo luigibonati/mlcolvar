@@ -5,6 +5,7 @@ __all__ = ["LDA_CV", "DeepLDA_CV"]
 import torch
 from .models import LinearCV, NeuralNetworkCV
 from torch.utils.data import Dataset, DataLoader
+import pandas as pd
 
 
 class LDA:
@@ -215,11 +216,20 @@ class LDA_CV(LinearCV):
         y : array-like of shape (n_samples,)
             Classes labels.
         """
-
-        if type(X) != torch.Tensor:
+        
+        # if DataFrame save feature names
+        if type(X) == pd.DataFrame:
+            self.feature_names = X.columns.values
+            X = torch.Tensor(X.values, device=self.device_) 
+        elif type(X) != torch.Tensor:
             X = torch.Tensor(X, device=self.device_)
-        if type(y) != torch.Tensor:
-            y = torch.Tensor(y, device=self.device_)  # class labels are integers
+
+        # class labels
+        if type(y) == pd.DataFrame:
+            y = torch.Tensor(Xy.values, device=self.device_) 
+        elif type(y) != torch.Tensor:
+            y = torch.Tensor(y, device=self.device_) 
+
         _, eigvecs = self.lda.compute_LDA(X, y)
         # save parameters for estimator
         self.w = eigvecs

@@ -4,6 +4,7 @@ __all__ = ["LinearCV", "NeuralNetworkCV"]
 
 import torch
 import numpy as np
+import pandas as pd
 from warnings import warn
 from . import optim
 
@@ -80,7 +81,9 @@ class LinearCV(torch.nn.Module):
         s : array-like of shape (n_samples, n_classes-1)
             Linear projection of inputs.
         """
-        if type(X) != torch.Tensor:
+        if type(X) == pd.DataFrame:
+            X = torch.Tensor(X.values, device=self.device_) 
+        elif type(X) != torch.Tensor:
             X = torch.Tensor(X, device=self.device_)
 
         s = torch.matmul(X - self.b, self.w)

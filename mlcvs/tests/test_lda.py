@@ -6,12 +6,13 @@ Unit and regression test for the lda module.
 import pytest
 import torch
 import numpy as np
+import pandas as pd
 from mlcvs.io import colvar_to_pandas
 from mlcvs.lda import LDA_CV, DeepLDA_CV
 
 # set global variables
 #torch.set_default_tensor_type(torch.FloatTensor)
-device = 'cpu' #torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 @pytest.fixture(scope="module")
@@ -98,6 +99,33 @@ def test_lda_harmonic_nclasses(n_classes,is_harmonic_lda):
         ).to(device)
     print(y_test)
     assert (y_test_expected - y_test).abs().sum() < 1e-4
+
+def test_lda_from_dataframe():
+    # params
+    n_feat = 2
+    n_class = 2
+    n_points = 100
+    np.random.seed(1)
+
+    # fake dataset
+    df = pd.DataFrame(np.random.rand(n_points,n_feat),columns=['X1','X2'] )
+    y = np.zeros(len(df))
+    y[:int(len(y)/2)] = int(1)
+    df ['y'] = y
+    
+    # filter columns
+    X = df.filter(regex='X')
+    y = df['y']
+    
+    # train lda cv
+    lda = LDA_CV(n_features=X.shape[1], device=device)
+    lda.train(X,y)
+
+    assert (lda.feature_names == X.columns.values).all()
+
+    s = lda.forward(X)[0]
+    s_expected = torch.Tensor([-0.2801]).to(device)
+    assert  torch.abs(s - s_expected) < 1e-4
 
 @pytest.mark.parametrize("is_harmonic_lda", [False, True])
 def test_lda_train_2d_model_harmonic(load_dataset_2d_model,is_harmonic_lda):
