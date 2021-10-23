@@ -34,7 +34,7 @@ class LDA:
         Perform LDA
     """
 
-    def __init__(self, harmonic_lda = False):
+    def __init__(self, harmonic_lda = False, device = 'auto'):
         """
         Create a LDA object
 
@@ -56,9 +56,11 @@ class LDA:
         # Regularization
         self.sw_reg = 1e-6
 
-        # Initialize device and dtype
-        self.dtype_ = torch.float32
-        self.device_ = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # Initialize device
+        if device == "auto":
+            self.device_ = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        else:
+            self.device_ = device
 
     def compute_LDA(self, H, label, save_params=True):
         """
@@ -93,9 +95,9 @@ class LDA:
         # Total scatter matrix (cov matrix over all observations)
         S_t = H_bar.t().matmul(H_bar) / (N - 1)
         # Define within scatter matrix and compute it
-        S_w = torch.Tensor().new_zeros((d, d), device=self.device_, dtype=self.dtype_)
+        S_w = torch.Tensor().new_zeros((d, d), device=self.device_)
         if self.harmonic_lda:
-            S_w_inv = torch.Tensor().new_zeros((d, d), device = self.device_, dtype = self.dtype_)
+            S_w_inv = torch.Tensor().new_zeros((d, d), device = self.device_)
         # Loop over classes to compute means and covs
         for i in classes:
             # check which elements belong to class i
@@ -123,7 +125,7 @@ class LDA:
 
         # Regularize S_w
         S_w = S_w + self.sw_reg * torch.diag(
-            torch.Tensor().new_ones((d), device=self.device_, dtype=self.dtype_)
+            torch.Tensor().new_ones((d), device=self.device_)
         )
 
         # -- Generalized eigenvalue problem: S_b * v_i = lambda_i * Sw * v_i --
@@ -184,7 +186,7 @@ class LDA_CV(LinearCV):
     + LinearCV TODO CHECK
     """
 
-    def __init__(self, n_features, harmonic_lda = False, device="auto", dtype=torch.float32, **kwargs):
+    def __init__(self, n_features, harmonic_lda = False, device="auto", **kwargs):
         """
         Create a LDA_CV object
 
@@ -197,10 +199,10 @@ class LDA_CV(LinearCV):
         **kwargs : dict
             Additional parameters for LinearCV object 
         """
-        super().__init__(n_features=n_features, device=device, dtype=dtype, **kwargs)
+        super().__init__(n_features=n_features, device=device, **kwargs)
 
         self.name_ = "hlda_cv" if harmonic_lda else "lda_cv"
-        self.lda = LDA(harmonic_lda)
+        self.lda = LDA(harmonic_lda,device=self.device_)
 
     def train(self, X, y):
         """
@@ -215,9 +217,9 @@ class LDA_CV(LinearCV):
         """
 
         if type(X) != torch.Tensor:
-            X = torch.tensor(X, dtype=self.dtype_, device=self.device_)
+            X = torch.Tensor(X, device=self.device_)
         if type(y) != torch.Tensor:
-            y = torch.tensor(y, device=self.device_)  # class labels are integers
+            y = torch.Tensor(y, device=self.device_)  # class labels are integers
         _, eigvecs = self.lda.compute_LDA(X, y)
         # save parameters for estimator
         self.w = eigvecs
@@ -242,7 +244,7 @@ class LDA_CV(LinearCV):
         self.train(X, y)
         return self.forward(X)
 
-    def set_regularization(self, sw_reg):
+    def set_regularization(self, sw_reg = 0.05):
         """
         Set regularization for within-scatter matrix.
 
@@ -256,7 +258,7 @@ class LDA_CV(LinearCV):
         .. math:: S_w = S_w + \mathtt{sw_reg}\ \mathbf{1}.
 
         """
-        self.lda.sw_reg = 0.05
+        self.lda.sw_reg = sw_reg
 
 
 class DeepLDA_CV(NeuralNetworkCV):
@@ -293,7 +295,7 @@ class DeepLDA_CV(NeuralNetworkCV):
         Evaluate loss function on dataset.
     """
 
-    def __init__(self, layers, activation="relu", device="auto", dtype=torch.float32, **kwargs):
+    def __init__(self, layers, activation="relu", device="auto", **kwargs):
         """
         Create a DeepLDA_CV object
 
@@ -306,10 +308,10 @@ class DeepLDA_CV(NeuralNetworkCV):
         """
         
         super().__init__(
-            layers=layers, activation=activation, device=device, dtype=dtype, **kwargs
+            layers=layers, activation=activation, device=device, **kwargs
         )
         self.name_ = "deeplda_cv"
-        self.lda = LDA()
+        self.lda = LDA(device=self.device_)
 
         # lorentzian regularization
         self.lorentzian_reg = 0

@@ -10,8 +10,8 @@ from mlcvs.io import colvar_to_pandas
 from mlcvs.lda import LDA_CV, DeepLDA_CV
 
 # set global variables
-dtype = torch.float32
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+#torch.set_default_tensor_type(torch.FloatTensor)
+device = 'cpu' #torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 @pytest.fixture(scope="module")
@@ -41,9 +41,8 @@ def load_dataset_2d_model():
     X, y = X[p], y[p]
 
     # Convert np to torch
-    X = torch.tensor(X, dtype=dtype, device=device)
-    y = torch.tensor(y, dtype=dtype, device=device)
-
+    X = torch.Tensor(X, device=device)
+    y = torch.Tensor(y, device=device)
     return X, y, names
 
 
@@ -75,9 +74,13 @@ def test_lda_harmonic_nclasses(n_classes,is_harmonic_lda):
     X = np.concatenate(x_list, axis=0)
     y = np.concatenate(y_list, axis=0)
 
+    # Transform to tensor 
+    X = torch.Tensor(X, device=device)
+    y = torch.Tensor(y, device=device)
+
     # Define model
     n_features = X.shape[1]
-    lda = LDA_CV(n_features,harmonic_lda=is_harmonic_lda)
+    lda = LDA_CV(n_features,harmonic_lda=is_harmonic_lda,device=device)
 
     # Fit and transform LDA
     result = lda.train_forward(X, y)
@@ -105,9 +108,11 @@ def test_lda_train_2d_model_harmonic(load_dataset_2d_model,is_harmonic_lda):
 
     # Define model
     n_features = X.shape[1]
-    lda = LDA_CV(n_features,harmonic_lda = is_harmonic_lda)
+    lda = LDA_CV(n_features,harmonic_lda = is_harmonic_lda,device=device)
     # Set features names (for PLUMED input)
     lda.set_params({"feature_names": feature_names})
+    
+    print(X.dtype)
 
     # Fit LDA
     lda.train(X, y)
@@ -332,3 +337,6 @@ def test_deeplda_export_load():
 
     # Assert results
     assert torch.equal(ytest, ytest_traced)
+
+if __name__ == "__main__":
+    test_lda_harmonic_nclasses(2,False)

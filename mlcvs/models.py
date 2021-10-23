@@ -43,11 +43,11 @@ class LinearCV(torch.nn.Module):
         Generate PLUMED input file
     """
 
-    def __init__(self, n_features, device="auto", dtype=torch.float32, **kwargs):
+    def __init__(self, n_features, device="auto", **kwargs):
         super().__init__(**kwargs)
 
-        # Device and dtype
-        self.dtype_ = dtype
+        # Device
+
         if device == "auto":
             self.device_ = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         else:
@@ -55,8 +55,8 @@ class LinearCV(torch.nn.Module):
 
         # Initialize parameters
         self.n_features = n_features
-        weight = torch.eye(n_features, dtype=self.dtype_, device=self.device_)
-        offset = torch.zeros(n_features, dtype=self.dtype_, device=self.device_)
+        weight = torch.eye(n_features,  device=self.device_)
+        offset = torch.zeros(n_features,  device=self.device_)
         self.register_buffer("w", weight)
         self.register_buffer("b", offset)
 
@@ -81,7 +81,7 @@ class LinearCV(torch.nn.Module):
             Linear projection of inputs.
         """
         if type(X) != torch.Tensor:
-            X = torch.tensor(X, dtype=self.dtype_, device=self.device_)
+            X = torch.Tensor(X, device=self.device_)
 
         s = torch.matmul(X - self.b, self.w)
 
@@ -189,8 +189,6 @@ class NeuralNetworkCV(torch.nn.Module):
         Neural network object
     n_features : int
         Number of input features
-    dtype_: torch.dtype
-        Type of tensors
     device_: torch.device
         Device (cpu or cuda)
     opt_: torch.optimizer
@@ -208,7 +206,7 @@ class NeuralNetworkCV(torch.nn.Module):
 
     Methods
     -------
-    __init__(layers,activation,device,dtype)
+    __init__(layers,activation,device)
         Create a neural network object.
     forward(x)
         Compute model output.
@@ -254,7 +252,7 @@ class NeuralNetworkCV(torch.nn.Module):
     """
 
     def __init__(
-        self, layers, activation="relu", device="auto", dtype=torch.float32, **kwargs
+        self, layers, activation="relu", device="auto",  **kwargs
     ):
         """
         Define a neural network module given the list of layers.
@@ -295,8 +293,7 @@ class NeuralNetworkCV(torch.nn.Module):
             else:
                 modules.append(torch.nn.Linear(layers[i], layers[i + 1]))
 
-        # Device and dtype
-        self.dtype_ = dtype
+        # Device
         if device == "auto":
             self.device_ = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         else:
@@ -308,8 +305,8 @@ class NeuralNetworkCV(torch.nn.Module):
         self.n_hidden = layers[-1]
 
         # Linear projection output
-        weight = torch.eye(self.n_hidden, dtype=self.dtype_, device=self.device_)
-        offset = torch.zeros(self.n_hidden, dtype=self.dtype_, device=self.device_)
+        weight = torch.eye(self.n_hidden, device=self.device_)
+        offset = torch.zeros(self.n_hidden, device=self.device_)
         self.register_buffer("w", weight)
         self.register_buffer("b", offset)
 
@@ -317,8 +314,8 @@ class NeuralNetworkCV(torch.nn.Module):
         self.normIn = False
         self.normOut = False
 
-        MeanIn = torch.zeros(self.n_features, dtype=self.dtype_, device=self.device_)
-        RangeIn = torch.ones(self.n_features, dtype=self.dtype_, device=self.device_)
+        MeanIn = torch.zeros(self.n_features, device=self.device_)
+        RangeIn = torch.ones(self.n_features, device=self.device_)
         self.register_buffer("MeanIn", MeanIn)
         self.register_buffer("RangeIn", RangeIn)
 
@@ -680,7 +677,7 @@ class NeuralNetworkCV(torch.nn.Module):
                     }, folder+checkpoint_name)
 
         # == Export jit model ==
-        fake_input = torch.zeros(self.n_features,dtype=self.dtype_, device=self.device_) #.reshape(1,self.n_features) #TODO check with plumed interface
+        fake_input = torch.zeros(self.n_features, device=self.device_) #.reshape(1,self.n_features) #TODO check with plumed interface
         mod = torch.jit.trace(self, fake_input)
         mod.save(folder+traced_name)
 
