@@ -224,9 +224,9 @@ class LDA_CV(LinearCV):
         elif type(X) != torch.Tensor:
             X = torch.Tensor(X, device=self.device_)
 
-        # class labels
+        # class
         if type(y) == pd.DataFrame:
-            y = torch.Tensor(Xy.values, device=self.device_) 
+            y = torch.Tensor(y.values, device=self.device_) 
         elif type(y) != torch.Tensor:
             y = torch.Tensor(y, device=self.device_) 
 
@@ -286,7 +286,7 @@ class DeepLDA_CV(NeuralNetworkCV):
         Number of performed epochs of training
     loss_train : list
         Loss function for train data over training. 
-    loss-valid : list
+    loss_valid : list
         Loss function for validation data over training.
 
     Methods
@@ -299,6 +299,8 @@ class DeepLDA_CV(NeuralNetworkCV):
         Apply regularization to NN output.
     loss_function(H,y)
         Loss function for the DeepLDA CV.
+    set_loss_function(func)
+        Custom loss function.
     train()
         Train Deep-LDA CVs.
     evaluate_dataset(x,label)
@@ -322,6 +324,9 @@ class DeepLDA_CV(NeuralNetworkCV):
         )
         self.name_ = "deeplda_cv"
         self.lda = LDA(device=self.device_)
+
+        # custom loss function
+        self.custom_loss = None
 
         # lorentzian regularization
         self.lorentzian_reg = 0
@@ -396,24 +401,42 @@ class DeepLDA_CV(NeuralNetworkCV):
         loss : torch.tensor
             loss function
         """
-        eigvals, eigvecs = self.lda.compute_LDA(H, y, save_params)
-        if save_params:
-            self.w = eigvecs
+        if self.custom_loss is None:
 
-        # TODO add sum option for multiclass
+            eigvals, eigvecs = self.lda.compute_LDA(H, y, save_params)
+            if save_params:
+                self.w = eigvecs
 
-        # if two classes loss is equal to the single eigenvalue
-        if self.lda.n_classes == 2:
-            loss = -eigvals
-        # if more than two classes loss equal to the smallest of the C-1 eigenvalues
-        elif self.lda.n_classes > 2:
-            loss = -eigvals[self.lda.n_classes - 2]
-        else:
-            raise ValueError("The number of classes for LDA must be greater than 1")
+            # TODO add sum option for multiclass
 
-        if self.lorentzian_reg > 0:
-            loss += self.regularization_lorentzian(H)
+            # if two classes loss is equal to the single eigenvalue
+            if self.lda.n_classes == 2:
+                loss = -eigvals
+            # if more than two classes loss equal to the smallest of the C-1 eigenvalues
+            elif self.lda.n_classes > 2:
+                loss = -eigvals[self.lda.n_classes - 2]
+            else:
+                raise ValueError("The number of classes for LDA must be greater than 1")
+
+            if self.lorentzian_reg > 0:
+                loss += self.regularization_lorentzian(H)
+
+        else: 
+            loss = self.custom_loss(self,H,y,save_params)
+
         return loss
+
+    def set_loss_function(self, func):
+        """Set custom loss function
+
+        TODO document with an example
+
+        Parameters
+        ----------
+        func : function
+            custom loss function
+        """
+        self.custom_loss = func
 
     def train_epoch(self, loader):
         """
