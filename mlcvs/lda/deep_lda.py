@@ -1,275 +1,40 @@
 """Linear discriminant analysis-based CVs."""
 
-__all__ = ["LDA_CV", "DeepLDA_CV"]
+__all__ = ["DeepLDA_CV"]
 
 import torch
-from .models import LinearCV, NeuralNetworkCV
-from torch.utils.data import Dataset, DataLoader
 import pandas as pd
+from torch.utils.data import Dataset, DataLoader
 
+from .lda import LDA
+from ..models import NeuralNetworkCV
 
-class LDA:
+class ColvarDataset(Dataset):
     """
-    Fisher's discriminant class.
+    Auxiliary dataset to generate a dataloader.
 
-    Attributes
-    ----------
-    n_features : int
-        Number of features
-    n_classes : int
-        Number of classes
-    evals_ : torch.Tensor
-        LDA eigenvalues
-    evecs_ : torch.Tensor
-        LDA eigenvectors
-    S_b_ : torch.Tensor
-        Between scatter matrix
-    S_w_ : torch.Tensor
-        Within scatter matrix
-    sw_reg : float
-        Regularization to S_w matrix
-
-    Methods
-    -------
-    compute_LDA(H,y,save_params):
-        Perform LDA
     """
 
-    def __init__(self, harmonic_lda = False, device = 'auto'):
+    def __init__(self, colvar_list):
         """
-        Create a LDA object
+        Initialize dataset
 
         Parameters
         ----------
-        harmonic_lda : bool
-            Harmonic variant of LDA
+        colvar_list : list of arrays
+            input data (also with classes)
         """
+        self.nstates = len(colvar_list)
+        self.colvar = colvar_list
 
-        # initialize attributes
-        self.harmonic_lda = harmonic_lda
-        self.evals_ = None
-        self.evecs_ = None
-        self.S_b_ = None
-        self.S_w_ = None
-        self.n_features = None 
-        self.n_classes = None
+    def __len__(self):
+        return len(self.colvar[0])
 
-        # Regularization
-        self.sw_reg = 1e-6
-
-        # Initialize device
-        if device == "auto":
-            self.device_ = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        else:
-            self.device_ = device
-
-    def compute_LDA(self, H, label, save_params=True):
-        """
-        Performs LDA and saves parameters.
-
-        Parameters
-        ----------
-        H : array-like of shape (n_samples, n_features)
-            Training data.
-        label : array-like of shape (n_samples,)
-            Classes labels.
-        save_params: bool, optional
-            Whether to store parameters in model
-
-        Returns
-        -------
-        evals : array of shape (n_classes-1)
-            LDA eigenvalues.
-        """
-
-        # sizes
-        N, d = H.shape
-        self.n_features = d
-
-        # classes
-        classes = torch.unique(label)
-        n_classes = len(classes)
-        self.n_classes = n_classes
-
-        # Mean centered observations for entire population
-        H_bar = H - torch.mean(H, 0, True)
-        # Total scatter matrix (cov matrix over all observations)
-        S_t = H_bar.t().matmul(H_bar) / (N - 1)
-        # Define within scatter matrix and compute it
-        S_w = torch.Tensor().new_zeros((d, d)).to(device=self.device_)
-        if self.harmonic_lda:
-            S_w_inv = torch.Tensor().new_zeros((d, d)).to(device=self.device_)
-        # Loop over classes to compute means and covs
-        for i in classes:
-            # check which elements belong to class i
-            H_i = H[torch.nonzero(label == i).view(-1)]
-            # compute mean centered obs of class i
-            H_i_bar = H_i - torch.mean(H_i, 0, True)
-            # count number of elements
-            N_i = H_i.shape[0]
-            if N_i == 0:
-                continue
-
-            # LDA
-            S_w += H_i_bar.t().matmul(H_i_bar) / ((N_i - 1) * n_classes)
-
-            # HLDA
-            if self.harmonic_lda:
-                inv_i = H_i_bar.t().matmul(H_i_bar) / ((N_i - 1) * n_classes)
-                S_w_inv += inv_i.inverse()
-
-        if self.harmonic_lda:
-            S_w = S_w_inv.inverse()
-
-        # Compute S_b from total scatter matrix
-        S_b = S_t - S_w
-
-        # Regularize S_w
-        S_w = S_w + self.sw_reg * torch.diag(
-            torch.Tensor().new_ones((d)).to(device=self.device_)
-        )
-
-        # -- Generalized eigenvalue problem: S_b * v_i = lambda_i * Sw * v_i --
-
-        # (1) use cholesky decomposition for S_w
-        L = torch.cholesky(S_w, upper=False)
-
-        # (2) define new matrix using cholesky decomposition
-        L_t = torch.t(L)
-        L_ti = torch.inverse(L_t)
-        L_i = torch.inverse(L)
-        S_new = torch.matmul(torch.matmul(L_i, S_b), L_ti)
-
-        # (3) find eigenvalues and vectors of S_new
-        eigvals, eigvecs = torch.symeig(S_new, eigenvectors=True)
-        # sort
-        eigvals, indices = torch.sort(eigvals, 0, descending=True)
-        eigvecs = eigvecs[:, indices]
-
-        # (4) return to original eigenvectors
-        eigvecs = torch.matmul(L_ti, eigvecs)
-
-        # normalize them
-        for i in range(eigvecs.shape[1]):  # TODO maybe change in sum along axis?
-            norm = eigvecs[:, i].pow(2).sum().sqrt()
-            eigvecs[:, i].div_(norm)
-        # set the first component positive
-        eigvecs.mul_(torch.sign(eigvecs[0, :]).unsqueeze(0).expand_as(eigvecs))
-
-        # keep only C-1 eigvals and eigvecs
-        eigvals = eigvals[: n_classes - 1]
-        eigvecs = eigvecs[:, : n_classes - 1]
-        if save_params:
-            self.evals_ = eigvals
-            self.evecs_ = eigvecs
-            self.S_b_ = S_b
-            self.S_w_ = S_w
-
-        return eigvals, eigvecs
-
-
-class LDA_CV(LinearCV):
-    """
-    Linear Discriminant-based collective variable.
-
-    Attributes
-    ----------
-    lda: LDA object
-        Linear discriminant analysis instance.
-
-    Methods
-    -------
-    train(X,y)
-        Fit LDA given data and classes
-    train_forward(X,y)
-        Fit LDA and project along components
-
-    + LinearCV TODO CHECK
-    """
-
-    def __init__(self, n_features, harmonic_lda = False, device="auto", **kwargs):
-        """
-        Create a LDA_CV object
-
-        Parameters
-        ----------
-        n_features : int
-            Number of input features
-        harmonic_lda : bool
-            Build a HLDA CV.
-        **kwargs : dict
-            Additional parameters for LinearCV object 
-        """
-        super().__init__(n_features=n_features, device=device, **kwargs)
-
-        self.name_ = "hlda_cv" if harmonic_lda else "lda_cv"
-        self.lda = LDA(harmonic_lda,device=self.device_)
-
-    def train(self, X, y):
-        """
-        Fit LDA given data and classes.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Training data.
-        y : array-like of shape (n_samples,)
-            Classes labels.
-        """
-        
-        # if DataFrame save feature names
-        if type(X) == pd.DataFrame:
-            self.feature_names = X.columns.values
-            X = torch.Tensor(X.values).to(device=self.device_)
-        elif type(X) != torch.Tensor:
-            X = torch.Tensor(X).to(device=self.device_)
-
-        # class
-        if type(y) == pd.DataFrame:
-            y = torch.Tensor(y.values).to(device=self.device_)
-        elif type(y) != torch.Tensor:
-            y = torch.Tensor(y).to(device=self.device_)
-
-        _, eigvecs = self.lda.compute_LDA(X, y)
-        # save parameters for estimator
-        self.w = eigvecs
-
-    def train_forward(self, X, y):
-        """
-        Fit LDA and project along components.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Training data.
-        y : array-like of shape (n_samples,)
-            Classes labels.
-
-        Returns
-        -------
-        s : array-like of shape (n_samples, n_classes-1)
-            Linear projection of inputs.
-
-        """
-        self.train(X, y)
-        return self.forward(X)
-
-    def set_regularization(self, sw_reg = 0.05):
-        """
-        Set regularization for within-scatter matrix.
-
-        Parameters
-        ----------
-        sw_reg : float
-            Regularization value.
-
-        Notes
-        -----
-        .. math:: S_w = S_w + \mathtt{sw_reg}\ \mathbf{1}.
-
-        """
-        self.lda.sw_reg = sw_reg
-
+    def __getitem__(self, idx):
+        x = ()
+        for i in range(self.nstates):
+            x += (self.colvar[i][idx],)
+        return x
 
 class DeepLDA_CV(NeuralNetworkCV):
     """
@@ -563,29 +328,3 @@ class DeepLDA_CV(NeuralNetworkCV):
         return loss
 
 
-class ColvarDataset(Dataset):
-    """
-    Auxiliary dataset to generate a dataloader.
-
-    """
-
-    def __init__(self, colvar_list):
-        """
-        Initialize dataset
-
-        Parameters
-        ----------
-        colvar_list : list of arrays
-            input data (also with classes)
-        """
-        self.nstates = len(colvar_list)
-        self.colvar = colvar_list
-
-    def __len__(self):
-        return len(self.colvar[0])
-
-    def __getitem__(self, idx):
-        x = ()
-        for i in range(self.nstates):
-            x += (self.colvar[i][idx],)
-        return x
