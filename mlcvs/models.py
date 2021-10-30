@@ -8,6 +8,69 @@ import pandas as pd
 from warnings import warn
 from . import optim
 
+# util for computing mean and range over dataset
+
+def compute_mean_range(x: torch.Tensor, print_values=False):
+    """
+    Compute mean and range of values over dataset (for inputs / outputs standardization)
+    """
+    Max, _ = torch.max(x, dim=0)
+    Min, _ = torch.min(x, dim=0)
+
+    Mean = (Max + Min) / 2.0
+    Range = (Max - Min) / 2.0
+
+    if print_values:
+        print("Standardization enabled.")
+        print("Mean:", Mean.shape, "-->", Mean)
+        print("Range:", Range.shape, "-->", Range)
+    if (Range < 1e-6).nonzero().sum() > 0:
+        print(
+            "[Warninthe follig] Normalization: owing features have a range of values < 1e-6:",
+            (Range < 1e-6).nonzero(),
+        )
+        Range[Range < 1e-6] = 1.0
+
+    return Mean, Range
+
+def normalize(
+    x: torch.Tensor, Mean: torch.Tensor, Range: torch.Tensor
+) -> (torch.Tensor):
+    """
+    Compute standardized inputs/outputs (internal).
+
+    Parameters
+    ----------
+    x: torch.Tensor
+        input/output
+    Mean: torch.Tensor
+        mean values to be subtracted.
+    Range: torch.Tensor
+        interval range to be divided by.
+
+    Returns
+    -------
+    out : torch.Tensor
+        standardized inputs/outputs
+    """
+
+    # if shape ==
+
+    if x.ndim == 2:
+        batch_size = x.size(0)
+        x_size = x.size(1)
+
+        Mean_ = Mean.unsqueeze(0).expand(batch_size, x_size)
+        Range_ = Range.unsqueeze(0).expand(batch_size, x_size)
+    elif x.ndim == 1:
+        Mean_ = Mean
+        Range_ = Range
+    else:
+        raise ValueError(
+            "Input tensor must of shape (n_features) or (n_batch,n_features)."
+        )
+
+    return x.sub(Mean_).div(Range_)
 
 class LinearCV(torch.nn.Module):
     """
@@ -56,8 +119,8 @@ class LinearCV(torch.nn.Module):
 
         # Initialize parameters
         self.n_features = n_features
-        weight = torch.eye(n_features,  device=self.device_)
-        offset = torch.zeros(n_features,  device=self.device_)
+        weight = torch.eye(n_features).to(device=self.device_)
+        offset = torch.zeros(n_features).to(device=self.device_)
         self.register_buffer("w", weight)
         self.register_buffer("b", offset)
 
@@ -65,7 +128,9 @@ class LinearCV(torch.nn.Module):
         self.name_ = "LinearCV"
         self.feature_names = ["x" + str(i) for i in range(n_features)]
 
-        # Flags
+        # Input normalization
+        self.normIn = False
+        self.normOut = False
 
     def forward(self, X):
         """
@@ -82,11 +147,17 @@ class LinearCV(torch.nn.Module):
             Linear projection of inputs.
         """
         if type(X) == pd.DataFrame:
-            X = torch.Tensor(X.values, device=self.device_) 
+            X = torch.Tensor(X.values).to(device=self.device_)
         elif type(X) != torch.Tensor:
-            X = torch.Tensor(X, device=self.device_)
+            X = torch.Tensor(X).to(device=self.device_)
+
+        if self.normIn:
+            X = normalize(X, self.MeanIn, self.RangeIn)
 
         s = torch.matmul(X - self.b, self.w)
+
+        if self.normOut:
+            s = normalize(s, self.MeanOut, self.RangeOut)
 
         return s
 
@@ -144,15 +215,18 @@ class LinearCV(torch.nn.Module):
                     f"{self.__class__.__name__} has no attribute {key}."
                 )
 
-    def plumed_input(self):
+    def plumed_input_combine(self): # TODO REMOVE
         """
         Generate PLUMED input file
+
+        Deprecated (todo remove)
 
         Returns
         -------
         out : string
             PLUMED input file
         """
+
         # count number of output components
         weights = self.w.cpu().numpy()
         offset = self.b.cpu().numpy()
@@ -178,9 +252,57 @@ class LinearCV(torch.nn.Module):
                     out += str(np.round(offset[j, i], 6)) + ","
             out = out[:-1]
 
-            out += " PERIODIC=NO"
+            out += " PERIODIC=NO\n"
+            
         return out
 
+    def plumed_input(self):
+        """
+        Generate PLUMED input file
+
+        Returns
+        -------
+        out : string
+            PLUMED input file
+        """
+        
+        # count number of output components
+        weights = self.w.cpu().numpy()
+        offset = self.b.cpu().numpy()
+        n_cv = 1 if weights.ndim == 1 else weights.shape[1]
+
+        # get normalization
+        if self.normIn:
+            mean = self.MeanIn.cpu().numpy()
+
+        out = ""
+        for i in range(n_cv):
+            if n_cv == 1:
+                out += f"{self.name_}: CUSTOM ARG="
+            else:
+                out += f"{self.name_}{i+1}: CUSTOM ARG="
+            for j in range(self.n_features):
+                out += f"{self.feature_names[j]},"
+            out = out[:-1]
+
+            out += " VAR="
+            for j in range(self.n_features):
+                out += f"x{j},"
+            out = out[:-1]
+
+            out += " FUNC="
+            for j in range(self.n_features):
+                w = weights[j, i]
+                s = "+" if w > 0 else ""
+                if self.normIn:
+                    m = mean[j]
+                    s2 = "+" if m < 0 else "-"
+                    out += f'{s}{w:.6f}*(x{j}{s2}{np.abs(m):.6f})'
+                else:
+                    out += f"{s}{w:.6f}*x{j}"
+
+            out += " PERIODIC=NO\n"
+        return out
 
 class NeuralNetworkCV(torch.nn.Module):
     """
@@ -308,19 +430,15 @@ class NeuralNetworkCV(torch.nn.Module):
         self.n_hidden = layers[-1]
 
         # Linear projection output
-        weight = torch.eye(self.n_hidden, device=self.device_)
-        offset = torch.zeros(self.n_hidden, device=self.device_)
+        weight = torch.eye(self.n_hidden).to(device=self.device_)
+        offset = torch.zeros(self.n_hidden).to(device=self.device_)
         self.register_buffer("w", weight)
         self.register_buffer("b", offset)
 
         # Input and output normalization
         self.normIn = False
+        self.normNN = False
         self.normOut = False
-
-        MeanIn = torch.zeros(self.n_features, device=self.device_)
-        RangeIn = torch.ones(self.n_features, device=self.device_)
-        self.register_buffer("MeanIn", MeanIn)
-        self.register_buffer("RangeIn", RangeIn)
 
         # Flags
         self.output_hidden = False
@@ -353,7 +471,7 @@ class NeuralNetworkCV(torch.nn.Module):
         forward : compute forward pass of the mdoel
         """
         if self.normIn:
-            x = self._normalize(x, self.MeanIn, self.RangeIn)
+            x = normalize(x, self.MeanIn, self.RangeIn)
         z = self.nn(x)
         return z
 
@@ -377,10 +495,15 @@ class NeuralNetworkCV(torch.nn.Module):
 
         """
         z = self.forward_nn(x)
+
+        if self.normNN:
+            z = normalize(z, self.MeanNN, self.RangeNN)
+
         if not self.output_hidden:
             z = self.linear_projection(z)
+
         if self.normOut:
-            z = self._normalize(z, self.MeanOut, self.RangeOut)
+            z = normalize(z, self.MeanOut, self.RangeOut)
         return z
 
     def linear_projection(self, H):
@@ -448,29 +571,6 @@ class NeuralNetworkCV(torch.nn.Module):
 
     # Input / output standardization
 
-    def _compute_mean_range(self, x: torch.Tensor, print_values=False):
-        """
-        Compute mean and range of values over dataset (for inputs / outputs standardization)
-        """
-        Max, _ = torch.max(x, dim=0)
-        Min, _ = torch.min(x, dim=0)
-
-        Mean = (Max + Min) / 2.0
-        Range = (Max - Min) / 2.0
-
-        if print_values:
-            print("Standardization enabled.")
-            print("Mean:", Mean.shape, "-->", Mean)
-            print("Range:", Range.shape, "-->", Range)
-        if (Range < 1e-6).nonzero().sum() > 0:
-            print(
-                "[Warninthe follig] Normalization: owing features have a range of values < 1e-6:",
-                (Range < 1e-6).nonzero(),
-            )
-            Range[Range < 1e-6] = 1.0
-
-        return Mean, Range
-
     def standardize_inputs(self, x: torch.Tensor, print_values=False):
         """
         Standardize inputs over dataset (based on max and min).
@@ -481,11 +581,16 @@ class NeuralNetworkCV(torch.nn.Module):
             reference set over which compute the standardization
         """
 
-        Mean, Range = self._compute_mean_range(x, print_values)
+        Mean, Range = compute_mean_range(x, print_values)
+
+        if hasattr(self,"MeanIn"):
+            self.MeanIn = Mean
+            self.RangeIn = Range
+        else:
+            self.register_buffer("MeanIn", Mean)
+            self.register_buffer("RangeIn", Range)
 
         self.normIn = True
-        self.MeanIn = Mean 
-        self.RangeIn = Range
 
     def standardize_outputs(self, input: torch.Tensor, print_values=False):
         """
@@ -501,7 +606,7 @@ class NeuralNetworkCV(torch.nn.Module):
         with torch.no_grad():
             x = self.forward(input)
 
-        Mean, Range = self._compute_mean_range(x, print_values)
+        Mean, Range = compute_mean_range(x, print_values)
 
         if hasattr(self,"MeanOut"):
             self.MeanOut = Mean
@@ -511,45 +616,6 @@ class NeuralNetworkCV(torch.nn.Module):
             self.register_buffer("RangeOut", Range)
 
         self.normOut = True
-
-    def _normalize(
-        self, x: torch.Tensor, Mean: torch.Tensor, Range: torch.Tensor
-    ) -> (torch.Tensor):
-        """
-        Compute standardized inputs/outputs (internal).
-
-        Parameters
-        ----------
-        x: torch.Tensor
-            input/output
-        Mean: torch.Tensor
-            mean values to be subtracted.
-        Range: torch.Tensor
-            interval range to be divided by.
-
-        Returns
-        -------
-        out : torch.Tensor
-            standardized inputs/outputs
-        """
-
-        # if shape ==
-
-        if x.ndim == 2:
-            batch_size = x.size(0)
-            x_size = x.size(1)
-
-            Mean_ = Mean.unsqueeze(0).expand(batch_size, x_size)
-            Range_ = Range.unsqueeze(0).expand(batch_size, x_size)
-        elif x.ndim == 1:
-            Mean_ = Mean
-            Range_ = Range
-        else:
-            raise ValueError(
-                "Input tensor must of shape (n_features) or (n_batch,n_features)."
-            )
-
-        return x.sub(Mean_).div(Range_)
 
         # Parameters
 
