@@ -14,7 +14,6 @@ from mlcvs.lda import LDA_CV, DeepLDA_CV
 #torch.set_default_tensor_type(torch.FloatTensor)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-
 @pytest.fixture(scope="module")
 def load_dataset_2d_model():
     """Load 2d-basins dataset"""
@@ -42,8 +41,8 @@ def load_dataset_2d_model():
     X, y = X[p], y[p]
 
     # Convert np to torch
-    X = torch.Tensor(X, device=device)
-    y = torch.Tensor(y, device=device)
+    X = torch.Tensor(X).to(device=device)
+    y = torch.Tensor(y).to(device=device)
     return X, y, names
 
 
@@ -76,8 +75,8 @@ def test_lda_harmonic_nclasses(n_classes,is_harmonic_lda):
     y = np.concatenate(y_list, axis=0)
 
     # Transform to tensor 
-    X = torch.Tensor(X, device=device)
-    y = torch.Tensor(y, device=device)
+    X = torch.Tensor(X).to(device=device)
+    y = torch.Tensor(y).to(device=device)
 
     # Define model
     n_features = X.shape[1]
@@ -159,8 +158,8 @@ def test_lda_train_2d_model_harmonic(load_dataset_2d_model,is_harmonic_lda):
     # Check PLUMED INPUT
     input = lda.plumed_input()
     expected_input = (
-        "hlda_cv: COMBINE ARG=p.x,p.y COEFFICIENTS=0.689055,-0.72470 PERIODIC=NO" if is_harmonic_lda
-        else "lda_cv: COMBINE ARG=p.x,p.y COEFFICIENTS=0.657474,-0.75347 PERIODIC=NO"
+        "hlda_cv: CUSTOM ARG=p.x,p.y VAR=x0,x1 FUNC=+0.689055*x0-0.724709*x1 PERIODIC=NO\n" if is_harmonic_lda
+        else "lda_cv: CUSTOM ARG=p.x,p.y VAR=x0,x1 FUNC=+0.657474*x0-0.753477*x1 PERIODIC=NO\n"
     )
     assert expected_input == input
 
@@ -290,6 +289,7 @@ def test_deeplda_train_2d_model(load_dataset_2d_model):
 
     with torch.no_grad():
         loss = model_loaded.evaluate_dataset(train_data, save_params=True) 
+        model_loaded.standardize_inputs(train_data[0])
         model_loaded.standardize_outputs(train_data[0])
 
     model_loaded.load_checkpoint('mlcvs/tests/__pycache__/model_checkpoint.pt') 

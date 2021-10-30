@@ -96,9 +96,9 @@ class LDA:
         # Total scatter matrix (cov matrix over all observations)
         S_t = H_bar.t().matmul(H_bar) / (N - 1)
         # Define within scatter matrix and compute it
-        S_w = torch.Tensor().new_zeros((d, d), device=self.device_)
+        S_w = torch.Tensor().new_zeros((d, d)).to(device=self.device_)
         if self.harmonic_lda:
-            S_w_inv = torch.Tensor().new_zeros((d, d), device = self.device_)
+            S_w_inv = torch.Tensor().new_zeros((d, d)).to(device=self.device_)
         # Loop over classes to compute means and covs
         for i in classes:
             # check which elements belong to class i
@@ -126,7 +126,7 @@ class LDA:
 
         # Regularize S_w
         S_w = S_w + self.sw_reg * torch.diag(
-            torch.Tensor().new_ones((d), device=self.device_)
+            torch.Tensor().new_ones((d)).to(device=self.device_)
         )
 
         # -- Generalized eigenvalue problem: S_b * v_i = lambda_i * Sw * v_i --
@@ -220,15 +220,15 @@ class LDA_CV(LinearCV):
         # if DataFrame save feature names
         if type(X) == pd.DataFrame:
             self.feature_names = X.columns.values
-            X = torch.Tensor(X.values, device=self.device_) 
+            X = torch.Tensor(X.values).to(device=self.device_)
         elif type(X) != torch.Tensor:
-            X = torch.Tensor(X, device=self.device_)
+            X = torch.Tensor(X).to(device=self.device_)
 
         # class
         if type(y) == pd.DataFrame:
-            y = torch.Tensor(y.values, device=self.device_) 
+            y = torch.Tensor(y.values).to(device=self.device_)
         elif type(y) != torch.Tensor:
-            y = torch.Tensor(y, device=self.device_) 
+            y = torch.Tensor(y).to(device=self.device_)
 
         _, eigvecs = self.lda.compute_LDA(X, y)
         # save parameters for estimator
