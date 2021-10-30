@@ -4,7 +4,6 @@ __all__ = ["EarlyStopping"]
 
 import torch
 
-
 class EarlyStopping:
     """
     Early stopping the training when the loss does not improve after

@@ -7,7 +7,7 @@ import pytest
 import torch
 import numpy as np
 import pandas as pd
-from mlcvs.io import colvar_to_pandas
+from mlcvs.utils.io import colvar_to_pandas
 from mlcvs.tica import TICA_CV
 
 # set global variables

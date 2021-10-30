@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from warnings import warn
 
-from .. import optim
+from ..utils.optim import EarlyStopping
 from .utils import normalize,compute_mean_range
 
 
@@ -25,7 +25,7 @@ class NeuralNetworkCV(torch.nn.Module):
         Device (cpu or cuda)
     opt_: torch.optimizer
         Optimizer
-    earlystopping_: optim.EarlyStopping
+    earlystopping_: EarlyStopping
         EarlyStopping scheduler
     normIn: bool
         Normalize inputs
@@ -270,7 +270,7 @@ class NeuralNetworkCV(torch.nn.Module):
         save_best: bool, optional
             store the best model
         """
-        self.earlystopping_ = optim.EarlyStopping(
+        self.earlystopping_ = EarlyStopping(
             patience, min_delta, consecutive, log, save_best_model
         )
         self.best_valid = None

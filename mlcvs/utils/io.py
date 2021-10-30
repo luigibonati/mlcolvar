@@ -4,7 +4,6 @@ __all__ = ["colvar_to_pandas"]
 
 import pandas as pd
 
-
 def colvar_to_pandas(filename="COLVAR", folder="./", sep=" "):
     """
     Load a PLUMED file and save it to a dataframe.

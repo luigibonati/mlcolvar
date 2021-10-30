@@ -3,10 +3,10 @@
 # __all__ = ["lda", "io", "optim", "models"]
 
 # Add imports here
-from .lda import *
-from .io import *
-from .optim import *
 from .models import *
+from .utils import *
+from .lda import *
+from .tica import *
 
 # Handle versioneer
 from ._version import get_versions
