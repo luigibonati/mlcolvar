@@ -19,8 +19,8 @@ def load_dataset_2d_model():
     """Load 2d-basins dataset"""
 
     # Load colvar files as pandas dataframes
-    dataA = colvar_to_pandas(folder="mlcvs/data/2d_model/", filename="COLVAR_stateA")
-    dataB = colvar_to_pandas(folder="mlcvs/data/2d_model/", filename="COLVAR_stateB")
+    dataA = colvar_to_pandas(folder="mlcvs/tests/data/2d_model/", filename="COLVAR_stateA")
+    dataB = colvar_to_pandas(folder="mlcvs/tests/data/2d_model/", filename="COLVAR_stateB")
 
     # Create input datasets
     xA = dataA.filter(regex="p.*").values
