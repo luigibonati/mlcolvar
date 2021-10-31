@@ -11,7 +11,7 @@ from ..models import LinearCV
 
 class TICA_CV(LinearCV):
 
-    def __init__(self, n_features, device="auto", **kwargs):
+    def __init__(self, n_features, **kwargs):
         """Create a Linear TICA CV
 
         Parameters
@@ -21,10 +21,10 @@ class TICA_CV(LinearCV):
         device : str, optional
             device, by default "auto"
         """
-        super().__init__(n_features=n_features, device=device, **kwargs)
+        super().__init__(n_features=n_features, **kwargs)
 
         self.name_ = "tica_cv"
-        self.tica = TICA(device=self.device_)
+        self.tica = TICA()
 
     def train(self, X, t = None, lag = 10):
         """Fit TICA given time-lagged data (and weights). 
@@ -67,10 +67,6 @@ class TICA_CV(LinearCV):
         # find time-lagged configurations
         x_t, x_lag, w_t, w_lag = look_for_configurations(X,t,lag)
 
-        x_t.to(self.device_)
-        x_lag.to(self.device_)
-        w_t.to(self.device_)
-        w_lag.to(self.device_)
 
         # compute mean-free variables
         ave = self.tica.compute_average(x_t,w_t)

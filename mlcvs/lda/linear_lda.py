@@ -27,7 +27,7 @@ class LDA_CV(LinearCV):
     + LinearCV TODO CHECK
     """
 
-    def __init__(self, n_features, harmonic_lda = False, device="auto", **kwargs):
+    def __init__(self, n_features, harmonic_lda = False, **kwargs):
         """
         Create a LDA_CV object
 
@@ -40,10 +40,10 @@ class LDA_CV(LinearCV):
         **kwargs : dict
             Additional parameters for LinearCV object 
         """
-        super().__init__(n_features=n_features, device=device, **kwargs)
+        super().__init__(n_features=n_features, **kwargs)
 
         self.name_ = "hlda_cv" if harmonic_lda else "lda_cv"
-        self.lda = LDA(harmonic_lda,device=self.device_)
+        self.lda = LDA(harmonic_lda)
 
     def train(self, X, y):
         """
@@ -57,18 +57,19 @@ class LDA_CV(LinearCV):
             Classes labels.
         """
         
+        #TODO : warning, this works only if device is CPU
         # if DataFrame save feature names
         if type(X) == pd.DataFrame:
             self.feature_names = X.columns.values
-            X = torch.Tensor(X.values).to(device=self.device_)
+            X = torch.Tensor(X.values)
         elif type(X) != torch.Tensor:
-            X = torch.Tensor(X).to(device=self.device_)
+            X = torch.Tensor(X)
 
         # class
         if type(y) == pd.DataFrame:
-            y = torch.Tensor(y.values).to(device=self.device_)
+            y = torch.Tensor(y.values)
         elif type(y) != torch.Tensor:
-            y = torch.Tensor(y).to(device=self.device_)
+            y = torch.Tensor(y)
 
         _, eigvecs = self.lda.compute_LDA(X, y)
         # save parameters for estimator

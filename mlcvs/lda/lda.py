@@ -27,7 +27,7 @@ class LDA:
         Perform LDA
     """
 
-    def __init__(self, harmonic_lda = False, device = 'auto'):
+    def __init__(self, harmonic_lda = False):
         """
         Create a LDA object
 
@@ -49,12 +49,6 @@ class LDA:
         # Regularization
         self.sw_reg = 1e-6
 
-        # Initialize device
-        if device == "auto":
-            self.device_ = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        else:
-            self.device_ = device
-
     def compute_LDA(self, H, label, save_params=True):
         """
         Performs LDA and saves parameters.
@@ -73,6 +67,8 @@ class LDA:
         evals : array of shape (n_classes-1)
             LDA eigenvalues.
         """
+        # device
+        device = H.device
 
         # sizes
         N, d = H.shape
@@ -88,9 +84,9 @@ class LDA:
         # Total scatter matrix (cov matrix over all observations)
         S_t = H_bar.t().matmul(H_bar) / (N - 1)
         # Define within scatter matrix and compute it
-        S_w = torch.Tensor().new_zeros((d, d)).to(device=self.device_)
+        S_w = torch.Tensor().new_zeros((d, d)).to(device)
         if self.harmonic_lda:
-            S_w_inv = torch.Tensor().new_zeros((d, d)).to(device=self.device_)
+            S_w_inv = torch.Tensor().new_zeros((d, d)).to(device)
         # Loop over classes to compute means and covs
         for i in classes:
             # check which elements belong to class i
@@ -118,7 +114,7 @@ class LDA:
 
         # Regularize S_w
         S_w = S_w + self.sw_reg * torch.diag(
-            torch.Tensor().new_ones((d)).to(device=self.device_)
+            torch.Tensor().new_ones((d)).to(device)
         )
 
         # -- Generalized eigenvalue problem: S_b * v_i = lambda_i * Sw * v_i --

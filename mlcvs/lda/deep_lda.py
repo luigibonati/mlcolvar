@@ -11,7 +11,6 @@ from ..models import NeuralNetworkCV
 class ColvarDataset(Dataset):
     """
     Auxiliary dataset to generate a dataloader.
-
     """
 
     def __init__(self, colvar_list):
@@ -71,7 +70,7 @@ class DeepLDA_CV(NeuralNetworkCV):
         Evaluate loss function on dataset.
     """
 
-    def __init__(self, layers, activation="relu", device="auto", **kwargs):
+    def __init__(self, layers, activation="relu", **kwargs):
         """
         Create a DeepLDA_CV object
 
@@ -84,10 +83,10 @@ class DeepLDA_CV(NeuralNetworkCV):
         """
         
         super().__init__(
-            layers=layers, activation=activation, device=device, **kwargs
+            layers=layers, activation=activation, **kwargs 
         )
         self.name_ = "deeplda_cv"
-        self.lda = LDA(device=self.device_)
+        self.lda = LDA()
 
         # custom loss function
         self.custom_loss = None
@@ -213,7 +212,7 @@ class DeepLDA_CV(NeuralNetworkCV):
         """
         for data in loader:
             # =================get data===================
-            X, y = data[0].float().to(self.device_), data[1].long().to(self.device_)
+            X, y = data
             # =================forward====================
             H = self.forward_nn(X)
             # =================lda loss===================
@@ -321,7 +320,7 @@ class DeepLDA_CV(NeuralNetworkCV):
             loss value
         """
         with torch.no_grad():
-            X, y = data[0].to(self.device_), data[1].long().to(self.device_)
+            X, y = data
             H = self.forward_nn(X)
             loss = self.loss_function(H, y, save_params)
         return loss

@@ -145,14 +145,8 @@ class TICA:
     """ Time-lagged independent component analysis base class.
     """
 
-    def __init__(self, device = 'auto'):
+    def __init__(self):
         """Initialize TICA object.
-
-        Parameters
-        ----------
-        device : str, optional
-            device, by default 'auto'
-
         """
 
         # initialize attributes
@@ -163,11 +157,6 @@ class TICA:
         # Regularization
         self.reg_cholesky = 0 
 
-        # Initialize device
-        if device == "auto":
-            self.device_ = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        else:
-            self.device_ = device
 
     def compute_average(self, x, w = None):
         """Compute (weighted) average to obtain mean-free inputs

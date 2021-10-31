@@ -44,8 +44,8 @@ def load_dataset_2d_model():
     X, y = X[p], y[p]
 
     # Convert np to torch
-    X = torch.Tensor(X).to(device=device)
-    y = torch.Tensor(y).to(device=device)
+    X = torch.Tensor(X).to(device)
+    y = torch.Tensor(y).to(device)
     return X, y, names
 
 
@@ -72,7 +72,7 @@ def test_deeplda_nclasses(n_classes):
     n_hidden = nodes[-1]
 
     # Model
-    model = DeepLDA_CV(nodes, device=device)
+    model = DeepLDA_CV(nodes)
     model.to(device)
 
     # Define input
@@ -130,7 +130,7 @@ def test_deeplda_train_2d_model(load_dataset_2d_model):
     l2_reg = 1e-5
 
     # MODEL
-    model = DeepLDA_CV(nodes, device=device)
+    model = DeepLDA_CV(nodes)
     model.to(device)
 
     # OPTIMIZER
@@ -169,7 +169,7 @@ def test_deeplda_train_2d_model(load_dataset_2d_model):
 
     # EXPORT CHECKPOINT AND LOAD (see function below for comments)
     model.export(folder='mlcvs/tests/__pycache__/')
-    model_loaded = DeepLDA_CV(nodes, device=device)
+    model_loaded = DeepLDA_CV(nodes)
     model_loaded.to(device)
 
     with torch.no_grad():
@@ -209,7 +209,7 @@ def test_deeplda_export_load():
     n_hidden = nodes[-1]
 
     # Model
-    model = DeepLDA_CV(nodes, device=device)
+    model = DeepLDA_CV(nodes)
     model.to(device)
 
     # Compute lda and set params
@@ -226,7 +226,7 @@ def test_deeplda_export_load():
     model.export(folder='mlcvs/tests/__pycache__/')
 
     # (1) --- Load checkpoint into new model
-    model_loaded = DeepLDA_CV(nodes, device=device)
+    model_loaded = DeepLDA_CV(nodes)
     model_loaded.to(device)
 
     # Note: it requires the correct shape for w and b of linear projection TODO

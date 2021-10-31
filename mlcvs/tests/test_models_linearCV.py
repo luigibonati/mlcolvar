@@ -25,7 +25,7 @@ def test_LinearCV(n_input, dev):
 
     # Define model
     # n_input = 2
-    cv = LinearCV(n_features=n_input,device=device)
+    cv = LinearCV(n_features=n_input)
     cv.to(device)
 
     # Define inputs
@@ -40,6 +40,7 @@ def test_LinearCV(n_input, dev):
     # Change parameters
     cv.set_weights(0.5 * torch.ones(n_input))
     cv.set_offset(0.5 * torch.ones(n_input))
+    cv.to(device)
 
     # Propagate (call method)
     y2 = cv(x)

@@ -82,7 +82,8 @@ class NeuralNetworkCV(torch.nn.Module):
     """
 
     def __init__(
-        self, layers, activation="relu", device="auto",  **kwargs
+        self, layers, activation="relu", **kwargs 
+
     ):
         """
         Define a neural network module given the list of layers.
@@ -123,20 +124,14 @@ class NeuralNetworkCV(torch.nn.Module):
             else:
                 modules.append(torch.nn.Linear(layers[i], layers[i + 1]))
 
-        # Device
-        if device == "auto":
-            self.device_ = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        else:
-            self.device_ = device
-
         # Initialize parameters
         self.nn = torch.nn.Sequential(*modules)
         self.n_features = layers[0]
         self.n_hidden = layers[-1]
 
         # Linear projection output
-        weight = torch.eye(self.n_hidden).to(device=self.device_)
-        offset = torch.zeros(self.n_hidden).to(device=self.device_)
+        weight = torch.eye(self.n_hidden)
+        offset = torch.zeros(self.n_hidden)
         self.register_buffer("w", weight)
         self.register_buffer("b", offset)
 
@@ -451,7 +446,8 @@ class NeuralNetworkCV(torch.nn.Module):
                     }, folder+checkpoint_name)
 
         # == Export jit model ==
-        fake_input = torch.zeros(self.n_features, device=self.device_) #.reshape(1,self.n_features) #TODO check with plumed interface
+        device = next(self.nn.parameters()).device
+        fake_input = torch.zeros(self.n_features, device = device) #self.device_) #.reshape(1,self.n_features) #TODO check with plumed interface
         mod = torch.jit.trace(self, fake_input)
         mod.save(folder+traced_name)
 

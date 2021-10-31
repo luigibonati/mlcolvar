@@ -42,20 +42,13 @@ class LinearCV(torch.nn.Module):
         Generate PLUMED input file
     """
 
-    def __init__(self, n_features, device="auto", **kwargs):
+    def __init__(self, n_features, **kwargs):
         super().__init__(**kwargs)
-
-        # Device
-
-        if device == "auto":
-            self.device_ = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        else:
-            self.device_ = device
 
         # Initialize parameters
         self.n_features = n_features
-        weight = torch.eye(n_features).to(device=self.device_)
-        offset = torch.zeros(n_features).to(device=self.device_)
+        weight = torch.eye(n_features)
+        offset = torch.zeros(n_features)
         self.register_buffer("w", weight)
         self.register_buffer("b", offset)
 
@@ -82,9 +75,9 @@ class LinearCV(torch.nn.Module):
             Linear projection of inputs.
         """
         if type(X) == pd.DataFrame:
-            X = torch.Tensor(X.values).to(device=self.device_)
+            X = torch.Tensor(X.values)
         elif type(X) != torch.Tensor:
-            X = torch.Tensor(X).to(device=self.device_)
+            X = torch.Tensor(X)
 
         if self.normIn:
             X = normalize(X, self.MeanIn, self.RangeIn)
@@ -106,7 +99,7 @@ class LinearCV(torch.nn.Module):
             weights
 
         """
-        self.w = w.to(self.device_)
+        self.w = w
 
     def set_offset(self, b):
         """
@@ -118,7 +111,7 @@ class LinearCV(torch.nn.Module):
             offset
 
         """
-        self.b = b.to(self.device_)
+        self.b = b
 
     def get_params(self):
         """

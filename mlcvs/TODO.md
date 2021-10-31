@@ -1,0 +1,39 @@
+# TODOs
+
+## General
+- [X] remove dtype and use set_default_type 
+- [X] remove device and use .to?
+- [ ] use _ for private functions
+- [ ] add submodules
+
+## io
+- [ ] take general fucntion from md-stateinterpreter
+
+## Models 
+### LinearCV
+- [X] inherit from nn.Module and save params as buffers
+- [X] change name of transform and fit?
+- [X] change features_names to feature_names (also NNCV)
+- [X] allow use pandas dataframe as input? (set features)
+- [X] enable standardize inputs/outputs (problem: plumed input)
+- [ ] check forward with differnet number of inputs than initialized
+
+### NNCV
+- [X] print plumed input file
+- [X] export model
+- [ ] remove linear projection if unset?
+- [ ] allow to take as input nn.module and copy architecture
+- [ ] add dropout / batchnorm?
+
+## Lda
+### Both
+- [x] compose LDA instead of inheritance
+- [ ] expose methods? (eigvals, matrices... )
+
+### LDA_CV
+- [X] implement HLDA
+ 
+### DeepLDA_CV
+- [ ] add multiclass loss function
+- [ ] add possibility to pass custom loss function (add manual someth)
+- [ ] change names to private members
