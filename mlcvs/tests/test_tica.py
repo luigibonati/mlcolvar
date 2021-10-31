@@ -12,13 +12,13 @@ from mlcvs.tica import TICA_CV
 
 # set global variables
 #torch.set_default_tensor_type(torch.FloatTensor)
-device = 'cpu' #torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def test_tica_train_2d_model():
     """Perform TICA on 2d_model data folder."""
 
     # Load dataset
-    data = colvar_to_pandas(folder="mlcvs/data/2d_model/", filename="COLVAR_md")
+    data = colvar_to_pandas(folder="mlcvs/tests/data/2d_model/", filename="COLVAR_md")
     data = data[::50]
 
     X = data.filter(regex='p.')
