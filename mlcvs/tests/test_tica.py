@@ -14,7 +14,7 @@ from mlcvs.tica import TICA_CV
 torch.set_default_tensor_type(torch.DoubleTensor)
 torch.set_printoptions(precision=8)
 
-device = 'cpu' #torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def test_tica_train_2d_model():
     """Perform TICA on 2d_model data folder."""
