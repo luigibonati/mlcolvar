@@ -8,9 +8,10 @@ import torch
 from mlcvs.models import LinearCV, NeuralNetworkCV
 
 # set global variables
-dtype = torch.float32
-# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+torch.set_default_tensor_type(torch.DoubleTensor)
+torch.set_printoptions(precision=8)
 
+# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 @pytest.mark.parametrize("n_input", [1, 2])
 @pytest.mark.parametrize("dev", ["cpu", "cuda"])

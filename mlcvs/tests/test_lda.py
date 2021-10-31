@@ -11,7 +11,9 @@ from mlcvs.utils.io import colvar_to_pandas
 from mlcvs.lda import LDA_CV, DeepLDA_CV
 
 # set global variables
-#torch.set_default_tensor_type(torch.FloatTensor)
+torch.set_default_tensor_type(torch.DoubleTensor)
+torch.set_printoptions(precision=8)
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 @pytest.fixture(scope="module")
@@ -90,14 +92,14 @@ def test_lda_harmonic_nclasses(n_classes,is_harmonic_lda):
     y_test = lda(x_test)
     if is_harmonic_lda:
         y_test_expected = torch.tensor(
-            [0.0709] if n_classes == 2 else [0.1525, -0.2786]
+            [0.07089982] if n_classes == 2 else [ 0.15250435, -0.27857320]
         ).to(device)
     else:
         y_test_expected = torch.tensor(
-            [0.2407] if n_classes == 2 else [0.2316, -0.1087]
+            [0.24074882] if n_classes == 2 else [ 0.23162389, -0.10873218]
         ).to(device)
-    print(y_test)
-    assert (y_test_expected - y_test).abs().sum() < 1e-4
+    print(f'hlda:{is_harmonic_lda} - nclasses:{n_classes} - result:{y_test}')
+    assert (y_test_expected - y_test).abs().sum() < 1e-6
 
 def test_lda_from_dataframe():
     # params
@@ -123,8 +125,9 @@ def test_lda_from_dataframe():
     assert (lda.feature_names == X.columns.values).all()
 
     s = lda.forward(X)[0]
-    s_expected = torch.Tensor([-0.2801]).to(device)
-    assert  torch.abs(s - s_expected) < 1e-4
+    s_expected = torch.Tensor([-0.28010044]).to(device)
+    print(s)
+    assert  torch.abs(s - s_expected) < 1e-6
 
 @pytest.mark.parametrize("is_harmonic_lda", [False, True])
 def test_lda_train_2d_model_harmonic(load_dataset_2d_model,is_harmonic_lda):
@@ -148,12 +151,12 @@ def test_lda_train_2d_model_harmonic(load_dataset_2d_model,is_harmonic_lda):
     x_test = np.ones(2)
     y_test = lda(x_test)
     
-    print(y_test.cpu().numpy())
+    print(f'hlda:{is_harmonic_lda} - result: {y_test}')
     y_test_expected = torch.tensor(
-                        [-0.0356541] if is_harmonic_lda else [-0.0960027] 
+                        [-0.03565392] if is_harmonic_lda else [-0.09600264]
                       ).to(device)
 
-    assert torch.abs(y_test_expected - y_test) < 1e-5
+    assert torch.abs(y_test_expected - y_test) < 1e-6
 
     # Check PLUMED INPUT
     input = lda.plumed_input()
