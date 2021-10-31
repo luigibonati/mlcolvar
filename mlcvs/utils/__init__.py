@@ -1,4 +1,5 @@
-__all__ = ["io","optim"]
+__all__ = ["io","optim","data"]
 
 from .io import *
 from .optim import *
+from .data import *

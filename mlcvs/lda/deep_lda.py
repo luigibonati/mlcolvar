@@ -3,36 +3,11 @@
 __all__ = ["DeepLDA_CV"]
 
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
 
 from .lda import LDA
 from ..models import NeuralNetworkCV
-
-class ColvarDataset(Dataset):
-    """
-    Auxiliary dataset to generate a dataloader.
-    """
-
-    def __init__(self, colvar_list):
-        """
-        Initialize dataset
-
-        Parameters
-        ----------
-        colvar_list : list of arrays
-            input data (also with classes)
-        """
-        self.nstates = len(colvar_list)
-        self.colvar = colvar_list
-
-    def __len__(self):
-        return len(self.colvar[0])
-
-    def __getitem__(self, idx):
-        x = ()
-        for i in range(self.nstates):
-            x += (self.colvar[i][idx],)
-        return x
+from ..utils.data import LabeledDataset
 
 class DeepLDA_CV(NeuralNetworkCV):
     """
@@ -260,7 +235,7 @@ class DeepLDA_CV(NeuralNetworkCV):
             self.default_optimizer()
 
         # create dataloader
-        train_dataset = ColvarDataset(train_data)
+        train_dataset = LabeledDataset(colvar = train_data[0], labels = train_data[1])
         if batch_size == -1:
             batch_size = len(train_data[0])
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
