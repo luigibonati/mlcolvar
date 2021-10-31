@@ -322,7 +322,7 @@ class DeepLDA_CV(NeuralNetworkCV):
             loss value
         """
         with torch.no_grad():
-            X, y = data[0].float().to(self.device_), data[1].long().to(self.device_)
+            X, y = data[0].to(self.device_), data[1].long().to(self.device_)
             H = self.forward_nn(X)
             loss = self.loss_function(H, y, save_params)
         return loss
