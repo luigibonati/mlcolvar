@@ -14,8 +14,6 @@ from mlcvs.lda import LDA_CV
 torch.set_default_tensor_type(torch.DoubleTensor)
 torch.set_printoptions(precision=8)
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 @pytest.fixture(scope="module")
 def load_dataset_2d_model():
     """Load 2d-basins dataset"""
@@ -43,8 +41,8 @@ def load_dataset_2d_model():
     X, y = X[p], y[p]
 
     # Convert np to torch
-    X = torch.Tensor(X).to(device=device)
-    y = torch.Tensor(y).to(device=device)
+    X = torch.Tensor(X) 
+    y = torch.Tensor(y) 
     return X, y, names
 
 
@@ -77,27 +75,27 @@ def test_lda_harmonic_nclasses(n_classes,is_harmonic_lda):
     y = np.concatenate(y_list, axis=0)
 
     # Transform to tensor 
-    X = torch.Tensor(X).to(device=device)
-    y = torch.Tensor(y).to(device=device)
+    X = torch.Tensor(X)
+    y = torch.Tensor(y)
 
     # Define model
     n_features = X.shape[1]
-    lda = LDA_CV(n_features,harmonic_lda=is_harmonic_lda,device=device)
+    lda = LDA_CV(n_features,harmonic_lda=is_harmonic_lda)
 
     # Fit and transform LDA
     result = lda.train_forward(X, y)
 
     # Project
-    x_test = torch.tensor(n_features).to(device)
+    x_test = torch.tensor(n_features)
     y_test = lda(x_test)
     if is_harmonic_lda:
         y_test_expected = torch.tensor(
             [0.07089982] if n_classes == 2 else [ 0.15250435, -0.27857320]
-        ).to(device)
+        )
     else:
         y_test_expected = torch.tensor(
             [0.24074882] if n_classes == 2 else [ 0.23162389, -0.10873218]
-        ).to(device)
+        )
     print(f'hlda:{is_harmonic_lda} - nclasses:{n_classes} - result:{y_test}')
     assert (y_test_expected - y_test).abs().sum() < 1e-6
 
@@ -119,13 +117,13 @@ def test_lda_from_dataframe():
     y = df['y']
     
     # train lda cv
-    lda = LDA_CV(n_features=X.shape[1], device=device)
+    lda = LDA_CV(n_features=X.shape[1]) 
     lda.train(X,y)
 
     assert (lda.feature_names == X.columns.values).all()
 
     s = lda.forward(X)[0]
-    s_expected = torch.Tensor([-0.28010044]).to(device)
+    s_expected = torch.Tensor([-0.28010044]) 
     print(s)
     assert  torch.abs(s - s_expected) < 1e-6
 
@@ -138,7 +136,7 @@ def test_lda_train_2d_model_harmonic(load_dataset_2d_model,is_harmonic_lda):
 
     # Define model
     n_features = X.shape[1]
-    lda = LDA_CV(n_features,harmonic_lda = is_harmonic_lda,device=device)
+    lda = LDA_CV(n_features,harmonic_lda = is_harmonic_lda)
     # Set features names (for PLUMED input)
     lda.set_params({"feature_names": feature_names})
     
@@ -154,7 +152,7 @@ def test_lda_train_2d_model_harmonic(load_dataset_2d_model,is_harmonic_lda):
     print(f'hlda:{is_harmonic_lda} - result: {y_test}')
     y_test_expected = torch.tensor(
                         [-0.03565392] if is_harmonic_lda else [-0.09600264]
-                      ).to(device)
+                      )
 
     assert torch.abs(y_test_expected - y_test) < 1e-6
 
