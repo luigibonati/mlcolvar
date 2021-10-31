@@ -3,7 +3,6 @@
 __all__ = ["DeepLDA_CV"]
 
 import torch
-import pandas as pd
 from torch.utils.data import Dataset, DataLoader
 
 from .lda import LDA

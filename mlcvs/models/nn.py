@@ -3,8 +3,6 @@
 __all__ = ["NeuralNetworkCV"]
 
 import torch
-import numpy as np
-import pandas as pd
 from warnings import warn
 
 from ..utils.optim import EarlyStopping

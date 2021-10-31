@@ -5,7 +5,7 @@ __all__ = ["LinearCV"]
 import torch
 import numpy as np
 import pandas as pd
-from .utils import normalize,compute_mean_range
+from .utils import normalize
 
 class LinearCV(torch.nn.Module):
     """
