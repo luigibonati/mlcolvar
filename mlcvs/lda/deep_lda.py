@@ -210,13 +210,13 @@ class DeepLDA_CV(NeuralNetworkCV):
         info=False,
     ):
         """
-        Train Deep-LDA CVs.
+        Train Deep-LDA CVs. Takes as input a dataloader constructed from a LabeledDataset, directly the dataloader or even a tuple of (colvar,labels) data.
 
         Parameters
         ----------
-        train_data: DataLoader
+        train_data: DataLoader, LabeledDataset or tuple of torch.tensors (X:input, y:labels)
             training set
-        valid_data: list of torch.tensors (X:input, y:labels)
+        valid_data: tuple of torch.tensors (X:input, y:labels) #TODO add dataloader option?
             validation set
         standardize_inputs: bool
             whether to standardize input data
@@ -228,6 +228,11 @@ class DeepLDA_CV(NeuralNetworkCV):
             frequency of log (default = 1)
         print_info: bool, optional
             print debug info (default = False)
+
+        See Also
+        --------
+        LabeledDataset
+            Dataset with 
         """
 
         # check optimizer
@@ -235,10 +240,20 @@ class DeepLDA_CV(NeuralNetworkCV):
             self.default_optimizer()
 
         # create dataloader
-        train_dataset = LabeledDataset(colvar = train_data[0], labels = train_data[1])
-        if batch_size == -1:
-            batch_size = len(train_data[0])
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        create_loader = True
+        if type(train_data) == DataLoader:
+            train_loader = train_data
+            create_loader = False
+        elif type(train_data) == LabeledDataset:
+            train_dataset = train_data
+        else: 
+            train_dataset = LabeledDataset(colvar = train_data[0], labels = train_data[1])
+
+        if create_loader:
+            # determine batch size
+            if batch_size == -1:
+                batch_size = len(train_data[0])
+            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
         # standardize inputs
         if standardize_inputs:
