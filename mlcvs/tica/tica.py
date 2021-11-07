@@ -3,7 +3,6 @@
 __all__ = ["TICA"] # TODO add other functions?
 
 import torch
-import numpy as np
 
 class TICA:
     """ Time-lagged independent component analysis base class.
