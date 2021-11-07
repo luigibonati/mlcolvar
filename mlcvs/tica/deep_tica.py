@@ -158,7 +158,7 @@ class DeepTICA_CV(NeuralNetworkCV):
             else:
                 raise ValueError("unknown objective. options: 'sum','sum2','gap','single','its'.")
         else: 
-            raise NotImplementedError('custom loss is not implemented yet')
+            loss = self.custom_loss(evals)
 
         return loss
 
@@ -173,7 +173,6 @@ class DeepTICA_CV(NeuralNetworkCV):
             custom loss function
         """
         self.custom_loss = func
-        raise NotImplementedError('custom loss is not implemented yet')
 
     def set_average(self, Mean, Range=None):
         """Save averages for computing mean-free inputs 

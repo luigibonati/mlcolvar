@@ -48,6 +48,9 @@ def test_deeptica_train_2d_model(load_dataset_2d_md):
     model = DeepTICA_CV(layers=[n_features,10,10,n_eig],device=device)
     model.to(device)
 
+    # specify custom loss
+    model.set_loss_function( func=lambda evals: torch.sum(evals) )
+
     # Fit TICA
     model.train(X=X, t=t, lag_time=10, nepochs=10)
 
