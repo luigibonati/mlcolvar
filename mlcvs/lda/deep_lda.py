@@ -16,8 +16,8 @@ class DeepLDA_CV(NeuralNetworkCV):
 
     Attributes
     ----------
-    lda : LDA object
-        Number of classes
+    lda : mlcvs.lda.LDA 
+        linear discriminant analysis class object
     lorentzian_reg: float
         Magnitude of lorentzian regularization
     epochs : int
@@ -51,10 +51,10 @@ class DeepLDA_CV(NeuralNetworkCV):
 
         Parameters
         ----------
-        n_features : int
-            Number of input features
+        layers : list
+            Number neurons per layers.
         **kwargs : dict
-            Additional parameters for LinearCV object
+            Additional parameters for NeuralNetworkCV class.
         """
         
         super().__init__(
@@ -232,7 +232,7 @@ class DeepLDA_CV(NeuralNetworkCV):
         See Also
         --------
         LabeledDataset
-            Dataset with 
+            Dataset with labels
         """
 
         # check optimizer
@@ -256,7 +256,7 @@ class DeepLDA_CV(NeuralNetworkCV):
             train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
         # standardize inputs
-        if standardize_inputs:
+        if standardize_inputs: # check if dataloader change this
             self.standardize_inputs(train_data[0])
 
         # print info
@@ -274,7 +274,10 @@ class DeepLDA_CV(NeuralNetworkCV):
 
             # earlystopping
             if self.earlystopping_ is not None:
-                self.earlystopping_(loss_valid, self.parameters)
+                if valid_data is None:
+                    raise ValueError('EarlyStopping requires validation data')
+                self.earlystopping_(loss_valid, model={'parameters': self.parameters,
+                                                            'buffers': self.buffers })
 
             # log
             if ((ep + 1) % log_every == 0) or (self.earlystopping_.early_stop):
@@ -290,8 +293,11 @@ class DeepLDA_CV(NeuralNetworkCV):
 
             # check whether to stop
             if (self.earlystopping_ is not None) and (self.earlystopping_.early_stop):
-                self.parameters = self.earlystopping_.best_model
+                self.parameters = self.earlystopping_.best_model['parameters']
+                self.buffers = self.earlystopping_.best_model['buffers']
                 break
+
+
 
     def evaluate_dataset(self, data, save_params=False):
         """
