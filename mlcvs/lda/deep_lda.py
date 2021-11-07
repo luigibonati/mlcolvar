@@ -276,8 +276,7 @@ class DeepLDA_CV(NeuralNetworkCV):
             if self.earlystopping_ is not None:
                 if valid_data is None:
                     raise ValueError('EarlyStopping requires validation data')
-                self.earlystopping_(loss_valid, model={'parameters': self.parameters,
-                                                            'buffers': self.buffers })
+                self.earlystopping_(loss_valid, model=self.state_dict() )
 
             # log
             if ((ep + 1) % log_every == 0) or (self.earlystopping_.early_stop):
@@ -291,10 +290,9 @@ class DeepLDA_CV(NeuralNetworkCV):
                     decimals=2,
                 )
 
-            # check whether to stop
+            # check whether to stop 
             if (self.earlystopping_ is not None) and (self.earlystopping_.early_stop):
-                self.parameters = self.earlystopping_.best_model['parameters']
-                self.buffers = self.earlystopping_.best_model['buffers']
+                self.load_state_dict( self.earlystopping_.best_model )
                 break
 
 

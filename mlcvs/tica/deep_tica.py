@@ -355,8 +355,7 @@ class DeepTICA_CV(NeuralNetworkCV):
             if self.earlystopping_ is not None:
                 if valid_loader is None:
                     raise ValueError('EarlyStopping requires validation data')
-                self.earlystopping_(loss_valid, model={'parameters': self.parameters,
-                                                            'buffers': self.buffers })
+                self.earlystopping_(loss_valid, model=self.state_dict())
 
             # log
             print_log = False
@@ -386,8 +385,7 @@ class DeepTICA_CV(NeuralNetworkCV):
 
             # check whether to stop 
             if (self.earlystopping_ is not None) and (self.earlystopping_.early_stop):
-                self.parameters = self.earlystopping_.best_model['parameters']
-                self.buffers = self.earlystopping_.best_model['buffers']
+                self.load_state_dict( self.earlystopping_.best_model )
                 break
 
     def evaluate_dataset(self, dataset, save_params=False, unravel_dataset = False):

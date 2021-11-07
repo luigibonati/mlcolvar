@@ -38,4 +38,4 @@
 - [ ] add dataloader option to valid_data
 
 ### earlystopping
-- [ ] save model.state_dict and then load
+- [X] save model.state_dict and then load
