@@ -137,8 +137,14 @@ class NeuralNetworkCV(torch.nn.Module):
 
         # Input and output normalization
         self.normIn = False
+        self.register_buffer("MeanIn", torch.zeros(self.n_features))
+        self.register_buffer("RangeIn", torch.ones(self.n_features))
         self.normNN = False
+        self.register_buffer("MeanNN", torch.zeros(self.n_hidden))
+        self.register_buffer("RangeNN", torch.ones(self.n_hidden))
         self.normOut = False
+        self.register_buffer("MeanOut", torch.zeros(self.n_hidden))
+        self.register_buffer("RangeOut", torch.ones(self.n_hidden))
 
         # Flags
         self.output_hidden = False
@@ -181,12 +187,12 @@ class NeuralNetworkCV(torch.nn.Module):
 
         Parameters
         ----------
-        x : torch.tensor
+        x : torch.Tensor
             input data
 
         Returns
         -------
-        z : torch.tensor
+        z : torch.Tensor
             CVs
 
         See Also
@@ -283,12 +289,15 @@ class NeuralNetworkCV(torch.nn.Module):
 
         Mean, Range = compute_mean_range(x, print_values)
 
-        if hasattr(self,"MeanIn"):
-            self.MeanIn = Mean
-            self.RangeIn = Range
-        else:
-            self.register_buffer("MeanIn", Mean)
-            self.register_buffer("RangeIn", Range)
+        self.MeanIn = Mean
+        self.RangeIn = Range
+
+        #if hasattr(self,"MeanIn"):
+        #    self.MeanIn = Mean
+        #    self.RangeIn = Range
+        #else:
+        #    self.register_buffer("MeanIn", Mean)
+        #    self.register_buffer("RangeIn", Range)
 
         self.normIn = True
 
@@ -308,12 +317,15 @@ class NeuralNetworkCV(torch.nn.Module):
 
         Mean, Range = compute_mean_range(x, print_values)
 
-        if hasattr(self,"MeanOut"):
-            self.MeanOut = Mean
-            self.RangeOut = Range
-        else:
-            self.register_buffer("MeanOut", Mean)
-            self.register_buffer("RangeOut", Range)
+        self.MeanOut = Mean
+        self.RangeOut = Range
+
+        #if hasattr(self,"MeanOut"):
+        #    self.MeanOut = Mean.to(self.MeanOut.device)
+        #    self.RangeOut = Range.to(self.RangeOut.device)
+        #else:
+        #    self.register_buffer("MeanOut", Mean)
+        #    self.register_buffer("RangeOut", Range)
 
         self.normOut = True
 
@@ -395,7 +407,7 @@ class NeuralNetworkCV(torch.nn.Module):
             if (type(value) == torch.Tensor) or (
                 type(value) == torch.nn.parameter.Parameter
             ):
-                value = value.cpu().numpy()
+                value = value.detach().cpu().numpy()
                 if value.shape == ():
                     print(
                         "{0:<{width}.{dec}f}".format(
