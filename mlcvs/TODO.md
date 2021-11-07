@@ -4,7 +4,7 @@
 - [X] remove dtype and use set_default_type 
 - [X] remove device and use .to?
 - [ ] use _ for private functions
-- [ ] add submodules
+- [X] add submodules
 
 ## io
 - [ ] take general fucntion from md-stateinterpreter
@@ -21,9 +21,7 @@
 ### NNCV
 - [X] print plumed input file
 - [X] export model
-- [ ] remove linear projection if unset?
 - [ ] allow to take as input nn.module and copy architecture
-- [ ] add dropout / batchnorm?
 
 ## Lda
 ### Both
@@ -34,6 +32,10 @@
 - [X] implement HLDA
  
 ### DeepLDA_CV
-- [ ] add multiclass loss function
+- [ ] add multiclass loss function (loss function)
 - [ ] add possibility to pass custom loss function (add manual someth)
 - [ ] change names to private members
+- [ ] add dataloader option to valid_data
+
+### earlystopping
+- [X] save model.state_dict and then load

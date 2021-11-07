@@ -6,8 +6,9 @@ import numpy as np
 import pandas as pd
 import torch
 
-from .tica import TICA,look_for_configurations
+from .tica import TICA
 from ..models import LinearCV
+from ..utils.data import find_time_lagged_configurations
 
 class TICA_CV(LinearCV):
 
@@ -18,8 +19,6 @@ class TICA_CV(LinearCV):
         ----------
         n_features : int
             Number of input features
-        device : str, optional
-            device, by default "auto"
         """
         super().__init__(n_features=n_features, **kwargs)
 
@@ -65,7 +64,7 @@ class TICA_CV(LinearCV):
             raise ValueError(f'length of X is {len(X)} while length of t is {len(t)}')
 
         # find time-lagged configurations
-        x_t, x_lag, w_t, w_lag = look_for_configurations(X,t,lag)
+        x_t, x_lag, w_t, w_lag = find_time_lagged_configurations(X,t,lag)
 
 
         # compute mean-free variables
@@ -139,4 +138,4 @@ class TICA_CV(LinearCV):
             Regularization value.
 
         """
-        self.lda.reg_cholesky = cholesky_reg
+        self.tica.reg_cholesky = cholesky_reg

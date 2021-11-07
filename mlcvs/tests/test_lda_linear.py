@@ -15,7 +15,7 @@ torch.set_default_tensor_type(torch.DoubleTensor)
 torch.set_printoptions(precision=8)
 
 @pytest.fixture(scope="module")
-def load_dataset_2d_model():
+def load_dataset_2d_classes():
     """Load 2d-basins dataset"""
 
     # Load colvar files as pandas dataframes
@@ -128,11 +128,11 @@ def test_lda_from_dataframe():
     assert  torch.abs(s - s_expected) < 1e-6
 
 @pytest.mark.parametrize("is_harmonic_lda", [False, True])
-def test_lda_train_2d_model_harmonic(load_dataset_2d_model,is_harmonic_lda):
+def test_lda_train_2d_model_harmonic(load_dataset_2d_classes,is_harmonic_lda):
     """Perform LDA on 2d_model data folder."""
 
     # Load dataset
-    X, y, feature_names = load_dataset_2d_model
+    X, y, feature_names = load_dataset_2d_classes
 
     # Define model
     n_features = X.shape[1]

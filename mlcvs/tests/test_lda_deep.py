@@ -18,7 +18,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 #TODO avoid duplication with lda_linear
 @pytest.fixture(scope="module")
-def load_dataset_2d_model():
+def load_dataset_2d_classes():
     """Load 2d-basins dataset"""
 
     # Load colvar files as pandas dataframes
@@ -104,11 +104,11 @@ def test_deeplda_nclasses(n_classes):
 
 @pytest.mark.slow
 # @pytest.mark.skip
-def test_deeplda_train_2d_model(load_dataset_2d_model):
+def test_deeplda_train_2d_model(load_dataset_2d_classes):
     """Perform DeepLDA on 2d-basins data folder."""
 
     # load dataset
-    X, y, feature_names = load_dataset_2d_model
+    X, y, feature_names = load_dataset_2d_classes
 
     # split train/test
     ntrain = 800
