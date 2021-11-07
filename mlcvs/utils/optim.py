@@ -65,6 +65,8 @@ class EarlyStopping:
         # IF first epoch: initialize
         if self.best_loss is None:
             self.best_loss = val_loss
+            if self.save_best_model:
+                self.best_model = model
 
         # IF valid_loss decreases
         elif self.best_loss - val_loss > self.min_delta:
@@ -74,7 +76,7 @@ class EarlyStopping:
                 self.counter = 0
             # save model if corresponding option is enabled
             if self.save_best_model:
-                self.best_model = model
+                self.best_model = model #copy.deepcopy(model) #TODO CHECK COPY OR REFERENCE
                 if epoch is not None:
                     self.best_epoch = epoch
 
