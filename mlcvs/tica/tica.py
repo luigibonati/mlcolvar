@@ -100,14 +100,10 @@ class TICA:
 
         if w is None: #TODO simplify it in the unbiased case?
             w = torch.ones(x.shape[0])
-            
-        #define arrays
-        corr = torch.zeros((d,d))
-        norm = torch.sum(w)
-
+        
         #compute correlation matrix
         corr = torch.einsum('ij, ik, i -> jk', x, y, w )
-        corr /= norm
+        corr /= torch.sum(w)
             
         if symmetrize:
             corr = 0.5*(corr + corr.T)

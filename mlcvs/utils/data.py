@@ -81,19 +81,21 @@ def find_time_lagged_configurations(x,t,lag):
     w_lag = []
     #find maximum time idx
     idx_end = closest_idx_torch(t,t[-1]-lag)
-    start_j = 0
+    #start_j = 0
+    
     #loop over time array and find pairs which are far away by lag
     for i in range(idx_end):
         stop_condition = lag+t[i+1]
         n_j = 0
+        
         for j in range(i,len(t)):
             if ( t[j] < stop_condition ) and (t[j+1]>t[i]+lag):
                 x_t.append(x[i])
                 x_lag.append(x[j])
                 deltaTau=min(t[i+1]+lag,t[j+1]) - max(t[i]+lag,t[j])
                 w_lag.append(deltaTau)
-                if n_j == 0: #assign j as the starting point for the next loop
-                    start_j = j
+                #if n_j == 0: #assign j as the starting point for the next loop
+                #    start_j = j
                 n_j +=1
             elif t[j] > stop_condition:
                 break

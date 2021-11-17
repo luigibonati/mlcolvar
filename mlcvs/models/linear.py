@@ -196,7 +196,7 @@ class LinearCV(torch.nn.Module):
         
         # count number of output components
         weights = self.w.cpu().numpy()
-        offset = self.b.cpu().numpy()
+        #offset = self.b.cpu().numpy()
         n_cv = 1 if weights.ndim == 1 else weights.shape[1]
 
         # get normalization

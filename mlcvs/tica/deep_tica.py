@@ -4,7 +4,6 @@ __all__ = ["DeepTICA_CV"]
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
 
 from .tica import TICA
 from ..models import NeuralNetworkCV
