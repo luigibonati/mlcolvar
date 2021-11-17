@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 
 from .tica import TICA
 from ..models import NeuralNetworkCV
-from ..utils.data import TimeLaggedDataset
+from ..utils.data import create_time_lagged_dataset, FastTensorDataLoader
 
 class DeepTICA_CV(NeuralNetworkCV):
     """
@@ -309,10 +309,8 @@ class DeepTICA_CV(NeuralNetworkCV):
                 print('WARNING: time is not given, assuming t = np.arange(len(X))')
                 t = np.arange(len(X))
 
-            dataset = TimeLaggedDataset(X,t,lag_time)
-            if batch_size == -1:
-                batch_size = len(dataset)
-            train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+            dataset = create_time_lagged_dataset(X,t,lag_time)
+            train_loader = FastTensorDataLoader(*dataset.tensors, batch_size=batch_size, shuffle=False) 
 
         # standardize inputs (unravel dataset and copy to device) #TODO check memory usage on GPU
         x_train = torch.cat([batch[0] for batch in train_loader]).to(self.device_)
