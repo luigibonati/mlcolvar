@@ -1,12 +1,23 @@
 name: docs
 channels:
+
+  - conda-forge
+  - pytorch
+
+  - defaults
+
 dependencies:
-    # Base depends
+
+  # Base depends
   - python
   - pip
 
+  # Package dependencies
+  - numpy
+  - pandas
+  - pytorch
+  - matplotlib
 
-
-    # Pip-only installs
+  # Pip-only installs
   #- pip:
 
