@@ -8,7 +8,7 @@ import torch
 import numpy as np
 import pandas as pd
 from torch.utils.data import DataLoader,random_split
-from mlcvs.utils.data import TimeLaggedDataset
+from mlcvs.utils.data import create_time_lagged_dataset,FastTensorDataLoader
 from mlcvs.utils.io import colvar_to_pandas
 from mlcvs.tica import DeepTICA_CV
 
@@ -67,15 +67,18 @@ def test_deeptica_train_2d_dataloader(load_dataset_2d_md):
 
     # Create dataset
     lag_time = 10
-    dataset = TimeLaggedDataset(X,t=t,lag_time=lag_time,logweights=None)
+    ##dataset = TimeLaggedDataset(X,t=t,lag_time=lag_time,logweights=None)
+    dataset = create_time_lagged_dataset(X,t=t,lag_time=lag_time,logweights=None)
 
     # split train - valid
     n_val = int(len(dataset)*.2)
     train_data, val_data = random_split(dataset, [len(dataset) - n_val, n_val])
 
     # create dataloaders 
-    train_loader = DataLoader(train_data, batch_size=2048, shuffle=True)
-    valid_loader = DataLoader(val_data, batch_size=len(val_data), shuffle=False)
+    ##train_loader = DataLoader(train_data, batch_size=2048, shuffle=True)
+    ##valid_loader = DataLoader(val_data, batch_size=len(val_data), shuffle=False)
+    train_loader = FastTensorDataLoader(*train_data.dataset.tensors, batch_size=len(train_data), shuffle=True)
+    valid_loader = FastTensorDataLoader(*val_data.dataset.tensors, batch_size=len(val_data),  shuffle=False)
 
     print(len(dataset))
 

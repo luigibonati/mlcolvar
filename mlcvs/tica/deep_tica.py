@@ -338,12 +338,13 @@ class DeepTICA_CV(NeuralNetworkCV):
 
             # compute scores after epoch
             loss_train = self.evaluate_dataset(train_loader,save_params=False)
-            self.loss_train.append(loss_train)
+            self.loss_train.append(loss_train.cpu())
             
             if valid_loader is not None:
                 loss_valid = self.evaluate_dataset(valid_loader)
-                self.loss_valid.append(loss_valid)
-            self.evals_train.append(torch.unsqueeze(self.tica.evals_,0))
+                self.loss_valid.append(loss_valid.cpu())
+            with torch.no_grad():
+                self.evals_train.append(torch.unsqueeze(self.tica.evals_,0))
 
             #standardize output
             if standardize_outputs:
@@ -353,7 +354,7 @@ class DeepTICA_CV(NeuralNetworkCV):
             if self.earlystopping_ is not None:
                 if valid_loader is None:
                     raise ValueError('EarlyStopping requires validation data')
-                self.earlystopping_(loss_valid, model=self.state_dict())
+                self.earlystopping_(loss_valid, model=self.state_dict(), epoch=ep)
 
             # log
             print_log = False
