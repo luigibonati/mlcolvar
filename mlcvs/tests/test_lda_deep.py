@@ -7,7 +7,7 @@ import pytest
 import torch
 import numpy as np
 import pandas as pd
-from mlcvs.utils.io import colvar_to_pandas
+from mlcvs.utils.io import load_dataframe
 from mlcvs.lda import  DeepLDA_CV
 
 # set global variables
@@ -22,8 +22,8 @@ def load_dataset_2d_classes():
     """Load 2d-basins dataset"""
 
     # Load colvar files as pandas dataframes
-    dataA = colvar_to_pandas(folder="mlcvs/tests/data/2d_model/", filename="COLVAR_stateA")
-    dataB = colvar_to_pandas(folder="mlcvs/tests/data/2d_model/", filename="COLVAR_stateB")
+    dataA = load_dataframe("mlcvs/tests/data/2d_model/COLVAR_stateA")
+    dataB = load_dataframe("mlcvs/tests/data/2d_model/COLVAR_stateB")
 
     # Create input datasets
     xA = dataA.filter(regex="p.*").values

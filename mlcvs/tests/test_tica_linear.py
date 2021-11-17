@@ -7,7 +7,7 @@ import pytest
 import torch
 import numpy as np
 import pandas as pd
-from mlcvs.utils.io import colvar_to_pandas
+from mlcvs.utils.io import load_dataframe
 from mlcvs.tica import TICA_CV
 
 # set global variables
@@ -18,8 +18,7 @@ def test_tica_train_2d_model():
     """Perform TICA on 2d_model data folder."""
 
     # Load dataset
-    data = colvar_to_pandas(folder="mlcvs/tests/data/2d_model/", filename="COLVAR_md")
-    data = data[::50]
+    data = load_dataframe("mlcvs/tests/data/2d_model/COLVAR_md", stride=50)
 
     X = data.filter(regex='p.')
 

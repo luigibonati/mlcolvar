@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from torch.utils.data import DataLoader,random_split
 from mlcvs.utils.data import create_time_lagged_dataset,FastTensorDataLoader
-from mlcvs.utils.io import colvar_to_pandas
+from mlcvs.utils.io import load_dataframe
 from mlcvs.tica import DeepTICA_CV
 
 # set global variables
@@ -23,10 +23,9 @@ def load_dataset_2d_md():
     """Load 2d-basins dataset"""
 
     # Load colvar files as pandas dataframes
-    data = colvar_to_pandas(folder="mlcvs/tests/data/2d_model/", filename="COLVAR_md")
+    data = load_dataframe("mlcvs/tests/data/2d_model/COLVAR_md", stride=50)
     
     # Create input datasets
-    data = data[::50]
     X = data.filter(regex='p.').values
     t = data['time'].values
     names = data.filter(regex="p.*").columns.values
