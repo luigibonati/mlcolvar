@@ -144,7 +144,7 @@ def test_deeplda_train_2d_model(load_dataset_2d_classes):
     model.set_regularization(sw_reg=sw_reg)
 
     # TRAIN
-    model.train(train_data, valid_data, info=True, log_every=100)
+    model.fit(train_data, valid_data, info=True, log_every=100)
 
     # standardize outputs
     model.standardize_outputs(train_data[0])

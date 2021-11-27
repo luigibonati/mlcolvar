@@ -25,7 +25,7 @@ class TICA_CV(LinearCV):
         self.name_ = "tica_cv"
         self.tica = TICA()
 
-    def train(self, X, t = None, lag = 10):
+    def fit(self, X, t = None, lag = 10):
         """Fit TICA given time-lagged data (and weights). 
 
         Parameters
@@ -39,7 +39,7 @@ class TICA_CV(LinearCV):
 
         See Also
         --------
-        train_forward : train and project along TICA components
+        fit_predict : train and project along TICA components
         """
                 
         # if DataFrame save feature names
@@ -80,7 +80,7 @@ class TICA_CV(LinearCV):
         self.set_average(ave)
         self.w = eigvecs
 
-    def train_forward(self, X, t = None, lag = 10):
+    def fit_predict(self, X, t = None, lag = 10):
         """Train TICA CV and project data
 
         Parameters
@@ -99,10 +99,10 @@ class TICA_CV(LinearCV):
 
         See Also
         --------
-        train : train TICA estimator
+        fit : train TICA estimator
         """
 
-        self.train(X, t, lag)
+        self.fit(X, t, lag)
         return self.forward(X)
 
     def set_average(self, Mean, Range=None):

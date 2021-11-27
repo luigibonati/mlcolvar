@@ -39,7 +39,7 @@ class DeepLDA_CV(NeuralNetworkCV):
         Loss function for the DeepLDA CV.
     set_loss_function(func)
         Custom loss function.
-    train()
+    fit()
         Train Deep-LDA CVs.
     evaluate_dataset(x,label)
         Evaluate loss function on dataset.
@@ -199,7 +199,7 @@ class DeepLDA_CV(NeuralNetworkCV):
         # ===================log======================
         self.epochs += 1
 
-    def train(
+    def fit(
         self,
         train_data,
         valid_data=None,

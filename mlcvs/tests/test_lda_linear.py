@@ -83,7 +83,7 @@ def test_lda_harmonic_nclasses(n_classes,is_harmonic_lda):
     lda = LDA_CV(n_features,harmonic_lda=is_harmonic_lda)
 
     # Fit and transform LDA
-    result = lda.train_forward(X, y)
+    result = lda.fit_predict(X, y)
 
     # Project
     x_test = torch.tensor(n_features)
@@ -118,11 +118,11 @@ def test_lda_from_dataframe():
     
     # train lda cv
     lda = LDA_CV(n_features=X.shape[1]) 
-    lda.train(X,y)
+    lda.fit(X,y)
 
     assert (lda.feature_names == X.columns.values).all()
 
-    s = lda.forward(X)[0]
+    s = lda.predict(X)[0]
     s_expected = torch.Tensor([-0.28010044]) 
     print(s)
     assert  torch.abs(s - s_expected) < 1e-6
@@ -143,7 +143,7 @@ def test_lda_train_2d_model_harmonic(load_dataset_2d_classes,is_harmonic_lda):
     print(X.dtype)
 
     # Fit LDA
-    lda.train(X, y)
+    lda.fit(X, y)
 
     # Project
     x_test = np.ones(2)

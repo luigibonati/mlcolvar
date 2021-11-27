@@ -33,7 +33,7 @@ class DeepTICA_CV(NeuralNetworkCV):
     -------
     __init__(layers,activation,**kwargs)
         Create a DeepTICA_CV object
-    train(train_loader, valid_loader, ... , n_epochs, ... )
+    fit(train_loader, valid_loader, ... , n_epochs, ... )
         Train DeepTICA CVs.
     loss_function(evals)
         Loss function for the DeepTICA CVs.
@@ -235,7 +235,7 @@ class DeepTICA_CV(NeuralNetworkCV):
         # ===================log======================
         self.epochs += 1
 
-    def train(
+    def fit(
         self,
         train_loader=None,
         valid_loader=None,
@@ -309,7 +309,7 @@ class DeepTICA_CV(NeuralNetworkCV):
                 t = np.arange(len(X))
 
             dataset = create_time_lagged_dataset(X,t,lag_time)
-            train_loader = FastTensorDataLoader(*dataset.tensors, batch_size=batch_size, shuffle=False) 
+            train_loader = FastTensorDataLoader(dataset.tensors, batch_size=batch_size, shuffle=False) 
 
         # standardize inputs (unravel dataset and copy to device) #TODO check memory usage on GPU
         x_train = torch.cat([batch[0] for batch in train_loader]).to(self.device_)
