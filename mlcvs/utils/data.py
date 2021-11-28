@@ -5,7 +5,7 @@ import numpy as np
 
 __all__ = ["LabeledDataset","TimeLaggedDataset","create_time_lagged_dataset","FastTensorDataLoader"]
 
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset,Subset
 from bisect import bisect_left
 
 class LabeledDataset(Dataset):
@@ -194,7 +194,7 @@ class FastTensorDataLoader:
     Adapted from https://discuss.pytorch.org/t/dataloader-much-slower-than-manual-batching/27014/6. 
 
     """
-    def __init__(self, *tensors, batch_size=0, shuffle=False):
+    def __init__(self, tensors, batch_size=0, shuffle=False):
         """
         Initialize a FastTensorDataLoader. 
         TODO DOCUMENTATION In numpy format
@@ -206,6 +206,9 @@ class FastTensorDataLoader:
 
         :returns: A FastTensorDataLoader.
         """
+
+        if type(tensors) == Subset:
+            tensors = [ tensors.dataset.tensors[i][tensors.indices] for i in range(len(tensors.dataset.tensors)) ]
 
         assert all(t.shape[0] == tensors[0].shape[0] for t in tensors)
         self.tensors = tensors

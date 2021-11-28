@@ -27,7 +27,7 @@ def test_tica_train_2d_model():
     tica = TICA_CV(n_features)
 
     # Fit TICA
-    tica.train(data, lag=10)
+    tica.fit(data, lag=10)
 
     # Project
     y_test = tica(X.iloc[0])

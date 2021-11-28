@@ -51,7 +51,7 @@ def test_deeptica_train_2d_model(load_dataset_2d_md):
     model.set_loss_function( func=lambda evals: torch.sum(evals) )
 
     # Fit TICA
-    model.train(X=X, t=t, lag_time=10, nepochs=10)
+    model.fit(X=X, t=t, lag_time=10, nepochs=10)
 
     # Project
     y_test = model(X[0].to(device))
@@ -76,8 +76,8 @@ def test_deeptica_train_2d_dataloader(load_dataset_2d_md):
     # create dataloaders 
     ##train_loader = DataLoader(train_data, batch_size=2048, shuffle=True)
     ##valid_loader = DataLoader(val_data, batch_size=len(val_data), shuffle=False)
-    train_loader = FastTensorDataLoader(*train_data.dataset.tensors, batch_size=len(train_data), shuffle=True)
-    valid_loader = FastTensorDataLoader(*val_data.dataset.tensors, batch_size=len(val_data),  shuffle=False)
+    train_loader = FastTensorDataLoader(train_data, batch_size=len(train_data), shuffle=True)
+    valid_loader = FastTensorDataLoader(val_data, batch_size=len(val_data),  shuffle=False)
 
     print(len(dataset))
 
@@ -90,7 +90,7 @@ def test_deeptica_train_2d_dataloader(load_dataset_2d_md):
     # Fit TICA
     model.set_regularization(cholesky_reg=1e-6)
     model.set_earlystopping(patience=5)
-    model.train(train_loader,valid_loader,nepochs=10)
+    model.fit(train_loader,valid_loader,nepochs=10)
 
     # Project
     y_test = model(X[0].to(device))
