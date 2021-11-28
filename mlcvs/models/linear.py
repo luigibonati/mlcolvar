@@ -89,6 +89,23 @@ class LinearCV(torch.nn.Module):
 
         return s
 
+    def predict(self, X):
+        """
+        Alias for self.forward.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features) or (n_features)
+            Inference data.
+
+        Returns
+        -------
+        s : array-like of shape (n_samples, n_classes-1)
+            Linear projection of inputs.
+        """
+
+        return self.forward(X)
+
     def set_weights(self, w):
         """
         Set weights of linear combination.

@@ -5,9 +5,10 @@
 - [X] remove device and use .to?
 - [ ] use _ for private functions
 - [X] add submodules
+- [X] change train in fit and create alias for predict
 
 ## io
-- [ ] take general fucntion from md-stateinterpreter
+- [X] take general fucntion from md-stateinterpreter
 
 ## Models 
 ### LinearCV

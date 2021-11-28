@@ -212,6 +212,23 @@ class NeuralNetworkCV(torch.nn.Module):
             z = normalize(z, self.MeanOut, self.RangeOut)
         return z
 
+    def predict(self, X):
+        """
+        Alias for self.forward.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features) or (n_features)
+            Inference data.
+
+        Returns
+        -------
+        s : array-like of shape (n_samples, n_classes-1)
+            Linear projection of inputs.
+        """
+
+        return self.forward(X)
+
     def linear_projection(self, H):
         """
         Apply linear projection to NN output.

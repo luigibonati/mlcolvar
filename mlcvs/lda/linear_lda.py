@@ -19,12 +19,10 @@ class LDA_CV(LinearCV):
 
     Methods
     -------
-    train(X,y)
+    fit(X,y)
         Fit LDA given data and classes
-    train_forward(X,y)
+    fit_predict(X,y)
         Fit LDA and project along components
-
-    + LinearCV TODO CHECK
     """
 
     def __init__(self, n_features, harmonic_lda = False, **kwargs):
@@ -45,7 +43,7 @@ class LDA_CV(LinearCV):
         self.name_ = "hlda_cv" if harmonic_lda else "lda_cv"
         self.lda = LDA(harmonic_lda)
 
-    def train(self, X, y):
+    def fit(self, X, y):
         """
         Fit LDA given data and classes.
 
@@ -75,7 +73,7 @@ class LDA_CV(LinearCV):
         # save parameters for estimator
         self.w = eigvecs
 
-    def train_forward(self, X, y):
+    def fit_predict(self, X, y):
         """
         Fit LDA and project along components.
 
@@ -92,7 +90,7 @@ class LDA_CV(LinearCV):
             Linear projection of inputs.
 
         """
-        self.train(X, y)
+        self.fit(X, y)
         return self.forward(X)
 
     def set_regularization(self, sw_reg = 0.05):
