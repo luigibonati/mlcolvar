@@ -11,7 +11,14 @@ from ..models import LinearCV
 from ..utils.data import find_time_lagged_configurations
 
 class TICA_CV(LinearCV):
+    """ Linear TICA CV.
 
+    Attributes
+    ----------
+    tica : mlcvs.tica.TICA 
+        TICA-object.
+
+    """
     def __init__(self, n_features, **kwargs):
         """Create a Linear TICA CV
 

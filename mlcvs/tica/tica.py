@@ -5,11 +5,13 @@ __all__ = ["TICA"] # TODO add other functions?
 import torch
 
 class TICA:
-    """ Time-lagged independent component analysis base class.
+    """ 
+    Time-lagged independent component analysis base class.
     """
 
     def __init__(self):
-        """Initialize TICA object.
+        """
+        Initialize TICA object.
         """
 
         # initialize attributes

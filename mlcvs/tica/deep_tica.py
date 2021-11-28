@@ -11,13 +11,13 @@ from ..utils.data import create_time_lagged_dataset, FastTensorDataLoader
 
 class DeepTICA_CV(NeuralNetworkCV):
     """
-    Neural network based estimator for TICA.
+    Neural network-based TICA CV.
     Perform a non-linear featurization of the inputs with a neural-network and optimize it as to maximize autocorrelation (e.g. eigenvalues of the transfer operator approximation).
 
     Attributes
     ----------
     tica : mlcvs.tica.TICA 
-        Number of classes
+        TICA-object
     reg_cholesky: float
         Magnitude of cholesky regularization
     epochs : int
@@ -29,20 +29,6 @@ class DeepTICA_CV(NeuralNetworkCV):
     evals_train: list
         Eigenvalues over training process.
 
-    Methods
-    -------
-    __init__(layers,activation,**kwargs)
-        Create a DeepTICA_CV object
-    fit(train_loader, valid_loader, ... , n_epochs, ... )
-        Train DeepTICA CVs.
-    loss_function(evals)
-        Loss function for the DeepTICA CVs.
-    evaluate_dataset(dataset)
-        Evaluate loss function on dataset.
-    set_regularization(cholesky_reg)
-        Set magnitudes of regularizations.
-    set_loss_function(func)
-        Custom loss function.
     """
 
     def __init__(self, layers, activation="relu", device = None, **kwargs):
@@ -253,8 +239,8 @@ class DeepTICA_CV(NeuralNetworkCV):
     ):
         """
         Train Deep-TICA CVs. This can be performed in two ways:
-        1. (preferred) taking a `train_loader` (Dataloader) built from a TimeLaggedDataset, and optionally a `valid_loader`.
-        2. if input data `X` (and `time`) are given and a `time_lag` is specified a Dataloader is constructed.
+        1. (preferred) taking a FastTensorDataLoader/DataLoader built from `mlcvs.utils.data.create_time_lagged_dataset`, and optionally a `valid_loader`.
+        2. if input data `X` (and `time`) are given, together with a `time_lag`, a Dataloader is constructed.
 
         Parameters
         ----------
@@ -287,7 +273,7 @@ class DeepTICA_CV(NeuralNetworkCV):
 
         See Also
         --------
-        TimeLaggedDataset
+        mlcvs.utils.data.create_time_lagged_dataset
             Create dataset finding time-lagged configurations
         loss_function
             Loss functions for training Deep-TICA CVs

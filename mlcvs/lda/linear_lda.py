@@ -16,13 +16,7 @@ class LDA_CV(LinearCV):
     ----------
     lda: LDA object
         Linear discriminant analysis instance.
-
-    Methods
-    -------
-    fit(X,y)
-        Fit LDA given data and classes
-    fit_predict(X,y)
-        Fit LDA and project along components
+        
     """
 
     def __init__(self, n_features, harmonic_lda = False, **kwargs):

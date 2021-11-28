@@ -10,36 +10,6 @@ from .utils import normalize
 class LinearCV(torch.nn.Module):
     """
     Linear CV base class.
-
-    Attributes
-    ----------
-    w : torch.Tensor
-        Weights array of linear model
-    b : torch.Tensor
-        Offset array 
-    n_features : int
-        Number of input features
-    feature_names : list
-        List of input features names
-    device_ : torch.Device
-        Device used for the model
-
-    Methods
-    -------
-    __init__(n_features)
-        Create a linear model.
-    forward(X)
-        Project data along linear model
-    get_params()
-        Return saved parameters
-    set_params(dict)
-        Set parameters via dictionaries
-    set_weights(w)
-        Set coefficients
-    set_offset(b)
-        Set linear model
-    plumed_input()
-        Generate PLUMED input file
     """
 
     def __init__(self, n_features, **kwargs):

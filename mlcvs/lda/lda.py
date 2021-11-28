@@ -20,11 +20,6 @@ class LDA:
         Within scatter matrix
     sw_reg : float
         Regularization to S_w matrix
-
-    Methods
-    -------
-    compute_LDA(H,y,save_params):
-        Perform LDA
     """
 
     def __init__(self, harmonic_lda = False):
