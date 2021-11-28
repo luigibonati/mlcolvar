@@ -27,27 +27,11 @@ class DeepLDA_CV(NeuralNetworkCV):
     loss_valid : list
         Loss function for validation data over training.
 
-    Methods
-    -------
-    __init__(layers,activation,**kwargs)
-        Create a DeepLDA_CV object
-    set_regularization(sw_reg,lorentzian_reg)
-        Set magnitudes of regularizations.
-    regularization_lorentzian(H)
-        Apply regularization to NN output.
-    loss_function(H,y)
-        Loss function for the DeepLDA CV.
-    set_loss_function(func)
-        Custom loss function.
-    fit()
-        Train Deep-LDA CVs.
-    evaluate_dataset(x,label)
-        Evaluate loss function on dataset.
     """
 
     def __init__(self, layers, activation="relu", **kwargs):
         """
-        Create a DeepLDA_CV object
+        Initialize a DeepLDA_CV object
 
         Parameters
         ----------
@@ -210,11 +194,11 @@ class DeepLDA_CV(NeuralNetworkCV):
         info=False,
     ):
         """
-        Train Deep-LDA CVs. Takes as input a dataloader constructed from a LabeledDataset, directly the dataloader or even a tuple of (colvar,labels) data.
+        Train Deep-LDA CVs. Takes as input a FastTensorDataLoader/standard Dataloader constructed from a TensorDataset, or even a tuple of (colvar,labels) data.
 
         Parameters
         ----------
-        train_data: DataLoader, LabeledDataset or tuple of torch.tensors (X:input, y:labels)
+        train_data: FastTensorDataLoader/DataLoader, or tuple of torch.tensors (X:input, y:labels)
             training set
         valid_data: tuple of torch.tensors (X:input, y:labels) #TODO add dataloader option?
             validation set
@@ -294,7 +278,6 @@ class DeepLDA_CV(NeuralNetworkCV):
             if (self.earlystopping_ is not None) and (self.earlystopping_.early_stop):
                 self.load_state_dict( self.earlystopping_.best_model )
                 break
-
 
 
     def evaluate_dataset(self, data, save_params=False):

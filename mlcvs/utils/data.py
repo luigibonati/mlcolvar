@@ -3,7 +3,7 @@
 import torch 
 import numpy as np
 
-__all__ = ["LabeledDataset","TimeLaggedDataset","create_time_lagged_dataset","FastTensorDataLoader"]
+__all__ = ["LabeledDataset","create_time_lagged_dataset","FastTensorDataLoader"]
 
 from torch.utils.data import Dataset,Subset
 from bisect import bisect_left
@@ -110,53 +110,9 @@ def find_time_lagged_configurations(x,t,lag):
 
     return x_t,x_lag,w_t,w_lag
 
-class TimeLaggedDataset(Dataset):
-    """
-    Dataset with pairs of configurations at time t and t+lag.
-    DEPRECATED TODO
-    """
-
-    def __init__(self, X, t = None, lag_time = 10, logweights = None):
-        """
-        Create dataset of time-lagged configurations, with optional weights to reweight the trajectory.
-
-        TODO DOC
-        """
-
-        # define time if not given
-        if t is None:
-            t = np.arange(0,len(X))
-
-        # rescale time with log-weights
-        if logweights is not None:
-            # compute time increment in simulation time t
-            dt = np.round(t[1]-t[0],3)
-            # compute instantaneus time increment in rescaled time t'
-            d_tprime = np.copy(np.exp(logweights)*dt)
-            #calculate cumulative time tau
-            tprime = np.cumsum(d_tprime)
-        else:
-            tprime = t
-
-        # find pairs of configurations separated by lag_time
-        data = find_time_lagged_configurations(X, tprime,lag=lag_time)
-        
-        # save data and weights
-        self.x_t = data[0]
-        self.x_lag = data[1]
-        self.w_t = data[2]
-        self.w_lag = data[3]
-
-    def __len__(self):
-        return len(self.x_t)
-
-    def __getitem__(self, idx):
-        x = (self.x_t[idx], self.x_lag[idx], self.w_t[idx], self.w_lag[idx])
-        return x
-
 def create_time_lagged_dataset(X, t = None, lag_time = 10, logweights = None):
     """
-    Create dataset of time-lagged configurations, with optional weights to reweight the trajectory.
+    Create dataset of time-lagged configurations, with optional (log)weights to reweight a biased trajectory. If the weights are given, the calculation of the time-lagged correlation functions is done in the rescaled time t'.  
 
     TODO DOC
     """
@@ -184,9 +140,9 @@ def create_time_lagged_dataset(X, t = None, lag_time = 10, logweights = None):
 
 class FastTensorDataLoader:
     """
-    A DataLoader-like object for a set of tensors that can be much faster than
-    TensorDataset + DataLoader because dataloader grabs individual indices of
-    the dataset and calls cat (slow).
+    A DataLoader-like object for a set of tensors.
+    
+    It is much faster than TensorDataset + DataLoader because dataloader grabs individual indices of the dataset and calls cat (slow).
 
     Notes
     =====
@@ -195,19 +151,29 @@ class FastTensorDataLoader:
 
     """
     def __init__(self, tensors, batch_size=0, shuffle=False):
+        """Initialize a FastTensorDataLoader.
+
+        Parameters
+        ----------
+        tensors : list of tensors or torch.Dataset or torch.Subset object containing a tensors object
+            tensors to store. Must have the same length @ dim 0.
+        batch_size : int, optional
+            batch size, by default 0 (==single batch)
+        shuffle : bool, optional
+            if True, shuffle the data *in-place* whenever an
+            iterator is created out of this object, by default False
+
+        Returns
+        -------
+        FastTensorDataLoader
+            dataloader-like object
+
         """
-        Initialize a FastTensorDataLoader. 
-        TODO DOCUMENTATION In numpy format
 
-        :param *tensors: tensors to store. Must have the same length @ dim 0.
-        :param batch_size: batch size to load. If equal to 0 single batch.
-        :param shuffle: if True, shuffle the data *in-place* whenever an
-            iterator is created out of this object.
-
-        :returns: A FastTensorDataLoader.
-        """
-
-        if type(tensors) == Subset:
+        # check input type
+        if type(tensors) == Dataset:
+            tensors = [ tensors.tensors[i] for i in range(len(tensors.tensors)) ]
+        elif type(tensors) == Subset:
             tensors = [ tensors.dataset.tensors[i][tensors.indices] for i in range(len(tensors.dataset.tensors)) ]
 
         assert all(t.shape[0] == tensors[0].shape[0] for t in tensors)

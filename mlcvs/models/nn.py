@@ -11,7 +11,7 @@ from .utils import normalize,compute_mean_range
 
 class NeuralNetworkCV(torch.nn.Module):
     """
-    Neural Network CV base class
+    Neural Network CV base class.
 
     Attributes
     ----------
@@ -33,37 +33,6 @@ class NeuralNetworkCV(torch.nn.Module):
         Output NN last layer rather than CVs
     feature_names : list
         List of input features names
-
-    Methods
-    -------
-    __init__(layers,activation,device)
-        Create a neural network object.
-    forward(x)
-        Compute model output.
-    forward_nn(x)
-        Compute NN output.
-    linear_projection(H)
-        Apply linear projection to NN output.
-    set_optimizer(opt)
-        Save optimizer
-    set_earlystopping(patience,min_delta, ...)
-        Enable EarlyStopping
-    standardize_inputs(x)
-        Standardize inputs over dataset
-    standardize_outputs(x)
-        Standardize outputs over dataset
-    get_params()
-        Return saved parameters
-    set_params(dict)
-        Set parameters via dictionaries
-    print_info()
-        Display information about model
-    export(folder,checkpoint_name,traced_name)
-        Save checkpoint for Pytorch and Torchscript model
-    load_checkpoint(checkpoint_path)
-        Load checkpoint
-    plumed_input()
-        Generate PLUMED input file
 
     Examples
     --------
