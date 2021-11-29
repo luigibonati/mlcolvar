@@ -22,4 +22,5 @@ dependencies:
   - pip:
     - sphinx-copybutton
     - furo
+    - nbsphinx
 
