@@ -17,10 +17,12 @@ dependencies:
   - pandas
   - pytorch
   - matplotlib
+  - nbsphinx
+  - ipython
 
   # Pip-only installs
   - pip:
     - sphinx-copybutton
     - furo
-    - nbsphinx
+    
 
