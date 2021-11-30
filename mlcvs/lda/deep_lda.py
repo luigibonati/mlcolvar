@@ -221,7 +221,7 @@ class DeepLDA_CV(NeuralNetworkCV):
 
         # check optimizer
         if self.opt_ is None:
-            self.default_optimizer()
+            self._set_default_optimizer()
 
         # create dataloader
         create_loader = True

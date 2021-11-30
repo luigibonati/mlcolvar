@@ -230,7 +230,7 @@ class NeuralNetworkCV(torch.nn.Module):
         """
         self.opt_ = opt
 
-    def _default_optimizer(self):
+    def _set_default_optimizer(self):
         """
         Initialize default optimizer (ADAM).
         """
@@ -469,7 +469,7 @@ class NeuralNetworkCV(torch.nn.Module):
                 self.opt_.load_state_dict(checkpoint['optimizer_state_dict'])
             except AttributeError as e:
                 warn('Optimizer not set. Initializing default one.')
-                self._default_optimizer()
+                self._set_default_optimizer()
                 self.opt_.load_state_dict(checkpoint['optimizer_state_dict'])
             
         for key,val in checkpoint.items():

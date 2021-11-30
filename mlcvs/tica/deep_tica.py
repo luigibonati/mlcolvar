@@ -304,7 +304,7 @@ class DeepTICA_CV(NeuralNetworkCV):
 
         # check optimizer
         if self.opt_ is None:
-            self._default_optimizer()
+            self._set_default_optimizer()
 
         # save loss function options
         self.loss_type = loss_type
