@@ -4,6 +4,7 @@ __all__ = ["NeuralNetworkCV"]
 
 import torch
 from warnings import warn
+from pathlib import Path
 
 from ..utils.optim import EarlyStopping
 from .utils import normalize,compute_mean_range
@@ -447,6 +448,7 @@ class NeuralNetworkCV(torch.nn.Module):
         device = next(self.nn.parameters()).device
         fake_input = torch.zeros(self.n_features, device = device) #self.device_) #.reshape(1,self.n_features) #TODO check with plumed interface
         mod = torch.jit.trace(self, fake_input)
+        Path(folder).mkdir(parents=True, exist_ok=True)
         mod.save(folder+traced_name)
 
     def load_checkpoint(self, checkpoint_path):
