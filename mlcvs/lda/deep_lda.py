@@ -29,7 +29,7 @@ class DeepLDA_CV(NeuralNetworkCV):
 
     """
 
-    def __init__(self, layers, activation="relu", **kwargs):
+    def __init__(self, layers, activation="relu", device = None, **kwargs):
         """
         Initialize a DeepLDA_CV object
 
@@ -46,6 +46,9 @@ class DeepLDA_CV(NeuralNetworkCV):
         )
         self.name_ = "deeplda_cv"
         self.lda = LDA()
+
+        # set device 
+        self.device_ = device
 
         # custom loss function
         self.custom_loss = None
@@ -171,7 +174,8 @@ class DeepLDA_CV(NeuralNetworkCV):
         """
         for data in loader:
             # =================get data===================
-            X, y = data
+            X = data[0].to(self.device_)
+            y = data[1].to(self.device_)
             # =================forward====================
             H = self.forward_nn(X)
             # =================lda loss===================
@@ -223,6 +227,10 @@ class DeepLDA_CV(NeuralNetworkCV):
         if self.opt_ is None:
             self._set_default_optimizer()
 
+        # check device
+        if self.device_ is None:
+            self.device_ = next(self.nn.parameters()).device
+
         # create dataloader
         create_loader = True
         if type(train_data) == DataLoader:
@@ -241,7 +249,7 @@ class DeepLDA_CV(NeuralNetworkCV):
 
         # standardize inputs
         if standardize_inputs: # check if dataloader change this
-            self.standardize_inputs(train_data[0])
+            self.standardize_inputs( train_data[0].to(self.device_) )
 
         # print info
         if info:
@@ -297,7 +305,8 @@ class DeepLDA_CV(NeuralNetworkCV):
             loss value
         """
         with torch.no_grad():
-            X, y = data
+            X = data[0].to(self.device_)
+            y = data[1].to(self.device_)
             H = self.forward_nn(X)
             loss = self.loss_function(H, y, save_params)
         return loss
