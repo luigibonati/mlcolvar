@@ -17,10 +17,10 @@
    .. autosummary::
    
       ~TICA_CV.__init__
+      ~TICA_CV.fit
+      ~TICA_CV.fit_predict
       ~TICA_CV.set_average
       ~TICA_CV.set_regularization
-      ~TICA_CV.train
-      ~TICA_CV.train_forward
    
    
 

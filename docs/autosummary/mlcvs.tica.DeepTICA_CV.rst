@@ -18,11 +18,11 @@
    
       ~DeepTICA_CV.__init__
       ~DeepTICA_CV.evaluate_dataset
+      ~DeepTICA_CV.fit
       ~DeepTICA_CV.loss_function
       ~DeepTICA_CV.set_average
       ~DeepTICA_CV.set_loss_function
       ~DeepTICA_CV.set_regularization
-      ~DeepTICA_CV.train
       ~DeepTICA_CV.train_epoch
    
    

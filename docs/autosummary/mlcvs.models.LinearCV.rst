@@ -21,6 +21,7 @@
       ~LinearCV.get_params
       ~LinearCV.plumed_input
       ~LinearCV.plumed_input_combine
+      ~LinearCV.predict
       ~LinearCV.set_offset
       ~LinearCV.set_params
       ~LinearCV.set_weights

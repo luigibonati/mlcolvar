@@ -17,9 +17,9 @@
    .. autosummary::
    
       ~LDA_CV.__init__
+      ~LDA_CV.fit
+      ~LDA_CV.fit_predict
       ~LDA_CV.set_regularization
-      ~LDA_CV.train
-      ~LDA_CV.train_forward
    
    
 

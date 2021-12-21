@@ -1,10 +1,15 @@
 Tutorials
 =========
 
-For more information on Jupyter itself, see `their web site <https://jupyter.org/>`_.
-
 .. toctree::
-   :caption: Introductory tutorials
+   :caption: Discriminant-based CVs
    :maxdepth: 1
 
-   notebooks/tutorial
+   notebooks/2d-model_discriminant.ipynb
+
+.. toctree::
+   :caption: TICA-based CVs
+   :maxdepth: 1
+
+   notebooks/2d-model_tica.ipynb
+   notebooks/ala2_deeptica_multithermal.ipynb

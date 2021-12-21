@@ -24,6 +24,7 @@
       ~NeuralNetworkCV.linear_projection
       ~NeuralNetworkCV.load_checkpoint
       ~NeuralNetworkCV.plumed_input
+      ~NeuralNetworkCV.predict
       ~NeuralNetworkCV.print_info
       ~NeuralNetworkCV.print_log
       ~NeuralNetworkCV.set_earlystopping
