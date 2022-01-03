@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 
 from .lda import LDA
 from ..models import NeuralNetworkCV
-from ..utils.data import LabeledDataset
+from ..utils.data import LabeledDataset, FastTensorDataLoader
 
 class DeepLDA_CV(NeuralNetworkCV):
     """
@@ -230,10 +230,10 @@ class DeepLDA_CV(NeuralNetworkCV):
         # check device
         if self.device_ is None:
             self.device_ = next(self.nn.parameters()).device
-
-        # create dataloader
+        
+        # create dataloader #TODO CHANGE IN FAST DATALOADER
         create_loader = True
-        if type(train_data) == DataLoader:
+        if ( type(train_data) == DataLoader ) or ( type(train_data) == FastTensorDataLoader ) :
             train_loader = train_data
             create_loader = False
         elif type(train_data) == LabeledDataset:
@@ -247,9 +247,10 @@ class DeepLDA_CV(NeuralNetworkCV):
                 batch_size = len(train_data[0])
             train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
-        # standardize inputs
-        if standardize_inputs: # check if dataloader change this
-            self.standardize_inputs( train_data[0].to(self.device_) )
+        # standardize inputs #TODO CHANGE FOR MEMORY ISSUES
+        x_train = torch.cat([batch[0] for batch in train_loader]).to(self.device_)
+        if standardize_inputs:
+            self.standardize_inputs( x_train )
 
         # print info
         if info:
@@ -288,16 +289,18 @@ class DeepLDA_CV(NeuralNetworkCV):
                 break
 
 
-    def evaluate_dataset(self, data, save_params=False):
+    def evaluate_dataset(self, dataset, save_params=False, unravel_dataset = False):
         """
         Evaluate loss function on dataset.
 
         Parameters
         ----------
-        data : array-like (data,labels)
-            validation dataset
+        dataset : dataloader or list of batches
+            dataset
         save_params: bool
             save the eigenvalues/vectors of LDA into the model
+        unravel_dataset: bool, optional
+            unravel dataset to calculate LDA loss on all dataset instead of averaging over batches   
 
         Returns
         -------
@@ -305,10 +308,22 @@ class DeepLDA_CV(NeuralNetworkCV):
             loss value
         """
         with torch.no_grad():
-            X = data[0].to(self.device_)
-            y = data[1].to(self.device_)
-            H = self.forward_nn(X)
-            loss = self.loss_function(H, y, save_params)
-        return loss
+            loss = 0
+            n_batches = 0
 
+            if unravel_dataset:
+                batches = [batch for batch in dataset] # to deal with shuffling
+                batches = [torch.cat([batch[i] for batch in batches]) for i in range(2)] 
+            else: 
+                batches = dataset
 
+            for batch in batches:
+                # =================get data===================
+                X = batch[0].to(self.device_)
+                y = batch[1].to(self.device_)
+                H = self.forward_nn(X)
+                # ===================loss=====================
+                loss += self.loss_function(H, y, save_params)
+                n_batches +=1
+
+        return loss/n_batches
