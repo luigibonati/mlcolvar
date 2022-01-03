@@ -6,6 +6,7 @@ Tutorials
    :maxdepth: 1
 
    notebooks/2d-model_discriminant.ipynb
+   notebooks/ala2_deeplda.ipynb
 
 .. toctree::
    :caption: TICA-based CVs
