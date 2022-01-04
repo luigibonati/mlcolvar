@@ -175,3 +175,22 @@ class TICA:
             self.evecs_ = eigvecs
     
         return eigvals, eigvecs
+
+    def timescales(self, lag):
+        """Return implied timescales as given by:
+
+        .. math:: t_i = \frac{\tau}{\log\ \lambda_i}
+
+        where $lambda_i$ are the eigenvalues and $\tau$ the lag-time.
+
+        Args:
+            lag (float): lag-time
+
+        Returns:
+            its (array): implied timescales
+        """
+
+        its = - lag/torch.log(self.evals_)
+
+        return its 
+        

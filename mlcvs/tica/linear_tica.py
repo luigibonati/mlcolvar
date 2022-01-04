@@ -98,7 +98,8 @@ class TICA_CV(LinearCV):
 
         # perform TICA
         _, eigvecs = self.tica.compute_TICA(data = [x_t,x_lag], 
-                                            weights = [w_t,w_lag])
+                                            weights = [w_t,w_lag],
+                                            save_params=True)
 
         # save parameters for estimator
         self.set_average(ave)
