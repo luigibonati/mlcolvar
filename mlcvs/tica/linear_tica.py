@@ -32,8 +32,8 @@ class TICA_CV(LinearCV):
         self.name_ = "tica_cv"
         self.tica = TICA()
 
-    def fit(self, X, t = None, lag = 10):
-        """Fit TICA given time-lagged data (and weights). 
+    def fit(self, X, t = None, lag = 10, logweights = None):
+        """Fit TICA given time-lagged data (and optional weights). 
 
         Parameters
         ----------
@@ -43,6 +43,8 @@ class TICA_CV(LinearCV):
             Time array, by default None -> np.arange(0,len(X))
         lag : int, optional
             lag-time, by default 10
+        logweights: array, optional
+            logarithm of the weights of the configurations
 
         See Also
         --------
@@ -70,9 +72,24 @@ class TICA_CV(LinearCV):
         if len(X) != len(t):
             raise ValueError(f'length of X is {len(X)} while length of t is {len(t)}')
 
-        # find time-lagged configurations
-        x_t, x_lag, w_t, w_lag = find_time_lagged_configurations(X,t,lag)
+        # if weights are given, rescale the time before finding time lagged configurations
+        if logweights is not None:
+            # compute time increment in simulation time t
+            dt = np.round(t[1]-t[0],3)
+            # sanitize logweights
+            logweights = torch.Tensor(logweights)
+            logweights -= torch.max(logweights)
+            lognorm = torch.logsumexp(logweights,0)
+            logweights /= lognorm
+            # compute instantaneus time increment in rescaled time t'
+            d_tprime = torch.exp(logweights)*dt
+            # calculate cumulative time t'
+            tprime = torch.cumsum(d_tprime,0)
+        else:
+            tprime = t
 
+        # find time-lagged configurations
+        x_t, x_lag, w_t, w_lag = find_time_lagged_configurations(X,tprime,lag)
 
         # compute mean-free variables
         ave = self.tica.compute_average(x_t,w_t)
@@ -98,6 +115,8 @@ class TICA_CV(LinearCV):
             Time array, by default None -> np.arange(0,len(X))
         lag : int, optional
             lag-time, by default 10
+        logweights: array, optional
+            logarithm of the weights of the configurations
 
         Returns
         -------

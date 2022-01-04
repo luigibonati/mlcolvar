@@ -121,14 +121,19 @@ def create_time_lagged_dataset(X, t = None, lag_time = 10, logweights = None):
     if t is None:
         t = np.arange(0,len(X))
 
-    # rescale time with log-weights
+    # rescale time with log-weights if given
     if logweights is not None:
         # compute time increment in simulation time t
         dt = np.round(t[1]-t[0],3)
+        # sanitize logweights
+        logweights = torch.Tensor(logweights)
+        logweights -= torch.max(logweights)
+        lognorm = torch.logsumexp(logweights,0)
+        logweights /= lognorm
         # compute instantaneus time increment in rescaled time t'
-        d_tprime = np.copy(np.exp(logweights)*dt)
-        #calculate cumulative time tau
-        tprime = np.cumsum(d_tprime)
+        d_tprime = torch.exp(logweights)*dt
+        # calculate cumulative time t'
+        tprime = torch.cumsum(d_tprime,0)
     else:
         tprime = t
 
