@@ -177,17 +177,23 @@ class TICA:
         return eigvals, eigvecs
 
     def timescales(self, lag):
-        """Return implied timescales as given by:
+        """Return implied timescales from eigenvalues and lag-time.
 
-        .. math:: t_i = \frac{\tau}{\log\ \lambda_i}
+        Parameters
+        ----------
+        lag : float
+            lag-time
 
-        where $lambda_i$ are the eigenvalues and $\tau$ the lag-time.
+        Returns
+        -------
+        its : tensor
+            implied timescales
 
-        Args:
-            lag (float): lag-time
-
-        Returns:
-            its (array): implied timescales
+        Notes
+        -----
+        If `lambda_i` are the eigenvalues and `tau` the lag-time, the implied times are given by:
+        
+        .. math:: t_i = - tau / \log\lambda_i
         """
 
         its = - lag/torch.log(self.evals_)

@@ -21,6 +21,7 @@
       ~TICA.compute_average
       ~TICA.compute_correlation_matrix
       ~TICA.solve_tica_eigenproblem
+      ~TICA.timescales
    
    
 
