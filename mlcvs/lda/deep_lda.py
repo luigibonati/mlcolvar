@@ -314,6 +314,8 @@ class DeepLDA_CV(NeuralNetworkCV):
             if unravel_dataset:
                 batches = [batch for batch in dataset] # to deal with shuffling
                 batches = [torch.cat([batch[i] for batch in batches]) for i in range(2)] 
+            elif type(dataset) == list:
+                batches = [dataset]
             else: 
                 batches = dataset
 
@@ -322,6 +324,7 @@ class DeepLDA_CV(NeuralNetworkCV):
                 X = batch[0].to(self.device_)
                 y = batch[1].to(self.device_)
                 H = self.forward_nn(X)
+                print(X.shape,y.shape,H.shape)
                 # ===================loss=====================
                 loss += self.loss_function(H, y, save_params)
                 n_batches +=1

@@ -103,7 +103,7 @@ def test_deeplda_nclasses(n_classes):
     assert expected_input == input
 
 @pytest.mark.slow
-# @pytest.mark.skip
+#@pytest.mark.skip
 def test_deeplda_train_2d_model(load_dataset_2d_classes):
     """Perform DeepLDA on 2d-basins data folder."""
 
