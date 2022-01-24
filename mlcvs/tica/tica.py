@@ -98,8 +98,6 @@ class TICA:
         """
         # TODO Add assert on shapes
 
-        d = x.shape[1]
-
         if w is None: #TODO simplify it in the unbiased case?
             w = torch.ones(x.shape[0])
         

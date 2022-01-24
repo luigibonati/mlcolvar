@@ -1,7 +1,3 @@
-import matplotlib
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
-
 __all__ = ["paletteFessa"]
 
 ##########################################################################
