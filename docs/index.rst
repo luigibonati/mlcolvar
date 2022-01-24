@@ -17,6 +17,7 @@ Please note that this project is in development, and you should expect bugs and 
    getting_started
    api
    tutorials
+   plumed
 
 Indices and tables
 ==================
