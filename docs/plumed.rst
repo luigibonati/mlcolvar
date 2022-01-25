@@ -13,7 +13,7 @@ Here we describe how to deploy the Pytorch-trained collective variables to enhan
 
 * PLUMED-Pytorch interface, available in this repository.
 
-Optionally, the `PytorchModel.cpp` interface can be compiled with PLUMED by putting it inside the folder `plumed2/src/function/` before installing it. Otherwise, it will be necessary to link it at runtime using the `LOAD <https://www.plumed.org/doc-master/user-doc/html/_l_o_a_d.html>`_ keyword::
+Optionally, the ``PytorchModel.cpp`` interface can be compiled with PLUMED by putting it inside the folder ``plumed2/src/function/`` before installing it. Otherwise, it will be necessary to link it at runtime using the `LOAD <https://www.plumed.org/doc-master/user-doc/html/_l_o_a_d.html>`_ keyword::
 
     LOAD FILE=PytorchModel.cpp
 
@@ -34,9 +34,9 @@ Here $LIBTORCH contains the location of the precompiled binaries and $PLUMED the
 
 Notes:
 
-- If using the CUDA-enabled binaries `-ltorch_cuda` needs to be added to LDFLAGS.
+- If using the CUDA-enabled binaries ``-ltorch_cuda`` needs to be added to LDFLAGS.
   
-- If using the pre-cxx11 ABI binaries the corresponding flag should be disabled in CXXFLAGS: `-D_GLIBCXX_USE_CXX11_ABI=0`.
+- If using the pre-cxx11 ABI binaries the corresponding flag should be disabled in CXXFLAGS: ``-D_GLIBCXX_USE_CXX11_ABI=0``.
 
 - Due to a conflict with the BLAS/LAPACK libraries contained in the LibTorch binaries, the search for other external libraries has to be disabled.
 
@@ -46,6 +46,6 @@ Notes:
  
 **Load the model in the PLUMED input file**
 
-In the PLUMED input file one should specify the model and the arguments. The interface detects the number of outputs and create a component for each of them, which can be accessed as cv.node-0, cv.node-1, ... ::
+In the PLUMED input file one should specify the model and the arguments. Here `x1,x2,..,xN` are the inputs which needs to be previusly defined inside the PLUMED input. The interface automatically detects the number of outputs and create a component for each of them, which can be accessed as cv.node-0, cv.node-1, ... ::
 
-    cv: PYTORCH_MODEL FILE=model.pt ARG=d1,d2,...,dN
+    cv: PYTORCH_MODEL FILE=model.pt ARG=x1,x2,...,xN
