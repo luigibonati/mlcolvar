@@ -19,6 +19,7 @@ dependencies:
   - matplotlib
   - nbsphinx
   - ipython
+  - scikit-learn
 
   # Pip-only installs
   - pip:

@@ -3,7 +3,7 @@ PLUMED-PyTorch interface
 
 **Deploying CVs in PLUMED2**
 
-Here we describe how to deploy the Pytorch-trained collective variables to enhance the sampling with the PLUMED2 open-source plug-in for molecular simulations. To do so, we will compile our model using `torch.jit`, and then load it in PLUMED via the LibTorch C++ API library.
+Here we describe how to deploy the Pytorch-trained collective variables to enhance the sampling with the PLUMED2 open-source plug-in for molecular simulations. To do so, we will compile our model using ```torch.jit``, and then load it in PLUMED via the LibTorch C++ API library.
 
 **Requirements**
 
@@ -11,9 +11,9 @@ Here we describe how to deploy the Pytorch-trained collective variables to enhan
 
 * `LibTorch <https://pytorch.org>`_ (same version of Pytorch used to train the model)
 
-* PLUMED-Pytorch interface, available in this repository.
+* `PLUMED-Pytorch interface <https://github.com/luigibonati/mlcvs/blob/main/plumed/PytorchModel.cpp>`_ , available in this repository.
 
-Optionally, the ``PytorchModel.cpp`` interface can be compiled with PLUMED by putting it inside the folder ``plumed2/src/function/`` before installing it. Otherwise, it will be necessary to link it at runtime using the `LOAD <https://www.plumed.org/doc-master/user-doc/html/_l_o_a_d.html>`_ keyword::
+The ``PytorchModel.cpp`` interface can be compiled with PLUMED by putting it inside the folder ``plumed2/src/function/`` before installing it. Otherwise, it will be necessary to link it at runtime using the `LOAD <https://www.plumed.org/doc-master/user-doc/html/_l_o_a_d.html>`_ keyword::
 
     LOAD FILE=PytorchModel.cpp
 
@@ -28,7 +28,7 @@ Here $LIBTORCH contains the location of the precompiled binaries and $PLUMED the
 
     ./configure --prefix=$PLUMED --enable-cxx=14 --enable-rpath \
                 --disable-external-lapack --disable-external-blas \
-                CXXFLAGS="-O3 -dynamic -D_GLIBCXX_USE_CXX14_ABI=1 -std=c++14" \
+                CXXFLAGS="-O3 -dynamic -D_GLIBCXX_USE_CXX14_ABI=1" \
                 CPPFLAGS="-I${LIBTORCH}/include/torch/csrc/api/include/ -I${LIBTORCH}/include/ -I${LIBTORCH}/include/torch" \
                 LDFLAGS="-L${LIBTORCH}/lib -ltorch -lc10 -ltorch_cpu -Wl,-rpath,${LIBTORCH}/lib"
 

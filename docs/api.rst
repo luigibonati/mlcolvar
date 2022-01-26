@@ -96,9 +96,9 @@ Some helper functions are defined to handle to input/output of the data, with pa
 
 .. rubric:: Optimization (``mlcvs.utils.optim``)
 
-.. currentmodule:: mlcvs.utils.optim
+Convenience functions to adjust the training of the neural networks based on a validation score. When the latter does not decrease anymore the simulation can be interrputed (``EarlyStopping``) or the learning rate decreased (``LRScheduler``). Note that the learning rate scheduler is not implemented yet in the `fit` functions of the CVs.
 
-Convenience functions to adjust the training of the neural networksbased on a validation score. When the latter does not decrease anymore the simulation can be interrputed (``EarlyStopping``) or the learning rate decreased (``LRScheduler``). Note that the learning rate scheduler is not implemented yet in the train functions of the CVs.
+.. currentmodule:: mlcvs.utils.optim
 
 .. autosummary::
    :toctree: autosummary
@@ -106,6 +106,17 @@ Convenience functions to adjust the training of the neural networksbased on a va
    EarlyStopping
    LRScheduler
 
+.. rubric:: FES (``mlcvs.utils.fes``)
+
+.. currentmodule:: mlcvs.utils.fes
+
+.. autosummary::
+   :toctree: autosummary
+
+   compute_fes
+
 .. rubric:: Plot (``mlcvs.utils.plot``)
 
-Here the `FESSA <https://github.com/luigibonati/fessa-color-palette>`_ palette is defined which allows. Upon loading ``mlcvs`` it is possible to use it direclly with Matplotlib. This color scheme is designed to provide an effective free energy landscapes visualization.
+Helper functions to plot the results with Matplotlib. A custom palette is also defined (`FESSA <https://github.com/luigibonati/fessa-color-palette>`_). Upon loading ``mlcvs`` it is possible to use this color scheme direclly with Matplotlib. This has been designed for free energy landscapes visualization.
+
+   

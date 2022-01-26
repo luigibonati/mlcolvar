@@ -20,6 +20,7 @@ dependencies:
   - pandas
   - pytorch
   - matplotlib
+  - scikit-learn
 
     # Pip-only installs
   #- pip:
