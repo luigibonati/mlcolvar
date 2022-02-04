@@ -14,8 +14,8 @@ is configured to look for libtorch */
 //#ifdef __PLUMED_HAS_LIBTORCH
 
 #include "core/PlumedMain.h"
-#include "function/Function.h"
-#include "function/ActionRegister.h"
+#include "Function.h"
+#include "ActionRegister.h"
 
 #include <torch/torch.h>
 #include <torch/script.h>

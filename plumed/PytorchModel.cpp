@@ -8,11 +8,11 @@
      Bonati, Rizzi and Parrinello - JPCL (2020)
 
  +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ */
-#ifdef __PLUMED_HAS_LIBTORCH
+//#ifdef __PLUMED_HAS_LIBTORCH
 
 #include "core/PlumedMain.h"
-#include "function/Function.h"
-#include "function/ActionRegister.h"
+#include "Function.h"
+#include "ActionRegister.h"
 
 #include <torch/torch.h>
 #include <torch/script.h>
@@ -137,7 +137,7 @@ void PytorchModel::calculate() {
   //derivatives
   for(unsigned j=0; j<_n_out; j++){
    //backpropagation
-    output[0][j].backward();
+    output[0][j].backward({}, /*retain_graph=*/ true);
     //convert to vector
     vector<float> der = tensor_to_vector (input_S.grad() );
     string name_comp = "node-"+std::to_string(j);
@@ -155,4 +155,4 @@ void PytorchModel::calculate() {
 }
 }
 
-#endif
+//#endif
