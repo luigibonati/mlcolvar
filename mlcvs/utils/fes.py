@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from torch import Tensor
 
-def compute_fes(X, temp=300, num_samples=100, bounds=None, bandwidth=0.01, kernel='gaussian', weights=None, scale_by = None, blocks = 1, plot=False, plot_max_fes=None, ax = None):
+def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0.01, kernel='gaussian', weights=None, scale_by = None, blocks = 1, plot=False, plot_max_fes=None, ax = None):
     """Compute the Free Energy Surface along the given variables.
 
     Parameters
@@ -15,6 +15,8 @@ def compute_fes(X, temp=300, num_samples=100, bounds=None, bandwidth=0.01, kerne
         data
     temp : float, optional
         temperature, by default 300
+    kbt : float, optional
+        temperature in energy units, by default None
     num_samples : int, optional
         number of points used along each direction, by default 100
     bounds : list of lists, optional
@@ -58,9 +60,10 @@ def compute_fes(X, temp=300, num_samples=100, bounds=None, bandwidth=0.01, kerne
 
     """
     # temperature
-    kb = 0.00831441
-    kbt = kb * temp
-
+    if kbt is None:
+        kb = 0.00831441
+        kbt = kb * temp
+    
     # dataset
     if type(X) == list:
         X = np.vstack(X).T
