@@ -23,7 +23,7 @@ import mlcvs
 # -- Project information -----------------------------------------------------
 
 project = 'mlcvs'
-copyright = ("2021, Luigi Bonati.")
+copyright = ("2022, Luigi Bonati.")
 author = 'Luigi Bonati'
 
 # The short X.Y version
@@ -97,7 +97,6 @@ pygments_style = 'default'
 #html_theme = 'sphinx_rtd_theme'
 html_theme = 'furo'
 
-
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
@@ -107,7 +106,7 @@ html_theme_options = {
     "light_css_variables": {
         "color-brand-primary": "red",
         "color-brand-content": "#CC3333",
-        "color-admonition-background": "#cc6b33",
+        #"color-admonition-background": "#cc6b33",
     },
 }
 
