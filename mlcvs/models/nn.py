@@ -437,6 +437,7 @@ class NeuralNetworkCV(torch.nn.Module):
                     # FLAGS
                     'normIn': self.normIn,
                     'normOut': self.normOut,
+                    'normNN': self.normNN,
                     'feature_names': self.feature_names,
                     # STATE DICT
                     'model_state_dict': self.state_dict(),
