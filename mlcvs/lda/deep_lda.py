@@ -3,7 +3,7 @@
 __all__ = ["DeepLDA_CV"]
 
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader,TensorDataset,random_split
 
 from .lda import LDA
 from ..models import NeuralNetworkCV
@@ -189,10 +189,13 @@ class DeepLDA_CV(NeuralNetworkCV):
 
     def fit(
         self,
-        train_data,
-        valid_data=None,
+        train_loader=None,
+        valid_loader=None,
+        X = None,
+        y = None,
         standardize_inputs=True,
-        batch_size=-1,
+        standardize_outputs=True,
+        batch_size=0,
         nepochs=1000,
         log_every=1,
         info=False,
@@ -206,8 +209,14 @@ class DeepLDA_CV(NeuralNetworkCV):
             training set
         valid_data: tuple of torch.tensors (X:input, y:labels) #TODO add dataloader option?
             validation set
+        X: np.array or torch.Tensor, optional
+            input data, alternative to train_loader (default = None)
+        y: np.array or torch.Tensor, optional
+            labels (default = None)
         standardize_inputs: bool
             whether to standardize input data
+        standardize_outputs: bool
+            whether to standardize CVs
         batch_size: bool, optional
             number of points per batch (default = -1, single batch)
         nepochs: int, optional
@@ -217,10 +226,6 @@ class DeepLDA_CV(NeuralNetworkCV):
         print_info: bool, optional
             print debug info (default = False)
 
-        See Also
-        --------
-        LabeledDataset
-            Dataset with labels
         """
 
         # check optimizer
@@ -230,25 +235,34 @@ class DeepLDA_CV(NeuralNetworkCV):
         # check device
         if self.device_ is None:
             self.device_ = next(self.nn.parameters()).device
+
+        # assert to avoid redundancy
+        if (train_loader is not None) and (X is not None):
+            raise KeyError('Only one between train_loader and X can be used.')
         
-        # create dataloader #TODO CHANGE IN FAST DATALOADER
-        create_loader = True
-        if ( type(train_data) == DataLoader ) or ( type(train_data) == FastTensorDataLoader ) :
-            train_loader = train_data
-            create_loader = False
-        elif type(train_data) == LabeledDataset:
-            train_dataset = train_data
-        else: 
-            train_dataset = LabeledDataset(colvar = train_data[0], labels = train_data[1])
+        # create dataloader if not given
+        if X is not None:
+            if y is None:
+                raise KeyError('labels (y) must be given.')
 
-        if create_loader:
-            # determine batch size
-            if batch_size == -1:
-                batch_size = len(train_data[0])
-            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+            if type(X) != torch.Tensor:
+                X = torch.Tensor(X)
+            if type(y) != torch.Tensor:
+                y = torch.Tensor(y)
+                            
+            dataset = TensorDataset(X,y)
+            train_size = int(0.9 * len(dataset))
+            valid_size = len(dataset) - train_size
 
-        # standardize inputs #TODO CHANGE FOR MEMORY ISSUES
-        x_train = torch.cat([batch[0] for batch in train_loader]).to(self.device_)
+            train_data, valid_data = random_split(dataset,[train_size,valid_size])
+            train_loader = FastTensorDataLoader(train_data,batch_size)
+            valid_loader = FastTensorDataLoader(valid_data)
+            print('Training   set:',len(train_data))
+            print('Validation set:',len(valid_data))
+
+        # standardize inputs (unravel dataset to compute average)
+        print('data',[batch[0] for batch in train_loader])
+        x_train = torch.cat([batch[0] for batch in train_loader])
         if standardize_inputs:
             self.standardize_inputs( x_train )
 
@@ -260,14 +274,18 @@ class DeepLDA_CV(NeuralNetworkCV):
         for ep in range(nepochs):
             self.train_epoch(train_loader)
 
-            loss_train = self.evaluate_dataset(train_data, save_params=True)
-            loss_valid = self.evaluate_dataset(valid_data)
+            loss_train = self.evaluate_dataset(train_loader, save_params=True)
+            loss_valid = self.evaluate_dataset(valid_loader)
             self.loss_train.append(loss_train)
             self.loss_valid.append(loss_valid)
 
+            #standardize output
+            if standardize_outputs:
+                self.standardize_outputs(x_train)
+
             # earlystopping
             if self.earlystopping_ is not None:
-                if valid_data is None:
+                if valid_loader is None:
                     raise ValueError('EarlyStopping requires validation data')
                 self.earlystopping_(loss_valid, model=self.state_dict() )
 
@@ -324,7 +342,6 @@ class DeepLDA_CV(NeuralNetworkCV):
                 X = batch[0].to(self.device_)
                 y = batch[1].to(self.device_)
                 H = self.forward_nn(X)
-                print(X.shape,y.shape,H.shape)
                 # ===================loss=====================
                 loss += self.loss_function(H, y, save_params)
                 n_batches +=1
