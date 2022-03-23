@@ -26,8 +26,8 @@ The weights of the NN are saved as parameters, while the coefficients of the lin
    :toctree: autosummary
    :template: custom-class-template.rst
 
-   LinearCV
-   NeuralNetworkCV
+   mlcvs.models.LinearCV
+   mlcvs.models.NeuralNetworkCV
 
 .. rubric:: Estimators
 
