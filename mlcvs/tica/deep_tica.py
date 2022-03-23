@@ -297,8 +297,8 @@ class DeepTICA_CV(NeuralNetworkCV):
             dataset = create_time_lagged_dataset(X,t,lag_time)
             train_loader = FastTensorDataLoader(dataset.tensors, batch_size=batch_size, shuffle=False) 
 
-        # standardize inputs (unravel dataset and copy to device) #TODO check memory usage on GPU
-        x_train = torch.cat([batch[0] for batch in train_loader]).to(self.device_)
+        # standardize inputs (unravel dataset to compute average)
+        x_train = torch.cat([batch[0] for batch in train_loader])
         if standardize_inputs:
             self.standardize_inputs(x_train)
 

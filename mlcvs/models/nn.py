@@ -276,8 +276,8 @@ class NeuralNetworkCV(torch.nn.Module):
 
         Mean, Range = compute_mean_range(x, print_values)
 
-        self.MeanIn = Mean
-        self.RangeIn = Range
+        self.MeanIn = Mean.to(self.device_)
+        self.RangeIn = Range.to(self.device_)
 
         #if hasattr(self,"MeanIn"):
         #    self.MeanIn = Mean
@@ -304,8 +304,8 @@ class NeuralNetworkCV(torch.nn.Module):
 
         Mean, Range = compute_mean_range(x, print_values)
 
-        self.MeanOut = Mean
-        self.RangeOut = Range
+        self.MeanOut = Mean.to(self.device_)
+        self.RangeOut = Range.to(self.device_)
 
         #if hasattr(self,"MeanOut"):
         #    self.MeanOut = Mean.to(self.MeanOut.device)
