@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader,TensorDataset,random_split
 
 from .lda import LDA
 from ..models import NeuralNetworkCV
-from ..utils.data import LabeledDataset, FastTensorDataLoader
+from ..utils.data import FastTensorDataLoader
 
 class DeepLDA_CV(NeuralNetworkCV):
     """

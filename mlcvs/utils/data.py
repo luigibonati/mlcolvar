@@ -1,39 +1,13 @@
 """Datasets."""
 
 import torch 
+import pandas
 import numpy as np
 
-__all__ = ["LabeledDataset","create_time_lagged_dataset","FastTensorDataLoader"]
+__all__ = ["create_time_lagged_dataset","FastTensorDataLoader"]
 
 from torch.utils.data import Dataset,Subset
 from bisect import bisect_left
-
-class LabeledDataset(Dataset):
-    """
-    Dataset with labels.
-    """
-
-    def __init__(self, colvar, labels):
-        """
-        Create dataset from colvar and labels.
-
-        Parameters
-        ----------
-        colvar : array-like
-            input data 
-        labels : array-like
-            classes labels
-        """
-
-        self.colvar = colvar
-        self.labels = labels
-
-    def __len__(self):
-        return len(self.colvar)
-
-    def __getitem__(self, idx):
-        x = (self.colvar[idx], self.labels[idx])
-        return x
 
 def closest_idx_torch(array, value):
         '''
@@ -112,10 +86,29 @@ def find_time_lagged_configurations(x,t,lag):
 
 def create_time_lagged_dataset(X, t = None, lag_time = 10, logweights = None):
     """
-    Create dataset of time-lagged configurations, with optional (log)weights to reweight a biased trajectory. If the weights are given, the calculation of the time-lagged correlation functions is done in the rescaled time t'.  
+    Create a dataset of time-lagged configurations. If a set of (log)weights is given the search is performed in the accelerated time.
 
-    TODO DOC
+    Parameters
+    ----------
+    X : array-like
+        input descriptors
+    t : array-like, optional
+        time series, by default np.arange(len(X))
+    lag_time: float, optional
+        lag between configurations, by default = 10        
+    logweights : array-like,optional
+        logweights to evaluate rescaled time as dt' = dt*exp(logweights)
     """
+
+    # check if dataframe
+    if type(X) == pandas.core.frame.DataFrame:
+        X = X.values
+    if type(t) == pandas.core.frame.DataFrame:
+        t = t.values
+
+    # assert
+    assert t.ndim == 1 
+    assert len(X) == len(t)
 
     # define time if not given
     if t is None:
@@ -123,6 +116,9 @@ def create_time_lagged_dataset(X, t = None, lag_time = 10, logweights = None):
 
     # rescale time with log-weights if given
     if logweights is not None:
+        # assert 
+        assert logweights.ndim == 1
+        assert len(X) == len(logweights)
         # compute time increment in simulation time t
         dt = np.round(t[1]-t[0],3)
         # sanitize logweights
