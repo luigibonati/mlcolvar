@@ -66,8 +66,6 @@ class LDA:
         device = H.device
 
         # sizes
-        print('H',H.shape)
-        print('label',label.shape)
         N, d = H.shape
         self.n_features = d
 
