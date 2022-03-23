@@ -257,11 +257,10 @@ class DeepLDA_CV(NeuralNetworkCV):
             train_data, valid_data = random_split(dataset,[train_size,valid_size])
             train_loader = FastTensorDataLoader(train_data,batch_size)
             valid_loader = FastTensorDataLoader(valid_data)
-            print('Training   set:',len(train_data))
-            print('Validation set:',len(valid_data))
+            print('Training   set:' ,len(train_data))
+            print('Validation set:' ,len(valid_data))
 
         # standardize inputs (unravel dataset to compute average)
-        print('data',[batch[0] for batch in train_loader])
         x_train = torch.cat([batch[0] for batch in train_loader])
         if standardize_inputs:
             self.standardize_inputs( x_train )
