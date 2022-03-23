@@ -62,7 +62,7 @@ class DeepLDA_CV(NeuralNetworkCV):
         self.loss_valid = []
         self.log_header = True
 
-    def set_regularization(self, sw_reg=0.02, lorentzian_reg=None):
+    def set_regularization(self, sw_reg=0.05, lorentzian_reg=None):
         """
         Set magnitude of regularizations for the training:
         - add identity matrix multiplied by `sw_reg` to within scatter S_w.
@@ -86,6 +86,7 @@ class DeepLDA_CV(NeuralNetworkCV):
         .. math:: S_w = S_w + \mathtt{sw_reg}\ \mathbf{1}.
 
         - Lorentzian
+
         TODO Add equation
 
         """
@@ -111,6 +112,7 @@ class DeepLDA_CV(NeuralNetworkCV):
     def loss_function(self, H, y, save_params=False):
         """
         Loss function for the DeepLDA CV. Correspond to maximizing the eigenvalue(s) of LDA plus a regularization on the NN outputs.
+        If there are C classes the C-1 eigenvalue will be maximized.
 
         Parameters
         ----------
@@ -226,6 +228,10 @@ class DeepLDA_CV(NeuralNetworkCV):
         print_info: bool, optional
             print debug info (default = False)
 
+        See Also
+        --------
+        loss_function
+            Loss functions for training Deep-LDA CVs
         """
 
         # check optimizer
