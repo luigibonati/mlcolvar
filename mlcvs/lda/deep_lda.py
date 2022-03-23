@@ -266,6 +266,12 @@ class DeepLDA_CV(NeuralNetworkCV):
             print('Training   set:' ,len(train_data))
             print('Validation set:' ,len(valid_data))
 
+        if self.lda.sw_reg == 1e-6: # default value
+            self.set_regularization(0.05)
+            print('Sw regularization:' ,self.lda.sw_reg)
+            print('Lorentzian reg.  :' ,self.lorentzian_reg)
+            print('')
+
         # standardize inputs (unravel dataset to compute average)
         x_train = torch.cat([batch[0] for batch in train_loader])
         if standardize_inputs:
