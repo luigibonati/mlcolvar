@@ -259,8 +259,6 @@ class NeuralNetworkCV(torch.nn.Module):
         self.earlystopping_ = EarlyStopping(
             patience, min_delta, consecutive, log, save_best_model
         )
-        self.best_valid = None
-        self.best_model = None
 
     # Input / output standardization
 
