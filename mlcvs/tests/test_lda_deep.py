@@ -9,6 +9,8 @@ import numpy as np
 import pandas as pd
 from mlcvs.utils.io import load_dataframe
 from mlcvs.lda import  DeepLDA_CV
+from mlcvs.utils.data import FastTensorDataLoader
+from torch.utils.data import random_split,TensorDataset
 
 # set global variables
 torch.set_default_tensor_type(torch.DoubleTensor)
@@ -143,11 +145,8 @@ def test_deeplda_train_2d_model(load_dataset_2d_classes):
     )
     model.set_regularization(sw_reg=sw_reg)
 
-    # TRAIN
-    model.fit(train_data, valid_data, info=True, log_every=100)
-
-    # standardize outputs
-    model.standardize_outputs(train_data[0])
+    # TRAIN (with X,y)
+    model.fit(X=X, y=y, info=True, log_every=100)
 
     # FORWARD
     xtest = torch.rand(X.size(1)).to(device)
