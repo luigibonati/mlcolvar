@@ -298,12 +298,12 @@ class NeuralNetworkCV(torch.nn.Module):
         # disable normOut for unbiased cv evaluation
         self.normOut = False
         with torch.no_grad():
-            x = self.forward(input)
+            x = self.forward(input.to(self.device_)) # TODO CHECK FOR MEMORY ISSUE ON GPU
 
         Mean, Range = compute_mean_range(x, print_values)
 
-        self.MeanOut = Mean.to(self.device_)
-        self.RangeOut = Range.to(self.device_)
+        self.MeanOut = Mean
+        self.RangeOut = Range
 
         #if hasattr(self,"MeanOut"):
         #    self.MeanOut = Mean.to(self.MeanOut.device)
