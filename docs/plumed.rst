@@ -3,12 +3,7 @@ PLUMED-PyTorch interface
 
 **Deploying CVs in PLUMED2**
 
-Here we describe how to deploy the Pytorch-trained collective variables to enhance the sampling with the PLUMED2 open-source plug-in for molecular simulations. To do so, we will compile our model using ``torch.jit``, and then load it in PLUMED via the LibTorch C++ API library.
+In order to use the ML CVs to enhance the sampling we can export them into the PLUMED2 open-source plug-in for molecular simulations. 
+To do so, we will compile our model using the just in time compiler (``torch.jit``). This creates a file which can be execute outside Python, e.g. in a standalone C++ programs. 
 
-To do so, there are two options described below. The first requires you to add the Pytorch interface to the PLUMED source code and manually configure PLUMED, while the latter is based on a custom PLUMED version which already contains the interface and a modified configure which can look for libtorch libraries at configuration time.
-
-.. toctree::
-  :maxdepth: 1
-
-  plumed_interface
-  plumed_module
+In this way we can load the CVs in PLUMED by using PyTorch C++ APIs (LibTorch). We have developed an interface (`PYTORCH_MODEL <https://www.plumed.org/doc-master/user-doc/html/_p_y_t_o_r_c_h__m_o_d_e_l.html>`_) which is now part of the official PLUMED2 software as an additional module. To configure PLUMED with Libtorch please have a look at the PLUMED `documentation <https://www.plumed.org/doc-master/user-doc/html/_p_y_t_o_r_c_h.html>`_.

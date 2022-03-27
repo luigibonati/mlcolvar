@@ -1,5 +1,5 @@
-Add the interface to PLUMED
-===========================
+Add the interface to PLUMED (deprecated)
+========================================
 
 **Requirements**
 

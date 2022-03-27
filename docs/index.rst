@@ -8,7 +8,8 @@ mlcvs: Machine Learning Collective Variables
 
 `mlcvs` is a Python package for building data-driven collective variables for enhanced sampling simulations.
 
-Please note that this project is in development, and you should expect bugs and breaking changes.
+
+Please note that this project is in development. Please open an issue on Github if you find bugs or you would like to ask for new features.
 
 .. toctree::
    :maxdepth: 1

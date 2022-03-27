@@ -1,5 +1,5 @@
-Download custom PLUMED version
-==============================
+Download custom PLUMED version (deprecated)
+============================================
 
 This page illustrates how to download and install the modified version of PLUMED which (1) can look at configuration time for the presence of libtorch and (2) contains a newer interface for loading Pytorch models. 
 
