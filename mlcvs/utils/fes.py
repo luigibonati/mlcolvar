@@ -171,7 +171,7 @@ def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0
                 ax.errorbar(grid,fes2,error)
             else:
                 ax.plot(grid,fes2)  
-            ax.set_ylabel('FES [kJ/mol]')
+            ax.set_ylabel('FES')
         elif dim == 2: 
             fes2 = np.copy(O)
             if plot_max_fes is not None:
@@ -179,6 +179,6 @@ def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0
             extent = [item for sublist in bounds for item in sublist] 
             pp = ax.contourf(fes2,cmap='fessa',extent=extent)#,vmax=max_fes)
             cbar = plt.colorbar(pp,ax=ax)
-            cbar.set_label('FES [kJ/mol]')
+            cbar.set_label('FES')
 
     return fes,grid,bounds,error
