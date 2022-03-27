@@ -18,7 +18,7 @@ def compute_mean_range(x: torch.Tensor, print_values=False):
         print("Range:", Range.shape, "-->", Range)
     if (Range < 1e-6).nonzero().sum() > 0:
         print(
-            "[Warninthe follig] Normalization: owing features have a range of values < 1e-6:",
+            "[Warning] Normalization: the following features have a range of values < 1e-6:",
             (Range < 1e-6).nonzero(),
         )
         Range[Range < 1e-6] = 1.0
