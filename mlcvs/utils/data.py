@@ -121,7 +121,7 @@ def create_time_lagged_dataset(X, t = None, lag_time = 10, logweights = None, tp
     logweights : array-like,optional
         logweights to evaluate rescaled time as dt' = dt*exp(logweights)
     tprime : array-like,optional
-        rescaled time estimated from the simulation. If not given 'tprime_evaluation(t,logweights)' it is used instead
+        rescaled time estimated from the simulation. If not given 'tprime_evaluation(t,logweights)' is used instead
     """
 
     # check if dataframe
