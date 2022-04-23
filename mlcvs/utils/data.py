@@ -33,6 +33,27 @@ def closest_idx_torch(array, value):
         else:
             return pos-1
 
+# evaluation of tprime from simulation time and logweights
+def tprime_evaluation(t, logweights = None):
+
+    # rescale time with log-weights if given
+    if logweights is not None:
+        # compute time increment in simulation time t
+        dt = np.round(t[1]-t[0],3)
+        # sanitize logweights
+        logweights = torch.Tensor(logweights)
+        logweights -= torch.max(logweights)
+        lognorm = torch.logsumexp(logweights,0)
+        logweights /= lognorm
+        # compute instantaneus time increment in rescaled time t'
+        d_tprime = torch.exp(logweights)*dt
+        # calculate cumulative time t'
+        tprime = torch.cumsum(d_tprime,0)
+    else:
+        tprime = t
+
+    return tprime
+
 def find_time_lagged_configurations(x,t,lag):
     '''
     Searches for all the pairs which are distant 'lag' in time, and returns the weights associated to lag=lag as well as the weights for lag=0.
@@ -56,13 +77,14 @@ def find_time_lagged_configurations(x,t,lag):
     #find maximum time idx
     idx_end = closest_idx_torch(t,t[-1]-lag)
     #start_j = 0
+    N = len(t)
     
     #loop over time array and find pairs which are far away by lag
     for i in range(idx_end):
         stop_condition = lag+t[i+1]
         n_j = 0
         
-        for j in range(i,len(t)):
+        for j in range(i,N):
             if ( t[j] < stop_condition ) and (t[j+1]>t[i]+lag):
                 x_t.append(x[i])
                 x_lag.append(x[j])
@@ -84,7 +106,7 @@ def find_time_lagged_configurations(x,t,lag):
 
     return x_t,x_lag,w_t,w_lag
 
-def create_time_lagged_dataset(X, t = None, lag_time = 10, logweights = None):
+def create_time_lagged_dataset(X, t = None, lag_time = 10, logweights = None, tprime = None):
     """
     Create a dataset of time-lagged configurations. If a set of (log)weights is given the search is performed in the accelerated time.
 
@@ -98,6 +120,8 @@ def create_time_lagged_dataset(X, t = None, lag_time = 10, logweights = None):
         lag between configurations, by default = 10        
     logweights : array-like,optional
         logweights to evaluate rescaled time as dt' = dt*exp(logweights)
+    tprime : array-like,optional
+        rescaled time estimated from the simulation. If not given 'tprime_evaluation(t,logweights)' it is used instead
     """
 
     # check if dataframe
@@ -114,24 +138,9 @@ def create_time_lagged_dataset(X, t = None, lag_time = 10, logweights = None):
     if t is None:
         t = np.arange(0,len(X))
 
-    # rescale time with log-weights if given
-    if logweights is not None:
-        # assert 
-        assert logweights.ndim == 1
-        assert len(X) == len(logweights)
-        # compute time increment in simulation time t
-        dt = np.round(t[1]-t[0],3)
-        # sanitize logweights
-        logweights = torch.Tensor(logweights)
-        logweights -= torch.max(logweights)
-        lognorm = torch.logsumexp(logweights,0)
-        logweights /= lognorm
-        # compute instantaneus time increment in rescaled time t'
-        d_tprime = torch.exp(logweights)*dt
-        # calculate cumulative time t'
-        tprime = torch.cumsum(d_tprime,0)
-    else:
-        tprime = t
+    #define tprime if not given
+    if tprime is None:
+        tprime = tprime_evaluation(t, logweights)
 
     # find pairs of configurations separated by lag_time
     data = find_time_lagged_configurations(X, tprime,lag=lag_time)
