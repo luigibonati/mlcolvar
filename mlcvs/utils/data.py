@@ -35,6 +35,16 @@ def closest_idx_torch(array, value):
 
 # evaluation of tprime from simulation time and logweights
 def tprime_evaluation(t, logweights = None):
+    """
+    Estimate the accelerated time if a set of (log)weights is given
+
+    Parameters
+    ----------
+    t : array-like, 
+        unbias time series,    
+    logweights : array-like,optional
+        logweights to evaluate rescaled time as dt' = dt*exp(logweights)
+    """
 
     # rescale time with log-weights if given
     if logweights is not None:
