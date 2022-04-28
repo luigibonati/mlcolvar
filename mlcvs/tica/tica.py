@@ -46,7 +46,7 @@ class TICA:
         
         return ave
 
-    def compute_TICA(self, data, weights = None, n_eig = 0, save_params=False):
+    def compute_TICA(self, data, weights = None, n_eig = 0, symmetrize=True, save_params=False):
         """Perform TICA computation
 
         Parameters
@@ -57,6 +57,8 @@ class TICA:
             Weights at time t and t+lag, by default None
         n_eig : int, optional
             number of eigenfunctions to compute, by default 0 = all
+        symmetrize : bool, optional
+            Enforce symmetrization, by default True
         save_params : bool, optional
             Save parameters of estimator, by default False
 
@@ -71,7 +73,7 @@ class TICA:
             w_t, w_lag = weights
 
         C_0 = self.compute_correlation_matrix(x_t,x_t,w_t)
-        C_lag = self.compute_correlation_matrix(x_t,x_lag,w_lag)
+        C_lag = self.compute_correlation_matrix(x_t,x_lag,w_lag,symmetrize=symmetrize)
         evals, evecs = self.solve_tica_eigenproblem(C_0,C_lag,n_eig=n_eig,save_params=save_params) 
 
         return evals, evecs
@@ -135,26 +137,45 @@ class TICA:
         -----
         The eigenvecs object which is returned is a matrix whose column eigvecs[:,i] is the eigenvector associated to eigvals[i]
         """ 
-        #cholesky decomposition
-        if self.reg_cholesky is not None:
-            reg = self.reg_cholesky*torch.eye(C_0.shape[0]).to(C_0.device)
-            L = torch.cholesky(C_0+reg,upper=False)
-        else:
-            L = torch.cholesky(C_0,upper=False)
-            
-        L_t = torch.t(L)
-        L_ti = torch.inverse(L_t)
-        L_i = torch.inverse(L)
-        C_new = torch.matmul(torch.matmul(L_i,C_lag),L_ti)
 
-        #find eigenvalues and vectors of C_new
-        eigvals, eigvecs = torch.symeig(C_new,eigenvectors=True)
-        #sort
-        eigvals, indices = torch.sort(eigvals, 0, descending=True)
-        eigvecs = eigvecs[:,indices]
-        
-        #return to original eigenvectors
-        eigvecs = torch.matmul(L_ti,eigvecs)
+        # if correlation matrices are symmetric the Cholesky decomposition and symeig method are used
+        if ( (C_lag.transpose(0, 1) == C_lag).all() and (C_0.transpose(0, 1) == C_0).all() ): 
+            #cholesky decomposition
+            if self.reg_cholesky is not None:
+                reg = self.reg_cholesky*torch.eye(C_0.shape[0]).to(C_0.device)
+                L = torch.cholesky(C_0+reg,upper=False)
+            else:
+                L = torch.cholesky(C_0,upper=False)
+                
+            L_t = torch.t(L)
+            L_ti = torch.inverse(L_t)
+            L_i = torch.inverse(L)
+            C_new = torch.matmul(torch.matmul(L_i,C_lag),L_ti)
+
+            #find eigenvalues and vectors of C_new
+            eigvals, eigvecs = torch.symeig(C_new,eigenvectors=True)
+
+            #sort
+            eigvals, indices = torch.sort(eigvals, 0, descending=True)
+            eigvecs = eigvecs[:,indices]
+            
+            #return to original eigenvectors
+            eigvecs = torch.matmul(L_ti,eigvecs)
+
+        else:
+            #Compute the pseudoinverse (Moore-Penrose inverse) of C_0. if det(C_0) != 0 then the usual inverse is computed
+            C_new = torch.matmul(C_lag,torch.pinverse(C_0))
+            #find eigenvalues and vectors of C_new
+            """ TODO: torch.eig() is deprecated in favor of torch.linalg.eig()  
+                      torch.linalg.eig() returns complex tensors of dtype cfloat or cdouble
+                      rather than real tensors mimicking complex tensors. 
+                      For future developments it would be necessary to take either only the real part
+                      or only the complex part or only the magnitude of the complex eigenvectors and eigenvalues """
+            eigvals, eigvecs = torch.eig(C_new,eigenvectors=True)
+
+            #sort
+            eigvals, indices = torch.sort(eigvals, 0, descending=True)
+            eigvecs = eigvecs[:,indices]
 
         #normalize them
         for i in range(eigvecs.shape[1]): # maybe change in sum along axis?
@@ -174,6 +195,7 @@ class TICA:
     
         return eigvals, eigvecs
 
+#TODO: check if t_i = - tau / \log\lambda_i or = - tau / \log \abs(\lambda_i) 
     def timescales(self, lag):
         """Return implied timescales from eigenvalues and lag-time.
 
