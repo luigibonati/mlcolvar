@@ -22,6 +22,9 @@ class TICA:
         # Regularization
         self.reg_cholesky = None 
 
+        #enforce symmetrization of correlation matrix
+        self.symmetrize = True
+
 
     def compute_average(self, x, w = None):
         """Compute (weighted) average to obtain mean-free inputs
@@ -46,7 +49,7 @@ class TICA:
         
         return ave
 
-    def compute_TICA(self, data, weights = None, n_eig = 0, symmetrize=True, save_params=False):
+    def compute_TICA(self, data, weights = None, n_eig = 0, save_params=False):
         """Perform TICA computation
 
         Parameters
@@ -57,8 +60,6 @@ class TICA:
             Weights at time t and t+lag, by default None
         n_eig : int, optional
             number of eigenfunctions to compute, by default 0 = all
-        symmetrize : bool, optional
-            Enforce symmetrization, by default True
         save_params : bool, optional
             Save parameters of estimator, by default False
 
@@ -73,12 +74,12 @@ class TICA:
             w_t, w_lag = weights
 
         C_0 = self.compute_correlation_matrix(x_t,x_t,w_t)
-        C_lag = self.compute_correlation_matrix(x_t,x_lag,w_lag,symmetrize=symmetrize)
+        C_lag = self.compute_correlation_matrix(x_t,x_lag,w_lag)
         evals, evecs = self.solve_tica_eigenproblem(C_0,C_lag,n_eig=n_eig,save_params=save_params) 
 
         return evals, evecs
 
-    def compute_correlation_matrix(self,x,y,w=None,symmetrize=True):
+    def compute_correlation_matrix(self,x,y,w=None):
         """Compute the correlation matrix between x and y with weights w
 
         Parameters
@@ -89,8 +90,6 @@ class TICA:
             second array
         w : torch.Tensor
             weights, by default None
-        symmetrize : bool, optional
-            Enforce symmetrization, by default True
 
         Returns
         -------
@@ -107,7 +106,7 @@ class TICA:
         corr = torch.einsum('ij, ik, i -> jk', x, y, w )
         corr /= torch.sum(w)
             
-        if symmetrize:
+        if self.symmetrize:
             corr = 0.5*(corr + corr.T)
 
         return corr
@@ -164,7 +163,7 @@ class TICA:
 
         else:
             #Compute the pseudoinverse (Moore-Penrose inverse) of C_0. if det(C_0) != 0 then the usual inverse is computed
-            C_new = torch.matmul(C_lag,torch.pinverse(C_0))
+            C_new = torch.matmul(torch.pinverse(C_0),C_lag)
             #find eigenvalues and vectors of C_new
             """ TODO: torch.eig() is deprecated in favor of torch.linalg.eig()  
                       torch.linalg.eig() returns complex tensors of dtype cfloat or cdouble
