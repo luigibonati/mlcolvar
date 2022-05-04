@@ -31,7 +31,7 @@ class DeepTICA_CV(NeuralNetworkCV):
 
     """
 
-    def __init__(self, layers, activation="relu", device = None, **kwargs):
+    def __init__(self, layers, activation="relu", random_initialization=False ,device = None, **kwargs):
         """
         Create a DeepTICA_CV object.
 
@@ -39,12 +39,14 @@ class DeepTICA_CV(NeuralNetworkCV):
         ----------
         layers : list
             Number neurons per layers.
+        random_initialization: bool
+            if initialize the weights of the network with random values uniform distributed in (0,1]
         **kwargs : dict
             Additional parameters for NeuralNetworkCV class.
         """
         
         super().__init__(
-            layers=layers, activation=activation, **kwargs 
+            layers=layers, activation=activation, random_initialization=random_initialization, **kwargs 
         )
         self.name_ = "deeptica_cv"
         self.tica = TICA()

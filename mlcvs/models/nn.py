@@ -52,7 +52,7 @@ class NeuralNetworkCV(torch.nn.Module):
     """
 
     def __init__(
-        self, layers, activation="relu", **kwargs 
+        self, layers, activation="relu", random_initialization=False, **kwargs 
 
     ):
         """
@@ -64,7 +64,8 @@ class NeuralNetworkCV(torch.nn.Module):
             Number of neurons per layer
         activation : string
             Activation function (relu, tanh, elu, linear)
-        devi
+        random_initialization: bool
+            if initialize the weights of the network with random values uniform distributed in (0,1]
 
         """
         super().__init__(**kwargs)
@@ -100,7 +101,11 @@ class NeuralNetworkCV(torch.nn.Module):
         self.n_hidden = layers[-1]
 
         # Linear projection output
-        weight = torch.eye(self.n_hidden)
+        # Initialization of the weights and offsets
+        if random_initialization:
+            weight = torch.rand(self.n_hidden)
+        else:
+            weight = torch.eye(self.n_hidden)
         offset = torch.zeros(self.n_hidden)
         self.register_buffer("w", weight)
         self.register_buffer("b", offset)
