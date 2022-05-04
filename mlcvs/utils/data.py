@@ -52,7 +52,9 @@ def tprime_evaluation(t, logweights = None):
         dt = np.round(t[1]-t[0],3)
         # sanitize logweights
         logweights = torch.Tensor(logweights)
-        logweights -= torch.max(logweights)
+        # when the bias is not deposited the value of bias potential is minimum
+        # then to have the same weight for both unbias and bias timescale 
+        logweights -= torch.min(logweights) #torch.max(logweights)
         lognorm = torch.logsumexp(logweights,0)
         logweights /= lognorm
         # compute instantaneus time increment in rescaled time t'
