@@ -54,6 +54,14 @@ def tprime_evaluation(t, logweights = None):
         logweights = torch.Tensor(logweights)
         # when the bias is not deposited the value of bias potential is minimum 
         logweights -= torch.max(logweights)
+        # bug: exp(logweights/lognorm) != exp(logweights)/norm, where norm is sum_i beta V_i
+        # are we changing the temperature? 
+        """ possibilities:
+            1) logweights /= torch.min(logweights) -> logweights belong to [0,1] 
+            2) pass beta as an argument, then logweights *= beta
+            3) tprime = dt * torch.cumsum( torch.exp( torch.logsumexp(logweights,0) ) ,0)
+            4) tprime = dt *torch.exp ( torch.log (torch.cumsum (torch.exp(logweights) ) ) )
+        """
         lognorm = torch.logsumexp(logweights,0)
         logweights /= lognorm
         # compute instantaneus time increment in rescaled time t'
