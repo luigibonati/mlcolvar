@@ -52,7 +52,7 @@ class NeuralNetworkCV(torch.nn.Module):
     """
 
     def __init__(
-        self, layers, activation="relu", random_initialization=False, **kwargs 
+        self, layers, activation="relu", gaussian_random_initialization=False, **kwargs 
 
     ):
         """
@@ -65,7 +65,7 @@ class NeuralNetworkCV(torch.nn.Module):
         activation : string
             Activation function (relu, tanh, elu, linear)
         random_initialization: bool
-            if initialize the weights of the network with random values uniform distributed in (0,1]
+            if initialize the weights of the network with random values gaussian distributed N(0,1)
 
         """
         super().__init__(**kwargs)
@@ -100,12 +100,14 @@ class NeuralNetworkCV(torch.nn.Module):
         self.n_features = layers[0]
         self.n_hidden = layers[-1]
 
-        # Linear projection output
         # Initialization of the weights and offsets
-        if random_initialization:
-            weight = torch.rand(self.n_hidden)
+        if gaussian_random_initialization:
+            self.apply(self._init_weights)
+            weight = torch.normal(0,1,[self.n_hidden,self.n_hidden])
         else:
+            # Linear projection output
             weight = torch.eye(self.n_hidden)
+
         offset = torch.zeros(self.n_hidden)
         self.register_buffer("w", weight)
         self.register_buffer("b", offset)
@@ -131,6 +133,12 @@ class NeuralNetworkCV(torch.nn.Module):
         # Generic attributes
         self.name_ = "NN_CV"
         self.feature_names = ["x" + str(i) for i in range(self.n_features)]
+
+    def _init_weights(self, module):
+            if isinstance(module, torch.nn.Linear):
+                module.weight.data.normal_(mean=0.0, std=1.0)
+                if module.bias is not None:
+                    module.bias.data.zero_()
 
     # Forward pass
     def forward_nn(self, x: torch.tensor) -> (torch.tensor):
