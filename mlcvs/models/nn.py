@@ -6,7 +6,7 @@ import torch
 from warnings import warn
 from pathlib import Path
 
-from ..utils.optim import EarlyStopping
+from ..utils.optim import EarlyStopping, LRScheduler
 from .utils import normalize,compute_mean_range
 
 
@@ -129,6 +129,7 @@ class NeuralNetworkCV(torch.nn.Module):
         # Optimizer
         self.opt_ = None
         self.earlystopping_ = None
+        self.LRScheduler_ = None
 
         # Generic attributes
         self.name_ = "NN_CV"
@@ -271,6 +272,26 @@ class NeuralNetworkCV(torch.nn.Module):
         """
         self.earlystopping_ = EarlyStopping(
             patience, min_delta, consecutive, log, save_best_model
+        )
+
+    def set_LRScheduler(self ,optimizer, patience=5, min_lr=1e-6, factor=0.9, log=False):
+        """
+        Enable LRScheduler.
+
+        Parameters
+        ----------
+        optimizer : torch.optimizer
+            the optimizer we are using
+        patience : int, optional
+            how many epochs to wait before updating the lr (default = 5)
+        min_lr: float, optional
+            least lr value to reduce to while updating (defaul = 1e-6)
+        factor: float, optional
+            factor by which the lr should be updated (default = 0.9)
+        log: bool, optional
+            print verbose info
+        """
+        self.LRScheduler_ = LRScheduler(optimizer, patience=patience, min_lr=min_lr, factor=factor, log=log
         )
 
     # Input / output standardization
