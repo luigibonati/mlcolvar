@@ -129,7 +129,7 @@ class NeuralNetworkCV(torch.nn.Module):
         # Optimizer
         self.opt_ = None
         self.earlystopping_ = None
-        self.LRScheduler_ = None
+        self.lrscheduler_ = None
 
         # Generic attributes
         self.name_ = "NN_CV"
@@ -291,7 +291,7 @@ class NeuralNetworkCV(torch.nn.Module):
         log: bool, optional
             print verbose info
         """
-        self.LRScheduler_ = LRScheduler(optimizer, patience=patience, min_lr=min_lr, factor=factor, log=log
+        self.lrscheduler_ = LRScheduler(optimizer, patience=patience, min_lr=min_lr, factor=factor, log=log
         )
 
     # Input / output standardization

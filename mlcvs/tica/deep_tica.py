@@ -341,6 +341,10 @@ class DeepTICA_CV(NeuralNetworkCV):
                     raise ValueError('EarlyStopping requires validation data')
                 self.earlystopping_(loss_valid, model=self.state_dict(), epoch=ep)
 
+            # lrscheduler
+            if self.lrscheduler_ is not None:
+                self.lrscheduler_(loss_valid)
+
             # log
             print_log = False
             if ((ep + 1) % log_every == 0):
