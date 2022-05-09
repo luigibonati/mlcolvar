@@ -184,7 +184,7 @@ class FastTensorDataLoader:
 
         Parameters
         ----------
-        tensors : list of tensors or torch.Dataset or torch.Subset object containing a tensors object
+        tensors : list of tensors or torch.Dataset or torch.Subset or list of torch.Subset object containing a tensors object
             tensors to store. Must have the same length @ dim 0.
         batch_size : int, optional
             batch size, by default 0 (==single batch)
@@ -204,6 +204,18 @@ class FastTensorDataLoader:
             tensors = [ tensors.tensors[i] for i in range(len(tensors.tensors)) ]
         elif type(tensors) == Subset:
             tensors = [ tensors.dataset.tensors[i][tensors.indices] for i in range(len(tensors.dataset.tensors)) ]
+        # check for input type list of Subset, and create a list of tensors
+        elif (type(tensors) == list and type(tensors[0]) == Subset ):
+            new_tensors = []
+            tensor = torch.Tensor()
+            for j in range( len( tensors[0].dataset.tensors ) ):
+                for i in range( len( tensors ) ):
+                    if i == 0:
+                        tensor = tensors[i].dataset.tensors[j][tensors[i].indices]
+                    else:    
+                        tensor = torch.cat( (tensor, tensors[i].dataset.tensors[j][tensors[i].indices]), 0 )
+                new_tensors.append(tensor)
+            tensors = new_tensors
 
         assert all(t.shape[0] == tensors[0].shape[0] for t in tensors)
         self.tensors = tensors
