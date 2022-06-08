@@ -49,7 +49,7 @@ def tprime_evaluation(t, logweights = None):
     # rescale time with log-weights if given
     if logweights is not None:
         # compute time increment in simulation time t
-        dt = np.round(t[1]-t[0],3)
+        dt = np.round(t[1]-t[0],5)
         # sanitize logweights
         logweights = torch.Tensor(logweights)
         # when the bias is not deposited the value of bias potential is minimum 
@@ -125,7 +125,7 @@ def find_time_lagged_configurations(x,t,lag):
 
     return x_t,x_lag,w_t,w_lag
 
-def create_time_lagged_dataset(X, t = None, lag_time = 10, logweights = None, tprime = None):
+def create_time_lagged_dataset(X, t = None, lag_time = 10, logweights = None, tprime = None, interval = None):
     """
     Create a dataset of time-lagged configurations. If a set of (log)weights is given the search is performed in the accelerated time.
 
@@ -141,6 +141,9 @@ def create_time_lagged_dataset(X, t = None, lag_time = 10, logweights = None, tp
         logweights to evaluate rescaled time as dt' = dt*exp(logweights)
     tprime : array-like,optional
         rescaled time estimated from the simulation. If not given 'tprime_evaluation(t,logweights)' is used instead
+    interval : list or np.array or tuple, optional
+        Range for slicing the returned dataset. Useful to work with batches of same sizes.
+        Recall that with different lag_times one obtains different datasets, with different lengths 
     """
 
     # check if dataframe
@@ -163,6 +166,15 @@ def create_time_lagged_dataset(X, t = None, lag_time = 10, logweights = None, tp
 
     # find pairs of configurations separated by lag_time
     data = find_time_lagged_configurations(X, tprime,lag=lag_time)
+
+    if interval is not None:
+        # covert to a list
+        data = list(data)
+        # assert dimension of interval
+        assert len(interval) == 2
+        # modifies the content of data by slicing
+        for i in range(len(data)):
+            data[i] = data[i][interval[0]:interval[1]]
 
     #return data
     return torch.utils.data.TensorDataset(*data)

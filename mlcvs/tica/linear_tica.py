@@ -74,6 +74,10 @@ class TICA_CV(LinearCV):
         if len(X) != len(t):
             raise ValueError(f'length of X is {len(X)} while length of t is {len(t)}')
 
+        # compute mean-free variables for descriptors
+        #ave = self.tica.compute_average(X,np.exp(logweights))
+        #X.sub_(ave)
+
         #define tprime if not given
         if tprime is None:
             tprime = tprime_evaluation(t, logweights)
@@ -82,6 +86,9 @@ class TICA_CV(LinearCV):
         x_t, x_lag, w_t, w_lag = find_time_lagged_configurations(X,tprime,lag)
 
         # compute mean-free variables
+        # considering all data points, this implementation must be done previously X -= average(X) 
+        #ave = self.tica.compute_average(X,np.exp(logweights))
+        # old
         ave = self.tica.compute_average(x_t,w_t)
         x_t.sub_(ave)
         x_lag.sub_(ave)
