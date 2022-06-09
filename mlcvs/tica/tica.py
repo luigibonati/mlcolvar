@@ -78,50 +78,6 @@ class TICA:
         evals, evecs = self.solve_tica_eigenproblem(C_0,C_lag,n_eig=n_eig,save_params=save_params) 
 
         return evals, evecs
-
-    def correlation_matrices(self,x,x_lag,w=None,w_lag=None):
-        """Compute the correlation matrices between x and x_lag with weights w and w_lag
-
-        Parameters
-        ----------
-        x : torch.Tensor
-            first array, from x(t=0) to x(t=T-tau) 
-        x_lag : torch.Tensor
-            second array, from x(t=tau) to x(t=T)
-        w : torch.Tensor
-            weights for x, by default None
-        w_lag : torch.Tensor
-            weights for x_lag, by default None
-
-        Returns
-        -------
-        torch.Tensor
-            correlation matrices, C(0) and C(tau)
-
-        """
-
-        if w is None: 
-            w = torch.ones(x.shape[0])
-        if w_lag is None: 
-            w_lag = torch.ones(x_lag.shape[0])
-        
-        #compute correlation matrix C0
-        corr_x = torch.einsum('ij, ik, i -> jk', x, x, w )
-        corr_x /= torch.sum(w)
-        corr_xlag = torch.einsum('ij, ik, i -> jk', x_lag, x_lag, w_lag )
-        corr_xlag /= torch.sum(w_lag)
-        # enforce symmetrization
-        C0 = 0.5*(corr_x + corr_xlag)
-
-        #compute correlation matrix Clag
-        corr_x_xlag = torch.einsum('ij, ik, i -> jk', x, x_lag, w_lag )
-        corr_x_xlag /= torch.sum(w_lag)
-        corr_xlag_x = torch.einsum('ij, ik, i -> jk', x_lag, x, w_lag )
-        corr_xlag_x /= torch.sum(w_lag)
-        # enforce symmetrization
-        Clag = 0.5*(corr_x_xlag + corr_xlag_x)
-
-        return C0,Clag
         
     def compute_correlation_matrix(self,x,y,w=None):
         """Compute the correlation matrix between x and y with weights w
