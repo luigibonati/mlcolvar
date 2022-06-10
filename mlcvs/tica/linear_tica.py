@@ -8,7 +8,7 @@ import torch
 
 from .tica import TICA
 from ..models import LinearCV
-from ..utils.data import find_time_lagged_configurations
+from ..utils.data import find_time_lagged_configurations, tprime_evaluation
 
 class TICA_CV(LinearCV):
     """ Linear TICA CV.
@@ -32,7 +32,7 @@ class TICA_CV(LinearCV):
         self.name_ = "tica_cv"
         self.tica = TICA()
 
-    def fit(self, X, t = None, lag = 10, logweights = None):
+    def fit(self, X, t = None, lag = 10, logweights = None, tprime = None):
         """Fit TICA given time-lagged data (and optional weights). 
 
         Parameters
@@ -45,6 +45,8 @@ class TICA_CV(LinearCV):
             lag-time, by default 10
         logweights: array, optional
             logarithm of the weights of the configurations
+        tprime : array-like,optional
+            rescaled time estimated from the simulation. If not given 'tprime_evaluation(t,logweights)' is used instead
 
         See Also
         --------
@@ -72,26 +74,21 @@ class TICA_CV(LinearCV):
         if len(X) != len(t):
             raise ValueError(f'length of X is {len(X)} while length of t is {len(t)}')
 
-        # if weights are given, rescale the time before finding time lagged configurations
-        if logweights is not None:
-            # compute time increment in simulation time t
-            dt = np.round(t[1]-t[0],3)
-            # sanitize logweights
-            logweights = torch.Tensor(logweights)
-            logweights -= torch.max(logweights)
-            lognorm = torch.logsumexp(logweights,0)
-            logweights /= lognorm
-            # compute instantaneus time increment in rescaled time t'
-            d_tprime = torch.exp(logweights)*dt
-            # calculate cumulative time t'
-            tprime = torch.cumsum(d_tprime,0)
-        else:
-            tprime = t
+        # compute mean-free variables for descriptors
+        #ave = self.tica.compute_average(X,np.exp(logweights))
+        #X.sub_(ave)
+
+        #define tprime if not given
+        if tprime is None:
+            tprime = tprime_evaluation(t, logweights)
 
         # find time-lagged configurations
         x_t, x_lag, w_t, w_lag = find_time_lagged_configurations(X,tprime,lag)
 
         # compute mean-free variables
+        # considering all data points, this implementation must be done previously X -= average(X) 
+        #ave = self.tica.compute_average(X,np.exp(logweights))
+        # old
         ave = self.tica.compute_average(x_t,w_t)
         x_t.sub_(ave)
         x_lag.sub_(ave)

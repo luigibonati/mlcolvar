@@ -208,7 +208,10 @@ class LinearCV(torch.nn.Module):
             out += " FUNC="
             for j in range(self.n_features):
                 w = weights[j, i]
-                s = "+" if w > 0 else ""
+                if j==0:
+                    s = ""
+                else:
+                    s = "+" if w > 0 else ""
                 if self.normIn:
                     m = mean[j]
                     s2 = "+" if m < 0 else "-"

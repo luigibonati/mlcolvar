@@ -6,7 +6,7 @@ import torch
 from warnings import warn
 from pathlib import Path
 
-from ..utils.optim import EarlyStopping
+from ..utils.optim import EarlyStopping, LRScheduler
 from .utils import normalize,compute_mean_range
 
 
@@ -52,7 +52,7 @@ class NeuralNetworkCV(torch.nn.Module):
     """
 
     def __init__(
-        self, layers, activation="relu", **kwargs 
+        self, layers, activation="relu", gaussian_random_initialization=False, **kwargs 
 
     ):
         """
@@ -64,7 +64,8 @@ class NeuralNetworkCV(torch.nn.Module):
             Number of neurons per layer
         activation : string
             Activation function (relu, tanh, elu, linear)
-        devi
+        random_initialization: bool
+            if initialize the weights of the network with random values gaussian distributed N(0,1)
 
         """
         super().__init__(**kwargs)
@@ -99,8 +100,14 @@ class NeuralNetworkCV(torch.nn.Module):
         self.n_features = layers[0]
         self.n_hidden = layers[-1]
 
-        # Linear projection output
-        weight = torch.eye(self.n_hidden)
+        # Initialization of the weights and offsets
+        if gaussian_random_initialization:
+            self.apply(self._init_weights)
+            weight = torch.normal(0,1,[self.n_hidden,self.n_hidden])
+        else:
+            # Linear projection output
+            weight = torch.eye(self.n_hidden)
+
         offset = torch.zeros(self.n_hidden)
         self.register_buffer("w", weight)
         self.register_buffer("b", offset)
@@ -122,10 +129,17 @@ class NeuralNetworkCV(torch.nn.Module):
         # Optimizer
         self.opt_ = None
         self.earlystopping_ = None
+        self.lrscheduler_ = None
 
         # Generic attributes
         self.name_ = "NN_CV"
         self.feature_names = ["x" + str(i) for i in range(self.n_features)]
+
+    def _init_weights(self, module):
+            if isinstance(module, torch.nn.Linear):
+                module.weight.data.normal_(mean=0.0, std=1.0)
+                if module.bias is not None:
+                    module.bias.data.zero_()
 
     # Forward pass
     def forward_nn(self, x: torch.tensor) -> (torch.tensor):
@@ -258,6 +272,26 @@ class NeuralNetworkCV(torch.nn.Module):
         """
         self.earlystopping_ = EarlyStopping(
             patience, min_delta, consecutive, log, save_best_model
+        )
+
+    def set_LRScheduler(self ,optimizer, patience=5, min_lr=1e-6, factor=0.9, log=False):
+        """
+        Enable LRScheduler.
+
+        Parameters
+        ----------
+        optimizer : torch.optimizer
+            the optimizer we are using
+        patience : int, optional
+            how many epochs to wait before updating the lr (default = 5)
+        min_lr: float, optional
+            least lr value to reduce to while updating (defaul = 1e-6)
+        factor: float, optional
+            factor by which the lr should be updated (default = 0.9)
+        log: bool, optional
+            print verbose info
+        """
+        self.lrscheduler_ = LRScheduler(optimizer, patience=patience, min_lr=min_lr, factor=factor, log=log
         )
 
     # Input / output standardization

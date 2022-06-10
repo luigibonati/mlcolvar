@@ -159,8 +159,8 @@ def test_lda_train_2d_model_harmonic(load_dataset_2d_classes,is_harmonic_lda):
     # Check PLUMED INPUT
     input = lda.plumed_input()
     expected_input = (
-        "hlda_cv: CUSTOM ARG=p.x,p.y VAR=x0,x1 FUNC=+0.689055*x0-0.724709*x1 PERIODIC=NO\n" if is_harmonic_lda
-        else "lda_cv: CUSTOM ARG=p.x,p.y VAR=x0,x1 FUNC=+0.657474*x0-0.753477*x1 PERIODIC=NO\n"
+        "hlda_cv: CUSTOM ARG=p.x,p.y VAR=x0,x1 FUNC=0.689055*x0-0.724709*x1 PERIODIC=NO\n" if is_harmonic_lda
+        else "lda_cv: CUSTOM ARG=p.x,p.y VAR=x0,x1 FUNC=0.657474*x0-0.753477*x1 PERIODIC=NO\n"
     )
     assert expected_input == input
 

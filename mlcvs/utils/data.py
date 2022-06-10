@@ -33,6 +33,46 @@ def closest_idx_torch(array, value):
         else:
             return pos-1
 
+# evaluation of tprime from simulation time and logweights
+def tprime_evaluation(t, logweights = None):
+    """
+    Estimate the accelerated time if a set of (log)weights is given
+
+    Parameters
+    ----------
+    t : array-like, 
+        unbias time series,    
+    logweights : array-like,optional
+        logweights to evaluate rescaled time as dt' = dt*exp(logweights)
+    """
+
+    # rescale time with log-weights if given
+    if logweights is not None:
+        # compute time increment in simulation time t
+        dt = np.round(t[1]-t[0],5)
+        # sanitize logweights
+        logweights = torch.Tensor(logweights)
+        # when the bias is not deposited the value of bias potential is minimum 
+        logweights -= torch.max(logweights)
+        # bug: exp(logweights/lognorm) != exp(logweights)/norm, where norm is sum_i beta V_i
+        # are we changing the temperature? 
+        """ possibilities:
+            1) logweights /= torch.min(logweights) -> logweights belong to [0,1] 
+            2) pass beta as an argument, then logweights *= beta
+            3) tprime = dt * torch.cumsum( torch.exp( torch.logsumexp(logweights,0) ) ,0)
+            4) tprime = dt *torch.exp ( torch.log (torch.cumsum (torch.exp(logweights) ) ) )
+        """
+        lognorm = torch.logsumexp(logweights,0)
+        logweights /= lognorm
+        # compute instantaneus time increment in rescaled time t'
+        d_tprime = torch.exp(logweights)*dt
+        # calculate cumulative time t'
+        tprime = torch.cumsum(d_tprime,0)
+    else:
+        tprime = t
+
+    return tprime
+
 def find_time_lagged_configurations(x,t,lag):
     '''
     Searches for all the pairs which are distant 'lag' in time, and returns the weights associated to lag=lag as well as the weights for lag=0.
@@ -56,13 +96,14 @@ def find_time_lagged_configurations(x,t,lag):
     #find maximum time idx
     idx_end = closest_idx_torch(t,t[-1]-lag)
     #start_j = 0
+    N = len(t)
     
     #loop over time array and find pairs which are far away by lag
     for i in range(idx_end):
         stop_condition = lag+t[i+1]
         n_j = 0
         
-        for j in range(i,len(t)):
+        for j in range(i,N):
             if ( t[j] < stop_condition ) and (t[j+1]>t[i]+lag):
                 x_t.append(x[i])
                 x_lag.append(x[j])
@@ -84,7 +125,7 @@ def find_time_lagged_configurations(x,t,lag):
 
     return x_t,x_lag,w_t,w_lag
 
-def create_time_lagged_dataset(X, t = None, lag_time = 10, logweights = None):
+def create_time_lagged_dataset(X, t = None, lag_time = 10, logweights = None, tprime = None, interval = None):
     """
     Create a dataset of time-lagged configurations. If a set of (log)weights is given the search is performed in the accelerated time.
 
@@ -98,6 +139,11 @@ def create_time_lagged_dataset(X, t = None, lag_time = 10, logweights = None):
         lag between configurations, by default = 10        
     logweights : array-like,optional
         logweights to evaluate rescaled time as dt' = dt*exp(logweights)
+    tprime : array-like,optional
+        rescaled time estimated from the simulation. If not given 'tprime_evaluation(t,logweights)' is used instead
+    interval : list or np.array or tuple, optional
+        Range for slicing the returned dataset. Useful to work with batches of same sizes.
+        Recall that with different lag_times one obtains different datasets, with different lengths 
     """
 
     # check if dataframe
@@ -114,27 +160,21 @@ def create_time_lagged_dataset(X, t = None, lag_time = 10, logweights = None):
     if t is None:
         t = np.arange(0,len(X))
 
-    # rescale time with log-weights if given
-    if logweights is not None:
-        # assert 
-        assert logweights.ndim == 1
-        assert len(X) == len(logweights)
-        # compute time increment in simulation time t
-        dt = np.round(t[1]-t[0],3)
-        # sanitize logweights
-        logweights = torch.Tensor(logweights)
-        logweights -= torch.max(logweights)
-        lognorm = torch.logsumexp(logweights,0)
-        logweights /= lognorm
-        # compute instantaneus time increment in rescaled time t'
-        d_tprime = torch.exp(logweights)*dt
-        # calculate cumulative time t'
-        tprime = torch.cumsum(d_tprime,0)
-    else:
-        tprime = t
+    #define tprime if not given
+    if tprime is None:
+        tprime = tprime_evaluation(t, logweights)
 
     # find pairs of configurations separated by lag_time
     data = find_time_lagged_configurations(X, tprime,lag=lag_time)
+
+    if interval is not None:
+        # covert to a list
+        data = list(data)
+        # assert dimension of interval
+        assert len(interval) == 2
+        # modifies the content of data by slicing
+        for i in range(len(data)):
+            data[i] = data[i][interval[0]:interval[1]]
 
     #return data
     return torch.utils.data.TensorDataset(*data)
@@ -156,7 +196,7 @@ class FastTensorDataLoader:
 
         Parameters
         ----------
-        tensors : list of tensors or torch.Dataset or torch.Subset object containing a tensors object
+        tensors : list of tensors or torch.Dataset or torch.Subset or list of torch.Subset object containing a tensors object
             tensors to store. Must have the same length @ dim 0.
         batch_size : int, optional
             batch size, by default 0 (==single batch)
@@ -176,6 +216,18 @@ class FastTensorDataLoader:
             tensors = [ tensors.tensors[i] for i in range(len(tensors.tensors)) ]
         elif type(tensors) == Subset:
             tensors = [ tensors.dataset.tensors[i][tensors.indices] for i in range(len(tensors.dataset.tensors)) ]
+        # check for input type list of Subset, and create a list of tensors
+        elif (type(tensors) == list and type(tensors[0]) == Subset ):
+            new_tensors = []
+            tensor = torch.Tensor()
+            for j in range( len( tensors[0].dataset.tensors ) ):
+                for i in range( len( tensors ) ):
+                    if i == 0:
+                        tensor = tensors[i].dataset.tensors[j][tensors[i].indices]
+                    else:    
+                        tensor = torch.cat( (tensor, tensors[i].dataset.tensors[j][tensors[i].indices]), 0 )
+                new_tensors.append(tensor)
+            tensors = new_tensors
 
         assert all(t.shape[0] == tensors[0].shape[0] for t in tensors)
         self.tensors = tensors
