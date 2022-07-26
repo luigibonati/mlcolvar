@@ -60,12 +60,8 @@ class DeepTICA_CV(NeuralNetworkCV):
         # lorentzian regularization
         self.reg_cholesky = 0
 
-        # training logs
-        self.epochs = 0
-        self.loss_train = []
-        self.loss_valid = []
+        # (additional) training logs
         self.evals_train = []
-        self.log_header = True
 
     def set_regularization(self, cholesky_reg=1e-6):
         """

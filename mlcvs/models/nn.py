@@ -135,6 +135,12 @@ class NeuralNetworkCV(torch.nn.Module):
         self.name_ = "NN_CV"
         self.feature_names = ["x" + str(i) for i in range(self.n_features)]
 
+        # training logs
+        self.epochs = 0
+        self.loss_train = []
+        self.loss_valid = []
+        self.log_header = True
+
     def _init_weights(self, module):
             if isinstance(module, torch.nn.Linear):
                 module.weight.data.normal_(mean=0.0, std=1.0)
@@ -167,7 +173,7 @@ class NeuralNetworkCV(torch.nn.Module):
 
     def forward(self, x: torch.tensor) -> (torch.tensor):
         """
-        Compute model output.
+        Compute model output. 
 
         Parameters
         ----------
@@ -208,7 +214,7 @@ class NeuralNetworkCV(torch.nn.Module):
         Returns
         -------
         s : array-like of shape (n_samples, n_classes-1)
-            Linear projection of inputs.
+            Model outputs.
         """
 
         return self.forward(X)
@@ -293,6 +299,31 @@ class NeuralNetworkCV(torch.nn.Module):
         """
         self.lrscheduler_ = LRScheduler(optimizer, patience=patience, min_lr=min_lr, factor=factor, log=log
         )
+
+    # Fit function
+    def train_epoch(self,loader):
+        """
+        Auxiliary function for training an epoch.
+
+        Parameters
+        ----------
+        loader: DataLoader
+            training set
+        """
+        for data in loader:
+            # =================get data===================
+            X = data[0].to(self.device_)
+            y = data[1].to(self.device_)
+            # =================forward====================
+            H = self.forward_nn(X)
+            # =================lda loss===================
+            loss = self.loss_function(H, y, save_params=False)
+            # =================backprop===================
+            self.opt_.zero_grad()
+            loss.backward()
+            self.opt_.step()
+        # ===================log======================
+        self.epochs += 1
 
     # Input / output standardization
 

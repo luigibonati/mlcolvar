@@ -56,11 +56,7 @@ class DeepLDA_CV(NeuralNetworkCV):
         # lorentzian regularization
         self.lorentzian_reg = 0
 
-        # training logs
-        self.epochs = 0
-        self.loss_train = []
-        self.loss_valid = []
-        self.log_header = True
+
 
     def set_regularization(self, sw_reg=0.05, lorentzian_reg=None):
         """
