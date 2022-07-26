@@ -1,12 +1,22 @@
 __all__ = ["compute_fes"]
 
-from sklearn.neighbors import KernelDensity
+# check whether KDEpy or scikit-learn is installed
+kdelib = 'KDEpy'
+try:
+    from KDEpy import FFTKDE
+    from KDEpy.utils import cartesian
+except ImportError:
+    kdelib = 'sklearn'
+    try:
+        from sklearn.neighbors import KernelDensity
+    except ImportError:
+        kdelib = None
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from torch import Tensor
-
-def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0.01, kernel='gaussian', weights=None, scale_by = None, blocks = 1, plot=False, plot_max_fes=None, ax = None):
+def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0.01, kernel='gaussian', weights=None, scale_by = None, blocks = 1, plot=False, plot_max_fes=None, ax = None, backend=None):
     """Compute the Free Energy Surface along the given variables.
 
     Parameters
@@ -37,6 +47,9 @@ def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0
         Maximum value of the FES to be plotted, by default None
     ax : matplotlib axis, optional
         Axis where to plot, default create new figure
+    backend: string, optional
+        Specify the backend for KDE ("KDEpy" or "sklearn")
+
     Returns
     -------
     fes: np.array
@@ -59,6 +72,17 @@ def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0
     [1] Invernizzi, Piaggi and Parrinello, PRX, 2020,10,4
 
     """
+    # check backend for KDE
+    if kdelib is None:
+        raise NotImplementedError ('The function compute_fes requires either KDEpy (fast) or scikit-learn (slow) to work.')
+    if kdelib == 'sklearn':
+        print('Warning: KDEpy is not installed, falling back to scikit-learn for kernel density estimation.')
+
+    if backend == 'sklearn':
+        from sklearn.neighbors import KernelDensity
+    elif backend is None:
+        backend = kdelib
+
     # temperature
     if kbt is None:
         kb = 0.00831441
@@ -98,15 +122,17 @@ def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0
         X /= scale
 
     # eval points
+    offset = 1e-3
     if dim == 1:
         if bounds is None:
-            bounds = (X[:,0].min(), X[:,0].max())
+            bounds = (X[:,0].min()-offset, X[:,0].max()+offset)
         grid = np.linspace(bounds[0], bounds[1], num_samples)
         positions = grid.reshape([-1,1])
     else:
         if bounds is None:
-            bounds = [(X[:,i].min(), X[:,i].max()) for i in range(dim)]
-        grid = np.meshgrid(*[np.linspace(b[0], b[1], num_samples) for b in bounds])
+            bounds = [(X[:,i].min()-offset, X[:,i].max()+offset) for i in range(dim)]
+        grid_list = [np.linspace(b[0], b[1], num_samples) for b in bounds]
+        grid = np.meshgrid(*grid_list)
         positions = np.vstack([g.ravel() for g in grid]).T
 
     # divide in blocks
@@ -121,12 +147,25 @@ def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0
         w_i = w_b[i]
 
         # fit
-        kde = KernelDensity(bandwidth=bandwidth, kernel=kernel)
-        kde.fit(X_i, sample_weight=w_i)
+        if backend == 'KDEpy':
+            kde = FFTKDE(bw=bandwidth, kernel=kernel)
+            kde.fit(X_i, weights=w_i)
 
-        # logpdf --> fes
-        ##positions = torch.tensor(positions, dtype=torch.float32)
-        fes = - kbt * kde.score_samples(positions).reshape([num_samples for i in range(dim)])
+            if dim == 1:
+                pos = [grid]
+            else:
+                pos = grid_list
+                
+            # pdf --> fes
+            fes = - kbt * np.log( kde.evaluate(cartesian(pos))).reshape([num_samples for i in range(dim)]) 
+        
+        elif backend == 'sklearn':
+            kde = KernelDensity(bandwidth=bandwidth, kernel=kernel)
+            kde.fit(X_i, sample_weight=w_i)
+
+            # logpdf --> fes
+            fes = - kbt * kde.score_samples(positions).reshape([num_samples for i in range(dim)])
+
         fes -= fes.min()
 
         # result for each block

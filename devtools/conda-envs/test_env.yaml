@@ -23,6 +23,7 @@ dependencies:
   - scikit-learn
 
     # Pip-only installs
-  #- pip:
+  - pip:
+    - KDEpy
   #  - codecov
 
