@@ -295,6 +295,8 @@ class DeepLDA_CV(NeuralNetworkCV):
                 if valid_loader is None:
                     raise ValueError('EarlyStopping requires validation data')
                 self.earlystopping_(loss_valid, model=self.state_dict() )
+            else:
+                self.set_earlystopping(patience=1e30)
 
             # log
             if ((ep + 1) % log_every == 0) or (self.earlystopping_.early_stop):

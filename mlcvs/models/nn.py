@@ -255,7 +255,7 @@ class NeuralNetworkCV(torch.nn.Module):
         """
         Initialize default optimizer (ADAM).
         """
-        self.opt_ = torch.optim.Adam(self.parameters())
+    self.opt_ = torch.optim.Adam(self.parameters())
 
     def set_earlystopping(
         self, patience=5, min_delta=0, consecutive=True, log=False, save_best_model=True
