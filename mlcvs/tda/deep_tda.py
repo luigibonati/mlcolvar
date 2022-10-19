@@ -1,9 +1,9 @@
 """Targeted Discriminant Analysis-based CVs"""
 
-__all__ = ["DeepLDA_CV"]
+__all__ = ["DeepTDA_CV"]
 
 import torch
-from torch.utils.data import DataLoader, TensorDataset, random_split
+from torch.utils.data import TensorDataset, random_split
 
 import numpy as np
 
