@@ -1,6 +1,7 @@
 """Input/output functions."""
 
 import pandas as pd
+import torch
 
 __all__ = ["load_dataframe", "plumed_to_pandas", "dataloader_from_file"]
 

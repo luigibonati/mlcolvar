@@ -119,8 +119,9 @@ class DeepTDA_CV(NeuralNetworkCV):
                 lossSigma[i] = self.beta * (sigma - torch.tensor(self.target_sigmas[i], device=self.device_)).pow(2)
 
             loss = torch.sum(lossMu) + torch.sum(lossSigma)
-            # ??? lossMu, lossSigma = torch.reshape(lossMu, (self.states_num, self.cvs_num)), torch.reshape(lossSigma, (self.states_num, self.cvs_num))
-            return loss  # ??? , torch.mean(lossMu, 1), torch.mean(lossSigma, 1)
+            # to output each contribute of the loss uncomment here
+            # lossMu, lossSigma = torch.reshape(lossMu, (self.states_num, self.cvs_num)), torch.reshape(lossSigma, (self.states_num, self.cvs_num))
+            return loss
 
         else:
             loss = self.custom_loss(self, H, y)
@@ -256,7 +257,7 @@ class DeepTDA_CV(NeuralNetworkCV):
         for ep in range(nepochs):
             self.train_epoch(train_loader)
 
-            loss_train = self.evaluate_dataset(train_loader)  # ??? serve il save_params?
+            loss_train = self.evaluate_dataset(train_loader) 
             loss_valid = self.evaluate_dataset(valid_loader)
             self.loss_train.append(loss_train)
             self.loss_valid.append(loss_valid)
