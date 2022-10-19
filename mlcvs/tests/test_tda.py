@@ -8,8 +8,8 @@ import pytest
 import numpy as np
 
 import torch
-import mlcvs.tda.deep_tda as test_tda
-from mlcvs.utils.io import dataloader_from_file
+from ..tda import deep_tda as test_tda
+from ..utils.io import dataloader_from_file
 
 import string
 alphabet = list(string.ascii_uppercase)
@@ -46,7 +46,7 @@ def test_deeptda(states_and_cvs):
     target_centers, target_sigmas = np.array(target_centers), np.array(target_sigmas)
     # initialize loader from file
     train_loader, valid_loader = dataloader_from_file(states_num=states_num,
-                                                      files_folder='./data/3states_model',
+                                                      files_folder='mlcvs/tests/data/3states_model',
                                                       file_names=['state_A.dat', 'state_B.dat', 'state_C.dat'],
                                                       n_input=28,
                                                       max_rows=1000,

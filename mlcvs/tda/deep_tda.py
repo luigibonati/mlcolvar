@@ -7,8 +7,8 @@ from torch.utils.data import TensorDataset, random_split
 
 import numpy as np
 
-from mlcvs.models import NeuralNetworkCV
-from mlcvs.utils.data import FastTensorDataLoader
+from ..models import NeuralNetworkCV
+from ..utils.data import FastTensorDataLoader
 
 
 class DeepTDA_CV(NeuralNetworkCV):
@@ -329,3 +329,14 @@ class DeepTDA_CV(NeuralNetworkCV):
                 n_batches += 1
 
         return loss / n_batches
+
+    def visualize_results(self, data_loader):
+        '''
+        Plot points distributions in the DeepTDA cv space
+
+        Parameters
+        ----------
+        dataset : dataloader or list of batches
+            dataset
+
+        '''
