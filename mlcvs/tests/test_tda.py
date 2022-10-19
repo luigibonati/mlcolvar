@@ -8,8 +8,8 @@ import pytest
 import numpy as np
 
 import torch
-from ..tda import deep_tda as test_tda
-from ..utils.io import dataloader_from_file
+from mlcvs.tda import deep_tda as test_tda
+from mlcvs.utils.io import dataloader_from_file
 
 import string
 alphabet = list(string.ascii_uppercase)
