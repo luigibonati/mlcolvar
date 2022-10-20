@@ -84,8 +84,9 @@ def test_deeptda(states_and_cvs):
     # get rough estimate of the errors
     dev_centers = np.sqrt((results_centers - target_centers)**2)
     dev_sigmas = np.sqrt((results_sigmas - target_sigmas) ** 2) * 10 # scale to unit
-    # assert we are roughly within a 3% error, this training is nonsense anyway
-    check = dev_centers > 3e-2
+   
+    # assert we are roughly within a 1% error, this training is nonsense anyway
+    check = dev_centers > 1e-1
     assert not np.any(check)
-    check = dev_sigmas > 3e-2
+    check = dev_sigmas > 1e-1
     assert not np.any(check)
