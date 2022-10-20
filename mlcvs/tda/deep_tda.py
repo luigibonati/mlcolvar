@@ -330,13 +330,14 @@ class DeepTDA_CV(NeuralNetworkCV):
 
         return loss / n_batches
 
-    def visualize_results(self, data_loader):
-        '''
-        Plot points distributions in the DeepTDA cv space
+# TODO
+    # def visualize_results(self, data_loader):
+    #     '''
+    #     Plot points distributions in the DeepTDA cv space
 
-        Parameters
-        ----------
-        dataset : dataloader or list of batches
-            dataset
+    #     Parameters
+    #     ----------
+    #     dataset : dataloader or list of batches
+    #         dataset
 
-        '''
+    #     '''
