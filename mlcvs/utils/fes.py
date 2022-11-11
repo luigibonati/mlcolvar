@@ -16,7 +16,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from torch import Tensor
-def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0.01, kernel='gaussian', weights=None, scale_by = None, blocks = 1, plot=False, plot_max_fes=None, ax = None, backend=None):
+def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0.01, kernel='gaussian', weights=None, scale_by = None, blocks = 1, fes_to_zero = None, plot=False, plot_max_fes=None, ax = None, backend=None, eps = 0):
     """Compute the Free Energy Surface along the given variables.
 
     Parameters
@@ -41,6 +41,8 @@ def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0
         Standardize each variable by its standard deviation (`std`) or by its range of values, by default None
     blocks : int, optional
         number of blocks to be used, by default 1
+    fes_to_zero: int, optional
+        index of the array where to shift the FES to zero (if none the minimum is set to zero)
     plot : bool, optional
         Plot the results (only available for 1D and 2D FES), by default False
     plot_max_fes : float, optional
@@ -49,6 +51,8 @@ def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0
         Axis where to plot, default create new figure
     backend: string, optional
         Specify the backend for KDE ("KDEpy" or "sklearn")
+    eps: float, optional
+        Add an epsilon in the argument of the log
 
     Returns
     -------
@@ -157,7 +161,7 @@ def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0
                 pos = grid_list
                 
             # pdf --> fes
-            fes = - kbt * np.log( kde.evaluate(cartesian(pos))).reshape([num_samples for i in range(dim)]) 
+            fes = - kbt * np.log( kde.evaluate(cartesian(pos)) + eps ).reshape([num_samples for i in range(dim)]).T
         
         elif backend == 'sklearn':
             kde = KernelDensity(bandwidth=bandwidth, kernel=kernel)
@@ -166,7 +170,10 @@ def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0
             # logpdf --> fes
             fes = - kbt * kde.score_samples(positions).reshape([num_samples for i in range(dim)])
 
-        fes -= fes.min()
+        if fes_to_zero is not None:
+            fes -= fes[fes_to_zero]
+        else:
+            fes -= fes.min()
 
         # result for each block
         O_i.append(fes)
@@ -216,7 +223,7 @@ def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0
             if plot_max_fes is not None:
                 fes2[fes2>plot_max_fes] = np.nan
             extent = [item for sublist in bounds for item in sublist] 
-            pp = ax.contourf(fes2,cmap='fessa',extent=extent)#,vmax=max_fes)
+            pp = ax.contourf(fes2,cmap='fessa',extent=extent) #,vmax=max_fes)
             cbar = plt.colorbar(pp,ax=ax)
             cbar.set_label('FES')
 
