@@ -1,114 +1,95 @@
-"""Linear discriminant analysis-based CVs."""
+"""Targeted Discriminant Analysis-based CVs"""
 
-__all__ = ["DeepLDA_CV"]
+__all__ = ["DeepTDA_CV"]
 
 import torch
-from torch.utils.data import DataLoader,TensorDataset,random_split
+from torch.utils.data import TensorDataset, random_split
 
-from .lda import LDA
+import numpy as np
+
 from ..models import NeuralNetworkCV
 from ..utils.data import FastTensorDataLoader
 
-class DeepLDA_CV(NeuralNetworkCV):
+
+class DeepTDA_CV(NeuralNetworkCV):
     """
-    Neural network based discriminant CV.
-    Perform a non-linear featurization of the inputs with a neural-network and optimize it as to maximize Fisher's discriminant ratio.
+    Neural network based targeted discriminant CV.
+    Perform a non-linear featurization of the inputs with a neural-network and optimize it in a way such that the data are distributed accordingly to a target distribution.
 
     Attributes
     ----------
-    lda : mlcvs.lda.LDA 
+    lda : mlcvs.lda.LDA
         linear discriminant analysis class object
     lorentzian_reg: float
         Magnitude of lorentzian regularization
     epochs : int
         Number of performed epochs of training
     loss_train : list
-        Loss function for train data over training. 
+        Loss function for train data over training.
     loss_valid : list
         Loss function for validation data over training.
 
     """
 
-    def __init__(self, layers, activation="relu", device = None, **kwargs):
+    def __init__(self, layers, states_num, cvs_num, target_centers, target_sigmas, alfa=1, beta=250, activation="relu",
+                 device=None, **kwargs):
         """
-        Initialize a DeepLDA_CV object
+        Initialize a DeepTDA_CV object
 
         Parameters
         ----------
         layers : list
             Number neurons per layers.
+        states_num: int
+            Number of states to be used for the training.
+        cvs_num: int
+            Number of output CVs
+        target_centers: list
+            Centers of the gaussian targets (with shape: [states_num, cvs_num])
+        target_sigma: list
+            Standard deviations of the gaussian targets (with shape: [states_num, cvs_num])
+        alfa: float
+            Prefactor for center contributions to loss function (default = 1)
+        beta: float
+            Prefactor for sigma contributions to loss function (default = 250)
         **kwargs : dict
             Additional parameters for NeuralNetworkCV class.
         """
-        
-        super().__init__(
-            layers=layers, activation=activation, **kwargs 
-        )
-        self.name_ = "deeplda_cv"
-        self.lda = LDA()
+        layers.append(cvs_num)
 
-        # set device 
+        super().__init__(
+            layers=layers, activation=activation, **kwargs
+        )
+        self.name_ = "deeptda_cv"
+        # self.lda = LDA()
+
+        # set device
         self.device_ = device
 
         # custom loss function
         self.custom_loss = None
 
-        # lorentzian regularization
-        self.lorentzian_reg = 0
+        # set number of states
+        self.states_num = states_num
 
+        # set number of CVs
+        self.cvs_num = cvs_num
 
+        # set targets
+        self.target_centers = np.array(target_centers)
+        self.target_sigmas = np.array(target_sigmas)
 
-    def set_regularization(self, sw_reg=0.05, lorentzian_reg=None):
+        # set loss prefactors
+        self.alfa = alfa
+        self.beta = beta
+
+        # send model to device
+        self.to(device)
+
+    def loss_function(self, H, y):
         """
-        Set magnitude of regularizations for the training:
-        - add identity matrix multiplied by `sw_reg` to within scatter S_w.
-        - add lorentzian regularization to NN outputs with magnitude `lorentzian_reg`
-
-        If `lorentzian_reg` is None, set it equal to `2./sw_reg`.
-
-        Parameters
-        ----------
-        sw_reg : float
-            Regularization value for S_w.
-        lorentzian_reg: float
-            Regularization for lorentzian on NN outputs.
-
-        Notes
-        -----
-        These regularizations are described in [1]_.
-        .. [1] Luigi Bonati, Valerio Rizzi, and Michele Parrinello, J. Phys. Chem. Lett. 11, 2998-3004 (2020).
-
-        - S_w
-        .. math:: S_w = S_w + \mathtt{sw_reg}\ \mathbf{1}.
-
-        - Lorentzian
-
-        TODO Add equation
-
-        """
-        self.lda.sw_reg = sw_reg
-        if lorentzian_reg is None:
-            self.lorentzian_reg = 2.0 / sw_reg
-        else:
-            self.lorentzian_reg = lorentzian_reg
-
-    def regularization_lorentzian(self, H):
-        """
-        Compute lorentzian regularization on NN outputs.
-
-        Parameters
-        ----------
-        x : float
-            input data
-        """
-        reg_loss = H.pow(2).sum().div(H.size(0))
-        reg_loss_lor = -self.lorentzian_reg / (1 + (reg_loss - 1).pow(2))
-        return reg_loss_lor
-
-    def loss_function(self, H, y, save_params=False):
-        """
-        Loss function for the DeepLDA CV. Correspond to maximizing the eigenvalue(s) of LDA plus a regularization on the NN outputs.
-        If there are C classes the C-1 eigenvalue will be maximized.
+        Loss function for the DeepTDA CV. Corresponds to minimizing the distance of each states from a target Gaussian distribution in the CV space given by the NN output.
+        The loss is written only in terms of the mean, mu, and the standard deviation, sigma, of the data computed along the components of the CVs space.
 
         Parameters
         ----------
@@ -116,38 +97,35 @@ class DeepLDA_CV(NeuralNetworkCV):
             NN output
         y : torch.tensor
             labels
-        save_params: bool
-            save the eigenvalues/vectors of LDA into the model
-
-        Returns
         -------
         loss : torch.tensor
             loss function
         """
         if self.custom_loss is None:
+            lossMu, lossSigma = torch.zeros(self.target_centers.shape, device=self.device_), torch.zeros(
+                self.target_centers.shape, device=self.device_)
 
-            eigvals, eigvecs = self.lda.compute_LDA(H, y, save_params)
-            if save_params:
-                self.w = eigvecs
+            for i in range(self.states_num):
+                # check which elements belong to class i
+                H_red = H[torch.nonzero(y == i).view(-1)]
 
-            # TODO add sum option for multiclass
+                # compute mean over the class i
+                mu = torch.mean(H_red, 0)
+                # compute standard deviation over class i
+                sigma = torch.std(H_red, 0)
 
-            # if two classes loss is equal to the single eigenvalue
-            if self.lda.n_classes == 2:
-                loss = -eigvals
-            # if more than two classes loss equal to the smallest of the C-1 eigenvalues
-            elif self.lda.n_classes > 2:
-                loss = -eigvals[self.lda.n_classes - 2]
-            else:
-                raise ValueError("The number of classes for LDA must be greater than 1")
+                # compute loss function contribute for class i
+                lossMu[i] = self.alfa * (mu - torch.tensor(self.target_centers[i], device=self.device_)).pow(2)
+                lossSigma[i] = self.beta * (sigma - torch.tensor(self.target_sigmas[i], device=self.device_)).pow(2)
 
-            if self.lorentzian_reg > 0:
-                loss += self.regularization_lorentzian(H)
+            loss = torch.sum(lossMu) + torch.sum(lossSigma)
+            # to output each contribute of the loss uncomment here
+            # lossMu, lossSigma = torch.reshape(lossMu, (self.states_num, self.cvs_num)), torch.reshape(lossSigma, (self.states_num, self.cvs_num))
+            return loss
 
-        else: 
-            loss = self.custom_loss(self,H,y,save_params)
-
-        return loss
+        else:
+            loss = self.custom_loss(self, H, y)
+            return loss
 
     def set_loss_function(self, func):
         """Set custom loss function
@@ -176,8 +154,8 @@ class DeepLDA_CV(NeuralNetworkCV):
             y = data[1].to(self.device_)
             # =================forward====================
             H = self.forward_nn(X)
-            # =================lda loss===================
-            loss = self.loss_function(H, y, save_params=False)
+            # =================tda loss=================== # ??? can I add the contributes also?
+            loss = self.loss_function(H, y)
             # =================backprop===================
             self.opt_.zero_grad()
             loss.backward()
@@ -186,20 +164,21 @@ class DeepLDA_CV(NeuralNetworkCV):
         self.epochs += 1
 
     def fit(
-        self,
-        train_loader=None,
-        valid_loader=None,
-        X = None,
-        y = None,
-        standardize_inputs=True,
-        standardize_outputs=True,
-        batch_size=0,
-        nepochs=1000,
-        log_every=1,
-        info=False,
+            self,
+            train_loader=None,
+            valid_loader=None,
+            X=None,
+            y=None,
+            standardize_inputs=True,
+            standardize_outputs=True,
+            batch_size=0,
+            nepochs=1000,
+            log_every=1,
+            info=False,
+            earlystopping=None
     ):
         """
-        Train Deep-LDA CVs. Takes as input a FastTensorDataLoader/standard Dataloader constructed from a TensorDataset, or even a tuple of (colvar,labels) data.
+        Train Deep-TDA CVs. Takes as input a FastTensorDataLoader/standard Dataloader constructed from a TensorDataset, or even a tuple of (colvar,labels) data.
 
         Parameters
         ----------
@@ -238,10 +217,13 @@ class DeepLDA_CV(NeuralNetworkCV):
         if self.device_ is None:
             self.device_ = next(self.nn.parameters()).device
 
+        # set earlystopping variable
+        self.earlystopping_ = earlystopping
+
         # assert to avoid redundancy
         if (train_loader is not None) and (X is not None):
             raise KeyError('Only one between train_loader and X can be used.')
-        
+
         # create dataloader if not given
         if X is not None:
             if y is None:
@@ -251,27 +233,21 @@ class DeepLDA_CV(NeuralNetworkCV):
                 X = torch.Tensor(X)
             if type(y) != torch.Tensor:
                 y = torch.Tensor(y)
-                            
-            dataset = TensorDataset(X,y)
+
+            dataset = TensorDataset(X, y)
             train_size = int(0.9 * len(dataset))
             valid_size = len(dataset) - train_size
 
-            train_data, valid_data = random_split(dataset,[train_size,valid_size])
-            train_loader = FastTensorDataLoader(train_data,batch_size)
+            train_data, valid_data = random_split(dataset, [train_size, valid_size])
+            train_loader = FastTensorDataLoader(train_data, batch_size)
             valid_loader = FastTensorDataLoader(valid_data)
-            print('Training   set:' ,len(train_data))
-            print('Validation set:' ,len(valid_data))
-
-        if self.lda.sw_reg == 1e-6: # default value
-            self.set_regularization(0.05)
-            print('Sw regularization:' ,self.lda.sw_reg)
-            print('Lorentzian reg.  :' ,self.lorentzian_reg)
-            print('')
+            print('Training   set:', len(train_data))
+            print('Validation set:', len(valid_data))
 
         # standardize inputs (unravel dataset to compute average)
         x_train = torch.cat([batch[0] for batch in train_loader])
         if standardize_inputs:
-            self.standardize_inputs( x_train )
+            self.standardize_inputs(x_train)
 
         # print info
         if info:
@@ -281,12 +257,12 @@ class DeepLDA_CV(NeuralNetworkCV):
         for ep in range(nepochs):
             self.train_epoch(train_loader)
 
-            loss_train = self.evaluate_dataset(train_loader, save_params=True)
+            loss_train = self.evaluate_dataset(train_loader) 
             loss_valid = self.evaluate_dataset(valid_loader)
             self.loss_train.append(loss_train)
             self.loss_valid.append(loss_valid)
 
-            #standardize output
+            # standardize output
             if standardize_outputs:
                 self.standardize_outputs(x_train)
 
@@ -294,7 +270,7 @@ class DeepLDA_CV(NeuralNetworkCV):
             if self.earlystopping_ is not None:
                 if valid_loader is None:
                     raise ValueError('EarlyStopping requires validation data')
-                self.earlystopping_(loss_valid, model=self.state_dict() )
+                self.earlystopping_(loss_valid, model=self.state_dict())
             else:
                 self.set_earlystopping(patience=1e30)
 
@@ -310,13 +286,12 @@ class DeepLDA_CV(NeuralNetworkCV):
                     decimals=2,
                 )
 
-            # check whether to stop 
+            # check whether to stop
             if (self.earlystopping_ is not None) and (self.earlystopping_.early_stop):
-                self.load_state_dict( self.earlystopping_.best_model )
+                self.load_state_dict(self.earlystopping_.best_model)
                 break
 
-
-    def evaluate_dataset(self, dataset, save_params=False, unravel_dataset = False):
+    def evaluate_dataset(self, dataset, unravel_dataset=False):
         """
         Evaluate loss function on dataset.
 
@@ -324,10 +299,8 @@ class DeepLDA_CV(NeuralNetworkCV):
         ----------
         dataset : dataloader or list of batches
             dataset
-        save_params: bool
-            save the eigenvalues/vectors of LDA into the model
         unravel_dataset: bool, optional
-            unravel dataset to calculate LDA loss on all dataset instead of averaging over batches   
+            unravel dataset to calculate LDA loss on all dataset instead of averaging over batches
 
         Returns
         -------
@@ -339,11 +312,11 @@ class DeepLDA_CV(NeuralNetworkCV):
             n_batches = 0
 
             if unravel_dataset:
-                batches = [batch for batch in dataset] # to deal with shuffling
-                batches = [torch.cat([batch[i] for batch in batches]) for i in range(2)] 
+                batches = [batch for batch in dataset]  # to deal with shuffling
+                batches = [torch.cat([batch[i] for batch in batches]) for i in range(2)]
             elif type(dataset) == list:
                 batches = [dataset]
-            else: 
+            else:
                 batches = dataset
 
             for batch in batches:
@@ -352,7 +325,19 @@ class DeepLDA_CV(NeuralNetworkCV):
                 y = batch[1].to(self.device_)
                 H = self.forward_nn(X)
                 # ===================loss=====================
-                loss += self.loss_function(H, y, save_params)
-                n_batches +=1
+                loss += self.loss_function(H, y)
+                n_batches += 1
 
-        return loss/n_batches
+        return loss / n_batches
+
+# TODO
+    # def visualize_results(self, data_loader):
+    #     '''
+    #     Plot points distributions in the DeepTDA cv space
+
+    #     Parameters
+    #     ----------
+    #     dataset : dataloader or list of batches
+    #         dataset
+
+    #     '''
