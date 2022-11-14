@@ -48,7 +48,8 @@ class DeepLDA_CV(NeuralNetworkCV):
         self.lda = LDA()
 
         # lorentzian regularization
-        self.lorentzian_reg = 0
+        self.lorentzian_reg = 0        
+        self.set_regularization(0.05)
 
         # send model to device
         self.set_device(device) 
@@ -139,161 +140,6 @@ class DeepLDA_CV(NeuralNetworkCV):
 
         return loss
 
-    def train_epoch(self, loader):
-        """
-        Auxiliary function for training an epoch.
-
-        Parameters
-        ----------
-        loader: DataLoader
-            training set
-        """
-        for data in loader:
-            # =================get data===================
-            X = data[0].to(self.device_)
-            y = data[1].to(self.device_)
-            # =================forward====================
-            H = self.forward_nn(X)
-            # =================lda loss===================
-            loss = self.loss_function(H, y, save_params=False)
-            # =================backprop===================
-            self.opt_.zero_grad()
-            loss.backward()
-            self.opt_.step()
-        # ===================log======================
-        self.epochs += 1
-
-    def fit(
-        self,
-        train_loader=None,
-        valid_loader=None,
-        X = None,
-        y = None,
-        standardize_inputs=True,
-        standardize_outputs=True,
-        batch_size=0,
-        nepochs=1000,
-        log_every=1,
-        info=False,
-    ):
-        """
-        Train Deep-LDA CVs. Takes as input a FastTensorDataLoader/standard Dataloader constructed from a TensorDataset, or even a tuple of (colvar,labels) data.
-
-        Parameters
-        ----------
-        train_data: FastTensorDataLoader/DataLoader, or tuple of torch.tensors (X:input, y:labels)
-            training set
-        valid_data: tuple of torch.tensors (X:input, y:labels) #TODO add dataloader option?
-            validation set
-        X: np.array or torch.Tensor, optional
-            input data, alternative to train_loader (default = None)
-        y: np.array or torch.Tensor, optional
-            labels (default = None)
-        standardize_inputs: bool
-            whether to standardize input data
-        standardize_outputs: bool
-            whether to standardize CVs
-        batch_size: bool, optional
-            number of points per batch (default = -1, single batch)
-        nepochs: int, optional
-            number of epochs (default = 1000)
-        log_every: int, optional
-            frequency of log (default = 1)
-        print_info: bool, optional
-            print debug info (default = False)
-
-        See Also
-        --------
-        loss_function
-            Loss functions for training Deep-LDA CVs
-        """
-
-        # check optimizer
-        if self.opt_ is None:
-            self._set_default_optimizer()
-
-        # check device
-        if self.device_ is None:
-            self.device_ = next(self.nn.parameters()).device
-
-        # assert to avoid redundancy
-        if (train_loader is not None) and (X is not None):
-            raise KeyError('Only one between train_loader and X can be used.')
-        
-        # create dataloader if not given
-        if X is not None:
-            if y is None:
-                raise KeyError('labels (y) must be given.')
-
-            if type(X) != torch.Tensor:
-                X = torch.Tensor(X)
-            if type(y) != torch.Tensor:
-                y = torch.Tensor(y)
-                            
-            dataset = TensorDataset(X,y)
-            train_size = int(0.9 * len(dataset))
-            valid_size = len(dataset) - train_size
-
-            train_data, valid_data = random_split(dataset,[train_size,valid_size])
-            train_loader = FastTensorDataLoader(train_data,batch_size)
-            valid_loader = FastTensorDataLoader(valid_data)
-            print('Training   set:' ,len(train_data))
-            print('Validation set:' ,len(valid_data))
-
-        if self.lda.sw_reg == 1e-6: # default value
-            self.set_regularization(0.05)
-            print('Sw regularization:' ,self.lda.sw_reg)
-            print('Lorentzian reg.  :' ,self.lorentzian_reg)
-            print('')
-
-        # standardize inputs (unravel dataset to compute average)
-        x_train = torch.cat([batch[0] for batch in train_loader])
-        if standardize_inputs:
-            self.standardize_inputs( x_train )
-
-        # print info
-        if info:
-            self.print_info()
-
-        # train
-        for ep in range(nepochs):
-            self.train_epoch(train_loader)
-
-            loss_train = self.evaluate_dataset(train_loader, save_params=True)
-            loss_valid = self.evaluate_dataset(valid_loader)
-            self.loss_train.append(loss_train)
-            self.loss_valid.append(loss_valid)
-
-            #standardize output
-            if standardize_outputs:
-                self.standardize_outputs(x_train)
-
-            # earlystopping
-            if self.earlystopping_ is not None:
-                if valid_loader is None:
-                    raise ValueError('EarlyStopping requires validation data')
-                self.earlystopping_(loss_valid, model=self.state_dict() )
-            else:
-                self.set_earlystopping(patience=1e30)
-
-            # log
-            if ((ep + 1) % log_every == 0) or (self.earlystopping_.early_stop):
-                self.print_log(
-                    {
-                        "Epoch": ep + 1,
-                        "Train Loss": loss_train,
-                        "Valid Loss": loss_valid,
-                    },
-                    spacing=[6, 12, 12],
-                    decimals=2,
-                )
-
-            # check whether to stop 
-            if (self.earlystopping_ is not None) and (self.earlystopping_.early_stop):
-                self.load_state_dict( self.earlystopping_.best_model )
-                break
-
-
     def evaluate_dataset(self, dataset, save_params=False, unravel_dataset = False):
         """
         Evaluate loss function on dataset.
@@ -305,7 +151,7 @@ class DeepLDA_CV(NeuralNetworkCV):
         save_params: bool
             save the eigenvalues/vectors of LDA into the model
         unravel_dataset: bool, optional
-            unravel dataset to calculate LDA loss on all dataset instead of averaging over batches   
+            unravel dataset to calculate loss on all dataset instead of averaging over batches   
 
         Returns
         -------

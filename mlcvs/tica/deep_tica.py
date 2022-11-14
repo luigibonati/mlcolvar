@@ -8,6 +8,7 @@ import torch
 from .tica import TICA
 from ..models import NeuralNetworkCV
 from ..utils.data import create_time_lagged_dataset, FastTensorDataLoader
+from torch.utils.data import random_split
 
 class DeepTICA_CV(NeuralNetworkCV):
     """
@@ -54,6 +55,10 @@ class DeepTICA_CV(NeuralNetworkCV):
         # lorentzian regularization
         self.reg_cholesky = 0
 
+        # default loss function options
+        self.loss_type = 'sum2'
+        self.n_eig = 0
+
         # (additional) training logs
         self.evals_train = []
 
@@ -71,6 +76,21 @@ class DeepTICA_CV(NeuralNetworkCV):
             Regularization value for C_lag.
         """
         self.tica.reg_cholesky = cholesky_reg
+
+    def set_loss_function(self,objective='sum2',n_eig=0):
+        """Set loss function parameters.
+
+        Parameters
+        ----------
+        objective : str, optional
+            function of the eigenvalues to optimize (see 'loss_function' for the options), by default 'sum2'
+        n_eig: int, optional
+            number of eigenvalues to include in the loss (default: 0 --> all). in case of single and single2 is used to specify which eigenvalue to use.
+        
+        See Also
+        --------
+        loss_function: loss function 
+        """
 
     def loss_function(self,evals,objective='sum2',n_eig=0):
         """
@@ -189,7 +209,7 @@ class DeepTICA_CV(NeuralNetworkCV):
             # ===================tica=====================
             eigvals, eigvecs = self.tica.compute_TICA(data = [f_t,f_lag], 
                                                       weights = [w_t,w_lag],
-                                                      save_params=True)
+                                                      save_params=False)
             self.set_average(ave_f)
             self.w = eigvecs
             # ===================loss=====================
@@ -201,158 +221,6 @@ class DeepTICA_CV(NeuralNetworkCV):
         # ===================log======================
         self.epochs += 1
 
-    def fit(
-        self,
-        train_loader=None,
-        valid_loader=None,
-        X=None,
-        t=None,
-        lag_time=None,
-        standardize_inputs=True,
-        standardize_outputs=True,
-        loss_type='sum2', #TODO SAVE TO INTERNAL VARIABLES
-        n_eig=0, 
-        batch_size=-1,
-        nepochs=1000,
-        log_every=1,
-        info=False,
-    ):
-        """
-        Train Deep-TICA CVs. This can be performed in two ways:
-        1. (preferred) taking a FastTensorDataLoader/DataLoader built from `mlcvs.utils.data.create_time_lagged_dataset`, and optionally a `valid_loader`.
-        2. if input data `X` (and `time`) are given, together with a `time_lag`, a Dataloader is constructed.
-
-        Parameters
-        ----------
-        train_loader: DataLoader, optional
-            training set
-        valid_loader: DataLoader, optional
-            validation set
-        X: np.array or torch.Tensor, optional
-            input data, alternative to train_loader (default = None)
-        t: np.array or torch.Tensor, optional
-            time series (default = None)
-        lag_time: float,optional
-            lag_time used to construct the dataloader from `X` and `t`, (default = None)
-        loss_type: str, optional
-            type of objective function, see loss_function for options (default = 'sum2')
-        n_eig: int
-            number of eigenvalues to optimize
-        standardize_inputs: bool, optional
-            whether to standardize input data (default = True)
-        standardize_outputs: bool, optional
-            whether to standardize output data (default = True)
-        batch_size: bool, optional
-            number of points per batch (default = -1, single batch)
-        nepochs: int, optional
-            number of epochs, only if constructing dataloader internally (default = 1000)
-        log_every: int, optional
-            frequency of log (default = 1)
-        print_info: bool, optional
-            print debug info (default = False)
-
-        See Also
-        --------
-        mlcvs.utils.data.create_time_lagged_dataset
-            Create dataset finding time-lagged configurations
-        loss_function
-            Loss functions for training Deep-TICA CVs
-        """
-        # check device
-        if self.device_ is None:
-            self.device_ = next(self.nn.parameters()).device
-
-        # assert to avoid redundancy
-        if (train_loader is not None) and (X is not None):
-            raise KeyError('Only one between train_loader and X can be used')
-        
-        # create dataloader if not given
-        if X is not None:
-            if lag_time is None:
-                raise KeyError('lag_time must be specified when X is given')
-            if t is None:
-                print('WARNING: time is not given, assuming t = np.arange(len(X))')
-                t = np.arange(len(X))
-
-            dataset = create_time_lagged_dataset(X,t,lag_time)
-            train_loader = FastTensorDataLoader(dataset.tensors, batch_size=batch_size, shuffle=False) 
-
-        # standardize inputs (unravel dataset to compute average)
-        x_train = torch.cat([batch[0] for batch in train_loader])
-        if standardize_inputs:
-            self.standardize_inputs(x_train)
-
-        # check optimizer
-        if self.opt_ is None:
-            self._set_default_optimizer()
-
-        # save loss function options
-        self.loss_type = loss_type
-        self.n_eig = n_eig
-
-        # print info
-        if info:
-            self.print_info()
-
-        # train
-        for ep in range(nepochs):
-            #optimize
-            self.train_epoch(train_loader)
-
-            # compute scores after epoch
-            loss_train = self.evaluate_dataset(train_loader,save_params=False)
-            self.loss_train.append(loss_train.cpu())
-            
-            if valid_loader is not None:
-                loss_valid = self.evaluate_dataset(valid_loader)
-                self.loss_valid.append(loss_valid.cpu())
-            with torch.no_grad():
-                self.evals_train.append(torch.unsqueeze(self.tica.evals_,0))
-
-            #standardize output
-            if standardize_outputs:
-                self.standardize_outputs(x_train)
-
-            # earlystopping
-            if self.earlystopping_ is not None:
-                if valid_loader is None:
-                    raise ValueError('EarlyStopping requires validation data')
-                self.earlystopping_(loss_valid, model=self.state_dict(), epoch=ep)
-
-            # lrscheduler
-            if self.lrscheduler_ is not None:
-                self.lrscheduler_(loss_valid)
-
-            # log
-            print_log = False
-            if ((ep + 1) % log_every == 0):
-                print_log = True
-            elif self.earlystopping_ is not None:
-                if (self.earlystopping_.early_stop):
-                    print_log = True
-
-            if print_log:
-                self.print_log(
-                    {
-                        "Epoch": ep + 1,
-                        "Train Loss": loss_train,
-                        "Valid Loss": loss_valid,
-                        "Eigenvalues": self.tica.evals_,
-                    } if valid_loader is not None else
-                    {
-                        "Epoch": ep + 1,
-                        "Train Loss": loss_train,
-                        "Eigenvalues": self.tica.evals_,
-                    },
-                    spacing=[6, 12, 12, 24] if valid_loader is not None
-                            else [6, 12, 24],
-                    decimals=3,
-                )
-
-            # check whether to stop 
-            if (self.earlystopping_ is not None) and (self.earlystopping_.early_stop):
-                self.load_state_dict( self.earlystopping_.best_model )
-                break
 
     def evaluate_dataset(self, dataset, save_params=False, unravel_dataset = False):
         """
@@ -409,6 +277,51 @@ class DeepTICA_CV(NeuralNetworkCV):
                 loss += self.loss_function(eigvals,objective=self.loss_type,n_eig=self.n_eig)
                 n_batches +=1
 
+            if save_params:
+                self.evals_train.append(torch.unsqueeze(eigvals,0))
+
         return loss/n_batches
+
+    # Prepare dataloader
+    def prepare_dataloader(self, X, y=None, batch_size=0, options={ 'lag_time': None } ) :
+        """Function for creating dataloaders if they are not given. 
+
+        Parameters
+        ----------
+        X : array-like
+            data
+        t : array-like
+            time, default None
+        batch_size : int
+            default 0 (signle batch)
+
+        Returns
+        -------
+        train_loader: FastTensorDataloader
+            train loader
+        valid_loader: FastTensorDataloader
+            valid loader
+        """
+
+        # create dataloader if not given
+        if X is not None:
+            lag_time = options['lag_time']
+            if lag_time is None:
+                raise KeyError('keyword lag_time missing from options dictionary')
+            if y is None:
+                print('WARNING: time (y) is not given, assuming t = np.arange(len(X))')
+                y = np.arange(len(X))
+
+        dataset = create_time_lagged_dataset(X,y,lag_time)
+        train_size = int(0.8 * len(dataset))
+        valid_size = len(dataset) - train_size
+        train_data, valid_data = random_split(dataset, [train_size, valid_size])
+        train_loader = FastTensorDataLoader(train_data, batch_size, shuffle=False)
+        valid_loader = FastTensorDataLoader(valid_data)
+        print('Created dataloaders')
+        print('Training   set:', len(train_data))
+        print('Validation set:', len(valid_data))
+
+        return train_loader, valid_loader
 
 
