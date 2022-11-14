@@ -29,7 +29,7 @@ class DeepLDA_CV(NeuralNetworkCV):
 
     """
 
-    def __init__(self, layers, activation="relu", device = None, **kwargs):
+    def __init__(self, layers, device=None, activation="relu", **kwargs):
         """
         Initialize a DeepLDA_CV object
 
@@ -47,13 +47,11 @@ class DeepLDA_CV(NeuralNetworkCV):
         self.name_ = "deeplda_cv"
         self.lda = LDA()
 
-        # set device 
-        self.device_ = device
-
         # lorentzian regularization
         self.lorentzian_reg = 0
 
-
+        # send model to device
+        self.set_device(device) 
 
     def set_regularization(self, sw_reg=0.05, lorentzian_reg=None):
         """

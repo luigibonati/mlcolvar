@@ -61,10 +61,6 @@ class DeepTDA_CV(NeuralNetworkCV):
             layers=layers, activation=activation, **kwargs
         )
         self.name_ = "deeptda_cv"
-        # self.lda = LDA()
-
-        # set device
-        self.device_ = device
 
         # set number of states
         self.states_num = states_num
@@ -81,7 +77,7 @@ class DeepTDA_CV(NeuralNetworkCV):
         self.beta = beta
 
         # send model to device
-        self.to(device)
+        self.set_device(device) 
 
     def loss_function(self, H, y):
         """

@@ -51,14 +51,14 @@ class DeepTICA_CV(NeuralNetworkCV):
         self.name_ = "deeptica_cv"
         self.tica = TICA()
 
-        # set device 
-        self.device_ = device
-
         # lorentzian regularization
         self.reg_cholesky = 0
 
         # (additional) training logs
         self.evals_train = []
+
+        # send model to device
+        self.set_device(device) 
 
     def set_regularization(self, cholesky_reg=1e-6):
         """

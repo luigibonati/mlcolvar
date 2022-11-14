@@ -128,6 +128,9 @@ class NeuralNetworkCV(torch.nn.Module):
             # Generic attributes
             self.feature_names = ["x" + str(i) for i in range(self.n_features)]
 
+        # Device
+        self.device_ = None
+
         # Optimizer
         self.opt_ = None
         self.earlystopping_ = None
@@ -238,6 +241,21 @@ class NeuralNetworkCV(torch.nn.Module):
         s = torch.matmul(H - self.b, self.w)
 
         return s
+
+    # Device
+
+    def set_device(self,device):
+        """ Set the device to be used and move the model to it (call model.to(device) ) 
+
+        Parameters
+        ----------
+        device : torch.device
+        """
+        if type(device) == str:
+            device = torch.device(device)
+            
+        self.device_=device
+        self.to(device)
 
     # Optimizer
 
