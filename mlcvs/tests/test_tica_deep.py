@@ -47,11 +47,8 @@ def test_deeptica_train_2d_model(load_dataset_2d_md):
     model = DeepTICA_CV(layers=[n_features,10,10,n_eig],device=device)
     model.to(device)
 
-    # specify custom loss
-    model.set_loss_function( func=lambda evals: torch.sum(evals) )
-
     # Fit TICA
-    model.fit(X=X, t=t, lag_time=10, nepochs=10)
+    model.fit(X=X, y=t, nepochs=10, options = { 'lag_time': 10 })
 
     # Project
     y_test = model(X[0].to(device))
@@ -66,7 +63,6 @@ def test_deeptica_train_2d_dataloader(load_dataset_2d_md):
 
     # Create dataset
     lag_time = 10
-    ##dataset = TimeLaggedDataset(X,t=t,lag_time=lag_time,logweights=None)
     dataset = create_time_lagged_dataset(X,t=t,lag_time=lag_time,logweights=None)
 
     # split train - valid
@@ -74,8 +70,6 @@ def test_deeptica_train_2d_dataloader(load_dataset_2d_md):
     train_data, val_data = random_split(dataset, [len(dataset) - n_val, n_val])
 
     # create dataloaders 
-    ##train_loader = DataLoader(train_data, batch_size=2048, shuffle=True)
-    ##valid_loader = DataLoader(val_data, batch_size=len(val_data), shuffle=False)
     train_loader = FastTensorDataLoader(train_data, batch_size=len(train_data), shuffle=True)
     valid_loader = FastTensorDataLoader(val_data, batch_size=len(val_data),  shuffle=False)
 
