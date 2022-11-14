@@ -9,7 +9,6 @@ from pathlib import Path
 from ..utils.optim import EarlyStopping, LRScheduler
 from .utils import normalize,compute_mean_range
 
-
 class NeuralNetworkCV(torch.nn.Module):
     """
     Neural Network CV base class.
@@ -48,7 +47,6 @@ class NeuralNetworkCV(torch.nn.Module):
         (2): Linear(in_features=10, out_features=5, bias=True)
       )
     )
-
     """
 
     def __init__(
@@ -85,46 +83,50 @@ class NeuralNetworkCV(torch.nn.Module):
                 "Unknown activation. options: 'relu','elu','tanh','linear'. "
             )
 
-        # Create architecture
-        modules = []
-        for i in range(len(layers) - 1):
-            if i < len(layers) - 2:
-                modules.append(torch.nn.Linear(layers[i], layers[i + 1]))
-                if activ is not None:
-                    modules.append(activ)
+        if layers is not None:
+            # Create architecture
+            modules = []
+            for i in range(len(layers) - 1):
+                if i < len(layers) - 2:
+                    modules.append(torch.nn.Linear(layers[i], layers[i + 1]))
+                    if activ is not None:
+                        modules.append(activ)
+                else:
+                    modules.append(torch.nn.Linear(layers[i], layers[i + 1]))
+
+            # Initialize parameters
+            self.nn = torch.nn.Sequential(*modules)
+            self.n_features = layers[0]
+            self.n_hidden = layers[-1]
+
+            # Initialization of the weights and offsets
+            if gaussian_random_initialization:
+                self.apply(self._init_weights)
+                weight = torch.normal(0,1,[self.n_hidden,self.n_hidden])
             else:
-                modules.append(torch.nn.Linear(layers[i], layers[i + 1]))
+                # Linear projection output
+                weight = torch.eye(self.n_hidden)
 
-        # Initialize parameters
-        self.nn = torch.nn.Sequential(*modules)
-        self.n_features = layers[0]
-        self.n_hidden = layers[-1]
+            offset = torch.zeros(self.n_hidden)
+            self.register_buffer("w", weight)
+            self.register_buffer("b", offset)
 
-        # Initialization of the weights and offsets
-        if gaussian_random_initialization:
-            self.apply(self._init_weights)
-            weight = torch.normal(0,1,[self.n_hidden,self.n_hidden])
-        else:
-            # Linear projection output
-            weight = torch.eye(self.n_hidden)
+            # Input and output normalization
+            self.normIn = False
+            self.register_buffer("MeanIn", torch.zeros(self.n_features))
+            self.register_buffer("RangeIn", torch.ones(self.n_features))
+            self.normNN = False
+            self.register_buffer("MeanNN", torch.zeros(self.n_hidden))
+            self.register_buffer("RangeNN", torch.ones(self.n_hidden))
+            self.normOut = False
+            self.register_buffer("MeanOut", torch.zeros(self.n_hidden))
+            self.register_buffer("RangeOut", torch.ones(self.n_hidden))
 
-        offset = torch.zeros(self.n_hidden)
-        self.register_buffer("w", weight)
-        self.register_buffer("b", offset)
+            # Flags
+            self.output_hidden = False
 
-        # Input and output normalization
-        self.normIn = False
-        self.register_buffer("MeanIn", torch.zeros(self.n_features))
-        self.register_buffer("RangeIn", torch.ones(self.n_features))
-        self.normNN = False
-        self.register_buffer("MeanNN", torch.zeros(self.n_hidden))
-        self.register_buffer("RangeNN", torch.ones(self.n_hidden))
-        self.normOut = False
-        self.register_buffer("MeanOut", torch.zeros(self.n_hidden))
-        self.register_buffer("RangeOut", torch.ones(self.n_hidden))
-
-        # Flags
-        self.output_hidden = False
+            # Generic attributes
+            self.feature_names = ["x" + str(i) for i in range(self.n_features)]
 
         # Optimizer
         self.opt_ = None
@@ -133,7 +135,6 @@ class NeuralNetworkCV(torch.nn.Module):
 
         # Generic attributes
         self.name_ = "NN_CV"
-        self.feature_names = ["x" + str(i) for i in range(self.n_features)]
 
         # training logs
         self.epochs = 0
@@ -316,7 +317,7 @@ class NeuralNetworkCV(torch.nn.Module):
             y = data[1].to(self.device_)
             # =================forward====================
             H = self.forward_nn(X)
-            # =================lda loss===================
+            # ===================loss======================
             loss = self.loss_function(H, y, save_params=False)
             # =================backprop===================
             self.opt_.zero_grad()
