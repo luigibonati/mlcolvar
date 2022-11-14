@@ -50,9 +50,6 @@ class DeepLDA_CV(NeuralNetworkCV):
         # set device 
         self.device_ = device
 
-        # custom loss function
-        self.custom_loss = None
-
         # lorentzian regularization
         self.lorentzian_reg = 0
 
@@ -124,42 +121,25 @@ class DeepLDA_CV(NeuralNetworkCV):
         loss : torch.tensor
             loss function
         """
-        if self.custom_loss is None:
+        eigvals, eigvecs = self.lda.compute_LDA(H, y, save_params)
+        if save_params:
+            self.w = eigvecs
 
-            eigvals, eigvecs = self.lda.compute_LDA(H, y, save_params)
-            if save_params:
-                self.w = eigvecs
+        # TODO add sum option for multiclass
 
-            # TODO add sum option for multiclass
+        # if two classes loss is equal to the single eigenvalue
+        if self.lda.n_classes == 2:
+            loss = -eigvals
+        # if more than two classes loss equal to the smallest of the C-1 eigenvalues
+        elif self.lda.n_classes > 2:
+            loss = -eigvals[self.lda.n_classes - 2]
+        else:
+            raise ValueError("The number of classes for LDA must be greater than 1")
 
-            # if two classes loss is equal to the single eigenvalue
-            if self.lda.n_classes == 2:
-                loss = -eigvals
-            # if more than two classes loss equal to the smallest of the C-1 eigenvalues
-            elif self.lda.n_classes > 2:
-                loss = -eigvals[self.lda.n_classes - 2]
-            else:
-                raise ValueError("The number of classes for LDA must be greater than 1")
-
-            if self.lorentzian_reg > 0:
-                loss += self.regularization_lorentzian(H)
-
-        else: 
-            loss = self.custom_loss(self,H,y,save_params)
+        if self.lorentzian_reg > 0:
+            loss += self.regularization_lorentzian(H)
 
         return loss
-
-    def set_loss_function(self, func):
-        """Set custom loss function
-
-        TODO document with an example
-
-        Parameters
-        ----------
-        func : function
-            custom loss function
-        """
-        self.custom_loss = func
 
     def train_epoch(self, loader):
         """

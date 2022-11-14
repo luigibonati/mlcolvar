@@ -66,9 +66,6 @@ class DeepTDA_CV(NeuralNetworkCV):
         # set device
         self.device_ = device
 
-        # custom loss function
-        self.custom_loss = None
-
         # set number of states
         self.states_num = states_num
 
@@ -101,43 +98,27 @@ class DeepTDA_CV(NeuralNetworkCV):
         loss : torch.tensor
             loss function
         """
-        if self.custom_loss is None:
-            lossMu, lossSigma = torch.zeros(self.target_centers.shape, device=self.device_), torch.zeros(
-                self.target_centers.shape, device=self.device_)
+        lossMu, lossSigma = torch.zeros(self.target_centers.shape, device=self.device_), torch.zeros(
+        self.target_centers.shape, device=self.device_)
 
-            for i in range(self.states_num):
-                # check which elements belong to class i
-                H_red = H[torch.nonzero(y == i).view(-1)]
+        for i in range(self.states_num):
+            # check which elements belong to class i
+            H_red = H[torch.nonzero(y == i).view(-1)]
 
-                # compute mean over the class i
-                mu = torch.mean(H_red, 0)
-                # compute standard deviation over class i
-                sigma = torch.std(H_red, 0)
+            # compute mean over the class i
+            mu = torch.mean(H_red, 0)
+            # compute standard deviation over class i
+            sigma = torch.std(H_red, 0)
 
-                # compute loss function contribute for class i
-                lossMu[i] = self.alfa * (mu - torch.tensor(self.target_centers[i], device=self.device_)).pow(2)
-                lossSigma[i] = self.beta * (sigma - torch.tensor(self.target_sigmas[i], device=self.device_)).pow(2)
+            # compute loss function contribute for class i
+            lossMu[i] = self.alfa * (mu - torch.tensor(self.target_centers[i], device=self.device_)).pow(2)
+            lossSigma[i] = self.beta * (sigma - torch.tensor(self.target_sigmas[i], device=self.device_)).pow(2)
 
-            loss = torch.sum(lossMu) + torch.sum(lossSigma)
-            # to output each contribute of the loss uncomment here
-            # lossMu, lossSigma = torch.reshape(lossMu, (self.states_num, self.cvs_num)), torch.reshape(lossSigma, (self.states_num, self.cvs_num))
-            return loss
+        loss = torch.sum(lossMu) + torch.sum(lossSigma)
+        # to output each contribute of the loss uncomment here
+        # lossMu, lossSigma = torch.reshape(lossMu, (self.states_num, self.cvs_num)), torch.reshape(lossSigma, (self.states_num, self.cvs_num))
 
-        else:
-            loss = self.custom_loss(self, H, y)
-            return loss
-
-    def set_loss_function(self, func):
-        """Set custom loss function
-
-        TODO document with an example
-
-        Parameters
-        ----------
-        func : function
-            custom loss function
-        """
-        self.custom_loss = func
+        return loss
 
     def train_epoch(self, loader):
         """

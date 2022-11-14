@@ -54,9 +54,6 @@ class DeepTICA_CV(NeuralNetworkCV):
         # set device 
         self.device_ = device
 
-        # custom loss function
-        self.custom_loss = None
-
         # lorentzian regularization
         self.reg_cholesky = 0
 
@@ -104,57 +101,42 @@ class DeepTICA_CV(NeuralNetworkCV):
         loss : torch.tensor (scalar)
             score
         """
-        if self.custom_loss is None:
 
-            #check if n_eig is given and
-            if (n_eig>0) & (len(evals) < n_eig):
-                raise ValueError("n_eig must be lower than the number of eigenvalues.")
-            elif (n_eig==0):
-                if ( (objective == 'single') | (objective == 'single2')):
-                    raise ValueError("n_eig must be specified when using single or single2.")
-                else:
-                    n_eig = len(evals)
-            elif (n_eig>0) & (objective == 'gapsum') :
-                raise ValueError("n_eig parameter not valid for gapsum. only sum of all gaps is implemented.")
-
-            loss = None
-            
-            if   objective == 'sum':
-                loss = - torch.sum(evals[:n_eig])
-            elif objective == 'sum2':
-                g_lambda = - torch.pow(evals,2)
-                loss = torch.sum(g_lambda[:n_eig])
-            elif objective == 'gap':
-                loss = - (evals[0] -evals[1])
-            #elif objective == 'gapsum':
-            #    loss = 0
-            #    for i in range(evals.shape[0]-1):
-            #        loss += - (evals[i+1] -evals[i])
-            elif objective == 'its':
-                g_lambda = 1 / torch.log(evals)
-                loss = torch.sum(g_lambda[:n_eig])
-            elif objective == 'single':
-                loss = - evals[n_eig-1]
-            elif objective == 'single2':
-                loss = - torch.pow(evals[n_eig-1],2)
+        #check if n_eig is given and
+        if (n_eig>0) & (len(evals) < n_eig):
+            raise ValueError("n_eig must be lower than the number of eigenvalues.")
+        elif (n_eig==0):
+            if ( (objective == 'single') | (objective == 'single2')):
+                raise ValueError("n_eig must be specified when using single or single2.")
             else:
-                raise ValueError("unknown objective. options: 'sum','sum2','gap','single','its'.")
-        else: 
-            loss = self.custom_loss(evals)
+                n_eig = len(evals)
+        elif (n_eig>0) & (objective == 'gapsum') :
+            raise ValueError("n_eig parameter not valid for gapsum. only sum of all gaps is implemented.")
+
+        loss = None
+        
+        if   objective == 'sum':
+            loss = - torch.sum(evals[:n_eig])
+        elif objective == 'sum2':
+            g_lambda = - torch.pow(evals,2)
+            loss = torch.sum(g_lambda[:n_eig])
+        elif objective == 'gap':
+            loss = - (evals[0] -evals[1])
+        #elif objective == 'gapsum':
+        #    loss = 0
+        #    for i in range(evals.shape[0]-1):
+        #        loss += - (evals[i+1] -evals[i])
+        elif objective == 'its':
+            g_lambda = 1 / torch.log(evals)
+            loss = torch.sum(g_lambda[:n_eig])
+        elif objective == 'single':
+            loss = - evals[n_eig-1]
+        elif objective == 'single2':
+            loss = - torch.pow(evals[n_eig-1],2)
+        else:
+            raise ValueError("unknown objective. options: 'sum','sum2','gap','single','its'.")
 
         return loss
-
-    def set_loss_function(self, func):
-        """Set custom loss function
-
-        TODO document with an example
-
-        Parameters
-        ----------
-        func : function
-            custom loss function
-        """
-        self.custom_loss = func
 
     def set_average(self, Mean, Range=None):
         """Save averages for computing mean-free inputs 
