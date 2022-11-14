@@ -6,6 +6,8 @@ import torch
 from warnings import warn
 from pathlib import Path
 
+from torch.utils.data import TensorDataset, random_split
+from ..utils.data import FastTensorDataLoader
 from ..utils.optim import EarlyStopping, LRScheduler
 from .utils import normalize,compute_mean_range
 
@@ -127,6 +129,7 @@ class NeuralNetworkCV(torch.nn.Module):
 
             # Generic attributes
             self.feature_names = ["x" + str(i) for i in range(self.n_features)]
+            self.custom_train = None
 
         # Device
         self.device_ = None
@@ -319,10 +322,11 @@ class NeuralNetworkCV(torch.nn.Module):
         self.lrscheduler_ = LRScheduler(optimizer, patience=patience, min_lr=min_lr, factor=factor, log=log
         )
 
-    # Fit function
+    # Default function for training an epoch
     def train_epoch(self,loader):
         """
-        Auxiliary function for training an epoch.
+        Auxiliary function for training an epoch. 
+        By default assumes a supervised task. It can be overloaded in the child class.
 
         Parameters
         ----------
@@ -336,13 +340,243 @@ class NeuralNetworkCV(torch.nn.Module):
             # =================forward====================
             H = self.forward_nn(X)
             # ===================loss======================
-            loss = self.loss_function(H, y, save_params=False)
+            loss = self.loss_function(H, y)
             # =================backprop===================
             self.opt_.zero_grad()
             loss.backward()
             self.opt_.step()
         # ===================log======================
         self.epochs += 1
+
+    # default function for evaluating loss on dataset
+    def evaluate_dataset(self, dataset, save_params=False, unravel_dataset=False):
+        """
+        Evaluate loss function on dataset.
+
+        Parameters
+        ----------
+        dataset : dataloader or list of batches
+            dataset
+        save_params: bool
+            save the parameters of the estimators if present (keep it with compatibility)
+        unravel_dataset: bool, optional
+            unravel dataset to calculate loss on all dataset instead of averaging over batches
+
+        Returns
+        -------
+        loss : torch.tensor
+            loss value
+        """
+        with torch.no_grad():
+            loss = 0
+            n_batches = 0
+
+            if unravel_dataset:
+                batches = [batch for batch in dataset]  # to deal with shuffling
+                batches = [torch.cat([batch[i] for batch in batches]) for i in range(2)]
+            elif type(dataset) == list:
+                batches = [dataset]
+            else:
+                batches = dataset
+
+            for batch in batches:
+                # =================get data===================
+                X = batch[0].to(self.device_)
+                y = batch[1].to(self.device_)
+                H = self.forward_nn(X)
+                # ===================loss=====================
+                loss += self.loss_function(H, y)
+                n_batches += 1
+
+        return loss / n_batches
+
+    # set custom loss
+    def set_custom_train(self, function):
+        """"Specify custom training function to be used for training a single epoch. 
+        Overloads train_epoch function. It expects a function which takes a single arguent (a dataloader) and train for an epoch
+
+        Parameters
+        ----------
+        function : function
+            function to be saved
+
+        See Also
+        --------
+        train_epoch:
+            single epoch training 
+        """
+        self.custom_train = function
+
+    # fit
+    def fit(
+            self,
+            train_loader=None,
+            valid_loader=None,
+            X=None,
+            y=None,
+            standardize_inputs=True,
+            standardize_outputs=True,
+            batch_size=0,
+            nepochs=1000,
+            log_every=1,
+            info=False,
+            earlystopping=None,
+            options={}
+    ):
+        """
+        Fit the CV. Takes as input a FastTensorDataLoader/standard Dataloader constructed from a TensorDataset, or even a tuple of (colvar,labels) data. 
+        It relies on the function train_epoch which defines the training loop. 
+
+        Parameters
+        ----------
+        train_data: FastTensorDataLoader/DataLoader, or tuple of torch.tensors (X:input, y:labels)
+            training set
+        valid_data: tuple of torch.tensors (X:input, y:labels) #TODO add dataloader option?
+            validation set
+        X: np.array or torch.Tensor, optional
+            input data, alternative to train_loader (default = None)
+        y: np.array or torch.Tensor, optional
+            labels (default = None)
+        standardize_inputs: bool
+            whether to standardize input data
+        standardize_outputs: bool
+            whether to standardize CVs
+        batch_size: bool, optional
+            number of points per batch (default = -1, single batch)
+        nepochs: int, optional
+            number of epochs (default = 1000)
+        log_every: int, optional
+            frequency of log (default = 1)
+        print_info: bool, optional
+            print debug info (default = False)
+        options: dict, optional
+            custom options for creating a dataset 
+
+        See Also
+        --------
+        loss_function
+            Loss function for training 
+        train_epoch
+            Function to train a single epoch
+        """
+
+        # check optimizer
+        if self.opt_ is None:
+            self._set_default_optimizer()
+
+        # check device
+        if self.device_ is None:
+            self.device_ = next(self.nn.parameters()).device
+
+        # set earlystopping variable
+        self.earlystopping_ = earlystopping
+
+        # assert to avoid redundancy
+        if (train_loader is not None) and (X is not None):
+            raise KeyError('Only one between train_loader and X can be used.')
+
+        # create dataloaders if not given
+        if X is not None:
+            train_loader, valid_loader = self.prepare_dataloader(X,y,batch_size,options)
+
+        # standardize inputs (unravel dataset to compute average)
+        x_train = torch.cat([batch[0] for batch in train_loader])
+        if standardize_inputs:
+            self.standardize_inputs(x_train)
+
+        # print info
+        if info:
+            self.print_info()
+
+        # train
+        for ep in range(nepochs):
+            # use custom train epoch function if present
+            if self.custom_train is not None:
+                self.custom_train(train_loader)
+            else:
+                self.train_epoch(train_loader)
+
+            loss_train = self.evaluate_dataset(train_loader, save_params=True).cpu() 
+            loss_valid = self.evaluate_dataset(valid_loader).cpu()
+            
+            self.loss_train.append(loss_train)
+            self.loss_valid.append(loss_valid)
+
+            # standardize output
+            if standardize_outputs:
+                self.standardize_outputs(x_train)
+
+            # earlystopping
+            if self.earlystopping_ is not None:
+                if valid_loader is None:
+                    raise ValueError('EarlyStopping requires validation data')
+                self.earlystopping_(loss_valid, model=self.state_dict())
+            else:
+                self.set_earlystopping(patience=1e30)
+
+            # log
+            if ((ep + 1) % log_every == 0) or (self.earlystopping_.early_stop):
+                self.print_log(
+                    {
+                        "Epoch": ep + 1,
+                        "Train Loss": loss_train,
+                        "Valid Loss": loss_valid,
+                    },
+                    spacing=[6, 12, 12],
+                    decimals=4,
+                )
+
+            # check whether to stop
+            if (self.earlystopping_ is not None) and (self.earlystopping_.early_stop):
+                self.load_state_dict(self.earlystopping_.best_model)
+                break
+
+    # Prepare dataloader
+    def prepare_dataloader(self,X, y=None, batch_size=0, options={}):
+        """Function for creating dataloaders if they are not given. 
+
+        Parameters
+        ----------
+        X : array-like
+            data
+        y : array-like
+            labels, default None
+        batch_size : int
+            default 0 (single batch)
+        options: dict
+            specific options, default empty
+
+        Returns
+        -------
+        train_loader: FastTensorDataloader
+            train loader
+        valid_loader: FastTensorDataloader
+            valid loader
+        """
+
+        # convert to Tensors
+        if type(X) != torch.Tensor:
+            X = torch.Tensor(X)
+
+        if y is None:
+            dataset = TensorDataset(X)
+        else:
+            if type(y) != torch.Tensor:
+                y = torch.Tensor(y)
+            dataset = TensorDataset(X, y)
+
+        train_size = int(0.8 * len(dataset))
+        valid_size = len(dataset) - train_size
+
+        train_data, valid_data = random_split(dataset, [train_size, valid_size])
+        train_loader = FastTensorDataLoader(train_data, batch_size)
+        valid_loader = FastTensorDataLoader(valid_data)
+        print('Created dataloaders')
+        print('Training   set:', len(train_data))
+        print('Validation set:', len(valid_data))
+
+        return train_loader, valid_loader
+
 
     # Input / output standardization
 
@@ -430,7 +664,6 @@ class NeuralNetworkCV(torch.nn.Module):
                 )
 
     # Info
-
     def print_info(self):
         """
         Display information about model.
