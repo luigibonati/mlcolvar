@@ -40,3 +40,16 @@
 
 ### earlystopping
 - [X] save model.state_dict and then load
+
+### REFACTORING
+- [X] remove custom loss
+- [X] prepare_dataset function
+- [X] move params (e.g. train) outside
+- [X] move fit to nn base
+- [X] add custom_train_epoch to fit 
+- [ ] add eval_dataset ?? 
+- [ ] multitask loss function ? 
+- [ ] evaluate dataloader ?? 
+
+### MISCELLANEA
+- [ ] create dataloader from file
