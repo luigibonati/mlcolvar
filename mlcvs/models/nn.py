@@ -492,7 +492,7 @@ class NeuralNetworkCV(torch.nn.Module):
         for ep in range(nepochs):
             # use custom train epoch function if present
             if self.custom_train is not None:
-                self.custom_train(train_loader)
+                self.custom_train(self,train_loader)
             else:
                 self.train_epoch(train_loader)
 
