@@ -9,10 +9,9 @@ mlcvs: Machine learning collective variables
 [![codecov](https://codecov.io/gh/luigibonati/mlcvs/branch/main/graph/badge.svg?token=H01H68KNNG)](https://codecov.io/gh/luigibonati/mlcvs)
 [![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/luigibonati/mlcvs.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/luigibonati/mlcvs/context:python)
 
-
 ### Copyright
 
-Copyright (c) 2021, Luigi Bonati
+Copyright (c) 2022, Luigi Bonati
 
 #### Acknowledgements
  
