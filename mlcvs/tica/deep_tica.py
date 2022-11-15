@@ -91,6 +91,8 @@ class DeepTICA_CV(NeuralNetworkCV):
         --------
         loss_function: loss function 
         """
+        self.loss_type = objective
+        self.n_eig = n_eig
 
     def loss_function(self,evals,objective='sum2',n_eig=0):
         """
