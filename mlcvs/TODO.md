@@ -48,8 +48,8 @@
 - [X] add custom_train_epoch to fit 
 - [x] add eval_dataset 
 - [x] change log to dictionary
-- [ ] add tests for custom_train
-- [ ] changed .to into set_device
+- [x] add tests for custom_train
+- [x] changed .to into set_device
 
 ### MISCELLANEA
 - [ ] create dataloader from file

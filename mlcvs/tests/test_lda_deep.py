@@ -145,6 +145,23 @@ def test_deeplda_train_2d_model(load_dataset_2d_classes):
     )
     model.set_regularization(sw_reg=sw_reg)
 
+    # SET CUSTOM LOSS 
+    def my_train_epoch(model,loader):
+        for data in loader:
+            # =================get data===================
+            X = data[0].to(model.device_)
+            y = data[1].to(model.device_)
+            # =================forward====================
+            H = model.forward_nn(X)
+            # ===================loss======================
+            loss = model.loss_function(H, y)
+            # =================backprop===================
+            model.opt_.zero_grad()
+            loss.backward()
+            model.opt_.step()
+    
+    model.set_custom_train(my_train_epoch)
+
     # TRAIN (with X,y)
     model.fit(X=X, y=y, info=True, log_every=100)
 
