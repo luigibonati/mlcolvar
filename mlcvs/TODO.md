@@ -34,9 +34,24 @@
  
 ### DeepLDA_CV
 - [ ] add multiclass loss function (loss function)
-- [ ] add possibility to pass custom loss function (add manual someth)
 - [ ] change names to private members
 - [ ] add dataloader option to valid_data
 
 ### earlystopping
 - [X] save model.state_dict and then load
+
+### REFACTORING
+- [X] remove custom loss
+- [X] prepare_dataset function
+- [X] move params (e.g. train) outside
+- [X] move fit to nn base
+- [X] add custom_train_epoch to fit 
+- [x] add eval_dataset 
+- [x] change log to dictionary
+- [x] add tests for custom_train
+- [x] changed .to into set_device
+
+### MISCELLANEA
+- [ ] create dataloader from file
+- [ ] evaluate dataloader function
+- [ ] add option to script rather than trace jit model
