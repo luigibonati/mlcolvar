@@ -47,7 +47,8 @@
 - [X] move fit to nn base
 - [X] add custom_train_epoch to fit 
 - [x] add eval_dataset 
-- [ ] change log to dictionary
+- [x] change log to dictionary
+- [ ] add tests for custom_train
 
 ### MISCELLANEA
 - [ ] create dataloader from file

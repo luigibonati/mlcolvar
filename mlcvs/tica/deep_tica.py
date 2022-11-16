@@ -59,8 +59,8 @@ class DeepTICA_CV(NeuralNetworkCV):
         self.loss_type = 'sum2'
         self.n_eig = 0
 
-        # (additional) training logs
-        self.evals_train = []
+        # additional training logs
+        self.logs['tica_eigvals'] = []
 
         # send model to device
         self.set_device(device) 
@@ -220,8 +220,6 @@ class DeepTICA_CV(NeuralNetworkCV):
             self.opt_.zero_grad()
             loss.backward()
             self.opt_.step()
-        # ===================log======================
-        self.epochs += 1
 
 
     def evaluate_dataset(self, dataset, save_params=False, unravel_dataset = False):
@@ -280,7 +278,7 @@ class DeepTICA_CV(NeuralNetworkCV):
                 n_batches +=1
 
             if save_params:
-                self.evals_train.append(torch.unsqueeze(eigvals,0))
+                self.logs['tica_eigvals'].append(self.tica.evals_)
 
         return loss/n_batches
 

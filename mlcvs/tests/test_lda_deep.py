@@ -215,7 +215,7 @@ def test_deeplda_export_load():
     with torch.no_grad():
         loss = model.evaluate_dataset(train_data, save_params=True)
     # Fake assignment
-    model.set_params({'epochs' : 1 })
+    model.set_params({'lorentzian_reg' : 40.0 })
 
     # Define input and forward
     xtest = torch.ones(n_features).to(device)
@@ -241,7 +241,7 @@ def test_deeplda_export_load():
     # Assert results
     assert torch.equal(ytest, ytest_loaded)
     # Assert parameters loading
-    assert model.get_params()['epochs'] == model_loaded.get_params()['epochs'] 
+    assert model.get_params()['lorentzian_reg'] == model_loaded.get_params()['lorentzian_reg'] 
 
     # (2) --- Load TorchScript model
     model_traced = torch.jit.load('mlcvs/tests/__pycache__/model.ptc')

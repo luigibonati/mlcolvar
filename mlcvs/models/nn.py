@@ -146,10 +146,9 @@ class NeuralNetworkCV(torch.nn.Module):
         self.custom_eval = None
 
         # training logs
-        self.epochs = 0
-        self.loss_train = []
-        self.loss_valid = []
-        self.log_header = True
+        # --> dict containing the base properties, others can be added depending on cv
+        self.logs = { 'epoch' : [], 'loss_train' : [], 'loss_valid' : [] }
+        self.log_format = { 'header' : True, 'decimals' : 3, 'spacing' : None }  
 
     def _init_weights(self, module):
             if isinstance(module, torch.nn.Linear):
@@ -348,8 +347,6 @@ class NeuralNetworkCV(torch.nn.Module):
             self.opt_.zero_grad()
             loss.backward()
             self.opt_.step()
-        # ===================log======================
-        self.epochs += 1
 
     # default function for evaluating loss on dataset
     def evaluate_dataset(self, dataset, save_params=False, unravel_dataset=False):
@@ -509,7 +506,7 @@ class NeuralNetworkCV(torch.nn.Module):
             self.print_info()
 
         # train
-        for ep in range(nepochs):
+        for ep in range(1,nepochs+1):
             # use custom train epoch function if present
             if self.custom_train is not None:
                 self.custom_train(self,train_loader)
@@ -525,8 +522,10 @@ class NeuralNetworkCV(torch.nn.Module):
                 loss_train = self.evaluate_dataset(train_loader, save_params=True).cpu() 
                 loss_valid = self.evaluate_dataset(valid_loader).cpu()
             
-            self.loss_train.append(loss_train)
-            self.loss_valid.append(loss_valid)
+            # append to log
+            self.logs['epoch'].append(ep)
+            self.logs['loss_train'].append(loss_train)
+            self.logs['loss_valid'].append(loss_valid)
 
             # standardize output
             if standardize_outputs:
@@ -534,23 +533,13 @@ class NeuralNetworkCV(torch.nn.Module):
 
             # earlystopping
             if self.earlystopping_ is not None:
-                if valid_loader is None:
-                    raise ValueError('EarlyStopping requires validation data')
                 self.earlystopping_(loss_valid, model=self.state_dict())
             else:
                 self.set_earlystopping(patience=1e30)
 
             # log
-            if ((ep + 1) % log_every == 0) or (self.earlystopping_.early_stop):
-                self.print_log(
-                    {
-                        "Epoch": ep + 1,
-                        "Train Loss": loss_train,
-                        "Valid Loss": loss_valid,
-                    },
-                    spacing=[6, 12, 12],
-                    decimals=4,
-                )
+            if (ep % log_every == 0) or (self.earlystopping_.early_stop):
+                self.print_log( self.logs, **self.log_format)
 
             # check whether to stop
             if (self.earlystopping_ is not None) and (self.earlystopping_.early_stop):
@@ -705,7 +694,7 @@ class NeuralNetworkCV(torch.nn.Module):
 
     # Log
 
-    def print_log(self, log_dict, spacing=None, decimals=3):
+    def print_log(self, log_dict, spacing=None, decimals=3, header=False):
         """
         Utility function for training log.
 
@@ -721,13 +710,14 @@ class NeuralNetworkCV(torch.nn.Module):
         """
         if spacing is None:
             spacing = [16 for i in range(len(log_dict))]
-        if self.log_header:
+        if header:
             for i, key in enumerate(log_dict.keys()):
                 print("{0:<{width}s}".format(key, width=spacing[i]), end="")
             print("")
-            self.log_header = False
+            self.log_format['header'] = False
 
-        for i, value in enumerate(log_dict.values()):
+        for i, log in enumerate(log_dict.values()):
+            value = log[-1]
             if type(value) == int:
                 print("{0:<{width}d}".format(value, width=spacing[i]), end="")
 
