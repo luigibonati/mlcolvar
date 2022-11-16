@@ -46,10 +46,10 @@
 - [X] move params (e.g. train) outside
 - [X] move fit to nn base
 - [X] add custom_train_epoch to fit 
-- [ ] add eval_dataset ?? 
-- [ ] multitask loss function ? 
-- [ ] evaluate dataloader ?? 
+- [x] add eval_dataset 
 - [ ] change log to dictionary
 
 ### MISCELLANEA
 - [ ] create dataloader from file
+- [ ] evaluate dataloader function
+- [ ] add option to script rather than trace jit model
