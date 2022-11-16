@@ -512,7 +512,6 @@ class NeuralNetworkCV(torch.nn.Module):
                     raise ValueError('EarlyStopping requires validation data')
                 self.earlystopping_(loss_valid, model=self.state_dict())
             else:
-                print('init early with 1e30')
                 self.set_earlystopping(patience=1e30)
 
             # log
