@@ -49,6 +49,7 @@
 - [x] add eval_dataset 
 - [x] change log to dictionary
 - [ ] add tests for custom_train
+- [ ] changed .to into set_device
 
 ### MISCELLANEA
 - [ ] create dataloader from file

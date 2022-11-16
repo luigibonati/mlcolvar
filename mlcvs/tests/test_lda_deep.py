@@ -75,7 +75,7 @@ def test_deeplda_nclasses(n_classes):
 
     # Model
     model = DeepLDA_CV(nodes)
-    model.to(device)
+    model.set_device(device)
 
     # Define input
     xtest = torch.ones(n_features).to(device)
@@ -133,7 +133,7 @@ def test_deeplda_train_2d_model(load_dataset_2d_classes):
 
     # MODEL
     model = DeepLDA_CV(nodes)
-    model.to(device)
+    model.set_device(device)
 
     # OPTIMIZER
     opt = torch.optim.Adam(model.parameters(), lr=lrate, weight_decay=l2_reg)

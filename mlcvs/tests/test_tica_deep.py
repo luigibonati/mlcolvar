@@ -45,7 +45,7 @@ def test_deeptica_train_2d_model(load_dataset_2d_md):
     n_features = X.shape[1]
     n_eig = 2
     model = DeepTICA_CV(layers=[n_features,10,10,n_eig],device=device)
-    model.to(device)
+    model.set_device(device)
 
     # Fit TICA
     model.fit(X=X, y=t, nepochs=10, options = { 'lag_time': 10 })
