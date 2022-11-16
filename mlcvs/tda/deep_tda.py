@@ -3,11 +3,8 @@
 __all__ = ["DeepTDA_CV"]
 
 import torch
-
 import numpy as np
-
 from ..models import NeuralNetworkCV
-
 
 class DeepTDA_CV(NeuralNetworkCV):
     """

@@ -3,11 +3,8 @@
 __all__ = ["DeepLDA_CV"]
 
 import torch
-from torch.utils.data import DataLoader,TensorDataset,random_split
-
 from .lda import LDA
 from ..models import NeuralNetworkCV
-from ..utils.data import FastTensorDataLoader
 
 class DeepLDA_CV(NeuralNetworkCV):
     """
