@@ -129,7 +129,6 @@ class NeuralNetworkCV(torch.nn.Module):
 
             # Generic attributes
             self.feature_names = ["x" + str(i) for i in range(self.n_features)]
-            self.custom_train = None
 
         # Device
         self.device_ = None
@@ -141,6 +140,10 @@ class NeuralNetworkCV(torch.nn.Module):
 
         # Generic attributes
         self.name_ = "NN_CV"
+
+        # Variables for custom train / eval functions
+        self.custom_train = None
+        self.custom_eval = None
 
         # training logs
         self.epochs = 0
@@ -391,10 +394,10 @@ class NeuralNetworkCV(torch.nn.Module):
 
         return loss / n_batches
 
-    # set custom loss
+    # set custom train function
     def set_custom_train(self, function):
         """"Specify custom training function to be used for training a single epoch. 
-        Overloads train_epoch function. It expects a function which takes a single arguent (a dataloader) and train for an epoch
+        Overloads train_epoch function. It expects a function which takes as arguments (model,dataloader) and train it for an epoch.
 
         Parameters
         ----------
@@ -407,6 +410,23 @@ class NeuralNetworkCV(torch.nn.Module):
             single epoch training 
         """
         self.custom_train = function
+
+    # set custom train function
+    def set_custom_eval(self, function):
+        """"Specify custom evaluation function to be used for computing the loss on a dataloader.
+        Overloads evaluate_dataset function. It expects a function which takes as arguments (model,dataloader,[save_params]) and returns the loss function on the dataset.
+
+        Parameters
+        ----------
+        function : function
+            function to be saved
+
+        See Also
+        --------
+        evaluate_dataset:
+            evaluate loss function on dataloader
+        """
+        self.custom_eval = function
 
     # fit
     def fit(
@@ -496,8 +516,14 @@ class NeuralNetworkCV(torch.nn.Module):
             else:
                 self.train_epoch(train_loader)
 
-            loss_train = self.evaluate_dataset(train_loader, save_params=True).cpu() 
-            loss_valid = self.evaluate_dataset(valid_loader).cpu()
+            # note: by default assumes that the parameters of the estimators (if any) are saved only after each epoch.
+            #       can be overriden using a custom_train and custom_eval function
+            if self.custom_eval is not None:
+                loss_train = self.custom_eval(self,train_loader, save_params=True).cpu() 
+                loss_valid = self.evaluate_dataset(self,valid_loader).cpu()
+            else: 
+                loss_train = self.evaluate_dataset(train_loader, save_params=True).cpu() 
+                loss_valid = self.evaluate_dataset(valid_loader).cpu()
             
             self.loss_train.append(loss_train)
             self.loss_valid.append(loss_valid)
@@ -576,7 +602,6 @@ class NeuralNetworkCV(torch.nn.Module):
         print('Validation set:', len(valid_data))
 
         return train_loader, valid_loader
-
 
     # Input / output standardization
 
