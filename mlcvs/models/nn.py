@@ -326,7 +326,7 @@ class NeuralNetworkCV(torch.nn.Module):
     def train_epoch(self,loader):
         """
         Auxiliary function for training an epoch. 
-        By default assumes a supervised task. It can be overloaded in the child class.
+        By default assumes a supervised task (dataloader containing (X,y)). 
 
         Parameters
         ----------
@@ -352,6 +352,7 @@ class NeuralNetworkCV(torch.nn.Module):
     def evaluate_dataset(self, dataset, save_params=False, unravel_dataset=False):
         """
         Evaluate loss function on dataset.
+        By default assumes a supervised task (dataloader containing (X,y)).
 
         Parameters
         ----------
@@ -420,7 +421,6 @@ class NeuralNetworkCV(torch.nn.Module):
             nepochs=1000,
             log_every=1,
             info=False,
-            earlystopping=None,
             options={}
     ):
         """
@@ -469,7 +469,7 @@ class NeuralNetworkCV(torch.nn.Module):
             self.device_ = next(self.nn.parameters()).device
 
         # set earlystopping variable
-        self.earlystopping_ = earlystopping
+        #self.earlystopping_ = earlystopping 
 
         # assert to avoid redundancy
         if (train_loader is not None) and (X is not None):
@@ -512,6 +512,7 @@ class NeuralNetworkCV(torch.nn.Module):
                     raise ValueError('EarlyStopping requires validation data')
                 self.earlystopping_(loss_valid, model=self.state_dict())
             else:
+                print('init early with 1e30')
                 self.set_earlystopping(patience=1e30)
 
             # log

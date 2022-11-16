@@ -34,7 +34,6 @@
  
 ### DeepLDA_CV
 - [ ] add multiclass loss function (loss function)
-- [ ] add possibility to pass custom loss function (add manual someth)
 - [ ] change names to private members
 - [ ] add dataloader option to valid_data
 
@@ -50,6 +49,7 @@
 - [ ] add eval_dataset ?? 
 - [ ] multitask loss function ? 
 - [ ] evaluate dataloader ?? 
+- [ ] change log to dictionary
 
 ### MISCELLANEA
 - [ ] create dataloader from file
