@@ -359,7 +359,7 @@ class NeuralNetworkCV(torch.nn.Module):
         dataset : dataloader or list of batches
             dataset
         save_params: bool
-            save the parameters of the estimators if present (keep it with compatibility)
+            save the parameters of the estimators if present (keep it for compatibility)
         unravel_dataset: bool, optional
             unravel dataset to calculate loss on all dataset instead of averaging over batches
 
@@ -767,20 +767,18 @@ class NeuralNetworkCV(torch.nn.Module):
                     # FLAGS
                     'normIn': self.normIn,
                     'normOut': self.normOut,
-                    'normNN': self.normNN,
+                    'normNN': self.normNN if hasattr(self, 'normNN') else None, 
                     'feature_names': self.feature_names,
                     # STATE DICT
                     'model_state_dict': self.state_dict(),
                     'optimizer_state_dict': self.opt_.state_dict() if self.opt_ is not None else None,
                     # TRAINING LCURVES
-                    'epochs': self.epochs if hasattr(self, 'epochs') else None,
-                    'loss_train': self.loss_train if hasattr(self, 'loss_train') else None,
-                    'loss_valid': self.loss_valid if hasattr(self, 'loss_valid') else None,   
+                    'logs': self.logs if hasattr(self, 'logs') else None, 
                     }, folder+checkpoint_name)
 
         # == Export jit model ==
-        device = next(self.nn.parameters()).device
-        fake_input = torch.zeros(self.n_features, device = device) #self.device_) #.reshape(1,self.n_features) #TODO check with plumed interface
+        #device = next(self.nn.parameters()).device
+        fake_input = torch.zeros(self.n_features, device = self.device_) #.reshape(1,self.n_features) #TODO check with plumed interface
         mod = torch.jit.trace(self, fake_input)
         mod.save(folder+traced_name)
 
