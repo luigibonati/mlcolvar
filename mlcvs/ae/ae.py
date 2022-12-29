@@ -4,11 +4,11 @@ __all__ = ["AutoEncoderCV"]
 
 import torch
 from mlcvs.models import NeuralNetworkCV
-from mlcvs.models.utils import normalize
+from mlcvs.models.utils import normalize, unnormalize
 
 class AutoEncoderCV (NeuralNetworkCV):
     """
-    AutoEncoding collective variable  #TODO
+    Autoencoding collective variable
 
     Attributes
     ----------
@@ -30,26 +30,10 @@ class AutoEncoderCV (NeuralNetworkCV):
         Normalize outputs
     feature_names : list
         List of input features names
-
-    Examples
-    --------
-    Create a neural-network with 20 inputs, one hidden layer with 10 nodes and 5 outputs #TODO
-    
-    >>> net = NeuralNetworkCV(layers=[20,10,5], activation = 'relu')
-    >>> net
-    NeuralNetworkCV(
-      (nn): Sequential(
-        (0): Linear(in_features=20, out_features=10, bias=True)
-        (1): ReLU(inplace=True)
-        (2): Linear(in_features=10, out_features=5, bias=True)
-      )
-    )
-
     """
 
     def __init__(
-        self, encoder_layers, decoder_layers=None, device=None, activation='relu', gaussian_random_initialization=False, **kwargs 
-
+        self, encoder_layers, decoder_layers=None, device=None, activation='relu', gaussian_random_initialization=False, **kwargs
     ):
         """
         Define an autoencoder given given the list of layers.
@@ -110,7 +94,7 @@ class AutoEncoderCV (NeuralNetworkCV):
 
         # Initialize parameters
         self.n_features = encoder_layers[0]
-        self.n_hidden = encoder_layers[-1]
+        self.n_hidden   = encoder_layers[-1]
 
         # Initialization of the weights and offsets
         if gaussian_random_initialization:
@@ -155,6 +139,10 @@ class AutoEncoderCV (NeuralNetworkCV):
             x = normalize(x, self.MeanIn, self.RangeIn)
 
         x = self.encoder(x)
+
+        if self.normOut:
+            x = normalize(x, self.MeanOut, self.RangeOut)
+            
         return x
 
     def encode_decode(self, x: torch.tensor) -> (torch.tensor):
@@ -177,10 +165,9 @@ class AutoEncoderCV (NeuralNetworkCV):
 
         """
         x = self.forward(x) #input norm + encoder
-        x = self.decoder(x)
-
-        if self.normOut:
-            x = normalize(x, self.MeanOut, self.RangeOut)
+        x = self.decoder(x) 
+        if self.normIn: # add back normalization
+            x = unnormalize(x, self.MeanIn, self.RangeIn)
 
         return x
 
@@ -190,20 +177,22 @@ class AutoEncoderCV (NeuralNetworkCV):
 
         Parameters
         ----------
-        x : torch.tensor
+        x : torch.Tensor
             input data
 
         Returns
         -------
-        z : torch.tensor
-            NN output
+        x : torch.Tensor
+            reconstructed data
 
         See Also
         --------
-        forward : compute forward pass of the model
+        forward : compute only encoder (CVs)
+
         """
-        z = self.encode_decode(x)
-        return z
+        x = self.encode_decode(x)
+        return x
+
 
     # Loss function
     def loss_function(self, X, X_hat):
