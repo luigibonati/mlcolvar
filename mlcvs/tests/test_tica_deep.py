@@ -23,7 +23,7 @@ def load_dataset_2d_md():
     """Load 2d-basins dataset"""
 
     # Load colvar files as pandas dataframes
-    data = load_dataframe("mlcvs/tests/data/2d_model/COLVAR_md", stride=50)
+    data = load_dataframe("mlcvs/tests/data/2d_model/COLVAR_md", stride=1)
     
     # Create input datasets
     X = data.filter(regex='p.').values
