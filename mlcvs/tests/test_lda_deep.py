@@ -226,7 +226,7 @@ def test_deeplda_export_load():
 
     # Model
     model = DeepLDA_CV(nodes)
-    model.to(device)
+    model.set_device(device)
 
     # Compute lda and set params
     with torch.no_grad():
@@ -243,7 +243,7 @@ def test_deeplda_export_load():
 
     # (1) --- Load checkpoint into new model
     model_loaded = DeepLDA_CV(nodes)
-    model_loaded.to(device)
+    model_loaded.set_device(device)
 
     # Note: it requires the correct shape for w and b of linear projection TODO
     # Workaround: make a fake LDA assignment

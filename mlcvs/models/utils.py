@@ -63,3 +63,42 @@ def normalize(
         )
 
     return x.sub(Mean_).div(Range_)
+
+def unnormalize(
+    x: torch.Tensor, Mean: torch.Tensor, Range: torch.Tensor
+) -> (torch.Tensor):
+    """
+    Compute standardized inputs/outputs (internal).
+
+    Parameters
+    ----------
+    x: torch.Tensor
+        input/output
+    Mean: torch.Tensor
+        mean values to be added back.
+    Range: torch.Tensor
+        interval range to be multiplied back.
+
+    Returns
+    -------
+    out : torch.Tensor
+        standardized inputs/outputs
+    """
+
+    # if shape ==
+
+    if x.ndim == 2:
+        batch_size = x.size(0)
+        x_size = x.size(1)
+
+        Mean_ = Mean.unsqueeze(0).expand(batch_size, x_size)
+        Range_ = Range.unsqueeze(0).expand(batch_size, x_size)
+    elif x.ndim == 1:
+        Mean_ = Mean
+        Range_ = Range
+    else:
+        raise ValueError(
+            "Input tensor must of shape (n_features) or (n_batch,n_features)."
+        )
+
+    return x.mul(Range_).add(Mean_)

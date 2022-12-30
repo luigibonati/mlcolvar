@@ -18,7 +18,7 @@ def test_tica_train_2d_model():
     """Perform TICA on 2d_model data folder."""
 
     # Load dataset
-    data = load_dataframe("mlcvs/tests/data/2d_model/COLVAR_md", stride=50)
+    data = load_dataframe("mlcvs/tests/data/2d_model/COLVAR_md", stride=1)
 
     X = data.filter(regex='p.')
 
@@ -36,7 +36,7 @@ def test_tica_train_2d_model():
     print(X.iloc[0])
     print(y_test)
     y_test_expected = torch.tensor(
-                        [-0.83703607,  0.90135466]
+                        [-0.66858778,  0.90833012]
                       )
 
     assert torch.abs(y_test_expected - y_test).sum() < 1e-6
