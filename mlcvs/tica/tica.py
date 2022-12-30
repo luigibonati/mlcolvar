@@ -70,6 +70,7 @@ class TICA:
 
         """
         x_t, x_lag = data 
+        w_t, w_lag = None, None
         if weights is not None:
             w_t, w_lag = weights
 
