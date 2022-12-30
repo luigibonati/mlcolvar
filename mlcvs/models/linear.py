@@ -187,6 +187,7 @@ class LinearCV(torch.nn.Module):
         n_cv = 1 if weights.ndim == 1 else weights.shape[1]
 
         # get normalization
+        mean = np.zeros(self.n_features)
         if self.normIn:
             mean = self.MeanIn.cpu().numpy()
 
