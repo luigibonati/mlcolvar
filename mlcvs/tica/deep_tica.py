@@ -304,13 +304,12 @@ class DeepTICA_CV(NeuralNetworkCV):
         """
 
         # create dataloader if not given
-        if X is not None:
-            lag_time = options['lag_time']
-            if lag_time is None:
-                raise KeyError('keyword lag_time missing from options dictionary')
-            if y is None:
-                print('WARNING: time (y) is not given, assuming t = np.arange(len(X))')
-                y = np.arange(len(X))
+        lag_time = options['lag_time']
+        if lag_time is None:
+            raise KeyError('keyword lag_time missing from options dictionary')
+        if y is None:
+            print('WARNING: time (y) is not given, assuming t = np.arange(len(X))')
+            y = np.arange(len(X))
 
         dataset = create_time_lagged_dataset(X,y,lag_time)
         train_size = int(0.8 * len(dataset))
