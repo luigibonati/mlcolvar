@@ -3,9 +3,11 @@ import pytorch_lightning as pl
 from mlcvs.core.utils.decorators import decorate_methods, allowed_hooks, apply_hooks
 from .utils import RunningAverageStd,RunningMinMax
 
+
+
 @decorate_methods(apply_hooks,methods=allowed_hooks)
 class Normalization(pl.LightningModule):
-    """_summary_
+    """Normalizing module, TODO WRITE
     """
 
     def __init__(self, n_in, mode = 'std', hooks = {'on_train_epoch_end': 'save_stats', 'on_train_epoch_start': 'reset_stats' }):
@@ -38,7 +40,7 @@ class Normalization(pl.LightningModule):
         self.Mean = self.running_stats.mean.detach()
         self.Range = self.running_stats.range.detach()
 
-    def get_mean_range(self, size : torch.Size) -> tuple[torch.Tensor]:
+    def get_mean_range(self, size : torch.Size) -> (torch.Tensor):
         """Return mean and range reshaped according to tensor size. 
 
         Parameters
