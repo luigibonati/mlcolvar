@@ -6,9 +6,11 @@ on:
   push:
     branches:
       - "main"
+      - "lightning"
   pull_request:
     branches:
       - "main"
+      - "lightning"
   schedule:
     # Weekly tests run on main by default:
     #   Scheduled workflows run on the latest commit on the default or base branch.
