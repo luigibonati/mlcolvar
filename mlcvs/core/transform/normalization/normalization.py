@@ -7,11 +7,27 @@ from .utils import RunningAverageStd,RunningMinMax
 
 @decorate_methods(apply_hooks,methods=allowed_hooks)
 class Normalization(pl.LightningModule):
-    """Normalizing module, TODO WRITE
+    """Normalizing block, used for computing standardized inputs/outputs.
+    By default it accumulates statistics from a single epoch and then save the parameters. This can be changed with the hooks dictionary.
     """
 
-    def __init__(self, n_in, mode = 'std', hooks = {'on_train_epoch_end': 'save_stats', 'on_train_epoch_start': 'reset_stats' }):
-        
+    def __init__(self, n_in : int, mode : str = 'std', hooks : dict = {'on_train_epoch_end': 'save_stats', 'on_train_epoch_start': 'reset_stats' }):
+        """Initialize a normalization object. This will accumulate statistics and then save the parameters. 
+        The time when these the reset/save parameters action are performed can be changed via the hooks dictionary.
+
+        The standardization mode can be either 'std' (remove by the mean and divide by the standard deviation) or 'minmax' (scale and shift the range of values such that all inputs are between -1 and 1).
+
+        Parameters
+        ----------
+        n_in : int
+            number of inputs
+        mode : str, optional
+            normalization mode (std,minmax), by default 'std'
+        hooks : dict, optional
+            dictionary which specify when to execute reset/save of accumulated parameters, by default {'on_train_epoch_end': 'save_stats', 'on_train_epoch_start': 'reset_stats' }
+
+        """
+
         super().__init__()
         
         # buffers containing mean and range for standardization
