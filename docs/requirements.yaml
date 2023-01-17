@@ -12,14 +12,16 @@ dependencies:
   - python
   - pip
 
-  # Package dependencies
+  # Core dependencies
   - numpy
   - pandas
   - pytorch
+  - pytorch-lightning
+
+  # utils
   - matplotlib
   - nbsphinx
   - ipython
-  - scikit-learn
 
   # Pip-only installs
   - pip:
