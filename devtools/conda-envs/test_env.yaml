@@ -19,7 +19,7 @@ dependencies:
   - numpy
   - pandas
   - pytorch
-  - pytorch_lightning
+  - pytorch-lightning
   - matplotlib
   - scikit-learn
 
