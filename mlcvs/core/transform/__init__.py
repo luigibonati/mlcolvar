@@ -1,3 +1,3 @@
-__all__ = ["normalization"]
+__all__ = ["Normalization"]
 
 from .normalization import *

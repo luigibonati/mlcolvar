@@ -68,6 +68,8 @@ class FastTensorDataLoader:
         n_batches, remainder = divmod(self.dataset_len, self.batch_size)
         if remainder > 0:
             n_batches += 1
+        self.n_batches = n_batches
+
     def __iter__(self):
         if self.shuffle:
             self.indices = torch.randperm(self.dataset_len)
@@ -98,4 +100,3 @@ def test_fasttensordataloader():
 
 if __name__ == "__main__":
     test_fasttensordataloader()
-    

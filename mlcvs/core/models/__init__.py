@@ -1,3 +1,3 @@
-__all__ = ["feedforward"]
+__all__ = ["FeedForward"]
 
 from .feedforward import *

@@ -1,4 +1,4 @@
-__all__ = ["normalization", "utils"]
+__all__ = ["Normalization"]
 
 from .normalization import *
 from .utils import *
