@@ -7,7 +7,7 @@ from mlcvs.core.transform import Normalization
 
 
 @decorate_methods(call_submodules_hooks, methods=allowed_hooks)
-class AutoEncoderCV(pl.LightningModule):
+class AutoEncoder_CV(pl.LightningModule):
     """AutoEncoding Collective Variable."""
     
     def __init__(self, encoder_layers : list , decoder_layers : list = None, options : dict[str,Any] = {}, **kwargs ):
@@ -32,7 +32,7 @@ class AutoEncoderCV(pl.LightningModule):
 
         # initialize normIn
         o = 'normIn'
-        if ( not options[o] ) and (options[o] is not None):
+        if ( options[o] is not False ) and (options[o] is not None):
             self.normIn = Normalization(self.n_in,**options[o]) 
 
         # initialize encoder
@@ -41,7 +41,7 @@ class AutoEncoderCV(pl.LightningModule):
 
          # initialize normOut
         o = 'normOut'
-        if ( not options[o] ) and (options[o] is not None):
+        if ( options[o] is not False ) and (options[o] is not None):
             self.normOut = Normalization(self.n_out,**options[o]) 
 
         # initialize encoder
@@ -97,7 +97,7 @@ def test_autoencodercv():
              'encoder' : { 'activation' : 'relu' },
              'normOut' : { 'mode'   : 'std' },
            } 
-    model = AutoEncoderCV( encoder_layers=layers, options=opts )
+    model = AutoEncoder_CV( encoder_layers=layers, options=opts )
     print(model)
     print('----------')
 

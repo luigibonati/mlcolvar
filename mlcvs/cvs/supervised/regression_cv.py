@@ -8,6 +8,7 @@ from torch.utils.data import TensorDataset
 
 from mlcvs.core.utils.decorators import decorate_methods,call_submodules_hooks,allowed_hooks
 
+__all__ = ["Regression_CV"]
 
 @decorate_methods(call_submodules_hooks,methods=allowed_hooks)
 class Regression_CV(pl.LightningModule):
