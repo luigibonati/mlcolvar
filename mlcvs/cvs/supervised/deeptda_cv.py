@@ -81,8 +81,9 @@ class DeepTDA_CV(pl.LightningModule):
 
     def forward(self, x: torch.tensor) -> (torch.tensor): #BASE_CV?
         for b in self.blocks:
-            if self.__getattr__(b) is not None:
-                x = self.__getattr__(b)(x)
+            block = getattr(self, b)
+            if block is not None:
+                x = block(x)
         return x
 
     def configure_optimizers(self):
