@@ -1,25 +1,26 @@
-from typing import Any,Union
+from typing import Any
 import torch
 import pytorch_lightning as pl
 from mlcvs.core.utils.decorators import decorate_methods, allowed_hooks, call_submodules_hooks
 from mlcvs.core.models import FeedForward
 from mlcvs.core.transform import Normalization
 
+
 @decorate_methods(call_submodules_hooks, methods=allowed_hooks)
 class AutoEncoderCV(pl.LightningModule):
     """AutoEncoding Collective Variable."""
     
-    def __init__(self, encoder_layers : list , decoder_layers : list = None, options : dict[str,Any] = {} ):
+    def __init__(self, encoder_layers : list , decoder_layers : list = None, options : dict[str,Any] = {}, **kwargs ):
         """TODO 
 
         """
         super().__init__()
 
         # Members
-        blocks = ['normIn','encoder','normOut','decoder'] 
+        self.blocks = ['normIn','encoder','normOut','decoder'] 
 
-        # Initialize defaults
-        for b in blocks:
+        # Initialize defaults #BASE_CV?
+        for b in self.blocks:
             self.__setattr__(b,None)
             options.setdefault(b,{})
 
@@ -48,7 +49,7 @@ class AutoEncoderCV(pl.LightningModule):
         self.decoder = FeedForward(decoder_layers, **options[o])
 
         # set input example
-        self.example_input_array = torch.ones(self.n_in)
+        self.example_input_array = torch.ones(self.n_in) #BASE_CV?
 
     def forward(self, x: torch.tensor) -> (torch.tensor):
         if self.normIn is not None:
@@ -56,7 +57,6 @@ class AutoEncoderCV(pl.LightningModule):
         x = self.encoder(x)
         if self.normOut is not None:
             x = self.normOut(x)
-        
         return x
 
     def encode_decode(self, x: torch.tensor) -> (torch.tensor):
