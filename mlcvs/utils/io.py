@@ -2,11 +2,13 @@
 
 import pandas as pd
 import numpy as np
+import string
 import torch
 from torch.utils.data import TensorDataset, random_split
-from ..utils.data import FastTensorDataLoader
+from mlcvs.utils.data import FastTensorDataLoader
 
-__all__ = ["load_dataframe", "plumed_to_pandas", "dataloader_from_file"]
+
+__all__ = ["load_dataframe", "plumed_to_pandas", "dataset_from_file"]
 
 def is_plumed_file(filename):
     """
@@ -131,86 +133,128 @@ def load_dataframe(data, start = 0, stop = None, stride = 1, **kwargs):
 
     return df
 
-def dataloader_from_file(states_num, files_folder, file_names, n_input, max_rows, from_column, train_set=None,
-                         valid_set=None, batch_size = -1, device=torch.device('cpu'), dtype=None, silent=False ):
-    '''Load data from files and directly creates the training and validation loaders with descriptors and labels.
+def dataset_from_file(file_names : list, 
+                    max_rows : int or list,
+                    create_labels : bool = True, 
+                    skip_rows : int or list = 0,
+                    regex_string : str = '',
+                    files_folder : str = None,
+                    dtype : torch.dtype = None,
+                    return_dataframe : bool = False, 
+                    verbose : bool =  True):
+    """
+    Initialize a torch labeled dataset from a list of files.
 
     Parameters
     ----------
-    states_num : int,
-        number of states to train on
-    cvs_num : int,
-        number of collective variables (CVs) to train
-    files_folder : str,
-        path to the folder with training data /my/path/to/data
-    file_names : list of str,
-        names of the files of training data
-    n_input : int,
-        number of descriptors to be used for the training
-    max_rows : int or list of int,
-        max number of rows to be loaded from each file. Use a list to specify for each state
-    from_column : int,
-        zero-based index of the first column to be loaded
-    train_set : int,
-        size of the training set (default = 90% dataset)
-    valid_set : int,
-        size of the validation set (default = 10% dataset)
-    batch_size : int,
-        batch_size for the training set (default = -1, single batch)
-    device : torch.device(),
-        device on which load the data (default = torch.device('cpu'))
-    dtype :
-        torch.dtype, (default = torch.float)
-    silent : bool,
-        it makes screen output silent (default = False)
+    file_names : list
+        Names of files from which import the data, one per class
+    max_rows : int or list
+        Maximum number of rows to be imported for each file. 
+        If int, it is set for all file
+    skip_rows : int or list, optional
+        Number of rows to be skipped for each file, by default 0
+        If int, it is set for all file
+    regex_string : str, optional
+        String for regex filtering of the inputs from pandas dataframe to torch dataset, by default ''
+        The default already filters out the 'time' column
+    files_folder : str, optional
+        Common path for the files to be imported, by default None
+        If set, filenames become 'files_folder/file_name'
+    dtype : torch.dtype, optional
+        Torch dtype for the tensor in the dataset, by default None
+    return_dataframe : bool, optional
+        Return also the imported Pandas dataframe for convenience, by default False
+    verbose : bool, optional
+        Print info on the imported data, by default True
 
     Returns
     -------
-    pandas.DataFrame
-        Dataframe
+    torch.Dataset
+        Torch labeled dataset of the given data
+    optional, pandas.Dataframe
+        Pandas dataframe of the given data #TODO improve
+    """
+    num_files = len(file_names)
 
-    '''
-    loaded_var, loaded_labels = {}, {}
-
+    # parse rows to be imported
     if type(max_rows) == int:
-        max_rows = np.ones(states_num, dtype=int) * max_rows
+        max_rows = np.ones(num_files, dtype=int) * max_rows
+    if type(skip_rows) == int:
+        skip_rows = np.ones(num_files, dtype=int) * skip_rows
 
-    if not silent:
-        print()
-        print('Loading classes data... ')
-        print('Check data shape: (set_size, n_descriptors)')
-    for i in range(states_num):
-        file_path = f'{files_folder}/{file_names[i]}'
-        loaded_var[i] = (np.loadtxt(file_path, max_rows=max_rows[i] + 1,
-                                    usecols=range(from_column, from_column + n_input)))
-        if not silent: print(f' - Data shape for class {list(string.ascii_uppercase)[i]}: ', np.shape(loaded_var[i]))
-        loaded_labels[i] = np.zeros(loaded_var[i].shape[0]) + i
+    # set file paths
+    if files_folder is not None:
+            for i in range(len(file_names)):
+                file_names[i] = files_folder + '/' + file_names[i]
 
-    # we need a single big training vector
-    var = np.concatenate([loaded_var[i] for i in loaded_var], axis=0)
-    labels = np.concatenate([loaded_labels[i] for i in loaded_labels], axis=0)
+    # initialize pandas dataframe
+    dataframe = pd.DataFrame()
 
-    # get total number of data points
-    datasize = len(var)
+    # load data
+    for i in range(num_files):
+        dataframe_tmp = load_dataframe(file_names[i], 
+                                        start = skip_rows[i], 
+                                        stop = max_rows[i])
+        # add label in the dataframe
+        if create_labels: dataframe_tmp['Label'] = i
 
-    # we randomly shuffle the deck
-    perm = np.random.permutation(len(var))
-    var, labels = var[perm], labels[perm]
+        if verbose: print(f' - Class {list(string.ascii_uppercase)[i]} dataframe shape: ', np.shape(dataframe_tmp))
 
-    # organize data into sets
-    if train_set is None:
-        if valid_set is None:
-            train_set = int( 0.9 * datasize)
-            valid_set = datasize - train_set
-        else:
-            if (datasize - valid_set) / datasize < 0.6:  print('WARNING: Valid set > 40% of dataset! Are you sure?')
-            train_set = datasize - valid_set
+        # update collective dataframe
+        dataframe = pd.concat([dataframe, dataframe_tmp], ignore_index=True)
+    
+    if verbose: 
+        print(f' - Imported pandas dataframe shape: ', np.shape(dataframe))
+        print(f' - Filtered pandas dataframe shape: ', np.shape(dataframe.filter(regex=f'^(?!.*Label)^(?!.*time)({regex_string})')))
 
-    # initialize dataset and loaders
-    dataset = TensorDataset(torch.tensor(var, dtype=dtype, device=device), torch.tensor(labels, dtype=dtype, device=device))
-    train_data, valid_data = random_split(dataset,[train_set,valid_set])
-    train_loader = FastTensorDataLoader(train_data, batch_size=batch_size)
-    valid_loader = FastTensorDataLoader(valid_data)
+    # create torch dataset
+    if create_labels: 
+        dataset = TensorDataset(torch.tensor(dataframe.filter(regex=f'^(?!.*Label)^(?!.*time)({regex_string})').values, dtype=dtype), torch.tensor(dataframe.filter(like='Label').values, dtype=dtype))
+    else:
+        dataset = TensorDataset(torch.tensor(dataframe.filter(regex=f'^(?!.*Label)^(?!.*time)({regex_string})').values, dtype=dtype))
+    
+    if verbose:
+        print(f' - Points in torch dataset: ', dataset.__len__())
+        print(f' - Descriptors in dataset: ', list(dataset)[0][0].shape[0])
+    
+    if return_dataframe:
+        return dataset, dataframe
+    else:
+        return dataset
 
-    return train_loader, valid_loader
+def test_dataloader():
+    print('Test no regex on two states..')
+    torch_dataset, pd_dataframe = dataset_from_file(file_names = ['state_A.dat', 'state_B.dat'], 
+                                                    max_rows = 10, 
+                                                    skip_rows =  0,
+                                                    create_labels=True,
+                                                    files_folder = '../data_samples',
+                                                    return_dataframe = True,
+                                                    regex_string='',
+                                                    verbose = True)
+    
+    print()
+    print('Test limited regex on two states..')
+    torch_dataset, pd_dataframe = dataset_from_file(file_names = ['state_A.dat', 'state_B.dat'], 
+                                                    max_rows = 10, 
+                                                    skip_rows =  0,
+                                                    create_labels=True,
+                                                    files_folder = '../data_samples',
+                                                    return_dataframe = True,
+                                                    regex_string='n|o',
+                                                    verbose = True)
 
+    print()
+    print('Test unlabeled on three states..')
+    torch_dataset, pd_dataframe = dataset_from_file(file_names = ['state_A.dat', 'state_B.dat', 'state_C.dat'], 
+                                                    max_rows = 10, 
+                                                    skip_rows =  0,
+                                                    create_labels=False,
+                                                    files_folder = '../data_samples',
+                                                    return_dataframe = True,
+                                                    regex_string='',
+                                                    verbose = True)
+
+if __name__ == "__main__":
+    test_dataloader() 
