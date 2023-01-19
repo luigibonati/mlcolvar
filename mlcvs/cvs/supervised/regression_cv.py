@@ -21,7 +21,7 @@ class Regression_CV(pl.LightningModule, CV_utils):
     
     def __init__(self, 
                 layers : list, 
-                options : dict[str, Any] = {},
+                options : dict = {},
                 **kwargs):
         """Example of collective variable obtained with a regression task.
 
