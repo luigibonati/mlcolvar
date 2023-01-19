@@ -10,6 +10,8 @@ from torch.utils.data import TensorDataset
 
 from mlcvs.core.utils.decorators import decorate_methods,call_submodules_hooks,allowed_hooks
 
+from mlcvs.cvs.utils import *
+
 __all__ = ["DeepTDA_CV"]
 
 @decorate_methods(call_submodules_hooks,methods=allowed_hooks)
@@ -51,21 +53,26 @@ class DeepTDA_CV(pl.LightningModule):
 
         # Members
         self.blocks = ['normIn', 'nn']
-
-        # Initialize defaults #BASE_CV?
-        for b in self.blocks:
-            self.__setattr__(b,None)
-            options.setdefault(b,{})
+        initialize_block_defaults(self=self, options=options)
         
         # Parse info from args
-        self.n_in = layers[0]
+        define_n_in_n_out(self=self, n_in=layers[0], n_out=layers[-1])
+        
         self.n_states = n_states
-        self.n_out = n_cvs
+        if self.n_out != n_cvs:
+            raise ValueError("Number of neurons of last layer should match the number of CVs!")
         self.n_cvs = n_cvs
-        #TODO assert that n_cvs = layers[-1]
-        self.target_centers = target_centers
-        self.target_sigmas =  target_sigmas
-        #TODO assert that size of target makes sense with n_cvs and n_states
+        
+        self.target_centers = torch.tensor(target_centers)
+        self.target_sigmas =  torch.tensor(target_sigmas)
+
+        if self.target_centers.shape != self.target_sigmas.shape:
+            raise ValueError(f"Size of target_centers and target_sigmas should be the same!")
+        if n_states != self.target_centers.shape[0]:
+            raise ValueError(f"Size of target_centers at dimension 0 should match the number of states! Expected {n_states} found {self.target_centers.shape[0]}")
+        if len(self.target_centers.shape) == 2:
+            if n_cvs != self.target_centers.shape[1]:
+                raise ValueError((f"Size of target_centers at dimension 1 should match the number of cvs! Expected {n_cvs} found {self.target_centers.shape[1]}"))
 
         # Initialize normIn
         o = 'normIn'
@@ -76,21 +83,15 @@ class DeepTDA_CV(pl.LightningModule):
         o = 'nn'
         self.nn = FeedForward(layers, **options[o])
 
-        self.example_input_array = torch.ones(self.n_in) #BASE_CV?
-
         # parameters
         self.lr = 1e-3
 
-    def forward(self, x: torch.tensor) -> (torch.tensor): #BASE_CV?
-        for b in self.blocks:
-            block = getattr(self, b)
-            if block is not None:
-                x = block(x)
-        return x
+    def forward(self, x: torch.tensor) -> (torch.tensor):
+        return forward_all_blocks(self=self, x=x)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
-        return optimizer
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
+        return self.optimizer
 
     def loss_function(self, input, labels):
         # TDA loss
@@ -119,7 +120,7 @@ def test_deeptda_cv():
     """
     Create a synthetic dataset and test functionality of the DeepTDA_CV class
     """
-    n_in, n_out = 2,1 
+    n_in, n_out = 2, 1 
     layers = [n_in, 24, 12, n_out]
 
     # initialize via dictionary
@@ -137,17 +138,18 @@ def test_deeptda_cv():
     # create dataset
     X = torch.randn((100,2))
     # make two 'states' different from each other
-    X[:50] += 10
-    X[50:] -= 10
+    X[:50 ] += 10
+    X[ 50:] -= 10
     # create labels
     y = torch.zeros(X.shape[0])
-    y[50:] += 1
-    
+    y[ 50:] += 1
+
     dataset = TensorDataset(X,y)
     datamodule = TensorDataModule(dataset,lengths=[0.75,0.2,0.05], batch_size=25)
     # train model
     trainer = pl.Trainer(accelerator='cpu',max_epochs=2,logger=None, enable_checkpointing=False)
     trainer.fit( model, datamodule )
+  
     # trace model
     traced_model = model.to_torchscript(file_path=None, method='trace', example_inputs=X[0])
     model.eval()

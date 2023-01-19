@@ -8,6 +8,8 @@ from torch.utils.data import TensorDataset
 
 from mlcvs.core.utils.decorators import decorate_methods,call_submodules_hooks,allowed_hooks
 
+from mlcvs.cvs.utils import *
+
 __all__ = ["Regression_CV"]
 
 @decorate_methods(call_submodules_hooks,methods=allowed_hooks)
@@ -36,15 +38,10 @@ class Regression_CV(pl.LightningModule):
 
         # Members
         self.blocks = ['normIn', 'nn']
-
-        # Initialize defaults #BASE_CV?
-        for b in self.blocks:
-            self.__setattr__(b,None)
-            options.setdefault(b,{})
+        initialize_block_defaults(self=self, options=options)
 
         # Parse info from args
-        self.n_in = layers[0]
-        self.n_out = layers[-1]
+        define_n_in_n_out(self=self, n_in=layers[0], n_out=layers[-1])
 
         # Initialize normIn
         o = 'normIn'
@@ -55,21 +52,15 @@ class Regression_CV(pl.LightningModule):
         o = 'nn'
         self.nn = FeedForward(layers, **options[o])
 
-        self.example_input_array = torch.ones(self.n_in) #BASE_CV?
-
         # parameters
         self.lr = 1e-3 
 
-    def forward(self, x: torch.tensor) -> (torch.tensor): #BASE_CV?
-        for b in self.blocks:
-            block = getattr(self, b)
-            if block is not None:
-                x = block(x)
-        return x
+    def forward(self, x: torch.tensor) -> (torch.tensor):
+        return forward_all_blocks(self=self, x=x)
 
-    def configure_optimizers(self): #BASE_CV?
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
-        return optimizer
+    def configure_optimizers(self):
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
+        return self.optimizer
 
     def loss_function(self, input, target): 
         # MSE LOSS

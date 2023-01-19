@@ -5,6 +5,7 @@ from mlcvs.core.utils.decorators import decorate_methods, allowed_hooks, call_su
 from mlcvs.core.models import FeedForward
 from mlcvs.core.transform import Normalization
 
+from mlcvs.cvs.utils import *
 
 @decorate_methods(call_submodules_hooks, methods=allowed_hooks)
 class AutoEncoder_CV(pl.LightningModule):
@@ -18,17 +19,12 @@ class AutoEncoder_CV(pl.LightningModule):
 
         # Members
         self.blocks = ['normIn','encoder','normOut','decoder'] 
-
-        # Initialize defaults #BASE_CV?
-        for b in self.blocks:
-            self.__setattr__(b,None)
-            options.setdefault(b,{})
+        initialize_block_defaults(self=self, options=options)
 
         # parse info from args
+        define_n_in_n_out(self=self, n_in=encoder_layers[0], n_out=encoder_layers[-1])
         if decoder_layers is None:
             decoder_layers = encoder_layers[::-1]
-        self.n_in = encoder_layers[0]
-        self.n_out = encoder_layers[-1]
 
         # initialize normIn
         o = 'normIn'
@@ -48,9 +44,6 @@ class AutoEncoder_CV(pl.LightningModule):
         o = 'decoder'
         self.decoder = FeedForward(decoder_layers, **options[o])
 
-        # set input example
-        self.example_input_array = torch.ones(self.n_in) #BASE_CV?
-
     def forward(self, x: torch.tensor) -> (torch.tensor):
         if self.normIn is not None:
             x = self.normIn(x)
@@ -67,8 +60,8 @@ class AutoEncoder_CV(pl.LightningModule):
         return x
     
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
-        return optimizer
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        return self.optimizer
 
     def loss_function(self, input, target):
         # Reconstruction (MSE) loss
