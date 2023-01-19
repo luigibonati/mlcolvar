@@ -4,8 +4,9 @@ import pytorch_lightning as pl
 from mlcvs.core.utils.decorators import decorate_methods, allowed_hooks, call_submodules_hooks
 from mlcvs.core.models import FeedForward
 from mlcvs.core.transform import Normalization
-
 from mlcvs.cvs.utils import CV_utils
+
+__all__ = ["AutoEncoder_CV"]
 
 @decorate_methods(call_submodules_hooks, methods=allowed_hooks)
 class AutoEncoder_CV(pl.LightningModule, CV_utils):
@@ -17,7 +18,8 @@ class AutoEncoder_CV(pl.LightningModule, CV_utils):
                 options : dict = {}, 
                 **kwargs):
         """
-        Train a CV defined as the output layer of the encoder of an autoencoder model
+        Train a CV defined as the output layer of the encoder of an autoencoder model (latent space). 
+        The decoder part is used only during the training for the reconstruction loss.
 
         Parameters
         ----------
