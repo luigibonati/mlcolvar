@@ -10,12 +10,12 @@ from torch.utils.data import TensorDataset
 
 from mlcvs.core.utils.decorators import decorate_methods,call_submodules_hooks,allowed_hooks
 
-from mlcvs.cvs.utils import *
+from mlcvs.cvs.utils import CV_utils
 
 __all__ = ["DeepTDA_CV"]
 
 @decorate_methods(call_submodules_hooks,methods=allowed_hooks)
-class DeepTDA_CV(pl.LightningModule):
+class DeepTDA_CV(pl.LightningModule, CV_utils):
     """
     Define Deep Targeted Discriminant Analysis (Deep-TDA) CV.
     Combine the inputs with a neural-network and optimize it in a way such that the data are distributed accordingly to a target distribution.
@@ -53,10 +53,10 @@ class DeepTDA_CV(pl.LightningModule):
 
         # Members
         self.blocks = ['normIn', 'nn']
-        initialize_block_defaults(self=self, options=options)
+        self.initialize_block_defaults(options=options)
         
         # Parse info from args
-        define_n_in_n_out(self=self, n_in=layers[0], n_out=layers[-1])
+        self.define_n_in_n_out(n_in=layers[0], n_out=layers[-1])
         
         self.n_states = n_states
         if self.n_out != n_cvs:
@@ -87,7 +87,7 @@ class DeepTDA_CV(pl.LightningModule):
         self.lr = 1e-3
 
     def forward(self, x: torch.tensor) -> (torch.tensor):
-        return forward_all_blocks(self=self, x=x)
+        return self.forward_all_blocks(x=x)
 
     def configure_optimizers(self):
         self.optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)

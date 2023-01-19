@@ -8,12 +8,12 @@ from torch.utils.data import TensorDataset
 
 from mlcvs.core.utils.decorators import decorate_methods,call_submodules_hooks,allowed_hooks
 
-from mlcvs.cvs.utils import *
+from mlcvs.cvs.utils import CV_utils
 
 __all__ = ["Regression_CV"]
 
 @decorate_methods(call_submodules_hooks,methods=allowed_hooks)
-class Regression_CV(pl.LightningModule):
+class Regression_CV(pl.LightningModule, CV_utils):
     """
     Example of collective variable obtained with a regression task.
     Combine the inputs with a neural-network and optimize it to match a target function
@@ -38,10 +38,10 @@ class Regression_CV(pl.LightningModule):
 
         # Members
         self.blocks = ['normIn', 'nn']
-        initialize_block_defaults(self=self, options=options)
+        self.initialize_block_defaults(options=options)
 
         # Parse info from args
-        define_n_in_n_out(self=self, n_in=layers[0], n_out=layers[-1])
+        self.define_n_in_n_out(n_in=layers[0], n_out=layers[-1])
 
         # Initialize normIn
         o = 'normIn'
@@ -56,7 +56,7 @@ class Regression_CV(pl.LightningModule):
         self.lr = 1e-3 
 
     def forward(self, x: torch.tensor) -> (torch.tensor):
-        return forward_all_blocks(self=self, x=x)
+        return self.forward_all_blocks(x=x)
 
     def configure_optimizers(self):
         self.optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
@@ -101,7 +101,6 @@ def test_regression_cv():
     dataset = TensorDataset(X,y)
     datamodule = TensorDataModule(dataset,lengths=[0.75,0.2,0.05], batch_size=25)
     # train model
-    model.lr = 10
     trainer = pl.Trainer(accelerator='cpu',max_epochs=2,logger=None, enable_checkpointing=False)
     trainer.fit( model, datamodule )
     # trace model

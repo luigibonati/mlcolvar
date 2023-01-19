@@ -5,24 +5,36 @@ from mlcvs.core.utils.decorators import decorate_methods, allowed_hooks, call_su
 from mlcvs.core.models import FeedForward
 from mlcvs.core.transform import Normalization
 
-from mlcvs.cvs.utils import *
+from mlcvs.cvs.utils import CV_utils
 
 @decorate_methods(call_submodules_hooks, methods=allowed_hooks)
-class AutoEncoder_CV(pl.LightningModule):
+class AutoEncoder_CV(pl.LightningModule, CV_utils):
     """AutoEncoding Collective Variable."""
     
     def __init__(self, encoder_layers : list , decoder_layers : list = None, options : dict[str,Any] = {}, **kwargs ):
-        """TODO 
+        """
+        Train a CV defined as the output layer of the encoder of an autoencoder model
 
+        Parameters
+        ----------
+        encoder_layers : list
+            Number of neurons per layer of the encoder
+        decoder_layers : list, optional
+            Number of neurons per layer of the decoder, by default None
+            If not set it takes automaically the reversed architecture of the encoder
+        options : dict[str,Any], optional
+            Options for the building blocks of the model, by default {}.
+            Available blocks: ['normIn', 'encoder','normOut','decoder'].
+            Set 'block_name' = None or False to turn off that block
         """
         super().__init__()
 
         # Members
         self.blocks = ['normIn','encoder','normOut','decoder'] 
-        initialize_block_defaults(self=self, options=options)
+        self.initialize_block_defaults(options=options)
 
         # parse info from args
-        define_n_in_n_out(self=self, n_in=encoder_layers[0], n_out=encoder_layers[-1])
+        self.define_n_in_n_out(n_in=encoder_layers[0], n_out=encoder_layers[-1])
         if decoder_layers is None:
             decoder_layers = encoder_layers[::-1]
 
