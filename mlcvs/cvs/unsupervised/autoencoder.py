@@ -6,7 +6,7 @@ from mlcvs.core.models import FeedForward
 from mlcvs.core.transform import Normalization
 from mlcvs.cvs.utils import CV_utils
 
-__all__ = ["AutoEncoderCV"]
+__all__ = ["AutoEncoder_CV"]
 
 @decorate_methods(call_submodules_hooks, methods=allowed_hooks)
 class AutoEncoder_CV(pl.LightningModule, CV_utils):
