@@ -11,7 +11,11 @@ from mlcvs.cvs.utils import CV_utils
 class AutoEncoder_CV(pl.LightningModule, CV_utils):
     """AutoEncoding Collective Variable."""
     
-    def __init__(self, encoder_layers : list , decoder_layers : list = None, options : dict[str,Any] = {}, **kwargs ):
+    def __init__(self,
+                encoder_layers : list, 
+                decoder_layers : list = None, 
+                options : dict = {}, 
+                **kwargs):
         """
         Train a CV defined as the output layer of the encoder of an autoencoder model
 
@@ -27,7 +31,7 @@ class AutoEncoder_CV(pl.LightningModule, CV_utils):
             Available blocks: ['normIn', 'encoder','normOut','decoder'].
             Set 'block_name' = None or False to turn off that block
         """
-        super().__init__()
+        super().__init__(**kwargs)
 
         # Members
         self.blocks = ['normIn','encoder','normOut','decoder'] 
@@ -72,8 +76,7 @@ class AutoEncoder_CV(pl.LightningModule, CV_utils):
         return x
     
     def configure_optimizers(self):
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
-        return self.optimizer
+        return self.initialize_default_Adam_opt()
 
     def loss_function(self, input, target):
         # Reconstruction (MSE) loss

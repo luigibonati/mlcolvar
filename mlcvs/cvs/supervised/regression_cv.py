@@ -21,7 +21,7 @@ class Regression_CV(pl.LightningModule, CV_utils):
     
     def __init__(self, 
                 layers : list, 
-                options : dict[str, Any] = {},
+                options : dict = {},
                 **kwargs):
         """Example of collective variable obtained with a regression task.
 
@@ -52,15 +52,11 @@ class Regression_CV(pl.LightningModule, CV_utils):
         o = 'nn'
         self.nn = FeedForward(layers, **options[o])
 
-        # parameters
-        self.lr = 1e-3 
-
     def forward(self, x: torch.tensor) -> (torch.tensor):
         return self.forward_all_blocks(x=x)
 
     def configure_optimizers(self):
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
-        return self.optimizer
+        return self.initialize_default_Adam_opt()
 
     def loss_function(self, input, target): 
         # MSE LOSS

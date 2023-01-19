@@ -26,7 +26,7 @@ class DeepTDA_CV(pl.LightningModule, CV_utils):
                 target_centers : list, 
                 target_sigmas : list, 
                 layers : list, 
-                options : dict[str, Any] = {}, 
+                options : dict = {}, 
                 **kwargs):
         """
         Define Deep Targeted Discriminant Analysis (Deep-TDA) CV.
@@ -83,15 +83,11 @@ class DeepTDA_CV(pl.LightningModule, CV_utils):
         o = 'nn'
         self.nn = FeedForward(layers, **options[o])
 
-        # parameters
-        self.lr = 1e-3
-
     def forward(self, x: torch.tensor) -> (torch.tensor):
         return self.forward_all_blocks(x=x)
 
     def configure_optimizers(self):
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
-        return self.optimizer
+        return self.initialize_default_Adam_opt()
 
     def loss_function(self, input, labels):
         # TDA loss
@@ -132,6 +128,7 @@ def test_deeptda_cv():
                         target_sigmas = [0.2, 0.2],
                         layers = layers
                         )
+    model.lr = 1e-3 # optional
     print('----------')
     print(model)
 

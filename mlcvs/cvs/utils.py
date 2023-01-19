@@ -5,7 +5,7 @@ from typing import Any
 class CV_utils():
     def __init__(self):
         self = self
-       
+
     def initialize_block_defaults(self, options : dict = {}):
         """
         Initialize the blocks as attributes of the CV class.
@@ -19,6 +19,21 @@ class CV_utils():
         for b in self.blocks:
             self.__setattr__(b,None)
             options.setdefault(b,{})
+
+    def initialize_default_Adam_opt(self) -> torch.optim:
+        """
+        Initialize a default Adam optimizer.
+        If self.lr is not defined sets lr=1e-3 .
+
+        Returns
+        -------
+        torch.optim
+            Torch optimizer
+        """
+        if not hasattr(self, 'lr'):
+            self.lr =  1e-3
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
+        return self.optimizer
 
     def define_n_in_n_out(self, n_in : int, n_out : int):
         """
