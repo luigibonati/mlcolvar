@@ -22,17 +22,11 @@ class DeepLDA_CV(pl.LightningModule,CV_utils):
         ----------
         n_states : int
             Number of states for the training
-        n_cvs : int
-            Numnber of collective variables to be trained
-        target_centers : list
-            Centers of the Gaussian targets
-        target_sigmas : list
-            Standard deviations of the Gaussian targets
         layers : list
             Number of neurons per layer
         options : dict[str, Any], optional
             Options for the building blocks of the model, by default {}.
-            Available blocks: ['normIn', 'nn'].
+            Available blocks: ['normIn','nn','lda','normOut'] .
             Set 'block_name' = None or False to turn off that block
         """
         super().__init__(**kwargs)
