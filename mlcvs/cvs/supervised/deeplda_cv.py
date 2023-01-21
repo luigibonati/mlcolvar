@@ -14,7 +14,7 @@ __all__ = ["DeepLDA_CV"]
 class DeepLDA_CV(pl.LightningModule,CV_utils):
     """Neural network-based discriminant collective variables."""
     
-    def __init__(self, n_states : int, layers : list , options : dict = {}, **kwargs): # TODO
+    def __init__(self, n_states : int, layers : list , options : dict = {}, **kwargs):
         """ 
         Define a Deep Linear Discriminant Analysis (Deep-LDA) CV.
 
@@ -134,12 +134,8 @@ class DeepLDA_CV(pl.LightningModule,CV_utils):
 
         Parameters
         ----------
-        H : torch.tensor
-            NN output
-        y : torch.tensor
-            labels
-        save_params: bool
-            save the eigenvalues/vectors of LDA into the model
+        eigenvalues : torch.tensor
+            LDA eigenvalues
 
         Returns
         -------
