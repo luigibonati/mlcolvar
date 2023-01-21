@@ -64,11 +64,7 @@ class DeepLDA_CV(pl.LightningModule,CV_utils):
         self.set_regularization(sw_reg=0.05)
 
     def forward(self, x: torch.tensor) -> (torch.tensor):
-        for b in self.blocks:
-            block = getattr(self, b)
-            if block is not None:
-                x = block(x)
-        return x
+        return self.forward_all_blocks(x)
 
     def forward_nn(self, x: torch.tensor) -> (torch.tensor):
         if self.normIn is not None:
