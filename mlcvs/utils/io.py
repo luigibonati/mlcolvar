@@ -223,7 +223,7 @@ def dataset_from_file(file_names : list,
     else:
         return dataset
 
-def test_dataloader():
+def test_datasetFromFile():
     print('Test no regex on two states..')
     torch_dataset, pd_dataframe = dataset_from_file(file_names = ['state_A.dat', 'state_B.dat'], 
                                                     max_rows = 10, 
@@ -257,4 +257,4 @@ def test_dataloader():
                                                     verbose = True)
 
 if __name__ == "__main__":
-    test_dataloader() 
+    test_datasetFromFile()
