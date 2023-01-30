@@ -112,35 +112,50 @@ class DeepTDA_CV(pl.LightningModule, CV_utils):
         self.log('valid_loss_sigmas', loss_sigmas, on_epoch=True)
 
 
-def test_deeptda_cv():
+def test_deeptda_cv(n_states = 2, n_cvs = 1):
     """
     Create a synthetic dataset and test functionality of the DeepTDA_CV class
     """
-    n_in, n_out = 2, 1 
+    n_in, n_out = 2, n_cvs 
     layers = [n_in, 24, 12, n_out]
+
+    if n_cvs == 1:
+        if n_states == 2:
+            target_centers = [-10, 10]
+            target_sigmas = [0.1, 0.1]
+        elif n_states == 3:
+            target_centers = [-10, 10, 0]
+            target_sigmas = [0.1, 0.1, 0.1]
+    elif n_cvs == 2:
+        target_centers = [[-10, -10], [10, -10], [0, 10]]
+        target_sigmas = [[0.1, 0.1], [0.1, 0.1], [0.1, 0.1]]
 
     # initialize via dictionary
     options= { 'FeedForward' : { 'activation' : 'relu' } }
 
-    model = DeepTDA_CV(n_states = 2,
-                        n_cvs = 1,
-                        target_centers = [-10, 10],
-                        target_sigmas = [0.2, 0.2],
+    model = DeepTDA_CV(n_states = n_states,
+                        n_cvs = n_cvs,
+                        target_centers = target_centers,
+                        target_sigmas = target_sigmas,
                         layers = layers
                         )
+
     model.lr = 1e-3 # optional
     print('----------')
     print(model)
 
     # create dataset
-    X = torch.randn((100,2))
-    # make two 'states' different from each other
+    X = torch.randn((50*n_states,2))
+    
+    # make the sets different from each other
     X[:50 ] += 10
     X[ 50:] -= 10
+
     # create labels
     y = torch.zeros(X.shape[0])
     y[ 50:] += 1
-
+    if n_states == 3:
+        y[100:] += 1
     dataset = TensorDataset(X,y)
     datamodule = TensorDataModule(dataset,lengths=[0.75,0.2,0.05], batch_size=25)
     # train model
@@ -153,4 +168,6 @@ def test_deeptda_cv():
     assert torch.allclose(model(X),traced_model(X))
 
 if __name__ == "__main__":
-    test_deeptda_cv() 
+    test_deeptda_cv(2,1)
+    test_deeptda_cv(3,1)
+    test_deeptda_cv(3,2) 
