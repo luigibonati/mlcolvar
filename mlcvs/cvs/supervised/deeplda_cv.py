@@ -206,8 +206,7 @@ def test_deeplda(n_states=2):
     model = DeepLDA_CV( n_states, layers, options=opts )
 
     # create trainer and fit
-    trainer = pl.Trainer(accelerator='gpu', devices=1, 
-                        callbacks=[pl.callbacks.early_stopping.EarlyStopping(monitor="valid_loss", patience=100, mode='min', min_delta=0.1, verbose=False)],
+    trainer = pl.Trainer(callbacks=[pl.callbacks.early_stopping.EarlyStopping(monitor="valid_loss", patience=100, mode='min', min_delta=0.1, verbose=False)],
                         max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)
     trainer.fit( model, datamodule )
 
