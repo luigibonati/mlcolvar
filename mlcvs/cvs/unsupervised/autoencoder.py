@@ -105,7 +105,7 @@ def test_autoencodercv():
     # initialize via dictionary
     opts = { 'normIn'  : None,
              'encoder' : { 'activation' : 'relu' },
-             'normOut' : { 'mode'   : 'std' },
+             'normOut' : { 'mode'   : 'mean_std' },
            } 
     model = AutoEncoder_CV( encoder_layers=layers, options=opts )
     print(model)

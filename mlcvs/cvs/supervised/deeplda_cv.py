@@ -15,16 +15,16 @@ __all__ = ["DeepLDA_CV"]
 class DeepLDA_CV(pl.LightningModule,CV_utils):
     """Neural network-based discriminant collective variables."""
     
-    def __init__(self, n_states : int, layers : list , options : dict = {}, **kwargs):
+    def __init__(self, layers : list , n_states : int, options : dict = {}, **kwargs):
         """ 
         Define a Deep Linear Discriminant Analysis (Deep-LDA) CV.
 
         Parameters
         ----------
-        n_states : int
-            Number of states for the training
         layers : list
             Number of neurons per layer
+        n_states : int
+            Number of states for the training
         options : dict[str, Any], optional
             Options for the building blocks of the model, by default {}.
             Available blocks: ['normIn','nn','lda','normOut'] .
@@ -124,9 +124,9 @@ class DeepLDA_CV(pl.LightningModule,CV_utils):
         reg_loss_lor = -self.lorentzian_reg / (1 + (reg_loss - 1).pow(2))
         return reg_loss_lor
 
-    def loss_function(self, eigenvalues):
+    def loss_function(self, eigenvalues, options = {'mode':'sum'}):
         """
-        Loss function for the DeepLDA CV. Correspond to maximizing the eigenvalue(s) of LDA plus a regularization on the NN outputs.
+        Loss function for the DeepLDA CV. Correspond to maximizing the eigenvalue(s) of LDA.
         If there are C classes the sum of the C-1 eigenvalues will be maximized.
 
         Parameters
@@ -139,7 +139,7 @@ class DeepLDA_CV(pl.LightningModule,CV_utils):
         loss : torch.tensor
             loss function
         """
-        loss = - reduce_eigenvalues(eigenvalues, {'mode':'sum'})
+        loss = - reduce_eigenvalues(eigenvalues, options)
 
         return loss
 
@@ -198,12 +198,12 @@ def test_deeplda(n_states=2):
                                     lengths = [0.8,0.2], batch_size=n_states*n_points)
 
     # initialize CV
-    opts = { 'normIn'  : { 'mode'   : 'std' } ,
+    opts = { 'normIn'  : { 'mode'   : 'mean_std' } ,
              'nn' :      { 'activation' : 'relu' },
              'lda' :     {} ,
              'normOut' : {} , 
            } 
-    model = DeepLDA_CV( n_states, layers, options=opts )
+    model = DeepLDA_CV( layers, n_states, options=opts )
 
     # create trainer and fit
     trainer = pl.Trainer(callbacks=[pl.callbacks.early_stopping.EarlyStopping(monitor="valid_loss", patience=100, mode='min', min_delta=0.1, verbose=False)],
