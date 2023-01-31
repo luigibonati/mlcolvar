@@ -229,7 +229,7 @@ def test_datasetFromFile():
                                                     max_rows = 10, 
                                                     skip_rows =  0,
                                                     create_labels=True,
-                                                    files_folder = '../data_samples',
+                                                    files_folder = 'mlcvs/tests/data',
                                                     return_dataframe = True,
                                                     regex_string='',
                                                     verbose = True)
@@ -240,7 +240,7 @@ def test_datasetFromFile():
                                                     max_rows = 10, 
                                                     skip_rows =  0,
                                                     create_labels=True,
-                                                    files_folder = '../data_samples',
+                                                    files_folder = 'mlcvs/tests/data',
                                                     return_dataframe = True,
                                                     regex_string='n|o',
                                                     verbose = True)
@@ -251,7 +251,7 @@ def test_datasetFromFile():
                                                     max_rows = 10, 
                                                     skip_rows =  0,
                                                     create_labels=False,
-                                                    files_folder = '../data_samples',
+                                                    files_folder = 'mlcvs/tests/data',
                                                     return_dataframe = True,
                                                     regex_string='',
                                                     verbose = True)
