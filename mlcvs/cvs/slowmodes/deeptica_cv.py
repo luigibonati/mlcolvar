@@ -160,9 +160,7 @@ def test_deep_tica():
     model = DeepTICA_CV(layers,n_out=1)
 
     # create trainer and fit
-    trainer = pl.Trainer(accelerator='gpu', devices=1, 
-                        callbacks=[pl.callbacks.early_stopping.EarlyStopping(monitor="valid_loss", patience=10, mode='min', verbose=False)],
-                        max_epochs=1, log_every_n_steps=2, logger=None, enable_checkpointing=False)
+    trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2, logger=None, enable_checkpointing=False)
     trainer.fit( model, datamodule )
 
     model.eval()
