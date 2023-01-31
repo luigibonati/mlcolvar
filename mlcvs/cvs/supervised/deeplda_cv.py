@@ -1,12 +1,13 @@
 import torch
 import pytorch_lightning as pl
-from mlcvs.core.utils.decorators import decorate_methods, allowed_hooks, call_submodules_hooks
+from mlcvs.utils.decorators import decorate_methods, allowed_hooks, call_submodules_hooks
 from mlcvs.core.models import FeedForward
 from mlcvs.core.transform import Normalization
 from mlcvs.utils.data import TensorDataModule
 from torch.utils.data import TensorDataset
 from mlcvs.cvs.utils import CV_utils
-from mlcvs.core.utils.lda import LDA
+from mlcvs.core.stats.lda import LDA
+from mlcvs.core.loss.eigvals import reduce_eigenvalues
 
 __all__ = ["DeepLDA_CV"]
 
@@ -126,7 +127,7 @@ class DeepLDA_CV(pl.LightningModule,CV_utils):
     def loss_function(self, eigenvalues):
         """
         Loss function for the DeepLDA CV. Correspond to maximizing the eigenvalue(s) of LDA plus a regularization on the NN outputs.
-        If there are C classes the C-1 eigenvalue will be maximized.
+        If there are C classes the sum of the C-1 eigenvalues will be maximized.
 
         Parameters
         ----------
@@ -138,43 +139,43 @@ class DeepLDA_CV(pl.LightningModule,CV_utils):
         loss : torch.tensor
             loss function
         """
-        # if two classes the loss is equal to the single eigenvalue
-        if self.lda.n_states == 2:
-            loss = -eigenvalues
-        # if more than two classes the loss is equal to the smallest of the C-1 eigenvalues
-        # TODO ADD OPTION FOR SUM EIGVALS MULTICLASS
-        elif self.lda.n_states > 2:
-            loss = -eigenvalues[self.lda.n_states - 2]
-        else:
-            raise ValueError(f"The number of classes for LDA must be greater than 1 (detected: {self.lda.n_states})")
+        loss = - reduce_eigenvalues(eigenvalues, {'mode':'sum'})
 
         return loss
 
     def training_step(self, train_batch, batch_idx):
+        # =================get data===================
         x, y = train_batch
+        # =================forward====================
         h = self.forward_nn(x)
-        S_b, S_w = self.lda.compute_scatter_matrices(h,y)
-        eigvals,_ = self.lda.compute_eigenvalues(S_b,S_w,save_params=True)
+        # ===================lda======================
+        eigvals,_ = self.lda.compute(h,y,save_params=True)
+        # ===================loss=====================
         loss = self.loss_function(eigvals)
         if self.lorentzian_reg > 0:
             lorentzian_reg = self.regularization_lorentzian(h)
             loss += lorentzian_reg
-        
+        # ====================log=====================        
         loss_dict = {'train_loss' : loss, 'train_lorentzian_reg' : lorentzian_reg}
         eig_dict = { f'train_eigval_{i+1}' : eigvals[i] for i in range(len(eigvals))}
         self.log_dict(dict(loss_dict, **eig_dict) ,on_step=True, on_epoch=True)
+        # ===================norm=====================     
         z = self.forward(x) # to accumulate info on normOut
         return loss
 
     def validation_step(self, val_batch, batch_idx):
+        # =================get data===================
         x, y = val_batch
+        # =================forward====================
         h = self.forward_nn(x)
-        S_b, S_w = self.lda.compute_scatter_matrices(h,y)
-        eigvals,_ = self.lda.compute_eigenvalues(S_b,S_w)
+        # ===================lda======================
+        eigvals,_ = self.lda.compute(h,y,save_params=True)
+        # ===================loss=====================
         loss = self.loss_function(eigvals)
         if self.lorentzian_reg > 0:
             lorentzian_reg = self.regularization_lorentzian(h)
             loss += lorentzian_reg
+        # ====================log=====================    
         loss_dict = {'valid_loss' : loss, 'valid_lorentzian_reg' : lorentzian_reg}
         eig_dict = { f'valid_eigval_{i+1}' : eigvals[i] for i in range(len(eigvals))}
         self.log_dict(dict(loss_dict, **eig_dict) ,on_step=True, on_epoch=True)
@@ -207,7 +208,7 @@ def test_deeplda(n_states=2):
     # create trainer and fit
     trainer = pl.Trainer(accelerator='gpu', devices=1, 
                         callbacks=[pl.callbacks.early_stopping.EarlyStopping(monitor="valid_loss", patience=100, mode='min', min_delta=0.1, verbose=False)],
-                        max_epochs=1, log_every_n_steps=2)#,logger=None, enable_checkpointing=False)
+                        max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)
     trainer.fit( model, datamodule )
 
     # eval

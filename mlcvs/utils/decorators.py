@@ -32,14 +32,16 @@ def apply_hooks(f):
 
     return wrapper
 
-"""Recursively apply hooks based on self.hooks dictionary, e.g. hooks = {"on_predict_batch_end": function_to_be_called]}"""
-def call_submodules_hooks(f):
+"""Call children hooks """
+def call_submodules_hooks(f, allowed_hooks = allowed_hooks):
     @functools.wraps(f)
     def wrapper(self,*args, **kwargs):
-        for child in self.children():
-            if isinstance(child,pl.LightningModule):
-                func = getattr(child,f.__name__)
-                func(*args, **kwargs)
+        f_name = f.__name__
+        if f_name in allowed_hooks:
+            for child in self.children():
+                if hasattr(child,f_name):
+                    func = getattr(child,f_name)
+                    func(*args, **kwargs)
         return f(self,*args, **kwargs)
 
     return wrapper
