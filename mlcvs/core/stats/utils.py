@@ -48,3 +48,71 @@ def cholesky_eigh(A, B, reg_B = 1e-6, n_eig = None ):
         eigvecs = eigvecs[:, : n_eig]
 
     return eigvals, eigvecs
+
+""" TODO implement also the non-symmetric version?
+#Compute the pseudoinverse (Moore-Penrose inverse) of C_0. if det(C_0) != 0 then the usual inverse is computed
+            C_new = torch.matmul(torch.pinverse(C_0),C_lag)
+            #find eigenvalues and vectors of C_new
+            #NOTE: torch.linalg.eig() returns complex tensors of dtype cfloat or cdouble
+            #          rather than real tensors mimicking complex tensors. 
+            #          For future developments it would be necessary to take either only the real part
+            #          or only the complex part or only the magnitude of the complex eigenvectors and eigenvalues 
+            eigvals, eigvecs = torch.linalg.eig(C_new, UPLO='L')
+"""
+
+def correlation_matrix(x,y,w=None,symmetrize=True):
+    """Compute the correlation matrix between x and y with weights w
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        first array
+    y : torch.Tensor
+        second array
+    w : torch.Tensor, optional
+        weights, by default None
+    symmetrize: bool, optional
+        whether to return 0.5 * (C + C^T), by default True
+
+    Returns
+    -------
+    torch.Tensor
+        correlation matrix
+
+    """
+    # TODO Add assert on shapes
+
+    if w is None: #TODO simplify it in the unbiased case?
+        w = torch.ones(x.shape[0])
+    
+    #compute correlation matrix
+    corr = torch.einsum('ij, ik, i -> jk', x, y, w )
+    corr /= torch.sum(w)
+        
+    if symmetrize:
+        corr = 0.5*(corr + corr.T)
+
+    return corr
+
+def compute_average(x, w = None):
+    """Compute (weighted) average on a batch
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Input data of shape
+    w : torch.Tensor, optional
+        Weights, by default None
+
+    Returns
+    -------
+    torch.Tensor
+        (weighted) mean of inputs
+
+    """
+    if w is not None:
+        ave = torch.einsum('ij,i ->j',x,w)/torch.sum(w)
+    else:
+        ave = torch.mean(x.T,1,keepdim=False).T
+    
+    return ave
