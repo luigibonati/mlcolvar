@@ -1,9 +1,6 @@
-torch~=1.10.2+cu113
-pandas~=1.4.1
-numpy~=1.22.2
-pytest~=7.1.3
-matplotlib~=3.5.1
-kdepy~=1.1.0
-yaml~=0.2.5
-pyyaml~=6.0
-setuptools~=65.3.0
+torch
+pandas
+numpy
+pytest
+matplotlib
+kdepy
