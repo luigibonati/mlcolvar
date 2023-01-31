@@ -1,4 +1,5 @@
 import torch
+from .utils import cholesky_eigh
 
 __all__ = ['LDA']
 
@@ -26,7 +27,7 @@ class LDA(torch.nn.Module):
 
     def __init__(self, n_in, n_states, harmonic_lda = False):
         """
-        Create a LDA object
+        Initialize a LDA object.
 
         Parameters
         ----------
@@ -55,6 +56,40 @@ class LDA(torch.nn.Module):
 
         # Regularization
         self.sw_reg = 1e-6
+
+    def compute(self, X, labels, save_params = True):
+        """
+        Compute LDA eigenvalues and eigenvectors. 
+        First compute the scatter matrices S_between (S_b) and S_within (S_w) and then solve the generalized eigenvalue problem.  
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_in)
+            Training data.
+        labels : array-like of shape (n_samples,)
+            states labels.
+        save_params: bool, optional
+            Whether to store parameters in model
+
+        Returns
+        -------
+        eigvals : torch.Tensor
+            LDA eigenvalues (n_states-1)
+        eigvecs : torch.Tensor
+            LDA eigenvectors (n_feature,n_states-1)
+
+        Notes
+        -----
+        The eigenvecs object which is returned is a matrix whose column eigvecs[:,i] is the eigenvector associated to eigvals[i]
+        """
+
+        S_b, S_w = self.compute_scatter_matrices(X,labels,save_params)
+        evals, evecs = cholesky_eigh(S_b,S_w,self.sw_reg,self.n_states-1)
+        if save_params:
+            self.evals = evals
+            self.evecs = evecs
+
+        return evals,evecs
 
     def compute_scatter_matrices(self, X, labels, save_params=True):
         """
@@ -118,75 +153,12 @@ class LDA(torch.nn.Module):
         # Compute S_b from total scatter matrix
         S_b = S_t - S_w
 
-        # Regularize S_w
-        S_w = S_w + self.sw_reg * torch.diag(
-            torch.Tensor().new_ones((d)).to(device)
-        )
-
         if save_params:
             self.S_b = S_b
             self.S_w = S_w
 
         return S_b, S_w
 
-    def compute_eigenvalues(self, S_b = None , S_w = None, save_params=True):
-        """
-        Compute LDA eigenvalues from S_w and S_b. 
-
-        Parameters
-        ----------
-        S_w, S_b : arrays of shape (n_in,n_in)
-            Between and within scatter matrices
-        save_params: bool, optional
-            Whether to store parameters in model
-
-        Returns
-        -------
-        eigvals : torch.Tensor
-            LDA eigenvalues (n_states-1)
-        eigvecs : torch.Tensor
-            LDA eigenvectors (n_feature,n_states-1)
-        """
-        if S_w is None: 
-            S_w = self.S_w
-        if S_b is None: 
-            S_b = self.S_b
-
-        # -- Generalized eigenvalue problem: S_b * v_i = lambda_i * Sw * v_i --
-
-        # (1) use cholesky decomposition for S_w
-        L = torch.linalg.cholesky(S_w, upper=False)
-
-        # (2) define new matrix using cholesky decomposition
-        L_t = torch.t(L)
-        L_ti = torch.inverse(L_t)
-        L_i = torch.inverse(L)
-        S_new = torch.matmul(torch.matmul(L_i, S_b), L_ti)
-
-        # (3) find eigenvalues and vectors of S_new
-        eigvals, eigvecs = torch.linalg.eigh(S_new, UPLO='L')
-        # sort
-        eigvals, indices = torch.sort(eigvals, 0, descending=True)
-        eigvecs = eigvecs[:, indices]
-
-        # (4) return to original eigenvectors
-        eigvecs = torch.matmul(L_ti, eigvecs)
-
-        # normalize them
-        for i in range(eigvecs.shape[1]):  # TODO maybe change in sum along axis?
-            norm = eigvecs[:, i].pow(2).sum().sqrt()
-            eigvecs[:, i].div_(norm)
-        # set the first component positive
-        eigvecs.mul_(torch.sign(eigvecs[0, :]).unsqueeze(0).expand_as(eigvecs))
-
-        # keep only C-1 eigvals and eigvecs
-        eigvals = eigvals[: self.n_states - 1]
-        eigvecs = eigvecs[:, : self.n_states - 1]
-        if save_params:
-            self.evals = eigvals
-            self.evecs = eigvecs
-
-        return eigvals, eigvecs
     
     def forward(self, x: torch.Tensor) -> (torch.Tensor):
         """
@@ -205,15 +177,16 @@ class LDA(torch.nn.Module):
         return torch.matmul(x, self.evecs)
 
 def test_lda():
-    n_in = 5
-    n_states = 3
+    n_in = 2
+    n_states = 2
     X = torch.rand(100,n_in)*100
     y = torch.randint(n_states,(100,1)).squeeze(1)
 
     lda = LDA(n_in,n_states)
-    S_w, S_b = lda.compute_scatter_matrices(X,y)
-    print(S_w.shape,S_b.shape)
-    evals,evecs = lda.compute_eigenvalues()
+    S_b, S_w = lda.compute_scatter_matrices(X,y)
+    print(S_w,S_b)
+    evals,evecs = lda.compute(X,y,True)
+    print(lda.S_w.shape,lda.S_b.shape)
     print(evals.shape,evecs.shape)
     s = lda(X)
     print(s.shape)

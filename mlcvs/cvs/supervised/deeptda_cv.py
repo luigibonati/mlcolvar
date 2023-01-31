@@ -8,7 +8,7 @@ from mlcvs.core import TDA_loss
 from mlcvs.utils.data import TensorDataModule
 from torch.utils.data import TensorDataset
 
-from mlcvs.core.utils.decorators import decorate_methods,call_submodules_hooks,allowed_hooks
+from mlcvs.utils.decorators import decorate_methods,call_submodules_hooks,allowed_hooks
 
 from mlcvs.cvs.utils import CV_utils
 
