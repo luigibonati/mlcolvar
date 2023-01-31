@@ -84,7 +84,7 @@ class LDA(torch.nn.Module):
         """
 
         S_b, S_w = self.compute_scatter_matrices(X,labels,save_params)
-        evals, evecs = cholesky_eigh(S_b,S_w,self.sw_reg,self.n_states-1)
+        evals, evecs = cholesky_eigh(S_b,S_w,self.sw_reg,n_eig=self.n_states-1)
         if save_params:
             self.evals = evals
             self.evecs = evecs

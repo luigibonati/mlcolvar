@@ -1,3 +1,4 @@
-__all__ = ["lda"]
+__all__ = ["LDA","TICA"]
 
-from .lda import *
+from .lda  import *
+from .tica import *
