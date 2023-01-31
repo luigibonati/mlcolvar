@@ -92,11 +92,11 @@ class FastTensorDataLoader:
     def __len__(self):
         return self.n_batches
 
-def test_fasttensordataloader(): 
+def test_FastTensorDataLoader(): 
     X = torch.arange(1,11).unsqueeze(1)
     y = X**2
     dataloader = FastTensorDataLoader([X,y],batch_size=2)
     print(next(iter(dataloader)))
 
 if __name__ == "__main__":
-    test_fasttensordataloader()
+    test_FastTensorDataLoader()
