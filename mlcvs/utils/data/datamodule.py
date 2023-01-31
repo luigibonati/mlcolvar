@@ -3,12 +3,13 @@ import pytorch_lightning as pl
 from torch.utils.data import TensorDataset, random_split
 from . import FastTensorDataLoader
 from typing import Union
+from .dataset import sequential_split
 
 __all__ = ["TensorDataModule"]
 
 class TensorDataModule(pl.LightningDataModule):
     """Lightning DataModule constructed for TensorDataset(s)."""
-    def __init__(self, dataset: TensorDataset, lengths=[0.8,0.2,0], batch_size: Union[int,list] = 32, shuffle : Union[bool,list] =  False,  generator : torch.Generator = None):
+    def __init__(self, dataset: TensorDataset, lengths=[0.8,0.2,0], batch_size: Union[int,list] = 32, random_splits: bool = True, shuffle : Union[bool,list] =  False,  generator : torch.Generator = None):
         """Create a DataModule derived from TensorDataset, which returns train/valid/test dataloaders.
 
         For the batch_size and shuffle parameters either a single value or a list-type of values (with same size as lenghts) can be provided.
@@ -21,6 +22,8 @@ class TensorDataModule(pl.LightningDataModule):
             Lenghts of the training/validation/test datasets , by default [0.8,0.2]
         batch_size : int or list, optional
             Batch size, by default 32
+        random_splits: bool, optional
+            whether to randomly split train/valid/test or sequentially, by default True
         shuffle : Union[bool,list], optional
             whether to shuffle the batches from the dataloader, by default False
         generator : torch.Generator, optional
@@ -37,10 +40,14 @@ class TensorDataModule(pl.LightningDataModule):
             self.shuffle = [shuffle for _ in lengths ]
         else:
             self.shuffle = shuffle
+        self.random_splits = random_splits
         self.generator = None
 
     def setup(self, stage: str):
-        self.dataset_splits = random_split(self.dataset, self.lengths, generator=self.generator)
+        if self.random_splits:
+            self.dataset_splits = random_split(self.dataset, self.lengths, generator=self.generator)
+        else:
+            self.dataset_splits = sequential_split(self.dataset, self.lengths)
 
     def train_dataloader(self):
         """Return training dataloader."""
