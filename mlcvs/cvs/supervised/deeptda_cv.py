@@ -112,50 +112,49 @@ class DeepTDA_CV(pl.LightningModule, CV_utils):
         self.log('valid_loss_centers', loss_centers, on_epoch=True)
         self.log('valid_loss_sigmas', loss_sigmas, on_epoch=True)
 
-import pytest
-import numpy as np
 
-@pytest.mark.parametrize("states_and_cvs", [  [2, 1], [3, 1], [3, 2], [5, 4] ])
-def test_deeptda_cv(states_and_cvs):
+import numpy as np
+def test_deeptda_cv():
     """
     Create a synthetic dataset and test functionality of the DeepTDA_CV class
     """
-    # get the number of states and cvs for the test run
-    n_states = states_and_cvs[0]
-    n_cvs = states_and_cvs[1]
-    
-    n_in, n_out = 2, n_cvs 
-    layers = [n_in, 4, 2, n_out]
-    target_centers = np.random.randn(n_states, n_cvs)
-    target_sigmas = np.random.randn(n_states, n_cvs)
+    for states_and_cvs in [  [2, 1], [3, 1], [3, 2], [5, 4] ]:
+        # get the number of states and cvs for the test run
+        n_states = states_and_cvs[0]
+        n_cvs = states_and_cvs[1]
+        
+        n_in, n_out = 2, n_cvs 
+        layers = [n_in, 4, 2, n_out]
+        target_centers = np.random.randn(n_states, n_cvs)
+        target_sigmas = np.random.randn(n_states, n_cvs)
 
-    # test initialize via dictionary
-    options= { 'FeedForward' : { 'activation' : 'relu' } }
+        # test initialize via dictionary
+        options= { 'FeedForward' : { 'activation' : 'relu' } }
 
-    model = DeepTDA_CV(n_states = n_states, n_cvs = n_cvs, target_centers = target_centers, target_sigmas = target_sigmas, layers = layers, options=options)
-    
-    print('----------')
-    print(model)
+        model = DeepTDA_CV(n_states = n_states, n_cvs = n_cvs, target_centers = target_centers, target_sigmas = target_sigmas, layers = layers, options=options)
+        
+        print('----------')
+        print(model)
 
-    # create dataset
-    samples = 50
-    X = torch.randn((samples * n_states, 2))
+        # create dataset
+        samples = 50
+        X = torch.randn((samples * n_states, 2))
 
-    # create labels
-    y = torch.zeros(X.shape[0])
-    for i in range(1, n_states):
-        y[samples*i:] += 1
-    
-    dataset = TensorDataset(X,y)
-    datamodule = TensorDataModule(dataset,lengths=[0.75,0.2,0.05], batch_size=samples)
-    # train model
-    trainer = pl.Trainer(accelerator='cpu', max_epochs=2, logger=None, enable_checkpointing=False)
-    trainer.fit( model, datamodule )
+        # create labels
+        y = torch.zeros(X.shape[0])
+        for i in range(1, n_states):
+            y[samples*i:] += 1
+        
+        dataset = TensorDataset(X,y)
+        datamodule = TensorDataModule(dataset,lengths=[0.75,0.2,0.05], batch_size=samples)
+        # train model
+        trainer = pl.Trainer(accelerator='cpu', max_epochs=2, logger=None, enable_checkpointing=False)
+        trainer.fit( model, datamodule )
 
-    # trace model
-    traced_model = model.to_torchscript(file_path=None, method='trace', example_inputs=X[0])
-    model.eval()
-    assert torch.allclose(model(X),traced_model(X))
+        # trace model
+        traced_model = model.to_torchscript(file_path=None, method='trace', example_inputs=X[0])
+        model.eval()
+        assert torch.allclose(model(X),traced_model(X))
 
 if __name__ == "__main__":
     test_deeptda_cv()
