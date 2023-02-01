@@ -140,7 +140,8 @@ def dataset_from_file(file_names : list,
                     regex_string : str = '',
                     files_folder : str = None,
                     dtype : torch.dtype = None,
-                    return_dataframe : bool = False, 
+                    return_dataframe : bool = False,
+                    modifier_function = None, 
                     verbose : bool =  True):
     """
     Initialize a torch labeled dataset from a list of files.
@@ -165,6 +166,9 @@ def dataset_from_file(file_names : list,
         Torch dtype for the tensor in the dataset, by default None
     return_dataframe : bool, optional
         Return also the imported Pandas dataframe for convenience, by default False
+    modifier_function : function, optional
+        Function to be applied to the imported data, by default None.
+        If regex_string is given, the funciton is applied only to the selected data
     verbose : bool, optional
         Print info on the imported data, by default True
 
@@ -205,14 +209,32 @@ def dataset_from_file(file_names : list,
         dataframe = pd.concat([dataframe, dataframe_tmp], ignore_index=True)
     
     if verbose: 
-        print(f' - Imported pandas dataframe shape: ', np.shape(dataframe))
-        print(f' - Filtered pandas dataframe shape: ', np.shape(dataframe.filter(regex=f'^(?!.*Label)^(?!.*time)({regex_string})')))
+        print(' - Imported pandas dataframe shape: ', np.shape(dataframe))
+        print(' - Filtered pandas dataframe shape: ', np.shape(dataframe.filter(regex=f'^(?!.*Label)^(?!.*time)({regex_string})')))
+
+    input_names = list(dataframe.filter(regex=f'^(?!.*Label)^(?!.*time)({regex_string})').columns)
+    if verbose:
+        n_inputs = len(input_names)
+        print(' - Number of inputs: ', n_inputs)        
+        rows = int(np.ceil(n_inputs / 10))
+        print(' - Input_names: ')
+        for r in range(rows):
+            for c in range(10):
+                if (c+1) + (r*10) <= n_inputs:
+                    if c==0:
+                        print(f'\t{c + r*10}- {input_names[c + r*10]}', end='')    
+                    else:
+                        print(f'\t\t{c + r*10}- {input_names[c + r*10]}', end='')
+            print()
+
+    if modifier_function is not None:
+        dataframe[input_names] = dataframe[input_names].apply(modifier_function)
 
     # create torch dataset
     if create_labels: 
-        dataset = TensorDataset(torch.tensor(dataframe.filter(regex=f'^(?!.*Label)^(?!.*time)({regex_string})').values, dtype=dtype), torch.tensor(dataframe.filter(like='Label').values, dtype=dtype))
+        dataset = TensorDataset(torch.tensor(dataframe[input_names].values, dtype=dtype), torch.tensor(dataframe.filter(like='Label').values, dtype=dtype))
     else:
-        dataset = TensorDataset(torch.tensor(dataframe.filter(regex=f'^(?!.*Label)^(?!.*time)({regex_string})').values, dtype=dtype))
+        dataset = TensorDataset(torch.tensor(dataframe[input_names].values, dtype=dtype))
     
     if verbose:
         print(f' - Points in torch dataset: ', dataset.__len__())
@@ -226,18 +248,18 @@ def dataset_from_file(file_names : list,
 def test_datasetFromFile():
     print('Test no regex on two states..')
     torch_dataset, pd_dataframe = dataset_from_file(file_names = ['state_A.dat', 'state_B.dat'], 
-                                                    max_rows = 10, 
+                                                    max_rows = 5, 
                                                     skip_rows =  0,
                                                     create_labels=True,
                                                     files_folder = 'mlcvs/tests/data',
                                                     return_dataframe = True,
                                                     regex_string='',
                                                     verbose = True)
-    
+
     print()
     print('Test limited regex on two states..')
     torch_dataset, pd_dataframe = dataset_from_file(file_names = ['state_A.dat', 'state_B.dat'], 
-                                                    max_rows = 10, 
+                                                    max_rows = 5, 
                                                     skip_rows =  0,
                                                     create_labels=True,
                                                     files_folder = 'mlcvs/tests/data',
@@ -245,10 +267,28 @@ def test_datasetFromFile():
                                                     regex_string='n|o',
                                                     verbose = True)
 
+    def test_modifier(x):
+        return x**2
+
+    print()
+    print('Test limited regex on two states with modifier..')
+    #print('[TEST] Dataframe before mod: ', pd_dataframe)
+
+    torch_dataset, pd_dataframe = dataset_from_file(file_names = ['state_A.dat', 'state_B.dat'], 
+                                                    max_rows = 5, 
+                                                    skip_rows =  0,
+                                                    create_labels=True,
+                                                    files_folder = 'mlcvs/tests/data',
+                                                    return_dataframe = True,
+                                                    regex_string='n|o',
+                                                    modifier_function=test_modifier,
+                                                    verbose = True)
+    #print('[TEST] Dataframe after mod: ', pd_dataframe)
+    
     print()
     print('Test unlabeled on three states..')
     torch_dataset, pd_dataframe = dataset_from_file(file_names = ['state_A.dat', 'state_B.dat', 'state_C.dat'], 
-                                                    max_rows = 10, 
+                                                    max_rows = 5, 
                                                     skip_rows =  0,
                                                     create_labels=False,
                                                     files_folder = 'mlcvs/tests/data',
