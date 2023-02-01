@@ -213,19 +213,6 @@ def dataset_from_file(file_names : list,
         print(' - Filtered pandas dataframe shape: ', np.shape(dataframe.filter(regex=f'^(?!.*Label)^(?!.*time)({regex_string})')))
 
     input_names = list(dataframe.filter(regex=f'^(?!.*Label)^(?!.*time)({regex_string})').columns)
-    if verbose:
-        n_inputs = len(input_names)
-        print(' - Number of inputs: ', n_inputs)        
-        rows = int(np.ceil(n_inputs / 10))
-        print(' - Input_names: ')
-        for r in range(rows):
-            for c in range(10):
-                if (c+1) + (r*10) <= n_inputs:
-                    if c==0:
-                        print(f'\t{c + r*10}- {input_names[c + r*10]}', end='')    
-                    else:
-                        print(f'\t\t{c + r*10}- {input_names[c + r*10]}', end='')
-            print()
 
     if modifier_function is not None:
         dataframe[input_names] = dataframe[input_names].apply(modifier_function)
@@ -237,7 +224,8 @@ def dataset_from_file(file_names : list,
         dataset = TensorDataset(torch.tensor(dataframe[input_names].values, dtype=dtype))
     
     if verbose:
-        print(f' - Points in torch dataset: ', dataset.__len__())
+        print()
+        print(f' - Samples in torch dataset: ', dataset.__len__())
         print(f' - Descriptors in dataset: ', list(dataset)[0][0].shape[0])
     
     if return_dataframe:
