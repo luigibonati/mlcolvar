@@ -2,6 +2,8 @@ import torch
 import numpy as np
 from torch.utils.data import Dataset
 
+__all__ = ["DictionaryDataset"]
+
 class DictionaryDataset(Dataset):
     """Define a torch dataset from a dictionary of lists/array/tensors and names.
     E.g. { 'data' : torch.tensor([1,2,3,4]), 
@@ -56,6 +58,19 @@ def test_DictionaryDataset():
     print(dataset[0])
     print(dataset[0:2]['data'])
     print(dataset[0:2]['data'].dtype)
+
+    # test with dataloader
+    from torch.utils.data import DataLoader
+    loader = DataLoader(dataset,batch_size=1)
+    batch=next(iter(loader))
+    print(batch['data'])
+
+    # test with fastdataloader
+    from .dataloader import FastTensorDataLoader
+    loader = FastTensorDataLoader(dataset,batch_size=1)
+    print(loader.names)
+    batch=next(iter(loader))
+    print(batch)
 
 if __name__ == "__main__":
     test_DictionaryDataset()
