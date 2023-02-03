@@ -92,6 +92,7 @@ class DeepTDA_CV(pl.LightningModule, CV_utils):
     def loss_function(self, input, labels):
         # TDA loss
         loss, loss_centers, loss_sigmas = TDA_loss(input, labels, self.n_states, self.target_centers, self.target_sigmas)
+        
         return loss, loss_centers, loss_sigmas
 
     def training_step(self, train_batch, batch_idx):
@@ -112,62 +113,48 @@ class DeepTDA_CV(pl.LightningModule, CV_utils):
         self.log('valid_loss_sigmas', loss_sigmas, on_epoch=True)
 
 
-def test_deeptda_cv(n_states = 2, n_cvs = 1):
+import numpy as np
+def test_deeptda_cv():
     """
     Create a synthetic dataset and test functionality of the DeepTDA_CV class
     """
-    n_in, n_out = 2, n_cvs 
-    layers = [n_in, 24, 12, n_out]
+    for states_and_cvs in [  [2, 1], [3, 1], [3, 2], [5, 4] ]:
+        # get the number of states and cvs for the test run
+        n_states = states_and_cvs[0]
+        n_cvs = states_and_cvs[1]
+        
+        n_in, n_out = 2, n_cvs 
+        layers = [n_in, 4, 2, n_out]
+        target_centers = np.random.randn(n_states, n_cvs)
+        target_sigmas = np.random.randn(n_states, n_cvs)
 
-    if n_cvs == 1:
-        if n_states == 2:
-            target_centers = [-10, 10]
-            target_sigmas = [0.1, 0.1]
-        elif n_states == 3:
-            target_centers = [-10, 10, 0]
-            target_sigmas = [0.1, 0.1, 0.1]
-    elif n_cvs == 2:
-        target_centers = [[-10, -10], [10, -10], [0, 10]]
-        target_sigmas = [[0.1, 0.1], [0.1, 0.1], [0.1, 0.1]]
+        # test initialize via dictionary
+        options= { 'FeedForward' : { 'activation' : 'relu' } }
 
-    # initialize via dictionary
-    options= { 'FeedForward' : { 'activation' : 'relu' } }
+        model = DeepTDA_CV(n_states = n_states, n_cvs = n_cvs, target_centers = target_centers, target_sigmas = target_sigmas, layers = layers, options=options)
+        
+        print('----------')
+        print(model)
 
-    model = DeepTDA_CV(n_states = n_states,
-                        n_cvs = n_cvs,
-                        target_centers = target_centers,
-                        target_sigmas = target_sigmas,
-                        layers = layers
-                        )
+        # create dataset
+        samples = 50
+        X = torch.randn((samples * n_states, 2))
 
-    model.lr = 1e-3 # optional
-    print('----------')
-    print(model)
+        # create labels
+        y = torch.zeros(X.shape[0])
+        for i in range(1, n_states):
+            y[samples*i:] += 1
+        
+        dataset = TensorDataset(X,y)
+        datamodule = TensorDataModule(dataset,lengths=[0.75,0.2,0.05], batch_size=samples)
+        # train model
+        trainer = pl.Trainer(accelerator='cpu', max_epochs=2, logger=None, enable_checkpointing=False)
+        trainer.fit( model, datamodule )
 
-    # create dataset
-    X = torch.randn((50*n_states,2))
-    
-    # make the sets different from each other
-    X[:50 ] += 10
-    X[ 50:] -= 10
-
-    # create labels
-    y = torch.zeros(X.shape[0])
-    y[ 50:] += 1
-    if n_states == 3:
-        y[100:] += 1
-    dataset = TensorDataset(X,y)
-    datamodule = TensorDataModule(dataset,lengths=[0.75,0.2,0.05], batch_size=25)
-    # train model
-    trainer = pl.Trainer(accelerator='cpu',max_epochs=2,logger=None, enable_checkpointing=False)
-    trainer.fit( model, datamodule )
-  
-    # trace model
-    traced_model = model.to_torchscript(file_path=None, method='trace', example_inputs=X[0])
-    model.eval()
-    assert torch.allclose(model(X),traced_model(X))
+        # trace model
+        traced_model = model.to_torchscript(file_path=None, method='trace', example_inputs=X[0])
+        model.eval()
+        assert torch.allclose(model(X),traced_model(X))
 
 if __name__ == "__main__":
-    test_deeptda_cv(2,1)
-    test_deeptda_cv(3,1)
-    test_deeptda_cv(3,2) 
+    test_deeptda_cv()
