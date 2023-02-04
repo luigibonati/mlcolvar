@@ -5,6 +5,7 @@ from mlcvs.utils.decorators import decorate_methods, allowed_hooks, call_submodu
 from mlcvs.core.models import FeedForward
 from mlcvs.core.transform import Normalization
 from mlcvs.cvs.utils import CV_utils
+from mlcvs.core.loss import MSE_loss
 
 __all__ = ["AutoEncoder_CV"]
 
@@ -82,14 +83,7 @@ class AutoEncoder_CV(pl.LightningModule, CV_utils):
 
     def loss_function(self, diff, options = {}):
         # Reconstruction (MSE) loss
-        if 'weights' in options:
-            w = options['weights']
-            if w.ndim == 1:
-                w = w.unsqueeze(1)
-            loss = (diff*w).square().mean()
-        else:
-            loss = (diff).square().mean()
-        return loss
+        return MSE_loss(diff,options)
 
     def training_step(self, train_batch, batch_idx):
         options = {}
@@ -137,10 +131,13 @@ def test_autoencodercv():
 
     # train
     print('train 1 - no weights')
-    dataset = DictionaryDataset({'data': torch.randn(100,in_features) })
+    X = torch.randn(100,in_features) 
+    dataset = DictionaryDataset({'data': X})
     datamodule = TensorDataModule(dataset)
     trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)
     trainer.fit( model, datamodule )
+    model.eval()
+    X_hat = model(X)
 
     # train with weights
     print('train 2 - weights')
@@ -148,6 +145,7 @@ def test_autoencodercv():
     datamodule = TensorDataModule(dataset)
     trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)
     trainer.fit( model, datamodule )
+    
 
 if __name__ == "__main__":
     test_autoencodercv() 
