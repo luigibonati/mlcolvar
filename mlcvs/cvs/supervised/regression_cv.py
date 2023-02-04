@@ -13,8 +13,11 @@ __all__ = ["Regression_CV"]
 class Regression_CV(pl.LightningModule, CV_utils):
     """
     Example of collective variable obtained with a regression task.
-    Combine the inputs with a neural-network and optimize it to match a target function
-         """
+    Combine the inputs with a neural-network and optimize it to match a target function.
+
+    For the training it requires a DictionaryDataset with the keys 'data' and 'target' and optionally 'weights'.
+    MSE Loss is used to optimize it.
+    """
     
     def __init__(self, 
                 layers : list, 

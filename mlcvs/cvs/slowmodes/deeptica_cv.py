@@ -11,10 +11,6 @@ from mlcvs.core.stats import TICA
 from mlcvs.core.transform import Normalization
 from mlcvs.cvs.utils import CV_utils
 from mlcvs.core.loss.eigvals import reduce_eigenvalues
-# tests
-import numpy as np
-from mlcvs.utils.data import TensorDataModule, create_time_lagged_dataset
-from torch.utils.data import TensorDataset
 
 
 @decorate_methods(call_submodules_hooks, methods=allowed_hooks)
@@ -114,7 +110,10 @@ class DeepTICA_CV(pl.LightningModule,CV_utils):
         3) Compute TICA
         """
         # =================get data===================
-        x_t, x_lag, w_t, w_lag = train_batch
+        x_t   = train_batch['data']
+        x_lag = train_batch['data_lag']
+        w_t   = train_batch['weights']
+        w_lag = train_batch['weights_lag']
         # =================forward====================
         f_t = self.forward_nn(x_t)
         f_lag = self.forward_nn(x_lag)
@@ -134,7 +133,10 @@ class DeepTICA_CV(pl.LightningModule,CV_utils):
 
     def validation_step(self, val_batch, batch_idx):
         # =================get data===================
-        x_t, x_lag, w_t, w_lag = val_batch
+        x_t   = val_batch['data']
+        x_lag = val_batch['data_lag']
+        w_t   = val_batch['weights']
+        w_lag = val_batch['weights_lag']
         # =================forward====================
         f_t = self.forward_nn(x_t)
         f_lag = self.forward_nn(x_lag)
@@ -149,10 +151,15 @@ class DeepTICA_CV(pl.LightningModule,CV_utils):
         
 
 def test_deep_tica():
+    # tests
+    import numpy as np
+    from mlcvs.utils.data import TensorDataModule, Build_TimeLagged_Dataset
+    from mlcvs.utils.data import DictionaryDataset
+
     # create dataset
     X = np.loadtxt('mlcvs/tests/data/mb-mcmc.dat')
     X = torch.Tensor(X)
-    dataset = create_time_lagged_dataset(X,lag_time=10)
+    dataset = Build_TimeLagged_Dataset(X,lag_time=10)
     datamodule = TensorDataModule(dataset, batch_size = 1024)
 
     # create cv

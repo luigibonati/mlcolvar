@@ -13,7 +13,10 @@ __all__ = ["DeepLDA_CV"]
 
 @decorate_methods(call_submodules_hooks, methods=allowed_hooks)
 class DeepLDA_CV(pl.LightningModule,CV_utils):
-    """Neural network-based discriminant collective variables."""
+    """Neural network-based discriminant collective variables.
+    
+    For the training it requires a DictionaryDataset with the keys 'data' and 'labels'.
+    """
     
     def __init__(self, layers : list , n_states : int, options : dict = {}, **kwargs):
         """ 
@@ -145,7 +148,8 @@ class DeepLDA_CV(pl.LightningModule,CV_utils):
 
     def training_step(self, train_batch, batch_idx):
         # =================get data===================
-        x, y = train_batch
+        x = train_batch['data']
+        y = train_batch['labels']
         # =================forward====================
         h = self.forward_nn(x)
         # ===================lda======================
@@ -165,11 +169,12 @@ class DeepLDA_CV(pl.LightningModule,CV_utils):
 
     def validation_step(self, val_batch, batch_idx):
         # =================get data===================
-        x, y = val_batch
+        x = val_batch['data']
+        y = val_batch['labels']
         # =================forward====================
         h = self.forward_nn(x)
         # ===================lda======================
-        eigvals,_ = self.lda.compute(h,y,save_params=True)
+        eigvals,_ = self.lda.compute(h,y,save_params=False)
         # ===================loss=====================
         loss = self.loss_function(eigvals)
         if self.lorentzian_reg > 0:
@@ -181,6 +186,8 @@ class DeepLDA_CV(pl.LightningModule,CV_utils):
         self.log_dict(dict(loss_dict, **eig_dict) ,on_step=True, on_epoch=True)
 
 def test_deeplda(n_states=2):
+    from mlcvs.utils.data import DictionaryDataset
+
     in_features, out_features = 2, n_states-1
     layers = [in_features, 50, 50, out_features]
 
@@ -194,8 +201,8 @@ def test_deeplda(n_states=2):
     X = torch.cat(X,dim=0)
     y = torch.cat(y,dim=0)
     
-    datamodule = TensorDataModule(TensorDataset(X,y),
-                                    lengths = [0.8,0.2], batch_size=n_states*n_points)
+    dataset = DictionaryDataset({'data':X, 'labels':y})
+    datamodule = TensorDataModule(dataset, lengths = [0.8,0.2], batch_size=n_states*n_points)
 
     # initialize CV
     opts = { 'normIn'  : { 'mode'   : 'mean_std' } ,
@@ -206,8 +213,7 @@ def test_deeplda(n_states=2):
     model = DeepLDA_CV( layers, n_states, options=opts )
 
     # create trainer and fit
-    trainer = pl.Trainer(callbacks=[pl.callbacks.early_stopping.EarlyStopping(monitor="valid_loss", patience=100, mode='min', min_delta=0.1, verbose=False)],
-                        max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)
+    trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)
     trainer.fit( model, datamodule )
 
     # eval

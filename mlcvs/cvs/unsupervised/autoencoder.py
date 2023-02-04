@@ -11,7 +11,10 @@ __all__ = ["AutoEncoder_CV"]
 
 @decorate_methods(call_submodules_hooks, methods=allowed_hooks)
 class AutoEncoder_CV(pl.LightningModule, CV_utils):
-    """AutoEncoding Collective Variable."""
+    """AutoEncoding Collective Variable.
+    
+    For training it requires a DictionaryDataset with the key 'date' and optionally 'weights'.
+    """
     
     def __init__(self,
                 encoder_layers : list, 

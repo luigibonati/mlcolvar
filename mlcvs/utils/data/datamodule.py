@@ -12,7 +12,7 @@ __all__ = ["TensorDataModule"]
 
 class TensorDataModule(pl.LightningDataModule):
     """Lightning DataModule constructed for TensorDataset(s)."""
-    def __init__(self, dataset: TensorDataset or DictionaryDataset, lengths=[0.8,0.2,0], batch_size: int or list = 32, random_splits: bool = True, shuffle : bool or list =  False,  generator : torch.Generator = None):
+    def __init__(self, dataset: TensorDataset or DictionaryDataset, lengths=[0.8,0.2], batch_size: int or list = 32, random_splits: bool = True, shuffle : bool or list =  False,  generator : torch.Generator = None):
         """Create a DataModule derived from TensorDataset, which returns train/valid/test dataloaders.
 
         For the batch_size and shuffle parameters either a single value or a list-type of values (with same size as lenghts) can be provided.
