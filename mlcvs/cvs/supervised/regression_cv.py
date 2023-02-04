@@ -3,12 +3,9 @@ import torch
 import pytorch_lightning as pl
 
 from mlcvs.core import FeedForward, Normalization
-from mlcvs.utils.data import TensorDataModule
-from torch.utils.data import TensorDataset
-
 from mlcvs.utils.decorators import decorate_methods,call_submodules_hooks,allowed_hooks
-
 from mlcvs.cvs.utils import CV_utils
+from mlcvs.core.loss import MSE_loss
 
 __all__ = ["Regression_CV"]
 
@@ -58,28 +55,48 @@ class Regression_CV(pl.LightningModule, CV_utils):
     def configure_optimizers(self):
         return self.initialize_default_Adam_opt()
 
-    def loss_function(self, input, target): 
-        # MSE LOSS
-        loss = (input-target).square().mean()
-        return loss
+    def loss_function(self, diff, options = {}):
+        # Reconstruction (MSE) loss
+        return MSE_loss(diff,options)
 
     def training_step(self, train_batch, batch_idx):
-        x, labels = train_batch
+        options = {}
+        # get data
+        x = train_batch['data']
+        labels = train_batch['target']
+        if 'weights' in train_batch:
+            options['weights'] = train_batch['weights'] 
+        # forward
         y = self(x)
-        loss = self.loss_function(y,labels)
+        # loss
+        diff = y - labels
+        loss = self.loss_function(diff, options)
+        # log
         self.log('train_loss', loss, on_epoch=True)
         return loss
 
     def validation_step(self, val_batch, batch_idx):
-        x, labels = val_batch
+        options = {}
+        # get data
+        x = val_batch['data']
+        labels = val_batch['target']
+        if 'weights' in val_batch:
+            options['weights'] = val_batch['weights'] 
+        # forward
         y = self(x)
-        loss = self.loss_function(y,labels)
-        self.log('val_loss', loss, on_epoch=True)
+        # loss
+        diff = y - labels
+        loss = self.loss_function(diff, options)
+        # log
+        self.log('train_loss', loss, on_epoch=True)
+        return loss
 
 def test_regression_cv():
     """
     Create a synthetic dataset and test functionality of the Regression_CV class
     """
+    from mlcvs.utils.data import DictionaryDataset, TensorDataModule
+
     in_features, out_features = 2,1 
     layers = [in_features, 5, 10, out_features]
 
@@ -94,14 +111,14 @@ def test_regression_cv():
     # create dataset
     X = torch.randn((100,2))
     y = X.square().sum(1)
-    dataset = TensorDataset(X,y)
+    dataset = DictionaryDataset({'data':X,'target':y})
     datamodule = TensorDataModule(dataset,lengths=[0.75,0.2,0.05], batch_size=25)
     # train model
     trainer = pl.Trainer(accelerator='cpu',max_epochs=2,logger=None, enable_checkpointing=False)
     trainer.fit( model, datamodule )
+    model.eval()
     # trace model
     traced_model = model.to_torchscript(file_path=None, method='trace', example_inputs=X[0])
-    model.eval()
     assert torch.allclose(model(X),traced_model(X))
     
 if __name__ == "__main__":
