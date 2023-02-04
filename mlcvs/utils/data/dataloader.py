@@ -45,8 +45,13 @@ class FastTensorDataLoader:
         self.names = None
 
         # check input type
-        if isinstance(tensors,Subset):
-            tensors = [ tensors.dataset.tensors[i][tensors.indices] for i in range(len(tensors.dataset.tensors)) ]
+        if isinstance(tensors,Subset): 
+            if isinstance(tensors.dataset,DictionaryDataset):
+                data = tensors.dataset[tensors.indices]
+                self.names = [ t for t in data.keys()]
+                tensors = [ t for t in data.values() ]
+            else:
+                tensors = [ tensors.dataset.tensors[i][tensors.indices] for i in range(len(tensors.dataset.tensors)) ]
         elif isinstance(tensors,dict): # decouple it in names and tensors and recreate it in next
             self.names = [ t for t in tensors.keys()]
             tensors = [ t for t in tensors.values() ]
