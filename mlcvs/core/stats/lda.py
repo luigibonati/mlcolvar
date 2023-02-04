@@ -25,7 +25,7 @@ class LDA(torch.nn.Module):
         Regularization to S_w matrix
     """
 
-    def __init__(self, in_features, n_states, harmonic_lda = False):
+    def __init__(self, in_features : int, n_states : int, mode : str = 'standard'):
         """
         Initialize a LDA object.
 
@@ -35,8 +35,8 @@ class LDA(torch.nn.Module):
             number of input features
         n_states : int
             number of states
-        harmonic_lda : bool
-            Harmonic variant of LDA
+        mode : string
+            options: {'standard','harmonic'}, standard or harmonic variant
         """
         super().__init__()
 
@@ -44,10 +44,13 @@ class LDA(torch.nn.Module):
         self.n_states = n_states
         self.in_features = in_features 
         self.out_features = n_states - 1
-        self.harmonic_lda = harmonic_lda
+        if (mode == 'standard') or (mode=='harmonic'):
+            self.mode = mode
+        else:
+            raise ValueError(f'LDA mode should be standard or harmonic, not {mode}.')
 
         # create eigenvector buffer
-        self.register_buffer("evecs" , torch.eye(in_features,self.out_features))
+        self.register_buffer("evecs", torch.eye(in_features,self.out_features))
 
         # initialize other attributes
         self.evals = None
@@ -56,6 +59,12 @@ class LDA(torch.nn.Module):
 
         # Regularization
         self.sw_reg = 1e-6
+
+    def extra_repr(self) -> str:
+        repr = f"in_features={self.in_features}, out_features={self.out_features}"
+        if self.mode=='harmonic':
+            repr += f" mode={self.mode}"
+        return repr
 
     def compute(self, X, labels, save_params = True):
         """
@@ -127,7 +136,7 @@ class LDA(torch.nn.Module):
         S_t = X_bar.t().matmul(X_bar) / (N - 1)
         # Define within scatter matrix and compute it
         S_w = torch.Tensor().new_zeros((d, d)).to(device)
-        if self.harmonic_lda:
+        if self.mode == 'harmonic':
             S_w_inv = torch.Tensor().new_zeros((d, d)).to(device)
         # Loop over states to compute means and covs
         for i in states:
@@ -142,12 +151,12 @@ class LDA(torch.nn.Module):
             # LDA
             S_w += X_i_bar.t().matmul(X_i_bar) / ((N_i - 1) * n_states)
 
-            # XLDA
-            if self.harmonic_lda:
+            # HLDA
+            if self.mode == 'harmonic':
                 inv_i = X_i_bar.t().matmul(X_i_bar) / ((N_i - 1) * n_states)
                 S_w_inv += inv_i.inverse()
 
-        if self.harmonic_lda:
+        if self.mode == 'harmonic':
             S_w = S_w_inv.inverse()
 
         # Compute S_b from total scatter matrix
@@ -179,10 +188,14 @@ class LDA(torch.nn.Module):
 def test_lda():
     in_features = 2
     n_states = 2
+    
+    torch.manual_seed(42)
     X = torch.rand(100,in_features)*100
     y = torch.randint(n_states,(100,1)).squeeze(1)
 
+    # standard
     lda = LDA(in_features,n_states)
+    print(lda)
     S_b, S_w = lda.compute_scatter_matrices(X,y)
     print(S_w,S_b)
     evals,evecs = lda.compute(X,y,True)
@@ -192,5 +205,11 @@ def test_lda():
     print(s.shape)
     assert (s.ndim == 2) and (s.shape[1]==n_states-1)
 
+    # harmonic variant
+    hlda = LDA(in_features, n_states, mode='harmonic')
+    print(hlda)
+    hlda.compute(X,y)
+    s = lda(X)
+    
 if __name__ == "__main__":
     test_lda()

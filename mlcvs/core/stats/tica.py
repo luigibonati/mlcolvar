@@ -35,6 +35,10 @@ class TICA(torch.nn.Module):
         # Regularization
         self.reg_c0 = 1e-6
 
+    def extra_repr(self) -> str:
+        repr = f"in_features={self.in_features}, out_features={self.out_features}"
+        return repr
+
     def compute(self, data, weights = None, remove_average=True, save_params=False):
         """Perform TICA computation.
 
@@ -132,6 +136,7 @@ def test_tica():
     
     # direct way, compute tica function
     tica = TICA(in_features,out_features=2)
+    print(tica)
     tica.compute([x_t,x_lag],[w_t,w_lag], save_params=True)
     s = tica(X)
     print(X.shape,'-->',s.shape)
