@@ -80,25 +80,50 @@ class AutoEncoder_CV(pl.LightningModule, CV_utils):
     def configure_optimizers(self):
         return self.initialize_default_Adam_opt()
 
-    def loss_function(self, input, target):
+    def loss_function(self, diff, options = {}):
         # Reconstruction (MSE) loss
-        loss = (input-target).square().mean()
+        if 'weights' in options:
+            w = options['weights']
+            if w.ndim == 1:
+                w = w.unsqueeze(1)
+            loss = (diff*w).square().mean()
+        else:
+            loss = (diff).square().mean()
         return loss
 
     def training_step(self, train_batch, batch_idx):
-        x = train_batch[0]
+        options = {}
+        # get data
+        x = train_batch['data']
+        if 'weights' in train_batch:
+            options['weights'] = train_batch['weights'] 
+        # forward
         x_hat = self.encode_decode(x)
-        loss = self.loss_function(x_hat,x)
+        # loss
+        diff = x - x_hat
+        loss = self.loss_function(diff, options)
+        # log
         self.log('train_loss', loss, on_epoch=True)
         return loss
 
     def validation_step(self, val_batch, batch_idx):
-        x = val_batch[0]
+        options = {}
+        # get data
+        x = val_batch['data']
+        if 'weights' in val_batch:
+            options['weights'] = val_batch['weights'] 
+        # forward
         x_hat = self.encode_decode(x)
-        loss = self.loss_function(x_hat,x)
+        # loss
+        diff = x - x_hat
+        loss = self.loss_function(diff, options)
+        # log
         self.log('val_loss', loss, on_epoch=True)
 
 def test_autoencodercv():
+    from mlcvs.utils.data import DictionaryDataset, TensorDataModule
+    import numpy as np
+
     n_in, n_out = 8,2
     layers = [n_in, 6, 4, n_out]
 
@@ -109,7 +134,20 @@ def test_autoencodercv():
            } 
     model = AutoEncoder_CV( encoder_layers=layers, options=opts )
     print(model)
-    print('----------')
+
+    # train
+    print('train 1 - no weights')
+    dataset = DictionaryDataset({'data': torch.randn(100,n_in) })
+    datamodule = TensorDataModule(dataset)
+    trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)
+    trainer.fit( model, datamodule )
+
+    # train with weights
+    print('train 2 - weights')
+    dataset = DictionaryDataset({'data': torch.randn(100,n_in), 'weights' : np.arange(100) })
+    datamodule = TensorDataModule(dataset)
+    trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)
+    trainer.fit( model, datamodule )
 
 if __name__ == "__main__":
     test_autoencodercv() 
