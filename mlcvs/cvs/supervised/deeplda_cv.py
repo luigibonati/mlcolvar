@@ -37,7 +37,7 @@ class DeepLDA_CV(pl.LightningModule,CV_utils):
         self.initialize_block_defaults(options=options)
 
         # Parse info from args
-        self.define_n_in_n_out(n_in=layers[0], n_out=layers[-1])
+        self.define_in_features_out_features(in_features=layers[0], out_features=layers[-1])
 
         # Save n_states
         self.n_states = n_states
@@ -45,7 +45,7 @@ class DeepLDA_CV(pl.LightningModule,CV_utils):
         # initialize normIn
         o = 'normIn'
         if ( options[o] is not False ) and (options[o] is not None):
-            self.normIn = Normalization(self.n_in, **options[o]) 
+            self.normIn = Normalization(self.in_features, **options[o]) 
 
         # initialize nn
         o = 'nn'
@@ -58,7 +58,7 @@ class DeepLDA_CV(pl.LightningModule,CV_utils):
         o = 'normOut'
 
         if ( options[o] is not False ) and (options[o] is not None):
-            self.normOut = Normalization(self.n_out,**options[o]) 
+            self.normOut = Normalization(self.out_features,**options[o]) 
 
         # regularization
         self.lorentzian_reg = 40 # == 2/sw_reg, see set_regularization   
@@ -181,14 +181,14 @@ class DeepLDA_CV(pl.LightningModule,CV_utils):
         self.log_dict(dict(loss_dict, **eig_dict) ,on_step=True, on_epoch=True)
 
 def test_deeplda(n_states=2):
-    n_in, n_out = 2, n_states-1
-    layers = [n_in, 50, 50, n_out]
+    in_features, out_features = 2, n_states-1
+    layers = [in_features, 50, 50, out_features]
 
     # create dataset
     n_points= 500
     X, y = [],[]
     for i in range(n_states):
-        X.append( torch.randn(n_points,n_in)*(i+1) + torch.tensor([10*i,(i-1)*10]) )
+        X.append( torch.randn(n_points,in_features)*(i+1) + torch.tensor([10*i,(i-1)*10]) )
         y.append( torch.ones(n_points)*i )
 
     X = torch.cat(X,dim=0)

@@ -175,9 +175,9 @@ def create_time_lagged_dataset(X, t = None, lag_time = 1, logweights = None, tpr
     return torch.utils.data.TensorDataset(*data)
 
 def test_create_time_lagged_dataset():
-    n_in = 2
+    in_features = 2
     n_points = 100
-    X = torch.rand(n_points,n_in)*100
+    X = torch.rand(n_points,in_features)*100
 
     dataset = create_time_lagged_dataset(X)
     print(len(dataset))

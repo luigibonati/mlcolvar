@@ -21,7 +21,7 @@ from torch.utils.data import TensorDataset
 class DeepTICA_CV(pl.LightningModule,CV_utils):
     """Time-lagged independent component analysis-based CV."""
     
-    def __init__(self, layers : list , n_out : int = None, options : dict = {}, **kwargs): 
+    def __init__(self, layers : list , out_features : int = None, options : dict = {}, **kwargs): 
         """ 
         Neural network-based TICA CV.
         Perform a non-linear featurization of the inputs with a neural-network and optimize it as to maximize autocorrelation (e.g. eigenvalues of the transfer operator approximation).
@@ -44,12 +44,12 @@ class DeepTICA_CV(pl.LightningModule,CV_utils):
         self.initialize_block_defaults(options=options)
 
         # Parse info from args
-        self.define_n_in_n_out(n_in=layers[0], n_out=n_out if n_out is not None else layers[-1])
+        self.define_in_features_out_features(in_features=layers[0], out_features=out_features if out_features is not None else layers[-1])
 
         # initialize normIn
         o = 'normIn'
         if ( options[o] is not False ) and (options[o] is not None):
-            self.normIn = Normalization(self.n_in, **options[o]) 
+            self.normIn = Normalization(self.in_features, **options[o]) 
 
         # initialize nn
         o = 'nn'
@@ -57,12 +57,12 @@ class DeepTICA_CV(pl.LightningModule,CV_utils):
 
         # initialize lda
         o = 'tica'
-        self.tica = TICA(layers[-1], self.n_out, **options[o])
+        self.tica = TICA(layers[-1], self.out_features, **options[o])
 
         # initialize normOut
         o = 'normOut'
         if ( options[o] is not False ) and (options[o] is not None):
-            self.normOut = Normalization(self.n_out,**options[o]) 
+            self.normOut = Normalization(self.out_features,**options[o]) 
 
     def forward(self, x: torch.tensor) -> (torch.tensor):
         return self.forward_all_blocks(x)
@@ -157,7 +157,7 @@ def test_deep_tica():
 
     # create cv
     layers = [2,10,10,2]
-    model = DeepTICA_CV(layers,n_out=1)
+    model = DeepTICA_CV(layers,out_features=1)
 
     # create trainer and fit
     trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2, logger=None, enable_checkpointing=False)

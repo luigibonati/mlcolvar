@@ -35,21 +35,21 @@ class CV_utils():
         self.optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
         return self.optimizer
 
-    def define_n_in_n_out(self, n_in : int, n_out : int):
+    def define_in_features_out_features(self, in_features : int, out_features : int):
         """
-        Initialize self.n_in and self.n_out of the CV class
+        Initialize self.in_features and self.out_features of the CV class
         Initialize self.example_input_array accordingly
 
         Parameters
         ----------
-        n_in : int
+        in_features : int
             Number of inputs of the CV model
-        n_out : int
+        out_features : int
             Number of outputs of the CV model, should be the number of CVs
         """
-        self.n_in = n_in
-        self.n_out = n_out
-        self.example_input_array = torch.ones(self.n_in)
+        self.in_features = in_features
+        self.out_features = out_features
+        self.example_input_array = torch.ones(self.in_features)
 
     def forward_all_blocks(self, x : torch.tensor) -> (torch.tensor):
         """

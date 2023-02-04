@@ -40,14 +40,14 @@ class AutoEncoder_CV(pl.LightningModule, CV_utils):
         self.initialize_block_defaults(options=options)
 
         # parse info from args
-        self.define_n_in_n_out(n_in=encoder_layers[0], n_out=encoder_layers[-1])
+        self.define_in_features_out_features(in_features=encoder_layers[0], out_features=encoder_layers[-1])
         if decoder_layers is None:
             decoder_layers = encoder_layers[::-1]
 
         # initialize normIn
         o = 'normIn'
         if ( options[o] is not False ) and (options[o] is not None):
-            self.normIn = Normalization(self.n_in,**options[o]) 
+            self.normIn = Normalization(self.in_features,**options[o]) 
 
         # initialize encoder
         o = 'encoder'
@@ -56,7 +56,7 @@ class AutoEncoder_CV(pl.LightningModule, CV_utils):
          # initialize normOut
         o = 'normOut'
         if ( options[o] is not False ) and (options[o] is not None):
-            self.normOut = Normalization(self.n_out,**options[o]) 
+            self.normOut = Normalization(self.out_features,**options[o]) 
 
         # initialize encoder
         o = 'decoder'
@@ -124,8 +124,8 @@ def test_autoencodercv():
     from mlcvs.utils.data import DictionaryDataset, TensorDataModule
     import numpy as np
 
-    n_in, n_out = 8,2
-    layers = [n_in, 6, 4, n_out]
+    in_features, out_features = 8,2
+    layers = [in_features, 6, 4, out_features]
 
     # initialize via dictionary
     opts = { 'normIn'  : None,
@@ -137,14 +137,14 @@ def test_autoencodercv():
 
     # train
     print('train 1 - no weights')
-    dataset = DictionaryDataset({'data': torch.randn(100,n_in) })
+    dataset = DictionaryDataset({'data': torch.randn(100,in_features) })
     datamodule = TensorDataModule(dataset)
     trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)
     trainer.fit( model, datamodule )
 
     # train with weights
     print('train 2 - weights')
-    dataset = DictionaryDataset({'data': torch.randn(100,n_in), 'weights' : np.arange(100) })
+    dataset = DictionaryDataset({'data': torch.randn(100,in_features), 'weights' : np.arange(100) })
     datamodule = TensorDataModule(dataset)
     trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)
     trainer.fit( model, datamodule )

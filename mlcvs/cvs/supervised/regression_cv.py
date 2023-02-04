@@ -41,12 +41,12 @@ class Regression_CV(pl.LightningModule, CV_utils):
         self.initialize_block_defaults(options=options)
 
         # Parse info from args
-        self.define_n_in_n_out(n_in=layers[0], n_out=layers[-1])
+        self.define_in_features_out_features(in_features=layers[0], out_features=layers[-1])
 
         # Initialize normIn
         o = 'normIn'
         if ( not options[o] ) and (options[o] is not None):
-            self.normIn = Normalization(self.n_in,**options[o])
+            self.normIn = Normalization(self.in_features,**options[o])
 
         # initialize NN
         o = 'nn'
@@ -80,8 +80,8 @@ def test_regression_cv():
     """
     Create a synthetic dataset and test functionality of the Regression_CV class
     """
-    n_in, n_out = 2,1 
-    layers = [n_in, 5, 10, n_out]
+    in_features, out_features = 2,1 
+    layers = [in_features, 5, 10, out_features]
 
     # initialize via dictionary
     options= { 'FeedForward' : { 'activation' : 'relu' } }

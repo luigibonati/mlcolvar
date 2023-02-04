@@ -25,13 +25,13 @@ class LDA(torch.nn.Module):
         Regularization to S_w matrix
     """
 
-    def __init__(self, n_in, n_states, harmonic_lda = False):
+    def __init__(self, in_features, n_states, harmonic_lda = False):
         """
         Initialize a LDA object.
 
         Parameters
         ----------
-        n_in : int
+        in_features : int
             number of input features
         n_states : int
             number of states
@@ -42,12 +42,12 @@ class LDA(torch.nn.Module):
 
         # Save attributes
         self.n_states = n_states
-        self.n_in = n_in 
-        self.n_out = n_states - 1
+        self.in_features = in_features 
+        self.out_features = n_states - 1
         self.harmonic_lda = harmonic_lda
 
         # create eigenvector buffer
-        self.register_buffer("evecs" , torch.eye(n_in,self.n_out))
+        self.register_buffer("evecs" , torch.eye(in_features,self.out_features))
 
         # initialize other attributes
         self.evals = None
@@ -64,7 +64,7 @@ class LDA(torch.nn.Module):
 
         Parameters
         ----------
-        X : array-like of shape (n_samples, n_in)
+        X : array-like of shape (n_samples, in_features)
             Training data.
         labels : array-like of shape (n_samples,)
             states labels.
@@ -97,7 +97,7 @@ class LDA(torch.nn.Module):
 
         Parameters
         ----------
-        X : array-like of shape (n_samples, n_in)
+        X : array-like of shape (n_samples, in_features)
             Training data.
         labels : array-like of shape (n_samples,)
             states labels.
@@ -106,7 +106,7 @@ class LDA(torch.nn.Module):
 
         Returns
         -------
-        S_b,S_w : arrays of shape (n_in,n_in)
+        S_b,S_w : arrays of shape (in_features,in_features)
             Between and within scatter matrices
         """
         # device
@@ -114,7 +114,7 @@ class LDA(torch.nn.Module):
 
         # sizes
         N, d = X.shape
-        self.n_in = d
+        self.in_features = d
 
         # states
         states = torch.unique(labels)
@@ -177,12 +177,12 @@ class LDA(torch.nn.Module):
         return torch.matmul(x, self.evecs)
 
 def test_lda():
-    n_in = 2
+    in_features = 2
     n_states = 2
-    X = torch.rand(100,n_in)*100
+    X = torch.rand(100,in_features)*100
     y = torch.randint(n_states,(100,1)).squeeze(1)
 
-    lda = LDA(n_in,n_states)
+    lda = LDA(in_features,n_states)
     S_b, S_w = lda.compute_scatter_matrices(X,y)
     print(S_w,S_b)
     evals,evecs = lda.compute(X,y,True)

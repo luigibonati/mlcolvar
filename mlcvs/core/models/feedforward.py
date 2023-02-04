@@ -52,8 +52,8 @@ class FeedForward(pl.LightningModule):
 
         # store model and attributes
         self.nn     = torch.nn.Sequential(*modules)
-        self.n_in   = layers[0]
-        self.n_out  = layers[-1]
+        self.in_features   = layers[0]
+        self.out_features  = layers[-1]
 
     def forward(self, x: torch.tensor) -> (torch.tensor):
         return self.nn(x)
@@ -61,13 +61,13 @@ class FeedForward(pl.LightningModule):
 def test_feedforward():
     torch.manual_seed(42)
     
-    n_in = 2
+    in_features = 2
     layers = [2,10,1]
     model = FeedForward(layers,activation='relu')
     
     print(model)
 
-    X = torch.zeros(n_in)
+    X = torch.zeros(in_features)
     print(model(X))
 
 if __name__ == "__main__":
