@@ -35,6 +35,8 @@ class DeepLDA_CV(pl.LightningModule,CV_utils):
         """
         super().__init__(**kwargs)
 
+        # ===== BLOCKS =====
+
         # Members
         self.blocks = ['normIn','nn','lda','normOut'] 
         self.initialize_block_defaults(options=options)
@@ -66,6 +68,9 @@ class DeepLDA_CV(pl.LightningModule,CV_utils):
         # regularization
         self.lorentzian_reg = 40 # == 2/sw_reg, see set_regularization   
         self.set_regularization(sw_reg=0.05)
+
+        # ===== LOSS OPTIONS =====
+        self.loss_options = {'mode':'sum'}      # eigenvalue reduction mode
 
     def forward(self, x: torch.tensor) -> (torch.tensor):
         return self.forward_all_blocks(x)
@@ -127,7 +132,7 @@ class DeepLDA_CV(pl.LightningModule,CV_utils):
         reg_loss_lor = -self.lorentzian_reg / (1 + (reg_loss - 1).pow(2))
         return reg_loss_lor
 
-    def loss_function(self, eigenvalues, options = {'mode':'sum'}):
+    def loss_function(self, eigenvalues, options = {}):
         """
         Loss function for the DeepLDA CV. Correspond to maximizing the eigenvalue(s) of LDA.
         If there are C classes the sum of the C-1 eigenvalues will be maximized.
@@ -155,7 +160,7 @@ class DeepLDA_CV(pl.LightningModule,CV_utils):
         # ===================lda======================
         eigvals,_ = self.lda.compute(h,y,save_params=True)
         # ===================loss=====================
-        loss = self.loss_function(eigvals)
+        loss = self.loss_function(eigvals, self.loss_options)
         if self.lorentzian_reg > 0:
             lorentzian_reg = self.regularization_lorentzian(h)
             loss += lorentzian_reg
@@ -176,7 +181,7 @@ class DeepLDA_CV(pl.LightningModule,CV_utils):
         # ===================lda======================
         eigvals,_ = self.lda.compute(h,y,save_params=False)
         # ===================loss=====================
-        loss = self.loss_function(eigvals)
+        loss = self.loss_function(eigvals, self.loss_options)
         if self.lorentzian_reg > 0:
             lorentzian_reg = self.regularization_lorentzian(h)
             loss += lorentzian_reg

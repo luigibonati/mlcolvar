@@ -69,3 +69,28 @@ class CV_utils():
             if block is not None:
                 x = block(x)
         return x
+
+    def set_loss_options(self, options : dict):
+        """
+        Save loss functions options to be used in train/valid step
+
+        Parameters
+        ----------
+        options : dict
+            Dictionary of options (allowed keys depend on the loss used)
+        """
+        self.loss_options = options
+
+    def set_loss_fn(self, fn):
+        """
+        Overload loss function with given function. 'fn' need to have the following signature:
+        def f(x : torch.Tensor, options : dict = {} ) -> torch.Tensor 
+        where x is the same input as in the loss_function implemented in the CV.
+        Lambda functions can also be used: fn = lambda x, options : -x.sum()
+
+        Parameters
+        ----------
+        fn : function
+            Loss function to be used in train/valid
+        """
+        self.loss_function = fn

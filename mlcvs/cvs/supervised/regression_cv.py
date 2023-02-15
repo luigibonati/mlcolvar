@@ -36,6 +36,8 @@ class Regression_CV(pl.LightningModule, CV_utils):
         """
         super().__init__(**kwargs)
 
+        # ===== BLOCKS =====
+
         # Members
         self.blocks = ['normIn', 'nn']
         self.initialize_block_defaults(options=options)
@@ -52,6 +54,9 @@ class Regression_CV(pl.LightningModule, CV_utils):
         o = 'nn'
         self.nn = FeedForward(layers, **options[o])
 
+        # ===== LOSS OPTIONS =====
+        self.loss_options = {}   
+
     def forward(self, x: torch.tensor) -> (torch.tensor):
         return self.forward_all_blocks(x=x)
 
@@ -63,34 +68,34 @@ class Regression_CV(pl.LightningModule, CV_utils):
         return MSE_loss(diff,options)
 
     def training_step(self, train_batch, batch_idx):
-        options = {}
-        # get data
+        options = self.loss_options
+        # =================get data===================
         x = train_batch['data']
         labels = train_batch['target']
         if 'weights' in train_batch:
             options['weights'] = train_batch['weights'] 
-        # forward
+        # =================forward====================
         y = self(x)
-        # loss
+        # ===================loss=====================
         diff = y - labels
         loss = self.loss_function(diff, options)
-        # log
+        # ====================log=====================    
         self.log('train_loss', loss, on_epoch=True)
         return loss
 
     def validation_step(self, val_batch, batch_idx):
-        options = {}
-        # get data
+        options = self.loss_options
+        # =================get data===================
         x = val_batch['data']
         labels = val_batch['target']
         if 'weights' in val_batch:
             options['weights'] = val_batch['weights'] 
-        # forward
+        # =================forward====================
         y = self(x)
-        # loss
+        # ===================loss=====================
         diff = y - labels
         loss = self.loss_function(diff, options)
-        # log
+        # ====================log=====================    
         self.log('train_loss', loss, on_epoch=True)
         return loss
 
@@ -107,7 +112,7 @@ def test_regression_cv():
     options= { 'FeedForward' : { 'activation' : 'relu' } }
 
     model = Regression_CV( layers = layers,
-                      options = options)
+                        options = options)
     print('----------')
     print(model)
 

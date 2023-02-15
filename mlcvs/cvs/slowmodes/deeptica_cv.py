@@ -12,7 +12,6 @@ from mlcvs.core.transform import Normalization
 from mlcvs.cvs.utils import CV_utils
 from mlcvs.core.loss.eigvals import reduce_eigenvalues
 
-
 @decorate_methods(call_submodules_hooks, methods=allowed_hooks)
 class DeepTICA_CV(pl.LightningModule,CV_utils):
     """Time-lagged independent component analysis-based CV."""
@@ -34,6 +33,8 @@ class DeepTICA_CV(pl.LightningModule,CV_utils):
             Set 'block_name' = None or False to turn off that block
         """
         super().__init__(**kwargs)
+
+        # ===== BLOCKS =====
 
         # Members
         self.blocks = ['normIn','nn','normNN','tica','normOut'] 
@@ -59,6 +60,10 @@ class DeepTICA_CV(pl.LightningModule,CV_utils):
         o = 'normOut'
         if ( options[o] is not False ) and (options[o] is not None):
             self.normOut = Normalization(self.out_features,**options[o]) 
+        
+        # ===== LOSS OPTIONS =====
+        self.loss_options = {'mode':'sum2',     # eigenvalue reduction mode
+                            'n_eig': 0 }        # how many eigenvalues to optimize (0 == all) 
 
     def forward(self, x: torch.tensor) -> (torch.tensor):
         return self.forward_all_blocks(x)
@@ -75,7 +80,7 @@ class DeepTICA_CV(pl.LightningModule,CV_utils):
 
     def set_regularization(self, c0_reg=1e-6):
         """
-        Add identity matrix multiplied by `c0_reg` to correlation matrix C(0) to avoid instabilities.
+        Add identity matrix multiplied by `c0_reg` to correlation matrix C(0) to avoid instabilities in performin Cholesky and .
         
         Parameters
         ----------
@@ -84,7 +89,7 @@ class DeepTICA_CV(pl.LightningModule,CV_utils):
         """
         self.tica.reg_c0 = c0_reg
 
-    def loss_function(self, eigenvalues, options = {'mode':'sum2'}):
+    def loss_function(self, eigenvalues, options = {}):
         """
         Loss function for the DeepTICA CV. Correspond to maximizing the eigenvalue(s) of TICA.
         By default the sum of the squares is maximized.
@@ -122,7 +127,7 @@ class DeepTICA_CV(pl.LightningModule,CV_utils):
                                                     weights = [w_t,w_lag],
                                                     save_params=True)
         # ===================loss=====================
-        loss = self.loss_function(eigvals)
+        loss = self.loss_function(eigvals,self.loss_options)
         # ====================log=====================            
         loss_dict = {'train_loss' : loss}
         eig_dict = { f'train_eigval_{i+1}' : eigvals[i] for i in range(len(eigvals))}
@@ -143,7 +148,7 @@ class DeepTICA_CV(pl.LightningModule,CV_utils):
         # ===================tica=====================
         eigvals, _ = self.tica.compute(data = [f_t,f_lag], weights = [w_t,w_lag])
         # ===================loss=====================
-        loss = self.loss_function(eigvals)
+        loss = self.loss_function(eigvals,self.loss_options)
         # ====================log=====================     
         loss_dict = {'valid_loss' : loss}
         eig_dict = { f'valid_eigval_{i+1}' : eigvals[i] for i in range(len(eigvals))}
