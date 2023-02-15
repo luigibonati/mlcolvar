@@ -39,6 +39,8 @@ class AutoEncoder_CV(pl.LightningModule, CV_utils):
         """
         super().__init__(**kwargs)
 
+        # ===== BLOCKS =====
+
         # Members
         self.blocks = ['normIn','encoder','normOut','decoder'] 
         self.initialize_block_defaults(options=options)
@@ -66,6 +68,9 @@ class AutoEncoder_CV(pl.LightningModule, CV_utils):
         o = 'decoder'
         self.decoder = FeedForward(decoder_layers, **options[o])
 
+        # ===== LOSS OPTIONS =====
+        self.loss_options = {}   
+
     def forward(self, x: torch.tensor) -> (torch.tensor):
         if self.normIn is not None:
             x = self.normIn(x)
@@ -90,31 +95,31 @@ class AutoEncoder_CV(pl.LightningModule, CV_utils):
 
     def training_step(self, train_batch, batch_idx):
         options = {}
-        # get data
+        # =================get data===================
         x = train_batch['data']
         if 'weights' in train_batch:
             options['weights'] = train_batch['weights'] 
-        # forward
+        # =================forward====================
         x_hat = self.encode_decode(x)
-        # loss
+        # ===================loss=====================
         diff = x - x_hat
         loss = self.loss_function(diff, options)
-        # log
+        # ====================log=====================     
         self.log('train_loss', loss, on_epoch=True)
         return loss
 
     def validation_step(self, val_batch, batch_idx):
         options = {}
-        # get data
+        # =================get data===================
         x = val_batch['data']
         if 'weights' in val_batch:
             options['weights'] = val_batch['weights'] 
-        # forward
+        # =================forward====================
         x_hat = self.encode_decode(x)
-        # loss
+        # ===================loss=====================
         diff = x - x_hat
         loss = self.loss_function(diff, options)
-        # log
+        # ====================log=====================     
         self.log('val_loss', loss, on_epoch=True)
 
 def test_autoencodercv():
