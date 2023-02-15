@@ -122,12 +122,20 @@ def test_regression_cv():
     dataset = DictionaryDataset({'data':X,'target':y})
     datamodule = TensorDataModule(dataset,lengths=[0.75,0.2,0.05], batch_size=25)
     # train model
-    trainer = pl.Trainer(accelerator='cpu',max_epochs=2,logger=None, enable_checkpointing=False)
+    trainer = pl.Trainer(accelerator='cpu',max_epochs=1,logger=None, enable_checkpointing=False)
     trainer.fit( model, datamodule )
     model.eval()
     # trace model
     traced_model = model.to_torchscript(file_path=None, method='trace', example_inputs=X[0])
     assert torch.allclose(model(X),traced_model(X))
-    
+
+    print('custom loss')
+    # use custom loss
+    trainer = pl.Trainer(accelerator='cpu',max_epochs=1,logger=None, enable_checkpointing=False)
+
+    model = Regression_CV( layers = [2,10,10,1])
+    model.set_loss_fn( lambda x, options: x.abs().mean() )
+    trainer.fit( model, datamodule )
+
 if __name__ == "__main__":
     test_regression_cv() 

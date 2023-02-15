@@ -164,12 +164,15 @@ def test_deep_tica():
     # create dataset
     X = np.loadtxt('mlcvs/tests/data/mb-mcmc.dat')
     X = torch.Tensor(X)
-    dataset = Build_TimeLagged_Dataset(X,lag_time=10)
+    dataset = Build_TimeLagged_Dataset(X,lag_time=1)
     datamodule = TensorDataModule(dataset, batch_size = 1024)
 
     # create cv
     layers = [2,10,10,2]
     model = DeepTICA_CV(layers,out_features=1)
+
+    # change loss options
+    model.set_loss_options({'mode': 'sum2'})
 
     # create trainer and fit
     trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2, logger=None, enable_checkpointing=False)

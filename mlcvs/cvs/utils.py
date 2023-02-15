@@ -70,17 +70,22 @@ class CV_utils():
                 x = block(x)
         return x
 
-    def set_loss_options(self, options : dict):
+    def set_loss_options(self, options : dict = {}, **kwargs):
         """
-        Save loss functions options to be used in train/valid step
+        Save loss functions options to be used in train/valid step. It can either take a dictionary or kwargs. 
+
+        Examples:
+        > cvs.set_loss_options(options = {'a' : 1, 'b' : 2})
+        > cvs.set_loss_options(a=1,b=2)
 
         Parameters
         ----------
         options : dict
             Dictionary of options (allowed keys depend on the loss used)
         """
-        self.loss_options = options
-
+        #add kwargs to options dict
+        self.loss_options = {**options, **locals()['kwargs']}
+    
     def set_loss_fn(self, fn):
         """
         Overload loss function with given function. 'fn' need to have the following signature:
