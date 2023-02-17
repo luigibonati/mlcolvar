@@ -2,11 +2,17 @@ import torch
 
 from typing import Any
 
-class CV_utils():
-    def __init__(self):
-        self = self
+class CV_utils:
+    """
+    
+    To inherit from this class, the class must define a BLOCKS class attribute.
 
-    def initialize_block_defaults(self, options : dict = {}):
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def initialize_block_defaults(self, options : dict = None):
         """
         Initialize the blocks as attributes of the CV class.
         Set the options of each block to empty dict.
@@ -14,11 +20,16 @@ class CV_utils():
         Parameters
         ----------
         options : dict[str, Any], optional
-            Options for the building blocks of the model, by default {}.
+            Options for the building blocks of the model, by default None.
         """
-        for b in self.blocks:
+        if options is None:
+            options = {}
+
+        for b in self.BLOCKS:
             self.__setattr__(b,None)
             options.setdefault(b,{})
+        
+        return options
 
     def initialize_default_Adam_opt(self) -> torch.optim:
         """
@@ -51,9 +62,9 @@ class CV_utils():
         self.out_features = out_features
         self.example_input_array = torch.ones(self.in_features)
 
-    def forward_all_blocks(self, x : torch.tensor) -> (torch.tensor):
+    def forward(self, x : torch.tensor) -> (torch.tensor):
         """
-        Execute all the blocks in self.blocks unless they have been deactivated with options dict
+        Execute all the blocks in self.BLOCKS unless they have been deactivated with options dict.
 
         Parameters
         ----------
@@ -64,13 +75,18 @@ class CV_utils():
         torch.tensor
             Output of the forward operation of the model
         """
-        for b in self.blocks:
+        for b in self.BLOCKS:
             block = getattr(self, b)
             if block is not None:
                 x = block(x)
         return x
 
-    def set_loss_options(self, options : dict = {}, **kwargs):
+    def validation_step(self, val_batch, batch_idx):
+        """ Equal to training step if not overridden. Different behaviors can be enforced based on the self.training variable. 
+        """
+        self.training_step(val_batch, batch_idx)
+
+    def set_loss_options(self, options : dict = None, **kwargs):
         """
         Save loss functions options to be used in train/valid step. It can either take a dictionary or kwargs. 
 
@@ -84,6 +100,8 @@ class CV_utils():
             Dictionary of options (allowed keys depend on the loss used)
         """
         #add kwargs to options dict
+        if options is None:
+            options = {}
         self.loss_options = {**options, **locals()['kwargs']}
     
     def set_loss_fn(self, fn):
