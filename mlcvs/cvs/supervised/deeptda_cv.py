@@ -129,7 +129,7 @@ def test_deeptda_cv():
         target_sigmas = np.random.randn(n_states, n_cvs)
 
         # test initialize via dictionary
-        options= { 'FeedForward' : { 'activation' : 'relu' } }
+        options= { 'nn' : { 'activation' : 'relu' } }
 
         model = DeepTDA_CV(n_states = n_states, n_cvs = n_cvs, target_centers = target_centers, target_sigmas = target_sigmas, layers = layers, options=options)
         
