@@ -19,6 +19,8 @@ class BaseCV:
         """
         super().__init__(*args, **kwargs)
 
+        self.initialize_blocks()
+
         self.in_features = in_features
         self.out_features = out_features
         
@@ -29,11 +31,8 @@ class BaseCV:
 
         self.loss_options = {}
 
-    def initialize_block_defaults(self, options : dict = None):
+    def sanitize_options(self, options : dict = None):
         """
-        Initialize the blocks as attributes of the CV class.
-        Set the options of each block to empty dict.
-
         Parameters
         ----------
         options : dict[str, Any], optional
@@ -43,10 +42,25 @@ class BaseCV:
             options = {}
 
         for b in self.BLOCKS:
-            self.__setattr__(b,None)
             options.setdefault(b,{})
-        
+
+        for o in options.keys():
+            if o not in self.BLOCKS:
+                if o == 'loss':
+                    self.set_loss_options(options[o])
+                elif o == 'optim':
+                    self.set_optim_options(options[o])
+                else:
+                    raise ValueError(f'The key {o} is not available in this class. The available keys are: {",".join(self.BLOCKS)},loss,optim ')
+
         return options
+
+    def initialize_blocks(self):
+        """
+        Initialize the blocks as attributes of the CV class.
+        """
+        for b in self.BLOCKS:
+            self.__setattr__(b,None)
 
     def forward(self, x : torch.tensor) -> (torch.tensor):
         """
