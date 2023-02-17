@@ -81,7 +81,7 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
         """
         self.tica.reg_c0 = c0_reg
 
-    def loss_function(self, eigenvalues, options = {}):
+    def loss_function(self, eigenvalues, **kwargs):
         """
         Loss function for the DeepTICA CV. Correspond to maximizing the eigenvalue(s) of TICA.
         By default the sum of the squares is maximized.
@@ -96,7 +96,7 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
         loss : torch.tensor
             loss function
         """
-        loss = - reduce_eigenvalues(eigenvalues, options)
+        loss = - reduce_eigenvalues(eigenvalues, **kwargs)
 
         return loss
 
@@ -119,7 +119,7 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
                                                     weights = [w_t,w_lag],
                                                     save_params=True)
         # ===================loss=====================
-        loss = self.loss_function(eigvals,self.loss_options)
+        loss = self.loss_function(eigvals,**self.loss_options)
         # ====================log=====================          
         name = 'train' if self.training else 'valid'       
         loss_dict = {f'{name}_loss' : loss}

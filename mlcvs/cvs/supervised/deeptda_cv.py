@@ -23,6 +23,7 @@ class DeepTDA_CV(BaseCV, pl.LightningModule):
 
     BLOCKS = ['normIn', 'nn']
 
+    # TODO n_states optional?
     def __init__(self,
                 n_states : int,
                 n_cvs : int,
@@ -59,19 +60,15 @@ class DeepTDA_CV(BaseCV, pl.LightningModule):
         self.n_states = n_states
         if self.out_features != n_cvs:
             raise ValueError("Number of neurons of last layer should match the number of CVs!")
-        self.n_cvs = n_cvs
         
-        # TODO pass to options
-        self.target_centers = torch.tensor(target_centers)
-        self.target_sigmas =  torch.tensor(target_sigmas)
-
-        if self.target_centers.shape != self.target_sigmas.shape:
+        # check size of targets
+        if target_centers.shape != target_sigmas.shape:
             raise ValueError(f"Size of target_centers and target_sigmas should be the same!")
-        if n_states != self.target_centers.shape[0]:
-            raise ValueError(f"Size of target_centers at dimension 0 should match the number of states! Expected {n_states} found {self.target_centers.shape[0]}")
-        if len(self.target_centers.shape) == 2:
-            if n_cvs != self.target_centers.shape[1]:
-                raise ValueError((f"Size of target_centers at dimension 1 should match the number of cvs! Expected {n_cvs} found {self.target_centers.shape[1]}"))
+        if n_states != target_centers.shape[0]:
+            raise ValueError(f"Size of target_centers at dimension 0 should match the number of states! Expected {n_states} found {target_centers.shape[0]}")
+        if len(target_centers.shape) == 2:
+            if n_cvs != target_centers.shape[1]:
+                raise ValueError((f"Size of target_centers at dimension 1 should match the number of cvs! Expected {n_cvs} found {target_centers.shape[1]}"))
 
         # Initialize normIn
         o = 'normIn'
@@ -82,20 +79,26 @@ class DeepTDA_CV(BaseCV, pl.LightningModule):
         o = 'nn'
         self.nn = FeedForward(layers, **options[o])
     
+        self.loss_options = {'n_states': n_states,
+                             'target_centers': target_centers,
+                             'target_sigmas':  target_sigmas                     
+        }
+
     # TODO change to have standard signature?
-    def loss_function(self, input, labels):
-        loss, loss_centers, loss_sigmas = TDA_loss(input, labels, self.n_states, self.target_centers, self.target_sigmas)
+    def loss_function(self, input, labels, **kwargs):
+        loss, loss_centers, loss_sigmas = TDA_loss(input, labels, **kwargs)
         
         return loss, loss_centers, loss_sigmas
 
     def training_step(self, train_batch, batch_idx):
+        options = self.loss_options
         # =================get data===================
         x = train_batch['data']
         labels = train_batch['labels']
         # =================forward====================
         z = self(x)
         # ===================loss=====================
-        loss, loss_centers, loss_sigmas = self.loss_function(z,labels)
+        loss, loss_centers, loss_sigmas = self.loss_function(z, labels, **options)
         # ====================log=====================+
         name = 'train' if self.training else 'valid'
         self.log(f'{name}_loss', loss, on_epoch=True)

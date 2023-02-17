@@ -85,9 +85,9 @@ class AutoEncoder_CV(BaseCV, pl.LightningModule):
             x = self.normIn.inverse(x)
         return x
 
-    def loss_function(self, diff, options = {}):
+    def loss_function(self, diff, **kwargs):
         # Reconstruction (MSE) loss
-        return MSE_loss(diff,options)
+        return MSE_loss(diff,**kwargs)
 
     def training_step(self, train_batch, batch_idx):
         options = self.loss_options
@@ -99,7 +99,7 @@ class AutoEncoder_CV(BaseCV, pl.LightningModule):
         x_hat = self.encode_decode(x)
         # ===================loss=====================
         diff = x - x_hat
-        loss = self.loss_function(diff, options)
+        loss = self.loss_function(diff, **options)
         # ====================log=====================     
         name = 'train' if self.training else 'valid'       
         self.log(f'{name}_loss', loss, on_epoch=True)

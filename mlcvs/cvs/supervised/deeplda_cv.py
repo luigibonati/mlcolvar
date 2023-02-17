@@ -122,7 +122,7 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
         reg_loss_lor = -self.lorentzian_reg / (1 + (reg_loss - 1).pow(2))
         return reg_loss_lor
 
-    def loss_function(self, eigenvalues, options = {}):
+    def loss_function(self, eigenvalues, **kwargs):
         """
         Loss function for the DeepLDA CV. Correspond to maximizing the eigenvalue(s) of LDA.
         If there are C classes the sum of the C-1 eigenvalues will be maximized.
@@ -137,7 +137,7 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
         loss : torch.tensor
             loss function
         """
-        loss = - reduce_eigenvalues(eigenvalues, options)
+        loss = - reduce_eigenvalues(eigenvalues, **kwargs)
 
         return loss
 
@@ -150,7 +150,7 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
         # ===================lda======================
         eigvals,_ = self.lda.compute(h,y,save_params=True if self.training else False) 
         # ===================loss=====================
-        loss = self.loss_function(eigvals, self.loss_options)
+        loss = self.loss_function(eigvals, **self.loss_options)
         if self.lorentzian_reg > 0:
             lorentzian_reg = self.regularization_lorentzian(h)
             loss += lorentzian_reg

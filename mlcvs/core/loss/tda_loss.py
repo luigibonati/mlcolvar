@@ -37,13 +37,13 @@ def TDA_loss(H : torch.tensor,
     torch.tensor
         Total loss, centers loss, sigmas loss
     """
-    if type(target_centers) is list:
+    if not isinstance(target_centers,torch.Tensor):
         target_centers = torch.tensor(target_centers)
-    if type(target_sigmas) is list:
+    if not isinstance(target_sigmas,torch.Tensor):
         target_sigmas = torch.tensor(target_sigmas)
     
-    loss_centers = torch.zeros_like(target_centers, dtype = torch.float32)
-    loss_sigmas = torch.zeros_like(target_sigmas, dtype = torch.float32)
+    loss_centers = torch.zeros_like(target_centers)
+    loss_sigmas = torch.zeros_like(target_sigmas)
     for i in range(n_states):
         # check which elements belong to class i
         print('state ', i)
