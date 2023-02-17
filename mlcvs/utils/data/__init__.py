@@ -1,5 +1,6 @@
-__all__ = ["TensorDataModule","FastTensorDataLoader",'find_time_lagged_configurations','create_time_lagged_dataset']
+__all__ = ["DictionaryDataset","TensorDataModule","FastTensorDataLoader",'Find_Time_Lagged_Configurations','Build_TimeLagged_Dataset']
 
+from .dataset import *
 from .dataloader import *
 from .datamodule import *
 from .timelagged import *

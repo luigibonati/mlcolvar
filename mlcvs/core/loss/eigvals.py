@@ -1,6 +1,6 @@
 import torch
 
-__all__ = []
+__all__ = ['reduce_eigenvalues']
 
 def reduce_eigenvalues(evals : torch.Tensor, options : dict = { 'mode':'sum', 'n_eig': 0 }):
         """

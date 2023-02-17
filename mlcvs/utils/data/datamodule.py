@@ -6,12 +6,13 @@ import pytorch_lightning as pl
 from torch.utils.data import TensorDataset, random_split, Subset
 from torch._utils import _accumulate
 from . import FastTensorDataLoader
+from . import DictionaryDataset
 
 __all__ = ["TensorDataModule"]
 
 class TensorDataModule(pl.LightningDataModule):
     """Lightning DataModule constructed for TensorDataset(s)."""
-    def __init__(self, dataset: TensorDataset, lengths=[0.8,0.2,0], batch_size: int or list = 32, random_splits: bool = True, shuffle : bool or list =  False,  generator : torch.Generator = None):
+    def __init__(self, dataset: TensorDataset or DictionaryDataset, lengths=[0.8,0.2], batch_size: int or list = 32, random_splits: bool = True, shuffle : bool or list =  False,  generator : torch.Generator = None):
         """Create a DataModule derived from TensorDataset, which returns train/valid/test dataloaders.
 
         For the batch_size and shuffle parameters either a single value or a list-type of values (with same size as lenghts) can be provided.
@@ -72,7 +73,6 @@ class TensorDataModule(pl.LightningDataModule):
     def teardown(self, stage: str):
         pass 
 
-
 def sequential_split(dataset, lengths: list ) -> list:
     """
     Sequentially split a dataset into non-overlapping new datasets of given lengths.
@@ -126,6 +126,18 @@ def test_TensorDataModule():
     loader = datamodule.train_dataloader()
     for data in loader:
         x_i, y_i = data
+        print(x_i.shape, y_i.shape)
+    datamodule.val_dataloader()
+    datamodule.test_dataloader()
+
+    dict_dataset = DictionaryDataset( {'data':X,'labels':y} )
+    datamodule = TensorDataModule(dict_dataset,lengths=[0.75,0.2,0.05],batch_size=25)
+    datamodule.setup('fit')
+    loader = datamodule.train_dataloader()
+    for data in loader:
+        print(data)
+        x_i = data['data']
+        y_i = data['labels']
         print(x_i.shape, y_i.shape)
     datamodule.val_dataloader()
     datamodule.test_dataloader()

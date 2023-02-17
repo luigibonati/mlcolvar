@@ -11,21 +11,21 @@ class TICA(torch.nn.Module):
     Time-lagged independent component analysis base class.
     """
 
-    def __init__(self, n_in, n_out = None):
+    def __init__(self, in_features, out_features = None):
         """
         Initialize a TICA object.
         """
         super().__init__()
 
         # save attributes
-        self.n_in  = n_in 
-        self.n_out = n_out if n_out is not None else n_in
+        self.in_features  = in_features 
+        self.out_features = out_features if out_features is not None else in_features
 
         # buffers
         # tica eigenvectors
-        self.register_buffer("evecs" ,torch.eye(n_in,self.n_out))
+        self.register_buffer("evecs" ,torch.eye(in_features,self.out_features))
         # mean to obtain mean free inputs
-        self.register_buffer("mean", torch.zeros(n_in))
+        self.register_buffer("mean", torch.zeros(in_features))
 
         # init other attributes
         self.evals = None
@@ -34,6 +34,10 @@ class TICA(torch.nn.Module):
 
         # Regularization
         self.reg_c0 = 1e-6
+
+    def extra_repr(self) -> str:
+        repr = f"in_features={self.in_features}, out_features={self.out_features}"
+        return repr
 
     def compute(self, data, weights = None, remove_average=True, save_params=False):
         """Perform TICA computation.
@@ -70,7 +74,7 @@ class TICA(torch.nn.Module):
         C_0 = correlation_matrix(x_t,x_t,w_t)
         C_lag = correlation_matrix(x_t,x_lag,w_lag)
 
-        evals, evecs = cholesky_eigh(C_lag,C_0,self.reg_c0,n_eig=self.n_out) 
+        evals, evecs = cholesky_eigh(C_lag,C_0,self.reg_c0,n_eig=self.out_features) 
 
         if save_params:
             self.evals = evals
@@ -123,15 +127,16 @@ class TICA(torch.nn.Module):
         return torch.matmul(x.sub(Mean), self.evecs)
         
 def test_tica():
-    n_in = 2
-    X = torch.rand(100,n_in)*100
+    in_features = 2
+    X = torch.rand(100,in_features)*100
     x_t = X[:-1]
     x_lag = X[1:]
     w_t = torch.rand(len(x_t))
     w_lag = w_t
     
     # direct way, compute tica function
-    tica = TICA(n_in,n_out=2)
+    tica = TICA(in_features,out_features=2)
+    print(tica)
     tica.compute([x_t,x_lag],[w_t,w_lag], save_params=True)
     s = tica(X)
     print(X.shape,'-->',s.shape)
@@ -139,7 +144,7 @@ def test_tica():
     print('timescales', tica.timescales(lag=10))
 
     # step by step
-    tica = TICA(n_in)
+    tica = TICA(in_features)
     C_0 = correlation_matrix(x_t,x_t)
     C_lag = correlation_matrix(x_t,x_lag)
     print(C_0.shape,C_lag.shape)

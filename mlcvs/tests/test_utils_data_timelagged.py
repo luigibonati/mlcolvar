@@ -1,6 +1,6 @@
 import pytest
 
-from mlcvs.utils.data.timelagged import test_create_time_lagged_dataset
+from mlcvs.utils.data.timelagged import test_Build_TimeLagged_Dataset
 
 if __name__ == "__main__":
-    test_create_time_lagged_dataset()
+    test_Build_TimeLagged_Dataset()

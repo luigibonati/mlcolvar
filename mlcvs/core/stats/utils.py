@@ -10,9 +10,11 @@ def cholesky_eigh(A, B, reg_B = 1e-6, n_eig = None ):
     -----
     The eigenvecs object which is returned is a matrix whose column eigvecs[:,i] is the eigenvector associated to eigvals[i]"""
 
-    # assert 
-    if ( (A.transpose(0, 1) != A).any() or (B.transpose(0, 1) != B).any() ): 
-        raise ValueError('The matrices need to be symmetric to solve the generalized eigenvalue problem via cholesky decomposition.')
+    # check that both matrices are symmetric
+    if not torch.allclose( A.transpose(0, 1), A) : 
+        raise ValueError('The matrices need to be symmetric to solve the generalized eigenvalue problem via cholesky decomposition. A >> ', A )
+    if not (torch.allclose( B.transpose(0, 1), B) ): 
+        raise ValueError('The matrices need to be symmetric to solve the generalized eigenvalue problem via cholesky decomposition. A >> ', B )
 
     # (0) regularize B matrix before cholesky
     B = B + reg_B*torch.eye(B.shape[0]).to(B.device)

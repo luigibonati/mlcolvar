@@ -2,8 +2,9 @@ import torch
 import numpy as np
 import pandas as pd
 from bisect import bisect_left
+from mlcvs.utils.data import DictionaryDataset
 
-__all__ = ['find_time_lagged_configurations','create_time_lagged_dataset']
+__all__ = ['Find_Time_Lagged_Configurations','Build_TimeLagged_Dataset']
 
 def closest_idx(array, value):
         '''
@@ -69,7 +70,7 @@ def tprime_evaluation(t, logweights = None):
 
     return tprime
 
-def find_time_lagged_configurations(x,t,lag_time):
+def Find_Time_Lagged_Configurations(x,t,lag_time):
     '''
     Searches for all the pairs which are distant 'lag' in time, and returns the weights associated to lag=lag as well as the weights for lag=0.
 
@@ -121,10 +122,10 @@ def find_time_lagged_configurations(x,t,lag_time):
 
     return x_t,x_lag,w_t,w_lag
 
-def create_time_lagged_dataset(X, t = None, lag_time = 1, logweights = None, tprime = None, interval = None):
+def Build_TimeLagged_Dataset(X, t = None, lag_time = 1, logweights = None, tprime = None, interval = None):
     """
-    Create a dataset of time-lagged configurations. If a set of (log)weights is given the search is performed in the accelerated time.
-
+    Create a DictionaryDataset of time-lagged configurations. If a set of (log)weights is given the search is performed in the accelerated time.
+    
     Parameters
     ----------
     X : array-like
@@ -140,6 +141,12 @@ def create_time_lagged_dataset(X, t = None, lag_time = 1, logweights = None, tpr
     interval : list or np.array or tuple, optional
         Range for slicing the returned dataset. Useful to work with batches of same sizes.
         Recall that with different lag_times one obtains different datasets, with different lengths 
+
+    Returns
+    -------
+    dataset: DictionaryDataset
+        Dataset with keys 'data', 'data_lag' (data at time t and t+lag), 'weights', 'weights_lag' (weights at time t and t+lag). 
+
     """
 
     # check if dataframe
@@ -160,7 +167,7 @@ def create_time_lagged_dataset(X, t = None, lag_time = 1, logweights = None, tpr
         tprime = tprime_evaluation(t, logweights)
 
     # find pairs of configurations separated by lag_time
-    data = find_time_lagged_configurations(X, tprime,lag_time=lag_time)
+    x_t,x_lag,w_t,w_lag = Find_Time_Lagged_Configurations(X, tprime,lag_time=lag_time)
 
     if interval is not None:
         # convert to a list
@@ -171,24 +178,28 @@ def create_time_lagged_dataset(X, t = None, lag_time = 1, logweights = None, tpr
         for i in range(len(data)):
             data[i] = data[i][interval[0]:interval[1]]
 
-    #return data
-    return torch.utils.data.TensorDataset(*data)
+    dataset = DictionaryDataset({'data':x_t, 'data_lag':x_lag, 'weights':w_t, 'weights_lag':w_lag})
 
-def test_create_time_lagged_dataset():
-    n_in = 2
+    #return torch.utils.data.TensorDataset(*data)
+    return dataset 
+
+
+def test_Build_TimeLagged_Dataset():
+    in_features = 2
     n_points = 100
-    X = torch.rand(n_points,n_in)*100
+    X = torch.rand(n_points,in_features)*100
 
-    dataset = create_time_lagged_dataset(X)
+    dataset = Build_TimeLagged_Dataset(X)
+    print(dataset)
     print(len(dataset))
 
     t = np.arange(n_points)
-    dataset = create_time_lagged_dataset(X,t,lag_time=10)
+    dataset = Build_TimeLagged_Dataset(X,t,lag_time=10)
     print(len(dataset))
 
     logweights = np.random.rand(n_points)
-    dataset =  create_time_lagged_dataset(X,t,logweights=logweights)
+    dataset =  Build_TimeLagged_Dataset(X,t,logweights=logweights)
     print(len(dataset))  
 
 if __name__ == "__main__":
-    test_create_time_lagged_dataset()
+    test_Build_TimeLagged_Dataset()

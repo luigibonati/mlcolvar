@@ -1,4 +1,5 @@
-__all__ = ["TDA_loss",'reduce_eigenvalues']
+__all__ = ["MSE_loss","TDA_loss",'reduce_eigenvalues']
 
+from .mse import MSE_loss
 from .tda_loss import TDA_loss
 from .eigvals import reduce_eigenvalues

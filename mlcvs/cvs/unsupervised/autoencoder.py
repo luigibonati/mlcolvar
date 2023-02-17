@@ -5,17 +5,23 @@ from mlcvs.utils.decorators import decorate_methods, allowed_hooks, call_submodu
 from mlcvs.core.models import FeedForward
 from mlcvs.core.transform import Normalization
 from mlcvs.cvs.utils import CV_utils
+from mlcvs.core.loss import MSE_loss
 
 __all__ = ["AutoEncoder_CV"]
 
 @decorate_methods(call_submodules_hooks, methods=allowed_hooks)
-class AutoEncoder_CV(pl.LightningModule, CV_utils):
-    """AutoEncoding Collective Variable."""
+class AutoEncoder_CV(CV_utils, pl.LightningModule):
+    """AutoEncoding Collective Variable.
+    
+    For training it requires a DictionaryDataset with the key 'data' and optionally 'weights'.
+    """
+    
+    BLOCKS = ['normIn','encoder','normOut','decoder'] 
     
     def __init__(self,
                 encoder_layers : list, 
                 decoder_layers : list = None, 
-                options : dict = {}, 
+                options : dict = None, 
                 **kwargs):
         """
         Train a CV defined as the output layer of the encoder of an autoencoder model (latent space). 
@@ -35,19 +41,20 @@ class AutoEncoder_CV(pl.LightningModule, CV_utils):
         """
         super().__init__(**kwargs)
 
+        # ===== BLOCKS =====
+
         # Members
-        self.blocks = ['normIn','encoder','normOut','decoder'] 
-        self.initialize_block_defaults(options=options)
+        options = self.initialize_block_defaults(options=options)
 
         # parse info from args
-        self.define_n_in_n_out(n_in=encoder_layers[0], n_out=encoder_layers[-1])
+        self.define_in_features_out_features(in_features=encoder_layers[0], out_features=encoder_layers[-1])
         if decoder_layers is None:
             decoder_layers = encoder_layers[::-1]
 
         # initialize normIn
         o = 'normIn'
         if ( options[o] is not False ) and (options[o] is not None):
-            self.normIn = Normalization(self.n_in,**options[o]) 
+            self.normIn = Normalization(self.in_features,**options[o]) 
 
         # initialize encoder
         o = 'encoder'
@@ -56,11 +63,14 @@ class AutoEncoder_CV(pl.LightningModule, CV_utils):
          # initialize normOut
         o = 'normOut'
         if ( options[o] is not False ) and (options[o] is not None):
-            self.normOut = Normalization(self.n_out,**options[o]) 
+            self.normOut = Normalization(self.out_features,**options[o]) 
 
         # initialize encoder
         o = 'decoder'
         self.decoder = FeedForward(decoder_layers, **options[o])
+
+        # ===== LOSS OPTIONS =====
+        self.loss_options = {}   
 
     def forward(self, x: torch.tensor) -> (torch.tensor):
         if self.normIn is not None:
@@ -76,31 +86,33 @@ class AutoEncoder_CV(pl.LightningModule, CV_utils):
         if self.normIn is not None:
             x = self.normIn.inverse(x)
         return x
-    
-    def configure_optimizers(self):
-        return self.initialize_default_Adam_opt()
 
-    def loss_function(self, input, target):
+    def loss_function(self, diff, options = {}):
         # Reconstruction (MSE) loss
-        loss = (input-target).square().mean()
-        return loss
+        return MSE_loss(diff,options)
 
     def training_step(self, train_batch, batch_idx):
-        x = train_batch[0]
+        options = self.loss_options
+        # =================get data===================
+        x = train_batch['data']
+        if 'weights' in train_batch:
+            options['weights'] = train_batch['weights'] 
+        # =================forward====================
         x_hat = self.encode_decode(x)
-        loss = self.loss_function(x_hat,x)
-        self.log('train_loss', loss, on_epoch=True)
+        # ===================loss=====================
+        diff = x - x_hat
+        loss = self.loss_function(diff, options)
+        # ====================log=====================     
+        name = 'train' if self.training else 'valid'       
+        self.log(f'{name}_loss', loss, on_epoch=True)
         return loss
 
-    def validation_step(self, val_batch, batch_idx):
-        x = val_batch[0]
-        x_hat = self.encode_decode(x)
-        loss = self.loss_function(x_hat,x)
-        self.log('val_loss', loss, on_epoch=True)
-
 def test_autoencodercv():
-    n_in, n_out = 8,2
-    layers = [n_in, 6, 4, n_out]
+    from mlcvs.utils.data import DictionaryDataset, TensorDataModule
+    import numpy as np
+
+    in_features, out_features = 8,2
+    layers = [in_features, 6, 4, out_features]
 
     # initialize via dictionary
     opts = { 'normIn'  : None,
@@ -109,7 +121,24 @@ def test_autoencodercv():
            } 
     model = AutoEncoder_CV( encoder_layers=layers, options=opts )
     print(model)
-    print('----------')
+
+    # train
+    print('train 1 - no weights')
+    X = torch.randn(100,in_features) 
+    dataset = DictionaryDataset({'data': X})
+    datamodule = TensorDataModule(dataset)
+    trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)
+    trainer.fit( model, datamodule )
+    model.eval()
+    X_hat = model(X)
+
+    # train with weights
+    print('train 2 - weights')
+    dataset = DictionaryDataset({'data': torch.randn(100,in_features), 'weights' : np.arange(100) })
+    datamodule = TensorDataModule(dataset)
+    trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)
+    trainer.fit( model, datamodule )
+    
 
 if __name__ == "__main__":
     test_autoencodercv() 

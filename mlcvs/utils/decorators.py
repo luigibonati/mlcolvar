@@ -2,7 +2,7 @@ import inspect
 import functools
 import pytorch_lightning as pl
 
-allowed_hooks = ["on_predict_batch_end","on_predict_batch_start","on_predict_end","on_predict_epoch_end","on_predict_epoch_start","on_predict_start","on_test_batch_end","on_test_batch_start","on_test_end","on_test_epoch_end","on_test_epoch_start","on_test_start","on_train_batch_end","on_train_batch_start","on_train_end","on_train_epoch_end","on_train_epoch_start","on_train_start","on_validation_batch_end","on_validation_batch_start","on_validation_end","on_validation_epoch_end","on_validation_epoch_start","on_validation_start"]
+allowed_hooks = ("on_predict_batch_end","on_predict_batch_start","on_predict_end","on_predict_epoch_end","on_predict_epoch_start","on_predict_start","on_test_batch_end","on_test_batch_start","on_test_end","on_test_epoch_end","on_test_epoch_start","on_test_start","on_train_batch_end","on_train_batch_start","on_train_end","on_train_epoch_end","on_train_epoch_start","on_train_start","on_validation_batch_end","on_validation_batch_start","on_validation_end","on_validation_epoch_end","on_validation_epoch_start","on_validation_start")
 
 """Iterate through a list of methods in a class and apply decorator."""
 def decorate_methods(decorator, methods=allowed_hooks):

@@ -1,6 +1,5 @@
 torch
 pandas
 numpy
-pytest
 matplotlib
 kdepy

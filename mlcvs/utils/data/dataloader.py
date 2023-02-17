@@ -2,6 +2,7 @@
 
 import torch 
 from torch.utils.data import TensorDataset
+from .dataset import DictionaryDataset
 
 __all__ = ["FastTensorDataLoader"]
 
@@ -12,6 +13,8 @@ class FastTensorDataLoader:
     A DataLoader-like object for a set of tensors.
     
     It is much faster than TensorDataset + DataLoader because dataloader grabs individual indices of the dataset and calls cat (slow).
+
+    Adapted to work also with dictionaries (incl. Dictionary Dataloader).
 
     Notes
     =====
@@ -24,7 +27,7 @@ class FastTensorDataLoader:
 
         Parameters
         ----------
-        tensors : list of tensors or torch.Dataset or torch.Subset or list of torch.Subset object containing a tensors object
+        tensors : list of tensors or torch.Dataset or torch.Subset or list of torch.Subset or dict object containing a tensors object
             tensors to store. Must have the same length @ dim 0.
         batch_size : int, optional
             batch size, by default 0 (==single batch)
@@ -38,10 +41,23 @@ class FastTensorDataLoader:
             dataloader-like object
 
         """
+        # allocate 
+        self.names = None
 
         # check input type
-        if isinstance(tensors,Subset):
-            tensors = [ tensors.dataset.tensors[i][tensors.indices] for i in range(len(tensors.dataset.tensors)) ]
+        if isinstance(tensors,Subset): 
+            if isinstance(tensors.dataset,DictionaryDataset):
+                data = tensors.dataset[tensors.indices]
+                self.names = [ t for t in data.keys()]
+                tensors = [ t for t in data.values() ]
+            else:
+                tensors = [ tensors.dataset.tensors[i][tensors.indices] for i in range(len(tensors.dataset.tensors)) ]
+        elif isinstance(tensors,dict): # decouple it in names and tensors and recreate it in next
+            self.names = [ t for t in tensors.keys()]
+            tensors = [ t for t in tensors.values() ]
+        elif isinstance(tensors,DictionaryDataset): # decouple it in names and tensors and recreate it in next
+            self.names = [ t for t in tensors.dictionary.keys()]
+            tensors = [ t for t in tensors.dictionary.values() ]
         elif isinstance(tensors,Dataset):
             tensors = [ tensors.tensors[i] for i in range(len(tensors.tensors)) ]
         # check for input type list of Subset, and create a list of tensors
@@ -86,6 +102,9 @@ class FastTensorDataLoader:
             batch = tuple(torch.index_select(t, 0, indices) for t in self.tensors)
         else:
             batch = tuple(t[self.i:self.i+self.batch_size] for t in self.tensors)
+        if self.names is not None: # then return a dictionary object
+            batch = dict(zip(self.names, batch))
+
         self.i += self.batch_size
         return batch
 
@@ -96,6 +115,10 @@ def test_FastTensorDataLoader():
     X = torch.arange(1,11).unsqueeze(1)
     y = X**2
     dataloader = FastTensorDataLoader([X,y],batch_size=2)
+    print(next(iter(dataloader)))
+
+    dict_dataset = {'data': X, 'labels': y}
+    dataloader = FastTensorDataLoader(dict_dataset,batch_size=2)
     print(next(iter(dataloader)))
 
 if __name__ == "__main__":

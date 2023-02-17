@@ -56,10 +56,10 @@ class DeepTDA_CV(pl.LightningModule, CV_utils):
         self.initialize_block_defaults(options=options)
         
         # Parse info from args
-        self.define_n_in_n_out(n_in=layers[0], n_out=layers[-1])
+        self.define_in_features_out_features(in_features=layers[0], out_features=layers[-1])
         
         self.n_states = n_states
-        if self.n_out != n_cvs:
+        if self.out_features != n_cvs:
             raise ValueError("Number of neurons of last layer should match the number of CVs!")
         self.n_cvs = n_cvs
         
@@ -77,7 +77,7 @@ class DeepTDA_CV(pl.LightningModule, CV_utils):
         # Initialize normIn
         o = 'normIn'
         if ( not options[o] ) and (options[o] is not None):
-            self.normIn = Normalization(self.n_in,**options[o])
+            self.normIn = Normalization(self.in_features,**options[o])
 
         # initialize NN
         o = 'nn'
@@ -123,8 +123,8 @@ def test_deeptda_cv():
         n_states = states_and_cvs[0]
         n_cvs = states_and_cvs[1]
         
-        n_in, n_out = 2, n_cvs 
-        layers = [n_in, 4, 2, n_out]
+        in_features, out_features = 2, n_cvs 
+        layers = [in_features, 4, 2, out_features]
         target_centers = np.random.randn(n_states, n_cvs)
         target_sigmas = np.random.randn(n_states, n_cvs)
 

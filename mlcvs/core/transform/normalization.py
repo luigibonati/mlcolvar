@@ -149,16 +149,16 @@ class Normalization(torch.nn.Module):
     By default it accumulates statistics from a single epoch and then save the parameters. This can be changed with the hooks dictionary.
     """
 
-    def __init__(self, n_in : int, mode : str = 'mean_std', epoch_wise : bool = True):
+    def __init__(self, in_features : int, mode : str = 'mean_std', epoch_wise : bool = True):
         """Initialize a normalization object. 
 
         The standardization mode can be either 'mean_std' (remove by the mean and divide by the standard deviation) or 'min_max' (scale and shift the range of values such that all inputs are between -1 and 1).
 
-        By default the normalization is computed on a running estimate based on each epoch. Disable it to save the parameters at the batch level. 
+        By default the normalization is computed on a running estimate along each epoch. Disable it to save the parameters at the batch level. 
 
         Parameters
         ----------
-        n_in : int
+        in_features : int
             number of inputs
         mode : str, optional
             normalization mode (mean_std, min_max), by default 'mean_std'
@@ -169,11 +169,11 @@ class Normalization(torch.nn.Module):
         super().__init__()
         
         # buffers containing mean and range for standardization
-        self.register_buffer("Mean", torch.zeros(n_in))
-        self.register_buffer("Range", torch.ones(n_in))
+        self.register_buffer("Mean", torch.zeros(in_features))
+        self.register_buffer("Range", torch.ones(in_features))
 
-        self.n_in = n_in
-        self.n_out = n_in
+        self.in_features = in_features
+        self.out_features = in_features
 
         self.mode = mode
 
@@ -187,7 +187,7 @@ class Normalization(torch.nn.Module):
         self.epoch_wise = epoch_wise
 
     def extra_repr(self) -> str:
-        return f"n_in={self.n_in}, mode={self.mode}, epoch_wise={self.epoch_wise}"
+        return f"in_features={self.in_features}, out_features={self.out_features}, mode={self.mode}, epoch_wise={self.epoch_wise}"
 
     def reset_stats(self) -> None:
         """Reset running statistics."""
@@ -206,28 +206,6 @@ class Normalization(torch.nn.Module):
     def on_train_epoch_end(self) -> None:
         if self.epoch_wise:
             self.save_stats()
-
-    def batch_reshape(t: torch.Tensor, size : torch.Size) -> (torch.Tensor):
-        """Return value reshaped according to size. 
-        In case of batch expand unsqueeze and expand along the first dimension.
-        For single inputs just pass:
-
-        Parameters
-        ----------
-            Mean and range 
-
-        """
-        if len(size) == 1:
-            pass
-        if len(size) == 2:
-            batch_size = size[0]
-            x_size = size[1]
-            t = t.unsqueeze(0).expand(batch_size, x_size)
-        else:
-            raise ValueError(
-                f"Input tensor must of shape (n_features) or (n_batch,n_features), not {size}."
-            )
-        return t
 
     def forward(self, x: torch.Tensor) -> (torch.Tensor):
         """
@@ -317,10 +295,10 @@ def test_running_min_max():
 def test_normalization():
     torch.manual_seed(42)
 
-    n_in = 2
-    norm = Normalization(n_in, mode='mean_std')
+    in_features = 2
+    norm = Normalization(in_features, mode='mean_std')
 
-    X = torch.randn((5,n_in))*10
+    X = torch.randn((5,in_features))*10
 
     # accumulate stats during training
     print('TRAIN')
@@ -346,7 +324,7 @@ def test_normalization():
     print(norm.inverse(norm(X)))
     print('-------------')
     # check other way of normalizing
-    norm = Normalization(n_in, mode='min_max')
+    norm = Normalization(in_features, mode='min_max')
     norm.train()
     X = torch.Tensor([[1,100,],[10,2],[5,50]])
     print('input')
