@@ -18,7 +18,7 @@ class DeepTICA_CV(CV_utils, pl.LightningModule):
     
     BLOCKS = ['normIn','nn','normNN','tica','normOut'] 
 
-    def __init__(self, layers : list , out_features : int = None, options : dict = {}, **kwargs): 
+    def __init__(self, layers : list , out_features : int = None, options : dict = None, **kwargs): 
         """ 
         Neural network-based TICA CV.
         Perform a non-linear featurization of the inputs with a neural-network and optimize it as to maximize autocorrelation (e.g. eigenvalues of the transfer operator approximation).
