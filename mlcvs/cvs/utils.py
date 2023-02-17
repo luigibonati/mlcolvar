@@ -1,7 +1,5 @@
 import torch
 
-from typing import Any
-
 class CV_utils:
     """
     
@@ -11,6 +9,11 @@ class CV_utils:
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        self.optim_name = 'Adam'
+        self.optim_options = {}
+
+        self.loss_options = {}
 
     def initialize_block_defaults(self, options : dict = None):
         """
@@ -30,21 +33,18 @@ class CV_utils:
             options.setdefault(b,{})
         
         return options
-
-    def initialize_default_Adam_opt(self) -> torch.optim:
+    
+    def configure_optimizers(self): 
         """
         Initialize a default Adam optimizer.
-        If self.lr is not defined sets lr=1e-3 .
 
         Returns
         -------
         torch.optim
             Torch optimizer
-        """
-        if not hasattr(self, 'lr'):
-            self.lr =  1e-3
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
-        return self.optimizer
+        """ 
+        optimizer = getattr(torch.optim,self.optim_name)(self.parameters(),**self.optim_options)
+        return optimizer
 
     def define_in_features_out_features(self, in_features : int, out_features : int):
         """
@@ -82,28 +82,10 @@ class CV_utils:
         return x
 
     def validation_step(self, val_batch, batch_idx):
-        """ Equal to training step if not overridden. Different behaviors can be enforced based on the self.training variable. 
+        """ Equal to training step if not overridden. Different behaviors for train/valid step can be enforced based on the self.training variable. 
         """
         self.training_step(val_batch, batch_idx)
 
-    def set_loss_options(self, options : dict = None, **kwargs):
-        """
-        Save loss functions options to be used in train/valid step. It can either take a dictionary or kwargs. 
-
-        Examples:
-        > cvs.set_loss_options(options = {'a' : 1, 'b' : 2})
-        > cvs.set_loss_options(a=1,b=2)
-
-        Parameters
-        ----------
-        options : dict
-            Dictionary of options (allowed keys depend on the loss used)
-        """
-        #add kwargs to options dict
-        if options is None:
-            options = {}
-        self.loss_options = {**options, **locals()['kwargs']}
-    
     def set_loss_fn(self, fn):
         """
         Overload loss function with given function. 'fn' need to have the following signature:
@@ -117,3 +99,52 @@ class CV_utils:
             Loss function to be used in train/valid
         """
         self.loss_function = fn
+
+    def set_loss_options(self, options : dict = None, **kwargs):
+        """
+        Save loss functions options to be used in train/valid step. It can either take a dictionary or arguments. 
+
+        Examples:
+        >>> cvs.set_loss_options(options = {'a' : 1, 'b' : 2})
+        >>> cvs.set_loss_options(a=1,b=2)
+
+        Parameters
+        ----------
+        options : dict
+            Dictionary of options to be passed to the loss during train/valid steps.
+        """
+        #add kwargs to options dict
+        if options is None:
+            options = {}
+        self.loss_options = {**options, **locals()['kwargs']}
+
+    def set_optim_name(self, optim_name : str): 
+        """Choose optimizer. Options can be set using set_optim_options. Actual optimizer will be return from configure_optimizer function.
+
+        Parameters
+        ----------
+        optim : str
+            Name of the torch.optim optimizer
+        """
+        if not hasattr(torch.optim,optim_name):
+            raise AttributeError (f'torch.optim does not have a {optim_name} optimizer.')
+        self.optim_name = optim_name
+
+    def set_optim_options(self, options : dict = None, **kwargs):
+        """
+        Save options to be used for creating optimizer in configure_optimizer function.
+
+        Examples:
+        >>> cvs.set_optim_options(options = {'weight_decay' : 1e-5, 'lr' : 1e-3})
+        >>> cvs.set_loss_options(lr=1e-3)
+
+        Parameters
+        ----------
+        options : dict
+            Dictionary of options
+        """
+        #add kwargs to options dict
+        if options is None:
+            options = {}
+        self.optim_options = {**options, **locals()['kwargs']}
+

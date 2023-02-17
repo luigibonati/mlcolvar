@@ -79,10 +79,6 @@ class DeepLDA_CV(CV_utils, pl.LightningModule):
         x = self.nn(x)
         return x
 
-    def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
-        return optimizer
-
     def set_regularization(self, sw_reg=0.05, lorentzian_reg=None):
         """
         Set magnitude of regularizations for the training:

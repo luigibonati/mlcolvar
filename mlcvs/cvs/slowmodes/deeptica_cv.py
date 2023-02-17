@@ -72,10 +72,6 @@ class DeepTICA_CV(CV_utils, pl.LightningModule):
         x = self.nn(x)
         return x
 
-    def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
-        return optimizer
-
     def set_regularization(self, c0_reg=1e-6):
         """
         Add identity matrix multiplied by `c0_reg` to correlation matrix C(0) to avoid instabilities in performin Cholesky and .

@@ -86,9 +86,6 @@ class AutoEncoder_CV(CV_utils, pl.LightningModule):
         if self.normIn is not None:
             x = self.normIn.inverse(x)
         return x
-    
-    def configure_optimizers(self):
-        return self.initialize_default_Adam_opt()
 
     def loss_function(self, diff, options = {}):
         # Reconstruction (MSE) loss

@@ -1,4 +1,3 @@
-from typing import Any
 import torch
 import pytorch_lightning as pl
 
@@ -58,9 +57,6 @@ class Regression_CV(CV_utils, pl.LightningModule):
         # ===== LOSS OPTIONS =====
         self.loss_options = {}   
 
-    def configure_optimizers(self):
-        return self.initialize_default_Adam_opt()
-
     def loss_function(self, diff, options = {}):
         # Reconstruction (MSE) loss
         return MSE_loss(diff,options)
@@ -105,6 +101,8 @@ def test_regression_cv():
     dataset = DictionaryDataset({'data':X,'target':y})
     datamodule = TensorDataModule(dataset,lengths=[0.75,0.2,0.05], batch_size=25)
     # train model
+    model.set_optim_name('SGD')
+    model.set_optim_options(lr=1e-2)
     trainer = pl.Trainer(accelerator='cpu',max_epochs=1,logger=None, enable_checkpointing=False)
     trainer.fit( model, datamodule )
     model.eval()
