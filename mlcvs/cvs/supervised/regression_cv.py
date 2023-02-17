@@ -10,7 +10,7 @@ from mlcvs.core.loss import MSE_loss
 __all__ = ["Regression_CV"]
 
 @decorate_methods(call_submodules_hooks,methods=allowed_hooks)
-class Regression_CV(pl.LightningModule, CV_utils):
+class Regression_CV(CV_utils, pl.LightningModule):
     """
     Example of collective variable obtained with a regression task.
     Combine the inputs with a neural-network and optimize it to match a target function.
@@ -18,10 +18,12 @@ class Regression_CV(pl.LightningModule, CV_utils):
     For the training it requires a DictionaryDataset with the keys 'data' and 'target' and optionally 'weights'.
     MSE Loss is used to optimize it.
     """
-    
+
+    BLOCKS = ['normIn', 'nn']
+
     def __init__(self, 
                 layers : list, 
-                options : dict = {},
+                options : dict = None,
                 **kwargs):
         """Example of collective variable obtained with a regression task.
 
@@ -30,7 +32,7 @@ class Regression_CV(pl.LightningModule, CV_utils):
         layers : list
             Number of neurons per layer
         options : dict[str, Any], optional
-            Options for the building blocks of the model, by default {}.
+            Options for the building blocks of the model, by default None.
             Available blocks: ['normIn', 'nn'].
             Set 'block_name' = None or False to turn off that block
         """
@@ -39,8 +41,7 @@ class Regression_CV(pl.LightningModule, CV_utils):
         # ===== BLOCKS =====
 
         # Members
-        self.blocks = ['normIn', 'nn']
-        self.initialize_block_defaults(options=options)
+        options = self.initialize_block_defaults(options=options)
 
         # Parse info from args
         self.define_in_features_out_features(in_features=layers[0], out_features=layers[-1])
@@ -56,9 +57,6 @@ class Regression_CV(pl.LightningModule, CV_utils):
 
         # ===== LOSS OPTIONS =====
         self.loss_options = {}   
-
-    def forward(self, x: torch.tensor) -> (torch.tensor):
-        return self.forward_all_blocks(x=x)
 
     def configure_optimizers(self):
         return self.initialize_default_Adam_opt()
@@ -79,24 +77,9 @@ class Regression_CV(pl.LightningModule, CV_utils):
         # ===================loss=====================
         diff = y - labels
         loss = self.loss_function(diff, options)
-        # ====================log=====================    
-        self.log('train_loss', loss, on_epoch=True)
-        return loss
-
-    def validation_step(self, val_batch, batch_idx):
-        options = self.loss_options
-        # =================get data===================
-        x = val_batch['data']
-        labels = val_batch['target']
-        if 'weights' in val_batch:
-            options['weights'] = val_batch['weights'] 
-        # =================forward====================
-        y = self(x)
-        # ===================loss=====================
-        diff = y - labels
-        loss = self.loss_function(diff, options)
-        # ====================log=====================    
-        self.log('train_loss', loss, on_epoch=True)
+        # ====================log===================== 
+        name = 'train' if self.training else 'valid'       
+        self.log(f'{name}_loss', loss, on_epoch=True)
         return loss
 
 def test_regression_cv():

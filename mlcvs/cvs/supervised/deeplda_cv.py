@@ -12,13 +12,15 @@ from mlcvs.core.loss.eigvals import reduce_eigenvalues
 __all__ = ["DeepLDA_CV"]
 
 @decorate_methods(call_submodules_hooks, methods=allowed_hooks)
-class DeepLDA_CV(pl.LightningModule,CV_utils):
+class DeepLDA_CV(CV_utils, pl.LightningModule):
     """Neural network-based discriminant collective variables.
     
     For the training it requires a DictionaryDataset with the keys 'data' and 'labels'.
     """
+
+    BLOCKS = ['normIn', 'nn', 'lda', 'normOut']
     
-    def __init__(self, layers : list , n_states : int, options : dict = {}, **kwargs):
+    def __init__(self, layers : list , n_states : int, options : dict = None, **kwargs):
         """ 
         Define a Deep Linear Discriminant Analysis (Deep-LDA) CV.
 
@@ -38,8 +40,7 @@ class DeepLDA_CV(pl.LightningModule,CV_utils):
         # ===== BLOCKS =====
 
         # Members
-        self.blocks = ['normIn','nn','lda','normOut'] 
-        self.initialize_block_defaults(options=options)
+        options = self.initialize_block_defaults(options=options)
 
         # Parse info from args
         self.define_in_features_out_features(in_features=layers[0], out_features=layers[-1])
@@ -71,9 +72,6 @@ class DeepLDA_CV(pl.LightningModule,CV_utils):
 
         # ===== LOSS OPTIONS =====
         self.loss_options = {'mode':'sum'}      # eigenvalue reduction mode
-
-    def forward(self, x: torch.tensor) -> (torch.tensor):
-        return self.forward_all_blocks(x)
 
     def forward_nn(self, x: torch.tensor) -> (torch.tensor):
         if self.normIn is not None:
@@ -158,37 +156,22 @@ class DeepLDA_CV(pl.LightningModule,CV_utils):
         # =================forward====================
         h = self.forward_nn(x)
         # ===================lda======================
-        eigvals,_ = self.lda.compute(h,y,save_params=True)
+        eigvals,_ = self.lda.compute(h,y,save_params=True if self.training else False) 
         # ===================loss=====================
         loss = self.loss_function(eigvals, self.loss_options)
         if self.lorentzian_reg > 0:
             lorentzian_reg = self.regularization_lorentzian(h)
             loss += lorentzian_reg
-        # ====================log=====================        
-        loss_dict = {'train_loss' : loss, 'train_lorentzian_reg' : lorentzian_reg}
-        eig_dict = { f'train_eigval_{i+1}' : eigvals[i] for i in range(len(eigvals))}
+        # ====================log=====================
+        name = 'train' if self.training else 'valid'    
+        loss_dict = {f'{name}_loss' : loss, f'{name}_lorentzian_reg' : lorentzian_reg}
+        eig_dict = { f'{name}_eigval_{i+1}' : eigvals[i] for i in range(len(eigvals))}
         self.log_dict(dict(loss_dict, **eig_dict) ,on_step=True, on_epoch=True)
         # ===================norm=====================     
-        z = self.forward(x) # to accumulate info on normOut
+        if self.training:
+            z = self.forward(x) # to accumulate info on normOut
         return loss
 
-    def validation_step(self, val_batch, batch_idx):
-        # =================get data===================
-        x = val_batch['data']
-        y = val_batch['labels']
-        # =================forward====================
-        h = self.forward_nn(x)
-        # ===================lda======================
-        eigvals,_ = self.lda.compute(h,y,save_params=False)
-        # ===================loss=====================
-        loss = self.loss_function(eigvals, self.loss_options)
-        if self.lorentzian_reg > 0:
-            lorentzian_reg = self.regularization_lorentzian(h)
-            loss += lorentzian_reg
-        # ====================log=====================    
-        loss_dict = {'valid_loss' : loss, 'valid_lorentzian_reg' : lorentzian_reg}
-        eig_dict = { f'valid_eigval_{i+1}' : eigvals[i] for i in range(len(eigvals))}
-        self.log_dict(dict(loss_dict, **eig_dict) ,on_step=True, on_epoch=True)
 
 def test_deeplda(n_states=2):
     from mlcvs.utils.data import DictionaryDataset

@@ -13,9 +13,11 @@ from mlcvs.cvs.utils import CV_utils
 from mlcvs.core.loss.eigvals import reduce_eigenvalues
 
 @decorate_methods(call_submodules_hooks, methods=allowed_hooks)
-class DeepTICA_CV(pl.LightningModule,CV_utils):
+class DeepTICA_CV(CV_utils, pl.LightningModule):
     """Time-lagged independent component analysis-based CV."""
     
+    BLOCKS = ['normIn','nn','normNN','tica','normOut'] 
+
     def __init__(self, layers : list , out_features : int = None, options : dict = {}, **kwargs): 
         """ 
         Neural network-based TICA CV.
@@ -37,7 +39,6 @@ class DeepTICA_CV(pl.LightningModule,CV_utils):
         # ===== BLOCKS =====
 
         # Members
-        self.blocks = ['normIn','nn','normNN','tica','normOut'] 
         self.initialize_block_defaults(options=options)
 
         # Parse info from args
@@ -64,9 +65,6 @@ class DeepTICA_CV(pl.LightningModule,CV_utils):
         # ===== LOSS OPTIONS =====
         self.loss_options = {'mode':'sum2',     # eigenvalue reduction mode
                             'n_eig': 0 }        # how many eigenvalues to optimize (0 == all) 
-
-    def forward(self, x: torch.tensor) -> (torch.tensor):
-        return self.forward_all_blocks(x)
         
     def forward_nn(self, x: torch.tensor) -> (torch.tensor):
         if self.normIn is not None:
@@ -128,32 +126,15 @@ class DeepTICA_CV(pl.LightningModule,CV_utils):
                                                     save_params=True)
         # ===================loss=====================
         loss = self.loss_function(eigvals,self.loss_options)
-        # ====================log=====================            
-        loss_dict = {'train_loss' : loss}
-        eig_dict = { f'train_eigval_{i+1}' : eigvals[i] for i in range(len(eigvals))}
+        # ====================log=====================          
+        name = 'train' if self.training else 'valid'       
+        loss_dict = {f'{name}_loss' : loss}
+        eig_dict = { f'{name}_eigval_{i+1}' : eigvals[i] for i in range(len(eigvals))}
         self.log_dict(dict(loss_dict, **eig_dict), on_step=True, on_epoch=True)
         # ===================norm=====================     
-        z = self.forward(x_t) # to accumulate info on normOut
+        if self.training:
+            z = self.forward(x_t) # to accumulate info on normOut
         return loss
-
-    def validation_step(self, val_batch, batch_idx):
-        # =================get data===================
-        x_t   = val_batch['data']
-        x_lag = val_batch['data_lag']
-        w_t   = val_batch['weights']
-        w_lag = val_batch['weights_lag']
-        # =================forward====================
-        f_t = self.forward_nn(x_t)
-        f_lag = self.forward_nn(x_lag)
-        # ===================tica=====================
-        eigvals, _ = self.tica.compute(data = [f_t,f_lag], weights = [w_t,w_lag])
-        # ===================loss=====================
-        loss = self.loss_function(eigvals,self.loss_options)
-        # ====================log=====================     
-        loss_dict = {'valid_loss' : loss}
-        eig_dict = { f'valid_eigval_{i+1}' : eigvals[i] for i in range(len(eigvals))}
-        self.log_dict(dict(loss_dict, **eig_dict), on_step=True, on_epoch=True)
-        
 
 def test_deep_tica():
     # tests
@@ -165,7 +146,7 @@ def test_deep_tica():
     X = np.loadtxt('mlcvs/tests/data/mb-mcmc.dat')
     X = torch.Tensor(X)
     dataset = Build_TimeLagged_Dataset(X,lag_time=1)
-    datamodule = TensorDataModule(dataset, batch_size = 1024)
+    datamodule = TensorDataModule(dataset, batch_size = 10000)
 
     # create cv
     layers = [2,10,10,2]

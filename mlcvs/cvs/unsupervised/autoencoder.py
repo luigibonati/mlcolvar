@@ -10,16 +10,18 @@ from mlcvs.core.loss import MSE_loss
 __all__ = ["AutoEncoder_CV"]
 
 @decorate_methods(call_submodules_hooks, methods=allowed_hooks)
-class AutoEncoder_CV(pl.LightningModule, CV_utils):
+class AutoEncoder_CV(CV_utils, pl.LightningModule):
     """AutoEncoding Collective Variable.
     
-    For training it requires a DictionaryDataset with the key 'date' and optionally 'weights'.
+    For training it requires a DictionaryDataset with the key 'data' and optionally 'weights'.
     """
+    
+    BLOCKS = ['normIn','encoder','normOut','decoder'] 
     
     def __init__(self,
                 encoder_layers : list, 
                 decoder_layers : list = None, 
-                options : dict = {}, 
+                options : dict = None, 
                 **kwargs):
         """
         Train a CV defined as the output layer of the encoder of an autoencoder model (latent space). 
@@ -42,8 +44,7 @@ class AutoEncoder_CV(pl.LightningModule, CV_utils):
         # ===== BLOCKS =====
 
         # Members
-        self.blocks = ['normIn','encoder','normOut','decoder'] 
-        self.initialize_block_defaults(options=options)
+        options = self.initialize_block_defaults(options=options)
 
         # parse info from args
         self.define_in_features_out_features(in_features=encoder_layers[0], out_features=encoder_layers[-1])
@@ -94,7 +95,7 @@ class AutoEncoder_CV(pl.LightningModule, CV_utils):
         return MSE_loss(diff,options)
 
     def training_step(self, train_batch, batch_idx):
-        options = {}
+        options = self.loss_options
         # =================get data===================
         x = train_batch['data']
         if 'weights' in train_batch:
@@ -105,22 +106,9 @@ class AutoEncoder_CV(pl.LightningModule, CV_utils):
         diff = x - x_hat
         loss = self.loss_function(diff, options)
         # ====================log=====================     
-        self.log('train_loss', loss, on_epoch=True)
+        name = 'train' if self.training else 'valid'       
+        self.log(f'{name}_loss', loss, on_epoch=True)
         return loss
-
-    def validation_step(self, val_batch, batch_idx):
-        options = {}
-        # =================get data===================
-        x = val_batch['data']
-        if 'weights' in val_batch:
-            options['weights'] = val_batch['weights'] 
-        # =================forward====================
-        x_hat = self.encode_decode(x)
-        # ===================loss=====================
-        diff = x - x_hat
-        loss = self.loss_function(diff, options)
-        # ====================log=====================     
-        self.log('val_loss', loss, on_epoch=True)
 
 def test_autoencodercv():
     from mlcvs.utils.data import DictionaryDataset, TensorDataModule
