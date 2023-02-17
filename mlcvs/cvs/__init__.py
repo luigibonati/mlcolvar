@@ -2,4 +2,4 @@ __all__ = ["DeepLDA_CV", "DeepTICA_CV","DeepTDA_CV","AutoEncoder_CV","Regression
 
 from .unsupervised import *
 from .supervised import *
-from .slowmodes import *
+from .timelagged import *
