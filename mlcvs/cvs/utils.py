@@ -1,6 +1,6 @@
 import torch
 
-class CV_utils:
+class BaseCV:
     """
     
     To inherit from this class, the class must define a BLOCKS class attribute.
@@ -34,18 +34,6 @@ class CV_utils:
         
         return options
     
-    def configure_optimizers(self): 
-        """
-        Initialize a default Adam optimizer.
-
-        Returns
-        -------
-        torch.optim
-            Torch optimizer
-        """ 
-        optimizer = getattr(torch.optim,self.optim_name)(self.parameters(),**self.optim_options)
-        return optimizer
-
     def define_in_features_out_features(self, in_features : int, out_features : int):
         """
         Initialize self.in_features and self.out_features of the CV class
@@ -64,7 +52,7 @@ class CV_utils:
 
     def forward(self, x : torch.tensor) -> (torch.tensor):
         """
-        Execute all the blocks in self.BLOCKS unless they have been deactivated with options dict.
+        Execute sequentially all the blocks in self.BLOCKS unless they have been deactivated with options dict.
 
         Parameters
         ----------
@@ -82,7 +70,8 @@ class CV_utils:
         return x
 
     def validation_step(self, val_batch, batch_idx):
-        """ Equal to training step if not overridden. Different behaviors for train/valid step can be enforced based on the self.training variable. 
+        """ 
+        Equal to training step if not overridden. Different behaviors for train/valid step can be enforced based on the self.training variable. 
         """
         self.training_step(val_batch, batch_idx)
 
@@ -147,4 +136,16 @@ class CV_utils:
         if options is None:
             options = {}
         self.optim_options = {**options, **locals()['kwargs']}
+
+    def configure_optimizers(self): 
+        """
+        Initialize the optimizer based on the self.optim_name and self.optim_options.
+
+        Returns
+        -------
+        torch.optim
+            Torch optimizer
+        """ 
+        optimizer = getattr(torch.optim,self.optim_name)(self.parameters(),**self.optim_options)
+        return optimizer
 

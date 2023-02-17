@@ -3,13 +3,13 @@ import pytorch_lightning as pl
 
 from mlcvs.core import FeedForward, Normalization
 from mlcvs.utils.decorators import decorate_methods,call_submodules_hooks,allowed_hooks
-from mlcvs.cvs.utils import CV_utils
+from mlcvs.cvs.utils import BaseCV
 from mlcvs.core.loss import MSE_loss
 
 __all__ = ["Regression_CV"]
 
 @decorate_methods(call_submodules_hooks,methods=allowed_hooks)
-class Regression_CV(CV_utils, pl.LightningModule):
+class Regression_CV(BaseCV, pl.LightningModule):
     """
     Example of collective variable obtained with a regression task.
     Combine the inputs with a neural-network and optimize it to match a target function.

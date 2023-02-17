@@ -5,14 +5,14 @@ from mlcvs.core.models import FeedForward
 from mlcvs.core.transform import Normalization
 from mlcvs.utils.data import TensorDataModule
 from torch.utils.data import TensorDataset
-from mlcvs.cvs.utils import CV_utils
+from mlcvs.cvs.utils import BaseCV
 from mlcvs.core.stats.lda import LDA
 from mlcvs.core.loss.eigvals import reduce_eigenvalues
 
 __all__ = ["DeepLDA_CV"]
 
 @decorate_methods(call_submodules_hooks, methods=allowed_hooks)
-class DeepLDA_CV(CV_utils, pl.LightningModule):
+class DeepLDA_CV(BaseCV, pl.LightningModule):
     """Neural network-based discriminant collective variables.
     
     For the training it requires a DictionaryDataset with the keys 'data' and 'labels'.

@@ -4,13 +4,13 @@ import pytorch_lightning as pl
 from mlcvs.utils.decorators import decorate_methods, allowed_hooks, call_submodules_hooks
 from mlcvs.core.models import FeedForward
 from mlcvs.core.transform import Normalization
-from mlcvs.cvs.utils import CV_utils
+from mlcvs.cvs.utils import BaseCV
 from mlcvs.core.loss import MSE_loss
 
 __all__ = ["AutoEncoder_CV"]
 
 @decorate_methods(call_submodules_hooks, methods=allowed_hooks)
-class AutoEncoder_CV(CV_utils, pl.LightningModule):
+class AutoEncoder_CV(BaseCV, pl.LightningModule):
     """AutoEncoding Collective Variable.
     
     For training it requires a DictionaryDataset with the key 'data' and optionally 'weights'.

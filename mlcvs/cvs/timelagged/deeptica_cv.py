@@ -9,11 +9,11 @@ from mlcvs.utils.decorators import decorate_methods, allowed_hooks, call_submodu
 from mlcvs.core.models import FeedForward
 from mlcvs.core.stats import TICA
 from mlcvs.core.transform import Normalization
-from mlcvs.cvs.utils import CV_utils
+from mlcvs.cvs.utils import BaseCV
 from mlcvs.core.loss.eigvals import reduce_eigenvalues
 
 @decorate_methods(call_submodules_hooks, methods=allowed_hooks)
-class DeepTICA_CV(CV_utils, pl.LightningModule):
+class DeepTICA_CV(BaseCV, pl.LightningModule):
     """Time-lagged independent component analysis-based CV."""
     
     BLOCKS = ['normIn','nn','normNN','tica','normOut'] 
