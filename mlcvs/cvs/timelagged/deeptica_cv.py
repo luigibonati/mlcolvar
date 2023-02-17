@@ -39,7 +39,7 @@ class DeepTICA_CV(CV_utils, pl.LightningModule):
         # ===== BLOCKS =====
 
         # Members
-        self.initialize_block_defaults(options=options)
+        options = self.initialize_block_defaults(options=options)
 
         # Parse info from args
         self.define_in_features_out_features(in_features=layers[0], out_features=out_features if out_features is not None else layers[-1])
