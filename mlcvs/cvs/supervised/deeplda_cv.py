@@ -35,15 +35,12 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
             Available blocks: ['normIn','nn','lda','normOut'] .
             Set 'block_name' = None or False to turn off that block
         """
-        super().__init__(**kwargs)
+        super().__init__(in_features=layers[0], out_features=layers[-1], **kwargs)
 
         # ===== BLOCKS =====
 
         # Members
         options = self.initialize_block_defaults(options=options)
-
-        # Parse info from args
-        self.define_in_features_out_features(in_features=layers[0], out_features=layers[-1])
 
         # Save n_states
         self.n_states = n_states

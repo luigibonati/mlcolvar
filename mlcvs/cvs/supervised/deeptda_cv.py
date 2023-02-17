@@ -52,13 +52,10 @@ class DeepTDA_CV(BaseCV, pl.LightningModule):
             Set 'block_name' = None or False to turn off that block
         """
 
-        super().__init__(**kwargs)
+        super().__init__(in_features=layers[0], out_features=layers[-1], **kwargs)
 
         # Members
         options = self.initialize_block_defaults(options=options)
-        
-        # Parse info from args
-        self.define_in_features_out_features(in_features=layers[0], out_features=layers[-1])
         
         self.n_states = n_states
         if self.out_features != n_cvs:

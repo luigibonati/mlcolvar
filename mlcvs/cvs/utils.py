@@ -7,8 +7,22 @@ class BaseCV:
 
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, in_features, out_features, *args, **kwargs):
+        """ Base CV class options.
+
+        Parameters
+        ----------
+        in_features : int
+            Number of inputs of the CV model
+        out_features : int
+            Number of outputs of the CV model, should be the number of CVs
+        """
         super().__init__(*args, **kwargs)
+
+        self.in_features = in_features
+        self.out_features = out_features
+        
+        self.example_input_array = torch.randn(self.in_features)
 
         self.optim_name = 'Adam'
         self.optim_options = {}
@@ -33,22 +47,6 @@ class BaseCV:
             options.setdefault(b,{})
         
         return options
-    
-    def define_in_features_out_features(self, in_features : int, out_features : int):
-        """
-        Initialize self.in_features and self.out_features of the CV class
-        Initialize self.example_input_array accordingly
-
-        Parameters
-        ----------
-        in_features : int
-            Number of inputs of the CV model
-        out_features : int
-            Number of outputs of the CV model, should be the number of CVs
-        """
-        self.in_features = in_features
-        self.out_features = out_features
-        self.example_input_array = torch.ones(self.in_features)
 
     def forward(self, x : torch.tensor) -> (torch.tensor):
         """

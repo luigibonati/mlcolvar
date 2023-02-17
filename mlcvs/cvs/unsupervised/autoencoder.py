@@ -39,7 +39,7 @@ class AutoEncoder_CV(BaseCV, pl.LightningModule):
             Available blocks: ['normIn', 'encoder','normOut','decoder'].
             Set 'block_name' = None or False to turn off that block
         """
-        super().__init__(**kwargs)
+        super().__init__(in_features=encoder_layers[0], out_features=encoder_layers[-1], **kwargs)
 
         # ===== BLOCKS =====
 
@@ -47,7 +47,6 @@ class AutoEncoder_CV(BaseCV, pl.LightningModule):
         options = self.initialize_block_defaults(options=options)
 
         # parse info from args
-        self.define_in_features_out_features(in_features=encoder_layers[0], out_features=encoder_layers[-1])
         if decoder_layers is None:
             decoder_layers = encoder_layers[::-1]
 
