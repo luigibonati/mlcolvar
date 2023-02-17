@@ -35,7 +35,7 @@ class AutoEncoder_CV(BaseCV, pl.LightningModule):
             Number of neurons per layer of the decoder, by default None
             If not set it takes automaically the reversed architecture of the encoder
         options : dict[str,Any], optional
-            Options for the building blocks of the model, by default {}.
+            Options for the building blocks of the model, by default None.
             Available blocks: ['normIn', 'encoder','normOut','decoder'].
             Set 'block_name' = None or False to turn off that block
         """
@@ -43,8 +43,7 @@ class AutoEncoder_CV(BaseCV, pl.LightningModule):
 
         # ===== BLOCKS =====
 
-        # Members
-        options = self.initialize_block_defaults(options=options)
+        options = self.sanitize_options(options)
 
         # parse info from args
         if decoder_layers is None:

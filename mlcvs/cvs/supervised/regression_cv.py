@@ -39,8 +39,7 @@ class Regression_CV(BaseCV, pl.LightningModule):
 
         # ===== BLOCKS =====
 
-        # Members
-        options = self.initialize_block_defaults(options=options)
+        options = self.sanitize_options(options)
 
         # Initialize normIn
         o = 'normIn'
@@ -54,9 +53,9 @@ class Regression_CV(BaseCV, pl.LightningModule):
         # ===== LOSS OPTIONS =====
         self.loss_options = {}   
 
-    def loss_function(self, diff, options = {}):
+    def loss_function(self, diff, **kwargs):
         # Reconstruction (MSE) loss
-        return MSE_loss(diff,options)
+        return MSE_loss(diff, **kwargs)
 
     def training_step(self, train_batch, batch_idx):
         options = self.loss_options
@@ -69,7 +68,7 @@ class Regression_CV(BaseCV, pl.LightningModule):
         y = self(x)
         # ===================loss=====================
         diff = y - labels
-        loss = self.loss_function(diff, options)
+        loss = self.loss_function(diff, **options)
         # ====================log===================== 
         name = 'train' if self.training else 'valid'       
         self.log(f'{name}_loss', loss, on_epoch=True)
@@ -85,7 +84,7 @@ def test_regression_cv():
     layers = [in_features, 5, 10, out_features]
 
     # initialize via dictionary
-    options= { 'FeedForward' : { 'activation' : 'relu' } }
+    options= { 'nn' : { 'activation' : 'relu' } }
 
     model = Regression_CV( layers = layers,
                         options = options)
@@ -107,12 +106,18 @@ def test_regression_cv():
     traced_model = model.to_torchscript(file_path=None, method='trace', example_inputs=X[0])
     assert torch.allclose(model(X),traced_model(X))
 
-    print('custom loss')
+    # weighted loss
+    print('weighted loss') 
+    w = torch.randn((100))
+    dataset = DictionaryDataset({'data':X,'target':y,'weights':w})
+    trainer.fit( model, datamodule )
+        
     # use custom loss
+    print('custom loss')
     trainer = pl.Trainer(accelerator='cpu',max_epochs=1,logger=None, enable_checkpointing=False)
 
     model = Regression_CV( layers = [2,10,10,1])
-    model.set_loss_fn( lambda x, options: x.abs().mean() )
+    model.set_loss_fn( lambda x: x.abs().mean() )
     trainer.fit( model, datamodule )
 
 if __name__ == "__main__":

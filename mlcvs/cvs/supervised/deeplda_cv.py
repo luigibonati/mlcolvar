@@ -39,8 +39,7 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
 
         # ===== BLOCKS =====
 
-        # Members
-        options = self.initialize_block_defaults(options=options)
+        options = self.sanitize_options(options)
 
         # Save n_states
         self.n_states = n_states

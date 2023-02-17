@@ -54,8 +54,7 @@ class DeepTDA_CV(BaseCV, pl.LightningModule):
 
         super().__init__(in_features=layers[0], out_features=layers[-1], **kwargs)
 
-        # Members
-        options = self.initialize_block_defaults(options=options)
+        options = self.sanitize_options(options)
         
         self.n_states = n_states
         if self.out_features != n_cvs:
