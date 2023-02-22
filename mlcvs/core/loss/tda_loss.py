@@ -46,12 +46,10 @@ def TDA_loss(H : torch.tensor,
     loss_sigmas = torch.zeros_like(target_sigmas)
     for i in range(n_states):
         # check which elements belong to class i
-        print('state ', i)
-        print(torch.nonzero(labels == i))
         if not torch.nonzero(labels == i).any():
             raise ValueError(f'State {i} was not represented in this batch! Either use bigger batch_size or a more equilibrated dataset composition!')
         else:
-            H_red = H[torch.nonzero(labels == i).view(-1)]
+            H_red = H[torch.nonzero(labels == i, as_tuple=True)]
 
             # compute mean and standard deviation over the class i
             mu = torch.mean(H_red, 0)
@@ -61,9 +59,6 @@ def TDA_loss(H : torch.tensor,
             else:
                 sigma = torch.std(H_red, 0)
 
-        print('Mu ', mu)
-        print('Sigma ', sigma)
-        
         # compute loss function contributes for class i
         loss_centers[i] = alfa*(mu - target_centers[i]).pow(2)
         loss_sigmas[i] = beta*(sigma - target_sigmas[i]).pow(2)
