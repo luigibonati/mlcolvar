@@ -49,7 +49,7 @@ def TDA_loss(H : torch.tensor,
         if not torch.nonzero(labels == i).any():
             raise ValueError(f'State {i} was not represented in this batch! Either use bigger batch_size or a more equilibrated dataset composition!')
         else:
-            H_red = H[torch.nonzero(labels == i).view(-1)]
+            H_red = H[torch.nonzero(labels == i, as_tuple=True)]
 
             # compute mean and standard deviation over the class i
             mu = torch.mean(H_red, 0)
