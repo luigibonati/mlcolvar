@@ -9,16 +9,16 @@ from mlcvs.utils.decorators import decorate_methods, allowed_hooks, call_submodu
 from mlcvs.core.models import FeedForward
 from mlcvs.core.stats import TICA
 from mlcvs.core.transform import Normalization
-from mlcvs.cvs.utils import CV_utils
+from mlcvs.cvs.utils import BaseCV
 from mlcvs.core.loss.eigvals import reduce_eigenvalues
 
 @decorate_methods(call_submodules_hooks, methods=allowed_hooks)
-class DeepTICA_CV(CV_utils, pl.LightningModule):
+class DeepTICA_CV(BaseCV, pl.LightningModule):
     """Time-lagged independent component analysis-based CV."""
     
     BLOCKS = ['normIn','nn','normNN','tica','normOut'] 
 
-    def __init__(self, layers : list , out_features : int = None, options : dict = {}, **kwargs): 
+    def __init__(self, layers : list , out_features : int = None, options : dict = None, **kwargs): 
         """ 
         Neural network-based TICA CV.
         Perform a non-linear featurization of the inputs with a neural-network and optimize it as to maximize autocorrelation (e.g. eigenvalues of the transfer operator approximation).
@@ -34,15 +34,13 @@ class DeepTICA_CV(CV_utils, pl.LightningModule):
             Available blocks: ['normIn','nn','tica','normOut'] .
             Set 'block_name' = None or False to turn off that block
         """
-        super().__init__(**kwargs)
+        super().__init__(in_features=layers[0], 
+                         out_features=out_features if out_features is not None else layers[-1], 
+                         **kwargs)
 
         # ===== BLOCKS =====
 
-        # Members
-        self.initialize_block_defaults(options=options)
-
-        # Parse info from args
-        self.define_in_features_out_features(in_features=layers[0], out_features=out_features if out_features is not None else layers[-1])
+        options = self.sanitize_options(options)
 
         # initialize normIn
         o = 'normIn'
@@ -83,7 +81,7 @@ class DeepTICA_CV(CV_utils, pl.LightningModule):
         """
         self.tica.reg_c0 = c0_reg
 
-    def loss_function(self, eigenvalues, options = {}):
+    def loss_function(self, eigenvalues, **kwargs):
         """
         Loss function for the DeepTICA CV. Correspond to maximizing the eigenvalue(s) of TICA.
         By default the sum of the squares is maximized.
@@ -98,7 +96,7 @@ class DeepTICA_CV(CV_utils, pl.LightningModule):
         loss : torch.tensor
             loss function
         """
-        loss = - reduce_eigenvalues(eigenvalues, options)
+        loss = - reduce_eigenvalues(eigenvalues, **kwargs)
 
         return loss
 
@@ -121,7 +119,7 @@ class DeepTICA_CV(CV_utils, pl.LightningModule):
                                                     weights = [w_t,w_lag],
                                                     save_params=True)
         # ===================loss=====================
-        loss = self.loss_function(eigvals,self.loss_options)
+        loss = self.loss_function(eigvals,**self.loss_options)
         # ====================log=====================          
         name = 'train' if self.training else 'valid'       
         loss_dict = {f'{name}_loss' : loss}

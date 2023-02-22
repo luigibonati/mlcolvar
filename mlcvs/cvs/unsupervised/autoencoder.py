@@ -4,13 +4,13 @@ import pytorch_lightning as pl
 from mlcvs.utils.decorators import decorate_methods, allowed_hooks, call_submodules_hooks
 from mlcvs.core.models import FeedForward
 from mlcvs.core.transform import Normalization
-from mlcvs.cvs.utils import CV_utils
+from mlcvs.cvs.utils import BaseCV
 from mlcvs.core.loss import MSE_loss
 
 __all__ = ["AutoEncoder_CV"]
 
 @decorate_methods(call_submodules_hooks, methods=allowed_hooks)
-class AutoEncoder_CV(CV_utils, pl.LightningModule):
+class AutoEncoder_CV(BaseCV, pl.LightningModule):
     """AutoEncoding Collective Variable.
     
     For training it requires a DictionaryDataset with the key 'data' and optionally 'weights'.
@@ -35,19 +35,17 @@ class AutoEncoder_CV(CV_utils, pl.LightningModule):
             Number of neurons per layer of the decoder, by default None
             If not set it takes automaically the reversed architecture of the encoder
         options : dict[str,Any], optional
-            Options for the building blocks of the model, by default {}.
+            Options for the building blocks of the model, by default None.
             Available blocks: ['normIn', 'encoder','normOut','decoder'].
             Set 'block_name' = None or False to turn off that block
         """
-        super().__init__(**kwargs)
+        super().__init__(in_features=encoder_layers[0], out_features=encoder_layers[-1], **kwargs)
 
         # ===== BLOCKS =====
 
-        # Members
-        options = self.initialize_block_defaults(options=options)
+        options = self.sanitize_options(options)
 
         # parse info from args
-        self.define_in_features_out_features(in_features=encoder_layers[0], out_features=encoder_layers[-1])
         if decoder_layers is None:
             decoder_layers = encoder_layers[::-1]
 
@@ -87,9 +85,9 @@ class AutoEncoder_CV(CV_utils, pl.LightningModule):
             x = self.normIn.inverse(x)
         return x
 
-    def loss_function(self, diff, options = {}):
+    def loss_function(self, diff, **kwargs):
         # Reconstruction (MSE) loss
-        return MSE_loss(diff,options)
+        return MSE_loss(diff,**kwargs)
 
     def training_step(self, train_batch, batch_idx):
         options = self.loss_options
@@ -101,7 +99,7 @@ class AutoEncoder_CV(CV_utils, pl.LightningModule):
         x_hat = self.encode_decode(x)
         # ===================loss=====================
         diff = x - x_hat
-        loss = self.loss_function(diff, options)
+        loss = self.loss_function(diff, **options)
         # ====================log=====================     
         name = 'train' if self.training else 'valid'       
         self.log(f'{name}_loss', loss, on_epoch=True)

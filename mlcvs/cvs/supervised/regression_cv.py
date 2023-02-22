@@ -3,13 +3,13 @@ import pytorch_lightning as pl
 
 from mlcvs.core import FeedForward, Normalization
 from mlcvs.utils.decorators import decorate_methods,call_submodules_hooks,allowed_hooks
-from mlcvs.cvs.utils import CV_utils
+from mlcvs.cvs.utils import BaseCV
 from mlcvs.core.loss import MSE_loss
 
 __all__ = ["Regression_CV"]
 
 @decorate_methods(call_submodules_hooks,methods=allowed_hooks)
-class Regression_CV(CV_utils, pl.LightningModule):
+class Regression_CV(BaseCV, pl.LightningModule):
     """
     Example of collective variable obtained with a regression task.
     Combine the inputs with a neural-network and optimize it to match a target function.
@@ -35,15 +35,11 @@ class Regression_CV(CV_utils, pl.LightningModule):
             Available blocks: ['normIn', 'nn'].
             Set 'block_name' = None or False to turn off that block
         """
-        super().__init__(**kwargs)
+        super().__init__(in_features=layers[0], out_features=layers[-1], **kwargs)
 
         # ===== BLOCKS =====
 
-        # Members
-        options = self.initialize_block_defaults(options=options)
-
-        # Parse info from args
-        self.define_in_features_out_features(in_features=layers[0], out_features=layers[-1])
+        options = self.sanitize_options(options)
 
         # Initialize normIn
         o = 'normIn'
@@ -57,9 +53,9 @@ class Regression_CV(CV_utils, pl.LightningModule):
         # ===== LOSS OPTIONS =====
         self.loss_options = {}   
 
-    def loss_function(self, diff, options = {}):
+    def loss_function(self, diff, **kwargs):
         # Reconstruction (MSE) loss
-        return MSE_loss(diff,options)
+        return MSE_loss(diff, **kwargs)
 
     def training_step(self, train_batch, batch_idx):
         options = self.loss_options
@@ -72,7 +68,7 @@ class Regression_CV(CV_utils, pl.LightningModule):
         y = self(x)
         # ===================loss=====================
         diff = y - labels
-        loss = self.loss_function(diff, options)
+        loss = self.loss_function(diff, **options)
         # ====================log===================== 
         name = 'train' if self.training else 'valid'       
         self.log(f'{name}_loss', loss, on_epoch=True)
@@ -88,7 +84,7 @@ def test_regression_cv():
     layers = [in_features, 5, 10, out_features]
 
     # initialize via dictionary
-    options= { 'FeedForward' : { 'activation' : 'relu' } }
+    options= { 'nn' : { 'activation' : 'relu' } }
 
     model = Regression_CV( layers = layers,
                         options = options)
@@ -110,12 +106,18 @@ def test_regression_cv():
     traced_model = model.to_torchscript(file_path=None, method='trace', example_inputs=X[0])
     assert torch.allclose(model(X),traced_model(X))
 
-    print('custom loss')
+    # weighted loss
+    print('weighted loss') 
+    w = torch.randn((100))
+    dataset = DictionaryDataset({'data':X,'target':y,'weights':w})
+    trainer.fit( model, datamodule )
+        
     # use custom loss
+    print('custom loss')
     trainer = pl.Trainer(accelerator='cpu',max_epochs=1,logger=None, enable_checkpointing=False)
 
     model = Regression_CV( layers = [2,10,10,1])
-    model.set_loss_fn( lambda x, options: x.abs().mean() )
+    model.set_loss_fn( lambda x: x.abs().mean() )
     trainer.fit( model, datamodule )
 
 if __name__ == "__main__":

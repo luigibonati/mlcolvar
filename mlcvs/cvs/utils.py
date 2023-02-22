@@ -1,25 +1,38 @@
 import torch
 
-class CV_utils:
+class BaseCV:
     """
     
     To inherit from this class, the class must define a BLOCKS class attribute.
 
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, in_features, out_features, *args, **kwargs):
+        """ Base CV class options.
+
+        Parameters
+        ----------
+        in_features : int
+            Number of inputs of the CV model
+        out_features : int
+            Number of outputs of the CV model, should be the number of CVs
+        """
         super().__init__(*args, **kwargs)
+
+        self.initialize_blocks()
+
+        self.in_features = in_features
+        self.out_features = out_features
+        
+        self.example_input_array = torch.randn(self.in_features)
 
         self.optim_name = 'Adam'
         self.optim_options = {}
 
         self.loss_options = {}
 
-    def initialize_block_defaults(self, options : dict = None):
+    def sanitize_options(self, options : dict = None):
         """
-        Initialize the blocks as attributes of the CV class.
-        Set the options of each block to empty dict.
-
         Parameters
         ----------
         options : dict[str, Any], optional
@@ -29,42 +42,29 @@ class CV_utils:
             options = {}
 
         for b in self.BLOCKS:
-            self.__setattr__(b,None)
             options.setdefault(b,{})
-        
+
+        for o in options.keys():
+            if o not in self.BLOCKS:
+                if o == 'loss':
+                    self.set_loss_options(options[o])
+                elif o == 'optim':
+                    self.set_optim_options(options[o])
+                else:
+                    raise ValueError(f'The key {o} is not available in this class. The available keys are: {",".join(self.BLOCKS)},loss,optim ')
+
         return options
-    
-    def configure_optimizers(self): 
-        """
-        Initialize a default Adam optimizer.
 
-        Returns
-        -------
-        torch.optim
-            Torch optimizer
-        """ 
-        optimizer = getattr(torch.optim,self.optim_name)(self.parameters(),**self.optim_options)
-        return optimizer
-
-    def define_in_features_out_features(self, in_features : int, out_features : int):
+    def initialize_blocks(self):
         """
-        Initialize self.in_features and self.out_features of the CV class
-        Initialize self.example_input_array accordingly
-
-        Parameters
-        ----------
-        in_features : int
-            Number of inputs of the CV model
-        out_features : int
-            Number of outputs of the CV model, should be the number of CVs
+        Initialize the blocks as attributes of the CV class.
         """
-        self.in_features = in_features
-        self.out_features = out_features
-        self.example_input_array = torch.ones(self.in_features)
+        for b in self.BLOCKS:
+            self.__setattr__(b,None)
 
     def forward(self, x : torch.tensor) -> (torch.tensor):
         """
-        Execute all the blocks in self.BLOCKS unless they have been deactivated with options dict.
+        Execute sequentially all the blocks in self.BLOCKS unless they have been deactivated with options dict.
 
         Parameters
         ----------
@@ -82,7 +82,8 @@ class CV_utils:
         return x
 
     def validation_step(self, val_batch, batch_idx):
-        """ Equal to training step if not overridden. Different behaviors for train/valid step can be enforced based on the self.training variable. 
+        """ 
+        Equal to training step if not overridden. Different behaviors for train/valid step can be enforced based on the self.training variable. 
         """
         self.training_step(val_batch, batch_idx)
 
@@ -147,4 +148,16 @@ class CV_utils:
         if options is None:
             options = {}
         self.optim_options = {**options, **locals()['kwargs']}
+
+    def configure_optimizers(self): 
+        """
+        Initialize the optimizer based on the self.optim_name and self.optim_options.
+
+        Returns
+        -------
+        torch.optim
+            Torch optimizer
+        """ 
+        optimizer = getattr(torch.optim,self.optim_name)(self.parameters(),**self.optim_options)
+        return optimizer
 

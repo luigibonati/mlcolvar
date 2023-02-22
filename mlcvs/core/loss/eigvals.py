@@ -2,7 +2,7 @@ import torch
 
 __all__ = ['reduce_eigenvalues']
 
-def reduce_eigenvalues(evals : torch.Tensor, options : dict = { 'mode':'sum', 'n_eig': 0 }):
+def reduce_eigenvalues( evals : torch.Tensor, mode = 'sum', n_eig = 0 ):
         """
         Calculate a monotonic function of the eigenvalues, by default the sum.
 
@@ -30,10 +30,6 @@ def reduce_eigenvalues(evals : torch.Tensor, options : dict = { 'mode':'sum', 'n
         loss : torch.tensor (scalar)
             score
         """
-
-        # parse args
-        mode = options['mode'] if 'mode' in options else 'sum'
-        n_eig = options['n_eig'] if 'n_eig' in options else 0
 
         #check if n_eig is given and
         if (n_eig>0) & (len(evals) < n_eig):

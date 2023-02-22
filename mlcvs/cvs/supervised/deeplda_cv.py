@@ -5,14 +5,14 @@ from mlcvs.core.models import FeedForward
 from mlcvs.core.transform import Normalization
 from mlcvs.utils.data import TensorDataModule
 from torch.utils.data import TensorDataset
-from mlcvs.cvs.utils import CV_utils
+from mlcvs.cvs.utils import BaseCV
 from mlcvs.core.stats.lda import LDA
 from mlcvs.core.loss.eigvals import reduce_eigenvalues
 
 __all__ = ["DeepLDA_CV"]
 
 @decorate_methods(call_submodules_hooks, methods=allowed_hooks)
-class DeepLDA_CV(CV_utils, pl.LightningModule):
+class DeepLDA_CV(BaseCV, pl.LightningModule):
     """Neural network-based discriminant collective variables.
     
     For the training it requires a DictionaryDataset with the keys 'data' and 'labels'.
@@ -35,15 +35,11 @@ class DeepLDA_CV(CV_utils, pl.LightningModule):
             Available blocks: ['normIn','nn','lda','normOut'] .
             Set 'block_name' = None or False to turn off that block
         """
-        super().__init__(**kwargs)
+        super().__init__(in_features=layers[0], out_features=layers[-1], **kwargs)
 
         # ===== BLOCKS =====
 
-        # Members
-        options = self.initialize_block_defaults(options=options)
-
-        # Parse info from args
-        self.define_in_features_out_features(in_features=layers[0], out_features=layers[-1])
+        options = self.sanitize_options(options)
 
         # Save n_states
         self.n_states = n_states
@@ -126,7 +122,7 @@ class DeepLDA_CV(CV_utils, pl.LightningModule):
         reg_loss_lor = -self.lorentzian_reg / (1 + (reg_loss - 1).pow(2))
         return reg_loss_lor
 
-    def loss_function(self, eigenvalues, options = {}):
+    def loss_function(self, eigenvalues, **kwargs):
         """
         Loss function for the DeepLDA CV. Correspond to maximizing the eigenvalue(s) of LDA.
         If there are C classes the sum of the C-1 eigenvalues will be maximized.
@@ -141,7 +137,7 @@ class DeepLDA_CV(CV_utils, pl.LightningModule):
         loss : torch.tensor
             loss function
         """
-        loss = - reduce_eigenvalues(eigenvalues, options)
+        loss = - reduce_eigenvalues(eigenvalues, **kwargs)
 
         return loss
 
@@ -154,7 +150,7 @@ class DeepLDA_CV(CV_utils, pl.LightningModule):
         # ===================lda======================
         eigvals,_ = self.lda.compute(h,y,save_params=True if self.training else False) 
         # ===================loss=====================
-        loss = self.loss_function(eigvals, self.loss_options)
+        loss = self.loss_function(eigvals, **self.loss_options)
         if self.lorentzian_reg > 0:
             lorentzian_reg = self.regularization_lorentzian(h)
             loss += lorentzian_reg
