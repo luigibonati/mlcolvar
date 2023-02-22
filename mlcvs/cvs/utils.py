@@ -102,6 +102,7 @@ class BaseCV:
         self.loss_function = fn
 
     def set_loss_options(self, options : dict = None, **kwargs):
+
         """
         Save loss functions options to be used in train/valid step. It can either take a dictionary or arguments. 
 
@@ -114,10 +115,10 @@ class BaseCV:
         options : dict
             Dictionary of options to be passed to the loss during train/valid steps.
         """
-        #add kwargs to options dict
         if options is None:
             options = {}
-        self.loss_options = {**options, **locals()['kwargs']}
+        #update saved options based on both provided dict options and kwargs
+        self.loss_options.update({**options, **locals()['kwargs']})
 
     def set_optim_name(self, optim_name : str): 
         """Choose optimizer. Options can be set using set_optim_options. Actual optimizer will be return from configure_optimizer function.
@@ -137,21 +138,21 @@ class BaseCV:
 
         Examples:
         >>> cvs.set_optim_options(options = {'weight_decay' : 1e-5, 'lr' : 1e-3})
-        >>> cvs.set_loss_options(lr=1e-3)
+        >>> cvs.set_optim_options(lr=1e-3)
 
         Parameters
         ----------
         options : dict
             Dictionary of options
         """
-        #add kwargs to options dict
         if options is None:
             options = {}
-        self.optim_options = {**options, **locals()['kwargs']}
+        #update saved options based on both provided dict options and kwargs
+        self.optim_options.update({**options, **locals()['kwargs']})
 
     def configure_optimizers(self): 
         """
-        Initialize the optimizer based on the self.optim_name and self.optim_options.
+        Initialize the optimizer based on self.optim_name and self.optim_options.
 
         Returns
         -------
