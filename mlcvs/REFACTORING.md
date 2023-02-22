@@ -5,26 +5,26 @@ nn
     [x] models 
         [x] feedforward
         [ ] linear
-    [ ] utils
-        [ ] lda (sw/sb + fisher)
-    [ ] loss
-        [ ] mse 
-        [ ] lda_eigenvalues
-        [ ] fisher_ratio
-        [ ] tda_loss
-        [ ] tica_eigenvalues
-        [ ] autocorrelation
+    [X] utils
+        [X] lda (sw/sb + fisher)
+    [X] loss
+        [X] mse 
+        [X] lda_eigenvalues
+        [X] fisher_ratio
+        [X] tda_loss
+        [X] tica_eigenvalues
+        [X] autocorrelation
 
 cvs
     [X] supervised
         [X] SimpleCV
-    [ ] unsupervised
-        [ ] AutoEncoderCV
-    [ ] discriminant
-        [ ] DeepLDA 
-        [ ] DeepTDA
-    [ ] slowmodes
-        [ ] DeepTICA
+    [X] unsupervised
+        [X] AutoEncoderCV
+    [X] discriminant
+        [X] DeepLDA 
+        [X] DeepTDA
+    [X] slowmodes
+        [X] DeepTICA
 
 utils 
     [ ] io
@@ -37,14 +37,19 @@ utils
     [ ] fes
         [X] compute_fes >> IMPROVE THE KEYWORDS (e.g. via dict)
 
-
 TODO
-[ ] change order LightingModule/CVUtils in cvs
-[ ] change name of init block defautls / return options in cvs
-[ ] move blocks from object to class members 
-[ ] remove forward all blocks from cvs
-[ ] change training and validation step in single function if possible
-[ ] change loss func in kwargs (add kwarsgs also in set_loss_fn) --> check for {} in options
+[X] change order LightingModule/CVUtils in cvs
+[X] change name of init block defautls / return options in cvs
+[X] move blocks from object to class members 
+[X] remove forward all blocks from cvs
+[X] change training and validation step in single function if possible
 
-[ ] set optimizer
-[ ] add resnet / dropout
+[X] change loss func in kwargs (add kwarsgs also in set_loss_fn) --> check for {} in options
+[X] MV define_in_features_out_features to initialization of CV class
+[X] change name from CV_utils to BaseCV
+
+[X] set optimizer
+[ ] add batchnorm / dropout / activation function 
+[ ] add torch.nn.module as block (load existing module)  
+[ ] check device for normalization buffers 
+[ ] add export function
