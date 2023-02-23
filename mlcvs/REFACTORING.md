@@ -49,7 +49,38 @@ TODO
 [X] change name from CV_utils to BaseCV
 
 [X] set optimizer
-[ ] add batchnorm / dropout / activation function 
+
+## IO
+
+[ ] to do?
+
+## UTILS.DATA
+
+[ ] Change names to data utils
+[ ] Refactor FastTensorDataloader
+
+## TRANSFORM 
+ 
+[ ] Pairwise distances
+[ ] symmetry functions
+
+## MODELS
+
+[ ] NN ==> add batchnorm / dropout / activation function  per layer
+[ ] ADD PRE / POST BLOCKS + options whether to use them 
 [ ] add torch.nn.module as block (load existing module)  
+[ ] print optim and loss options in summary
+
+## TRAINER
+
+[ ] subclass trainer / use hooks to achieve:
+    [ ] on_fit_start --> preprocess dataset + disable pre/post in model
+    [ ] on_fit_end --> enable pre/post ?
+
+## EXTRA
+
 [ ] check device for normalization buffers 
-[ ] add export function
+[ ] add export function?
+
+
+
