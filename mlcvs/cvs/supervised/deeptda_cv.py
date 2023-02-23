@@ -61,7 +61,12 @@ class DeepTDA_CV(BaseCV, pl.LightningModule):
         if self.out_features != n_cvs:
             raise ValueError("Number of neurons of last layer should match the number of CVs!")
         
-        # check size of targets
+        # check size  and type of targets
+        if not isinstance(target_centers,torch.Tensor):
+            target_centers = torch.Tensor(target_centers)
+        if not isinstance(target_sigmas,torch.Tensor):
+            target_sigmas = torch.Tensor(target_sigmas)
+
         if target_centers.shape != target_sigmas.shape:
             raise ValueError(f"Size of target_centers and target_sigmas should be the same!")
         if n_states != target_centers.shape[0]:
@@ -82,12 +87,11 @@ class DeepTDA_CV(BaseCV, pl.LightningModule):
         self.loss_options = {'n_states': n_states,
                              'target_centers': target_centers,
                              'target_sigmas':  target_sigmas                     
-        }
+                            }
 
     # TODO change to have standard signature?
     def loss_function(self, input, labels, **kwargs):
         loss, loss_centers, loss_sigmas = TDA_loss(input, labels, **kwargs)
-        
         return loss, loss_centers, loss_sigmas
 
     def training_step(self, train_batch, batch_idx):
@@ -96,14 +100,14 @@ class DeepTDA_CV(BaseCV, pl.LightningModule):
         x = train_batch['data']
         labels = train_batch['labels']
         # =================forward====================
-        z = self(x)
+        z = self.forward(x)
         # ===================loss=====================
         loss, loss_centers, loss_sigmas = self.loss_function(z, labels, **options)
         # ====================log=====================+
         name = 'train' if self.training else 'valid'
-        self.log(f'{name}_loss', loss, on_epoch=True)
-        self.log(f'{name}_loss_centers', loss_centers, on_epoch=True)
-        self.log(f'{name}_loss_sigmas', loss_sigmas, on_epoch=True)
+        self.log(f'{name}_loss', loss.to(float), on_epoch=True)
+        self.log(f'{name}_loss_centers', loss_centers.to(float), on_epoch=True)
+        self.log(f'{name}_loss_sigmas', loss_sigmas.to(float), on_epoch=True)
         return loss
 
 # TODO signature of tests?
@@ -139,7 +143,7 @@ def test_deeptda_cv():
             y[samples*i:] += 1
         
         dataset = DictionaryDataset({'data': X, 'labels' : y})
-        datamodule = TensorDataModule(dataset,lengths=[0.75,0.2,0.05], batch_size=samples)
+        datamodule = TensorDataModule(dataset,lengths=[0.75,0.2,0.05], batch_size=samples)        
         # train model
         trainer = pl.Trainer(accelerator='cpu', max_epochs=2, logger=None, enable_checkpointing=False)
         trainer.fit( model, datamodule )
