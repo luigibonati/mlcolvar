@@ -78,7 +78,7 @@ def test_regression_cv():
     """
     Create a synthetic dataset and test functionality of the Regression_CV class
     """
-    from mlcvs.utils.data import DictionaryDataset, TensorDataModule
+    from mlcvs.utils.data import DictionaryDataset, DictionaryDataModule
 
     in_features, out_features = 2,1 
     layers = [in_features, 5, 10, out_features]
@@ -95,7 +95,7 @@ def test_regression_cv():
     X = torch.randn((100,2))
     y = X.square().sum(1)
     dataset = DictionaryDataset({'data':X,'target':y})
-    datamodule = TensorDataModule(dataset,lengths=[0.75,0.2,0.05], batch_size=25)
+    datamodule = DictionaryDataModule(dataset,lengths=[0.75,0.2,0.05], batch_size=25)
     # train model
     model.set_optim_name('SGD')
     model.set_optim_options(lr=1e-2)

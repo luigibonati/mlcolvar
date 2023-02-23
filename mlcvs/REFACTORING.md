@@ -31,8 +31,8 @@ utils
         [X] load_dataframe
         [ ] dataloader_from_file >> CHANGE IT (1) more general (2) datamodules
     [ ] data
-        [X] FastTensorDataloader
-        [X] TensorDataModule
+        [X] FastDictionaryLoader
+        [X] DictionaryDataModule
         [ ] Mixed datataset (combination of more datasets)
     [ ] fes
         [X] compute_fes >> IMPROVE THE KEYWORDS (e.g. via dict)
@@ -56,8 +56,9 @@ TODO
 
 ## UTILS.DATA
 
-[ ] Change names to data utils
-[ ] Refactor FastTensorDataloader
+[X] Change names to data utils ==> "DictionaryDataset","DictionaryDataModule","FastDictionaryLoader"
+[X] Refactor FastDictionaryLoader
+[ ] Mixed dataset?
 
 ## TRANSFORM 
  

@@ -5,7 +5,7 @@ from typing import Any
 from mlcvs.core import FeedForward, Normalization
 from mlcvs.core import TDA_loss
 
-from mlcvs.utils.data import TensorDataModule
+from mlcvs.utils.data import DictionaryDataModule
 from torch.utils.data import TensorDataset
 
 from mlcvs.utils.decorators import decorate_methods,call_submodules_hooks,allowed_hooks
@@ -143,7 +143,7 @@ def test_deeptda_cv():
             y[samples*i:] += 1
         
         dataset = DictionaryDataset({'data': X, 'labels' : y})
-        datamodule = TensorDataModule(dataset,lengths=[0.75,0.2,0.05], batch_size=samples)        
+        datamodule = DictionaryDataModule(dataset,lengths=[0.75,0.2,0.05], batch_size=samples)        
         # train model
         trainer = pl.Trainer(accelerator='cpu', max_epochs=2, logger=None, enable_checkpointing=False)
         trainer.fit( model, datamodule )

@@ -3,7 +3,7 @@ import pytorch_lightning as pl
 from mlcvs.utils.decorators import decorate_methods, allowed_hooks, call_submodules_hooks
 from mlcvs.core.models import FeedForward
 from mlcvs.core.transform import Normalization
-from mlcvs.utils.data import TensorDataModule
+from mlcvs.utils.data import DictionaryDataModule
 from torch.utils.data import TensorDataset
 from mlcvs.cvs.utils import BaseCV
 from mlcvs.core.stats.lda import LDA
@@ -182,7 +182,7 @@ def test_deeplda(n_states=2):
     y = torch.cat(y,dim=0)
     
     dataset = DictionaryDataset({'data':X, 'labels':y})
-    datamodule = TensorDataModule(dataset, lengths = [0.8,0.2], batch_size=n_states*n_points)
+    datamodule = DictionaryDataModule(dataset, lengths = [0.8,0.2], batch_size=n_states*n_points)
 
     # initialize CV
     opts = { 'normIn'  : { 'mode'   : 'mean_std' } ,

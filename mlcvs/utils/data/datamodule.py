@@ -8,11 +8,11 @@ from torch._utils import _accumulate
 from . import FastDictionaryLoader
 from . import DictionaryDataset
 
-__all__ = ["TensorDataModule"]
+__all__ = ["DictionaryDataModule"]
 
-class TensorDataModule(pl.LightningDataModule):
+class DictionaryDataModule(pl.LightningDataModule):
     """Lightning DataModule constructed for TensorDataset(s)."""
-    def __init__(self, dataset: TensorDataset or DictionaryDataset, lengths=[0.8,0.2], batch_size: int or list = 32, random_splits: bool = True, shuffle : bool or list =  False, generator : torch.Generator = None):
+    def __init__(self, dataset: DictionaryDataset, lengths=[0.8,0.2], batch_size: int or list = 0, random_splits: bool = True, shuffle : bool or list =  False, generator : torch.Generator = None):
         """Create a DataModule derived from TensorDataset, which returns train/valid/test dataloaders.
 
         For the batch_size and shuffle parameters either a single value or a list-type of values (with same size as lenghts) can be provided.
@@ -24,7 +24,7 @@ class TensorDataModule(pl.LightningDataModule):
         lengths : list, optional
             Lenghts of the training/validation/test datasets , by default [0.8,0.2]
         batch_size : int or list, optional
-            Batch size, by default 32
+            Batch size, by default 0 (== len(dataset))
         random_splits: bool, optional
             whether to randomly split train/valid/test or sequentially, by default True
         shuffle : Union[bool,list], optional
@@ -115,13 +115,13 @@ def sequential_split(dataset, lengths: list ) -> list:
         # LB change: do sequential rather then random splitting
         return [Subset(dataset, np.arange(offset-length,offset)) for offset, length in zip(_accumulate(lengths), lengths)]
 
-def test_TensorDataModule():
+def test_DictionaryDataModule():
     torch.manual_seed(42)
     X = torch.randn((100,2))
     y = X.square()
     dataset = TensorDataset(X,y)
 
-    datamodule = TensorDataModule(dataset,lengths=[0.75,0.2,0.05],batch_size=25)
+    datamodule = DictionaryDataModule(dataset,lengths=[0.75,0.2,0.05],batch_size=25)
     datamodule.setup('fit')
     loader = datamodule.train_dataloader()
     for data in loader:
@@ -131,7 +131,7 @@ def test_TensorDataModule():
     datamodule.test_dataloader()
 
     dict_dataset = DictionaryDataset( {'data':X,'labels':y} )
-    datamodule = TensorDataModule(dict_dataset,lengths=[0.75,0.2,0.05],batch_size=25)
+    datamodule = DictionaryDataModule(dict_dataset,lengths=[0.75,0.2,0.05],batch_size=25)
     datamodule.setup('fit')
     loader = datamodule.train_dataloader()
     for data in loader:
@@ -143,4 +143,4 @@ def test_TensorDataModule():
     datamodule.test_dataloader()
 
 if __name__ == "__main__":
-    test_TensorDataModule() 
+    test_DictionaryDataModule() 

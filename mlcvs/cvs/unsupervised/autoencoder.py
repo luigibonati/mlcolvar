@@ -106,7 +106,7 @@ class AutoEncoder_CV(BaseCV, pl.LightningModule):
         return loss
 
 def test_autoencodercv():
-    from mlcvs.utils.data import DictionaryDataset, TensorDataModule
+    from mlcvs.utils.data import DictionaryDataset, DictionaryDataModule
     import numpy as np
 
     in_features, out_features = 8,2
@@ -124,7 +124,7 @@ def test_autoencodercv():
     print('train 1 - no weights')
     X = torch.randn(100,in_features) 
     dataset = DictionaryDataset({'data': X})
-    datamodule = TensorDataModule(dataset)
+    datamodule = DictionaryDataModule(dataset)
     trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)
     trainer.fit( model, datamodule )
     model.eval()
@@ -133,7 +133,7 @@ def test_autoencodercv():
     # train with weights
     print('train 2 - weights')
     dataset = DictionaryDataset({'data': torch.randn(100,in_features), 'weights' : np.arange(100) })
-    datamodule = TensorDataModule(dataset)
+    datamodule = DictionaryDataModule(dataset)
     trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)
     trainer.fit( model, datamodule )
     
