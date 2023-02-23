@@ -5,14 +5,14 @@ import numpy as np
 import pytorch_lightning as pl
 from torch.utils.data import TensorDataset, random_split, Subset
 from torch._utils import _accumulate
-from . import FastTensorDataLoader
+from . import FastDictionaryLoader
 from . import DictionaryDataset
 
 __all__ = ["TensorDataModule"]
 
 class TensorDataModule(pl.LightningDataModule):
     """Lightning DataModule constructed for TensorDataset(s)."""
-    def __init__(self, dataset: TensorDataset or DictionaryDataset, lengths=[0.8,0.2], batch_size: int or list = 32, random_splits: bool = True, shuffle : bool or list =  False,  generator : torch.Generator = None):
+    def __init__(self, dataset: TensorDataset or DictionaryDataset, lengths=[0.8,0.2], batch_size: int or list = 32, random_splits: bool = True, shuffle : bool or list =  False, generator : torch.Generator = None):
         """Create a DataModule derived from TensorDataset, which returns train/valid/test dataloaders.
 
         For the batch_size and shuffle parameters either a single value or a list-type of values (with same size as lenghts) can be provided.
@@ -44,7 +44,7 @@ class TensorDataModule(pl.LightningDataModule):
         else:
             self.shuffle = shuffle
         self.random_splits = random_splits
-        self.generator = None
+        self.generator = generator
 
     def setup(self, stage: str):
         if self.random_splits:
@@ -54,16 +54,16 @@ class TensorDataModule(pl.LightningDataModule):
 
     def train_dataloader(self):
         """Return training dataloader."""
-        return FastTensorDataLoader(self.dataset_splits[0], batch_size=self.batch_size[0],shuffle=self.shuffle[0])
+        return FastDictionaryLoader(self.dataset_splits[0], batch_size=self.batch_size[0],shuffle=self.shuffle[0])
 
     def val_dataloader(self):
         """Return validation dataloader."""
-        return FastTensorDataLoader(self.dataset_splits[1], batch_size=self.batch_size[1],shuffle=self.shuffle[1])
+        return FastDictionaryLoader(self.dataset_splits[1], batch_size=self.batch_size[1],shuffle=self.shuffle[1])
 
     def test_dataloader(self):
         """Return test dataloader."""
         if len(self.lengths) >= 3:
-            return FastTensorDataLoader(self.dataset_splits[2], batch_size=self.batch_size[2],shuffle=self.shuffle[2])
+            return FastDictionaryLoader(self.dataset_splits[2], batch_size=self.batch_size[2],shuffle=self.shuffle[2])
         else: 
             raise ValueError('Test dataset not available, you need to pass three lenghts to datamodule.')  
 
