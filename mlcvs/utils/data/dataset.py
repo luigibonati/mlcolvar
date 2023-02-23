@@ -68,7 +68,6 @@ def test_DictionaryDataset():
     # test with fastdataloader
     from .dataloader import FastDictionaryLoader
     loader = FastDictionaryLoader(dataset,batch_size=1)
-    print(loader.names)
     batch=next(iter(loader))
     print(batch)
 
