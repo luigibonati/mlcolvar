@@ -38,9 +38,9 @@ def TDA_loss(H : torch.tensor,
         Total loss, centers loss, sigmas loss
     """
     if not isinstance(target_centers,torch.Tensor):
-        target_centers = torch.tensor(target_centers)
+        target_centers = torch.Tensor(target_centers)
     if not isinstance(target_sigmas,torch.Tensor):
-        target_sigmas = torch.tensor(target_sigmas)
+        target_sigmas = torch.Tensor(target_sigmas)
     
     loss_centers = torch.zeros_like(target_centers)
     loss_sigmas = torch.zeros_like(target_sigmas)
