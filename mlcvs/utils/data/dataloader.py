@@ -2,6 +2,7 @@
 
 import torch 
 from mlcvs.utils.data import DictionaryDataset
+from mlcvs.core.transform.utils import RunningStats
 
 __all__ = ["FastDictionaryLoader"]
 
@@ -84,6 +85,35 @@ class FastDictionaryLoader:
 
     def __len__(self):
         return self.n_batches
+
+    @property
+    def keys(self):
+        return self.dictionary.keys
+    
+    def get_stats(self):
+        """Compute statistics ('Mean','Std','Min','Max') of the dataloader. 
+
+        Returns
+        -------
+        stats 
+            dictionary of dictionaries with statistics
+        """
+        stats = {}
+        for batch in iter(self):
+            for k in self.keys:
+                #initialize
+                if k not in stats:
+                    stats[k] = RunningStats(batch[k])
+                # or accumulate
+                else:
+                    stats[k].update(batch[k])
+
+        # convert to dictionaries
+        for k in stats.keys():
+            stats[k] = stats[k].to_dict()
+
+        return stats
+        
 
 def test_FastDictionaryLoader(): 
     X = torch.arange(1,11).unsqueeze(1)

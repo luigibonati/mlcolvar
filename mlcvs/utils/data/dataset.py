@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from mlcvs.core.transform.utils import RunningStats
 from torch.utils.data import Dataset
 
 __all__ = ["DictionaryDataset"]
@@ -10,8 +11,8 @@ class DictionaryDataset(Dataset):
            'labels' : [0,0,1,1],
            'weights' : np.asarray([0.5,1.5,1.5,0.5]) }
     """
-    def __init__(self, dictionary: dict):
-        """Create a Dataset from  a dictionary.
+    def __init__(self, dictionary: dict = None, **kwargs):
+        """Create a Dataset from a dictionary or from a list of kwargs.
 
         Parameters
         ----------
@@ -20,8 +21,11 @@ class DictionaryDataset(Dataset):
 
         """
         # assert type dict 
-        if not isinstance(dictionary,dict):
+        if (dictionary is not None) and (not isinstance(dictionary,dict)):
             raise TypeError(f'DictionaryDataset requires a dictionary , not {type(dictionary)}.')
+
+        # Add kwargs to dict
+        dictionary = {**dictionary, **locals()['kwargs']}
 
         # convert to torch.tensors
         for key,val in dictionary.items():
@@ -46,6 +50,23 @@ class DictionaryDataset(Dataset):
     
     def __len__(self):
         return self.length
+    
+    def get_stats(self):
+        """Compute statistics ('Mean','Std','Min','Max') of the dataset. 
+
+        Returns
+        -------
+        stats 
+            dictionary of dictionaries with statistics
+        """
+        stats = {}
+        for k in self.keys:
+            stats[k] = RunningStats(self.dictionary[k]).to_dict()
+        return stats
+    
+    @property
+    def keys(self):
+        return tuple(self.dictionary.keys())
 
 def test_DictionaryDataset():
     # from list
