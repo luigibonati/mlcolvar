@@ -16,7 +16,7 @@ from mlcvs.core.loss.eigvals import reduce_eigenvalues
 class DeepTICA_CV(BaseCV, pl.LightningModule):
     """Time-lagged independent component analysis-based CV."""
     
-    BLOCKS = ['normIn','nn','normNN','tica','normOut'] 
+    BLOCKS = ['normIn','nn','tica'] 
 
     def __init__(self, layers : list , out_features : int = None, options : dict = None, **kwargs): 
         """ 
@@ -31,7 +31,7 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
             Number of cvs to optimize, default None (= last layer)
         options : dict[str, Any], optional
             Options for the building blocks of the model, by default {}.
-            Available blocks: ['normIn','nn','tica','normOut'] .
+            Available blocks: ['normIn','nn','tica'].
             Set 'block_name' = None or False to turn off that block
         """
         super().__init__(in_features=layers[0], 
@@ -54,11 +54,6 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
         # initialize lda
         o = 'tica'
         self.tica = TICA(layers[-1], self.out_features, **options[o])
-
-        # initialize normOut
-        o = 'normOut'
-        if ( options[o] is not False ) and (options[o] is not None):
-            self.normOut = Normalization(self.out_features,**options[o]) 
         
         # ===== LOSS OPTIONS =====
         self.loss_options = {'mode':'sum2',     # eigenvalue reduction mode
@@ -124,10 +119,7 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
         name = 'train' if self.training else 'valid'       
         loss_dict = {f'{name}_loss' : loss}
         eig_dict = { f'{name}_eigval_{i+1}' : eigvals[i] for i in range(len(eigvals))}
-        self.log_dict(dict(loss_dict, **eig_dict), on_step=True, on_epoch=True)
-        # ===================norm=====================     
-        if self.training:
-            z = self.forward(x_t) # to accumulate info on normOut
+        self.log_dict(dict(loss_dict, **eig_dict), on_step=True, on_epoch=True)  
         return loss
 
 def test_deep_tica():

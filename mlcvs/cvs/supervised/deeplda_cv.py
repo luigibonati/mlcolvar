@@ -18,7 +18,7 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
     For the training it requires a DictionaryDataset with the keys 'data' and 'labels'.
     """
 
-    BLOCKS = ['normIn', 'nn', 'lda', 'normOut']
+    BLOCKS = ['normIn', 'nn', 'lda']
     
     def __init__(self, layers : list , n_states : int, options : dict = None, **kwargs):
         """ 
@@ -32,7 +32,7 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
             Number of states for the training
         options : dict[str, Any], optional
             Options for the building blocks of the model, by default {}.
-            Available blocks: ['normIn','nn','lda','normOut'] .
+            Available blocks: ['normIn','nn','lda'] .
             Set 'block_name' = None or False to turn off that block
         """
         super().__init__(in_features=layers[0], out_features=layers[-1], **kwargs)
@@ -56,11 +56,6 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
         # initialize lda
         o = 'lda'
         self.lda = LDA(layers[-1], n_states, **options[o])
-        # initialize normOut
-        o = 'normOut'
-
-        if ( options[o] is not False ) and (options[o] is not None):
-            self.normOut = Normalization(self.out_features,**options[o]) 
 
         # regularization
         self.lorentzian_reg = 40 # == 2/sw_reg, see set_regularization   
@@ -159,9 +154,6 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
         loss_dict = {f'{name}_loss' : loss, f'{name}_lorentzian_reg' : lorentzian_reg}
         eig_dict = { f'{name}_eigval_{i+1}' : eigvals[i] for i in range(len(eigvals))}
         self.log_dict(dict(loss_dict, **eig_dict) ,on_step=True, on_epoch=True)
-        # ===================norm=====================     
-        if self.training:
-            z = self.forward(x) # to accumulate info on normOut
         return loss
 
 
@@ -188,7 +180,6 @@ def test_deeplda(n_states=2):
     opts = { 'normIn'  : { 'mode'   : 'mean_std' } ,
              'nn' :      { 'activation' : 'relu' },
              'lda' :     {} ,
-             'normOut' : {} , 
            } 
     model = DeepLDA_CV( layers, n_states, options=opts )
 

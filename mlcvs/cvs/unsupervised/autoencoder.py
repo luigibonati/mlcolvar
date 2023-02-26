@@ -16,7 +16,7 @@ class AutoEncoder_CV(BaseCV, pl.LightningModule):
     For training it requires a DictionaryDataset with the key 'data' and optionally 'weights'.
     """
     
-    BLOCKS = ['normIn','encoder','normOut','decoder'] 
+    BLOCKS = ['normIn','encoder','decoder'] 
     
     def __init__(self,
                 encoder_layers : list, 
@@ -36,7 +36,7 @@ class AutoEncoder_CV(BaseCV, pl.LightningModule):
             If not set it takes automaically the reversed architecture of the encoder
         options : dict[str,Any], optional
             Options for the building blocks of the model, by default None.
-            Available blocks: ['normIn', 'encoder','normOut','decoder'].
+            Available blocks: ['normIn', 'encoder','decoder'].
             Set 'block_name' = None or False to turn off that block
         """
         super().__init__(in_features=encoder_layers[0], out_features=encoder_layers[-1], **kwargs)
@@ -58,11 +58,6 @@ class AutoEncoder_CV(BaseCV, pl.LightningModule):
         o = 'encoder'
         self.encoder = FeedForward(encoder_layers, **options[o])
 
-         # initialize normOut
-        o = 'normOut'
-        if ( options[o] is not False ) and (options[o] is not None):
-            self.normOut = Normalization(self.out_features,**options[o]) 
-
         # initialize encoder
         o = 'decoder'
         self.decoder = FeedForward(decoder_layers, **options[o])
@@ -74,8 +69,6 @@ class AutoEncoder_CV(BaseCV, pl.LightningModule):
         if self.normIn is not None:
             x = self.normIn(x)
         x = self.encoder(x)
-        if self.normOut is not None:
-            x = self.normOut(x)
         return x
 
     def encode_decode(self, x: torch.tensor) -> (torch.tensor):
@@ -115,7 +108,6 @@ def test_autoencodercv():
     # initialize via dictionary
     opts = { 'normIn'  : None,
              'encoder' : { 'activation' : 'relu' },
-             'normOut' : { 'mode'   : 'mean_std' },
            } 
     model = AutoEncoder_CV( encoder_layers=layers, options=opts )
     print(model)
