@@ -54,9 +54,8 @@ class Normalization(Transform):
 
     def setup_from_datamodule(self,datamodule):
         if not self.is_initialized:
-            print('ABC initializing!!!!')
+            # obtain statistics from the dataloader
             stats = datamodule.train_dataloader().get_stats()['data']
-            print(stats)
             if self.mode == 'mean_std':
                 self.Mean = stats['Mean']
                 self.Range = stats['Std']
@@ -66,7 +65,7 @@ class Normalization(Transform):
                 self.Mean = (Max + Min) / 2.0
                 self.Range = (Max - Min) / 2.0
             elif self.mode == 'custom':
-                raise AttributeError('If mode is custom the parameters should be supplied when creating an object of this class.')
+                raise AttributeError('If mode is custom the parameters should be supplied when creating the Normalization object.')
             else: 
                 raise ValueError(f'Mode {self.mode} unknonwn. Available modes: "mean_std", "min_max","custom"')
 
