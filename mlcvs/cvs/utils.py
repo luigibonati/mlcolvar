@@ -1,10 +1,9 @@
 import torch
+from mlcvs.core.transform import Transform
 
 class BaseCV:
     """
-    
     To inherit from this class, the class must define a BLOCKS class attribute.
-
     """
 
     def __init__(self, in_features, out_features, *args, **kwargs):
@@ -61,6 +60,15 @@ class BaseCV:
         """
         for b in self.BLOCKS:
             self.__setattr__(b,None)
+
+    def setup(self, stage=None):
+        if stage == "fit":
+            self.initialize_transforms(self.trainer.datamodule)
+
+    def initialize_transforms(self, datamodule):
+        for b in self.BLOCKS:
+            if isinstance(getattr(self,b), Transform): 
+                getattr(self,b).setup_from_datamodule(datamodule)
 
     def forward(self, x : torch.tensor) -> (torch.tensor):
         """
