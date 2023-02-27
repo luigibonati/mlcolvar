@@ -32,18 +32,21 @@ class BaseCV:
 
         if preprocessing is not None:
             self.do_preprocessing = True
-            if isinstance(preprocessing,list):
+            if not isinstance(preprocessing,list):
                 preprocessing = [preprocessing]
+            in_features_pre = preprocessing[0].in_features
         self.preprocessing = preprocessing
 
         if postprocessing is not None:
             self.do_postprocessing = True
-            if isinstance(postprocessing,list):
+            if not isinstance(postprocessing,list):
                 postprocessing = [postprocessing]
+            out_features_post = postprocessing[-1].out_features
         self.postprocessing = postprocessing
 
-        self.in_features = in_features # TODO update FROM PRE/POST PROCESSING?
-        self.out_features = out_features
+        # adapt no. input and output features based on pre/post processing
+        self.in_features = in_features if preprocessing is None else in_features_pre
+        self.out_features = out_features if postprocessing is None else out_features_post
 
         self.example_input_array = torch.randn(self.in_features)
 
@@ -112,7 +115,7 @@ class BaseCV:
         torch.tensor
             Output of the forward operation of the model
         """
-        
+
         if self.preprocessing is not None and self.do_preprocessing:
             for p in self.preprocessing:
                 x = p(x)
@@ -228,4 +231,7 @@ class BaseCV:
         """ 
         optimizer = getattr(torch.optim,self.optim_name)(self.parameters(),**self.optim_options)
         return optimizer
+    
+    def on_fit_start(self):
+        self.do_postprocessing 
 
