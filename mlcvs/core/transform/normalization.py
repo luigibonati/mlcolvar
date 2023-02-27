@@ -31,19 +31,12 @@ class Normalization(Transform):
         # buffers containing mean and range for standardization
         self.register_buffer("Mean", torch.zeros(in_features))
         self.register_buffer("Range", torch.ones(in_features))
-
-        self.is_initialized = False
-        if mean is not None:
-            self.Mean = mean
-            self.is_initialized = True
-        if range is not None:
-            self.Range = range
-            self.is_initialized = True
-
+        
         self.mode = mode
-        if mean is not None or range is not None:
-            self.is_initialized = True
-            self.mode = 'custom'
+        self.is_initialized = False
+
+        # set mean and range if provided
+        self.set_custom(mean,range)
 
         # save params
         self.in_features = in_features
@@ -52,22 +45,43 @@ class Normalization(Transform):
     def extra_repr(self) -> str:
         return f"in_features={self.in_features}, out_features={self.out_features}, mode={self.mode}"
 
+    def set_custom(self,mean = None, range = None): # TODO DOC
+
+        if mean is not None:
+            self.Mean = mean
+        if range is not None:
+            self.Range = range
+
+        if mean is not None or range is not None:
+            self.is_initialized = True
+            self.mode = 'custom'
+
+    def set_from_stats(self,stats,mode=None): # TODO DOC
+        if mode is None:
+            mode = self.mode
+
+        if mode == 'mean_std':
+                self.Mean = stats['Mean']
+                self.Range = stats['Std']
+        elif mode == 'min_max':
+            Min = stats['Min']
+            Max = stats['Max']
+            self.Mean = (Max + Min) / 2.0
+            self.Range = (Max - Min) / 2.0
+        elif mode == 'custom':
+            raise AttributeError('If mode is custom the parameters should be supplied when creating the Normalization object or with the set_custom, not with set_from_stats')
+        else: 
+            raise ValueError(f'Mode {self.mode} unknonwn. Available modes: "mean_std", "min_max","custom"')
+    
+        if mode != self.mode:
+            self.mode = mode
+
     def setup_from_datamodule(self,datamodule):
         if not self.is_initialized:
             # obtain statistics from the dataloader
             stats = datamodule.train_dataloader().get_stats()['data']
-            if self.mode == 'mean_std':
-                self.Mean = stats['Mean']
-                self.Range = stats['Std']
-            elif self.mode == 'min_max':
-                Min = stats['Min']
-                Max = stats['Max']
-                self.Mean = (Max + Min) / 2.0
-                self.Range = (Max - Min) / 2.0
-            elif self.mode == 'custom':
-                raise AttributeError('If mode is custom the parameters should be supplied when creating the Normalization object.')
-            else: 
-                raise ValueError(f'Mode {self.mode} unknonwn. Available modes: "mean_std", "min_max","custom"')
+            self.set_from_stats(stats,self.mode)
+            self.is_initialized = True
 
     def forward(self, x: torch.Tensor) -> (torch.Tensor):
         """
