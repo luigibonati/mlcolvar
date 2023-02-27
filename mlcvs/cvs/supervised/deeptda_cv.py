@@ -100,7 +100,7 @@ class DeepTDA_CV(BaseCV, pl.LightningModule):
         x = train_batch['data']
         labels = train_batch['labels']
         # =================forward====================
-        z = self.forward(x)
+        z = self.forward_blocks(x)
         # ===================loss=====================
         loss, loss_centers, loss_sigmas = self.loss_function(z, labels, **options)
         # ====================log=====================+

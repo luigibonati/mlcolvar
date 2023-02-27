@@ -6,7 +6,9 @@ class BaseCV:
     To inherit from this class, the class must define a BLOCKS class attribute.
     """
 
-    def __init__(self, in_features, out_features, *args, **kwargs):
+    def __init__(self, in_features, out_features, 
+                        preprocessing : list = None, postprocessing : list = None,
+                        *args, **kwargs):
         """ Base CV class options.
 
         Parameters
@@ -15,19 +17,41 @@ class BaseCV:
             Number of inputs of the CV model
         out_features : int
             Number of outputs of the CV model, should be the number of CVs
+        preprocessing : list,optional
+            List of preprocessing modules, default None
+            
         """
         super().__init__(*args, **kwargs)
 
+        # MODEL 
         self.initialize_blocks()
 
-        self.in_features = in_features
+        # Set pre/post
+        self.do_preprocessing = False
+        self.do_postprocessing = False
+
+        if preprocessing is not None:
+            self.do_preprocessing = True
+            if isinstance(preprocessing,list):
+                preprocessing = [preprocessing]
+        self.preprocessing = preprocessing
+
+        if postprocessing is not None:
+            self.do_postprocessing = True
+            if isinstance(postprocessing,list):
+                postprocessing = [postprocessing]
+        self.postprocessing = postprocessing
+
+        self.in_features = in_features # TODO update FROM PRE/POST PROCESSING?
         self.out_features = out_features
-        
+
         self.example_input_array = torch.randn(self.in_features)
 
+        # OPTIM
         self.optim_name = 'Adam'
         self.optim_options = {}
 
+        # LOSS
         self.loss_options = {}
 
     def sanitize_options(self, options : dict = None):
@@ -72,21 +96,56 @@ class BaseCV:
 
     def forward(self, x : torch.tensor) -> (torch.tensor):
         """
-        Execute sequentially all the blocks in self.BLOCKS unless they have been deactivated with options dict.
+        Evaluation of the CV
+
+        - Apply preprocessing if any
+        - Execute sequentially all the blocks in self.BLOCKS unless they are not initialized
+        - Apply postprocessing if any
 
         Parameters
         ----------
         x : torch.tensor
             Input of the forward operation of the model
+
         Returns
         -------
         torch.tensor
             Output of the forward operation of the model
         """
+        
+        if self.preprocessing is not None and self.do_preprocessing:
+            for p in self.preprocessing:
+                x = p(x)
+
+        x = self.forward_blocks(x)
+
+        if self.postprocessing is not None and self.do_postprocessing:
+            for p in self.postprocessing:
+                x = p(x)
+        return x
+
+    def forward_blocks(self, x : torch.tensor) -> (torch.tensor):
+        """
+        Execute sequentially all the blocks in self.BLOCKS unless they are not initialized.
+        
+        No pre/post processing will be executed here. This is supposed to be called during training/validation and to be overloaded if necessary.
+
+        Parameters
+        ----------
+        x : torch.tensor
+            Input of the forward operation of the model
+
+        Returns
+        -------
+        torch.tensor
+            Output of the forward operation of the model
+        """
+
         for b in self.BLOCKS:
             block = getattr(self, b)
             if block is not None:
                 x = block(x)
+
         return x
 
     def validation_step(self, val_batch, batch_idx):

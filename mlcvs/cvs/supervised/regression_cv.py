@@ -65,7 +65,7 @@ class Regression_CV(BaseCV, pl.LightningModule):
         if 'weights' in train_batch:
             options['weights'] = train_batch['weights'] 
         # =================forward====================
-        y = self.forward(x)
+        y = self.forward_blocks(x)
         # ===================loss=====================
         diff = y - labels
         loss = self.loss_function(diff, **options)
