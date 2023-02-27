@@ -3,7 +3,7 @@ import pytorch_lightning as pl
 
 from mlcvs.core import FeedForward, Normalization
 from mlcvs.utils.decorators import decorate_methods,call_submodules_hooks,allowed_hooks
-from mlcvs.cvs.utils import BaseCV
+from mlcvs.cvs.cv import BaseCV
 from mlcvs.core.loss import MSE_loss
 
 __all__ = ["Regression_CV"]

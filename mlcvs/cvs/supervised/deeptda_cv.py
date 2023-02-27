@@ -10,7 +10,7 @@ from torch.utils.data import TensorDataset
 
 from mlcvs.utils.decorators import decorate_methods,call_submodules_hooks,allowed_hooks
 
-from mlcvs.cvs.utils import BaseCV
+from mlcvs.cvs.cv import BaseCV
 
 __all__ = ["DeepTDA_CV"]
 

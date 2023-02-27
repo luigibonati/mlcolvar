@@ -9,7 +9,7 @@ from mlcvs.utils.decorators import decorate_methods, allowed_hooks, call_submodu
 from mlcvs.core.models import FeedForward
 from mlcvs.core.stats import TICA
 from mlcvs.core.transform import Normalization
-from mlcvs.cvs.utils import BaseCV
+from mlcvs.cvs.cv import BaseCV
 from mlcvs.core.loss.eigvals import reduce_eigenvalues
 
 @decorate_methods(call_submodules_hooks, methods=allowed_hooks)
