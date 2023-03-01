@@ -56,7 +56,7 @@ TODO
 
 ## DOC
 
-[ ] add nbmake in tests and CI
+[X] add nbmake in tests and CI
 [ ] tutorialsssss
 
 ## IO
