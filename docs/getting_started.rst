@@ -7,12 +7,13 @@ Installation
 ------------
 To install mlcvs, you will need an environment with the following packages:
 
-* ``Python > 3.7``
-* ``NumPy``
-* ``Pandas``
-* ``PyTorch``
-* ``Matplotlib`` (plotting functions)
-* ``Scikit-learn`` (FES estimation via KDE)
+* ``python > 3.7``
+* ``numpy``
+* ``pytorch``
+* ``pytorch-lightning``  
+* ``pandas`` (i/o)
+* ``matplolib`` (plot)
+* ``KDEpy`` or ``scikit-learn`` (FES estimation via KDE)
 
 Once you have installed the requirements, you can install mlcvs by cloning the repository:
 ::

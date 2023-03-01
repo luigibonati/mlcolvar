@@ -5,9 +5,9 @@ To compile the docs, first ensure that Sphinx and the ReadTheDocs theme are inst
 
 
 ```bash
-conda install sphinx sphinx_rtd_theme 
+conda install sphinx sphinx_rtd_theme nbsphinx
+pip install sphinx-copybutton furo 
 ```
-
 
 Once installed, you can use the `Makefile` in this directory to compile static HTML pages by
 ```bash
