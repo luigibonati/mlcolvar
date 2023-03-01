@@ -98,6 +98,7 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
         2) Remove average (inside forward_nn)
         3) Compute TICA
         """
+        options = self.loss_options.copy()
         # =================get data===================
         x_t   = train_batch['data']
         x_lag = train_batch['data_lag']
@@ -111,7 +112,7 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
                                                     weights = [w_t,w_lag],
                                                     save_params=True)
         # ===================loss=====================
-        loss = self.loss_function(eigvals,**self.loss_options)
+        loss = self.loss_function(eigvals,**options)
         # ====================log=====================          
         name = 'train' if self.training else 'valid'       
         loss_dict = {f'{name}_loss' : loss}

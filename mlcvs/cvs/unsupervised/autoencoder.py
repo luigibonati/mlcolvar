@@ -82,7 +82,7 @@ class AutoEncoder_CV(BaseCV, pl.LightningModule):
         return MSE_loss(diff,**kwargs)
 
     def training_step(self, train_batch, batch_idx):
-        options = self.loss_options
+        options = self.loss_options.copy()
         # =================get data===================
         x = train_batch['data']
         if 'weights' in train_batch:

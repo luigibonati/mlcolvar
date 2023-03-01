@@ -135,6 +135,7 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
         return loss
 
     def training_step(self, train_batch, batch_idx):
+        options = self.loss_options.copy()
         # =================get data===================
         x = train_batch['data']
         y = train_batch['labels']
@@ -143,7 +144,7 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
         # ===================lda======================
         eigvals,_ = self.lda.compute(h,y,save_params=True if self.training else False) 
         # ===================loss=====================
-        loss = self.loss_function(eigvals, **self.loss_options)
+        loss = self.loss_function(eigvals, **options)
         if self.lorentzian_reg > 0:
             lorentzian_reg = self.regularization_lorentzian(h)
             loss += lorentzian_reg

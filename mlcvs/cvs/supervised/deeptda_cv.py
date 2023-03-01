@@ -87,7 +87,7 @@ class DeepTDA_CV(BaseCV, pl.LightningModule):
         return loss, loss_centers, loss_sigmas
 
     def training_step(self, train_batch, batch_idx):
-        options = self.loss_options
+        options = self.loss_options.copy()
         # =================get data===================
         x = train_batch['data']
         labels = train_batch['labels']
