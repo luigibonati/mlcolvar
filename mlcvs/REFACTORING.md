@@ -64,6 +64,7 @@ TODO
  
 [ ] Pairwise distances
 [ ] symmetry functions
+[ ] Add utils for switching functions? 
 
 ## MODELS
 
