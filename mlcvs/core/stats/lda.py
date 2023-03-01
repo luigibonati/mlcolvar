@@ -1,9 +1,11 @@
 import torch
 from .utils import cholesky_eigh
 
+from mlcvs.core.stats import Stats
+
 __all__ = ['LDA']
 
-class LDA(torch.nn.Module):
+class LDA(Stats):
     """
     Fisher's discriminant class.
 

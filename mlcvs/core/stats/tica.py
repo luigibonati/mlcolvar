@@ -3,10 +3,11 @@
 __all__ = ["TICA"]
 
 import torch
+from mlcvs.core.stats import Stats
 from mlcvs.core.stats.utils import correlation_matrix, cholesky_eigh, compute_average
 from mlcvs.core.transform.utils import batch_reshape
 
-class TICA(torch.nn.Module):
+class TICA(Stats):
     """ 
     Time-lagged independent component analysis base class.
     """

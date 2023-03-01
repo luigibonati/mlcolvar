@@ -52,7 +52,7 @@ TODO
 
 ## CORE
 
-[ ] add base class for stats and add inheritance to lda/tica
+[~X] add base class for stats and add inheritance to lda/tica
 
 ## IO
 
