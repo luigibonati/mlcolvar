@@ -1,7 +1,7 @@
 """Datasets."""
 
 import torch 
-from mlcvs.utils.data import DictionaryDataset
+from mlcvs.data import DictionaryDataset
 from mlcvs.core.transform.utils import RunningStats
 
 __all__ = ["FastDictionaryLoader"]

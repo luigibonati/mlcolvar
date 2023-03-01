@@ -99,7 +99,7 @@ class AutoEncoder_CV(BaseCV, pl.LightningModule):
         return loss
 
 def test_autoencodercv():
-    from mlcvs.utils.data import DictionaryDataset, DictionaryDataModule
+    from mlcvs.data import DictionaryDataset, DictionaryDataModule
     import numpy as np
 
     in_features, out_features = 8,2

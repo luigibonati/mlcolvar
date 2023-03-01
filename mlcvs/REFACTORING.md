@@ -50,27 +50,41 @@ TODO
 
 [X] set optimizer
 
-## CORE
+## GENERAL
 
-[~X] add base class for stats and add inheritance to lda/tica
+[ ] how to handle imports 
+
+## DOC
+
+[ ] add nbmake in tests and CI
+[ ] tutorialsssss
 
 ## IO
 
-[ ] to do?
+[ ] to do? 
 
 ## CVS
+
 [ ] training --> options = self.loss_options.copy()
+[ ] add option to add postprocessing after init
+[ ] print optim and loss options in summary
+[ ] add flag to apply preprocessing during training (default = None, complain when preprocessing is not None)
 
 ## UTILS.DATA
 
 [X] Change names to data utils ==> "DictionaryDataset","DictionaryDataModule","FastDictionaryLoader"
 [X] Refactor FastDictionaryLoader
 [X] add get_stats to datamodule ?
+[X] mv from mlcvs.data to mlcvs.data
+[X] fix return of dataloaders in 
 [ ] Mixed dataset?
-[ ] mv from mlcvs.utils.data to mlcvs.data
+
+## STATS
+
+[ ] Add base class
 
 ## TRANSFORM 
- 
+
 [ ] Pairwise distances
 [ ] symmetry functions
 [ ] Add utils for switching functions? 
@@ -79,13 +93,12 @@ TODO
 
 [X] NN ==> add batchnorm / dropout / activation function  per layer
 [ ] add torch.nn.module as block (load existing module)  
-[ ] print optim and loss options in summary
 
-## EXTRA
+## EXPORT
 
 [ ] check device for normalization buffers 
 [ ] add export function?
-[ ] how to handle imports 
+[ ] export torchscript model as checkpoint
 
 
 

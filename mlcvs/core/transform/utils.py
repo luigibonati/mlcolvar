@@ -91,7 +91,7 @@ def test_runningstats():
     stats.to_dict()
 
     # create dataloader
-    from mlcvs.utils.data import FastDictionaryLoader
+    from mlcvs.data import FastDictionaryLoader
     loader = FastDictionaryLoader({'data':X,'target':y},batch_size=20)
 
     # compute statistics of a single key of loader

@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import pandas as pd
 from bisect import bisect_left
-from mlcvs.utils.data import DictionaryDataset
+from mlcvs.data import DictionaryDataset
 
 __all__ = ['Find_Time_Lagged_Configurations','Build_TimeLagged_Dataset']
 
