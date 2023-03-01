@@ -89,6 +89,7 @@ class BaseCV:
             self.__setattr__(b,None)
 
     def setup(self, stage=None):
+        print('CV SETUP')
         if stage == "fit":
             self.initialize_transforms(self.trainer.datamodule)
 
@@ -231,7 +232,3 @@ class BaseCV:
         """ 
         optimizer = getattr(torch.optim,self.optim_name)(self.parameters(),**self.optim_options)
         return optimizer
-    
-    def on_fit_start(self):
-        self.do_postprocessing 
-

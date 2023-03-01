@@ -45,8 +45,17 @@ class DictionaryDataModule(pl.LightningDataModule):
             self.shuffle = shuffle
         self.random_splits = random_splits
         self.generator = generator
+        
+        # dataloaders
+        self.train_loader = None
+        self.valid_loader = None
+        self.test_loader  = None
+
+    def prepare_data(self):
+        print('DATALOADER PREPARE DATA')
 
     def setup(self, stage: str):
+        print('DATALOADER SETUP')
         if self.random_splits:
             self.dataset_splits = random_split(self.dataset, self.lengths, generator=self.generator)
         else:
@@ -54,21 +63,27 @@ class DictionaryDataModule(pl.LightningDataModule):
 
     def train_dataloader(self):
         """Return training dataloader."""
-        return FastDictionaryLoader(self.dataset_splits[0], batch_size=self.batch_size[0],shuffle=self.shuffle[0])
+        if self.train_loader is None:
+            self.train_loader = FastDictionaryLoader(self.dataset_splits[0], batch_size=self.batch_size[0],shuffle=self.shuffle[0])
+        return self.train_loader
 
     def val_dataloader(self):
         """Return validation dataloader."""
-        return FastDictionaryLoader(self.dataset_splits[1], batch_size=self.batch_size[1],shuffle=self.shuffle[1])
+        if self.valid_loader is None:
+            self.valid_loader = FastDictionaryLoader(self.dataset_splits[1], batch_size=self.batch_size[1],shuffle=self.shuffle[1])
+        return self.valid_loader
 
     def test_dataloader(self):
         """Return test dataloader."""
         if len(self.lengths) >= 3:
-            return FastDictionaryLoader(self.dataset_splits[2], batch_size=self.batch_size[2],shuffle=self.shuffle[2])
+            if self.test_loader is None:
+                self.test_loader = FastDictionaryLoader(self.dataset_splits[2], batch_size=self.batch_size[2],shuffle=self.shuffle[2])
+            return self.test_loader
         else: 
             raise ValueError('Test dataset not available, you need to pass three lenghts to datamodule.')  
 
     def predict_dataloader(self):
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def teardown(self, stage: str):
         pass 

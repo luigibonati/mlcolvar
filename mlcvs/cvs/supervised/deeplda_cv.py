@@ -3,7 +3,7 @@ import pytorch_lightning as pl
 from mlcvs.utils.decorators import decorate_methods, allowed_hooks, call_submodules_hooks
 from mlcvs.core.nn import FeedForward
 from mlcvs.core.transform import Normalization
-from mlcvs.utils.data import DictionaryDataModule
+from mlcvs.data import DictionaryDataModule
 from torch.utils.data import TensorDataset
 from mlcvs.cvs.cv import BaseCV
 from mlcvs.core.stats.lda import LDA
@@ -158,7 +158,7 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
 
 
 def test_deeplda(n_states=2):
-    from mlcvs.utils.data import DictionaryDataset
+    from mlcvs.data import DictionaryDataset
 
     in_features, out_features = 2, n_states-1
     layers = [in_features, 50, 50, out_features]

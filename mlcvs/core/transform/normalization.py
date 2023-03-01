@@ -45,7 +45,7 @@ class Normalization(Transform):
     def extra_repr(self) -> str:
         return f"in_features={self.in_features}, out_features={self.out_features}, mode={self.mode}"
 
-    def set_custom(self,mean = None, range = None): # TODO DOC
+    def set_custom(self,mean : torch.Tensor = None, range : torch.Tensor = None): # TODO DOC
 
         if mean is not None:
             self.Mean = mean
@@ -56,7 +56,7 @@ class Normalization(Transform):
             self.is_initialized = True
             self.mode = 'custom'
 
-    def set_from_stats(self,stats,mode=None): # TODO DOC
+    def set_from_stats(self,stats : dict ,mode=None): # TODO DOC
         if mode is None:
             mode = self.mode
 
@@ -73,6 +73,8 @@ class Normalization(Transform):
         else: 
             raise ValueError(f'Mode {self.mode} unknonwn. Available modes: "mean_std", "min_max","custom"')
     
+        self.is_initialized = True
+        
         if mode != self.mode:
             self.mode = mode
 
@@ -81,7 +83,6 @@ class Normalization(Transform):
             # obtain statistics from the dataloader
             stats = datamodule.train_dataloader().get_stats()['data']
             self.set_from_stats(stats,self.mode)
-            self.is_initialized = True
 
     def forward(self, x: torch.Tensor) -> (torch.Tensor):
         """

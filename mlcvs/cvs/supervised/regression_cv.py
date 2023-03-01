@@ -58,7 +58,7 @@ class Regression_CV(BaseCV, pl.LightningModule):
         return MSE_loss(diff, **kwargs)
 
     def training_step(self, train_batch, batch_idx):
-        options = self.loss_options
+        options = self.loss_options.copy()
         # =================get data===================
         x = train_batch['data']
         labels = train_batch['target']
@@ -78,7 +78,7 @@ def test_regression_cv():
     """
     Create a synthetic dataset and test functionality of the Regression_CV class
     """
-    from mlcvs.utils.data import DictionaryDataset, DictionaryDataModule
+    from mlcvs.data import DictionaryDataset, DictionaryDataModule
 
     in_features, out_features = 2,1 
     layers = [in_features, 5, 10, out_features]
