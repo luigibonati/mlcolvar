@@ -1,7 +1,7 @@
 import torch
 import pytorch_lightning as pl
 from mlcvs.utils.decorators import decorate_methods, allowed_hooks, call_submodules_hooks
-from mlcvs.core.models import FeedForward
+from mlcvs.core.nn import FeedForward
 from mlcvs.core.transform import Normalization
 from mlcvs.utils.data import DictionaryDataModule
 from torch.utils.data import TensorDataset
