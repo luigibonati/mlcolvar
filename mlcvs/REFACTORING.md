@@ -53,13 +53,18 @@ TODO
 ## CORE
 
 [ ] add base class for stats and add inheritance to lda/tica
+[ ] how to handle imports 
+
+## DOC
+[ ] add nbmake in tests and CI
 
 ## IO
 
-[ ] to do?
+[ ] to do? 
 
 ## CVS
 [ ] training --> options = self.loss_options.copy()
+[ ] add option to add postprocessing after init
 
 ## UTILS.DATA
 
@@ -80,11 +85,12 @@ TODO
 [ ] add torch.nn.module as block (load existing module)  
 [ ] print optim and loss options in summary
 
-## EXTRA
+## EXPORT
 
 [ ] check device for normalization buffers 
 [ ] add export function?
-[ ] how to handle imports 
+[ ] export torchscript model as checkpoint
+
 
 
 
