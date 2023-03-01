@@ -1,6 +1,5 @@
 import torch
 import pytorch_lightning as pl
-from mlcvs.utils.decorators import decorate_methods, allowed_hooks, call_submodules_hooks
 from mlcvs.core.nn import FeedForward
 from mlcvs.core.transform import Normalization
 from mlcvs.data import DictionaryDataModule
@@ -11,7 +10,6 @@ from mlcvs.core.loss.eigvals import reduce_eigenvalues
 
 __all__ = ["DeepLDA_CV"]
 
-@decorate_methods(call_submodules_hooks, methods=allowed_hooks)
 class DeepLDA_CV(BaseCV, pl.LightningModule):
     """Neural network-based discriminant collective variables.
     

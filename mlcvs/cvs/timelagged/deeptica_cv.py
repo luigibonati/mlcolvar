@@ -4,15 +4,12 @@ __all__ = ["DeepTICA_CV"]
 
 import torch
 import pytorch_lightning as pl
-# cv
-from mlcvs.utils.decorators import decorate_methods, allowed_hooks, call_submodules_hooks
-from mlcvs.core.nn import FeedForward
+from mlcvs.core import FeedForward
 from mlcvs.core.stats import TICA
 from mlcvs.core.transform import Normalization
-from mlcvs.cvs.cv import BaseCV
-from mlcvs.core.loss.eigvals import reduce_eigenvalues
+from mlcvs.cvs import BaseCV
+from mlcvs.core.loss import reduce_eigenvalues
 
-@decorate_methods(call_submodules_hooks, methods=allowed_hooks)
 class DeepTICA_CV(BaseCV, pl.LightningModule):
     """Time-lagged independent component analysis-based CV."""
     

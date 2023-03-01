@@ -1,15 +1,14 @@
 from typing import Any
 import torch
 import pytorch_lightning as pl
-from mlcvs.utils.decorators import decorate_methods, allowed_hooks, call_submodules_hooks
+
+from mlcvs.cvs.cv import BaseCV
 from mlcvs.core.nn import FeedForward
 from mlcvs.core.transform import Normalization
-from mlcvs.cvs.cv import BaseCV
 from mlcvs.core.loss import MSE_loss
 
 __all__ = ["AutoEncoder_CV"]
 
-@decorate_methods(call_submodules_hooks, methods=allowed_hooks)
 class AutoEncoder_CV(BaseCV, pl.LightningModule):
     """AutoEncoding Collective Variable.
     

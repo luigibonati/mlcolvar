@@ -1,9 +1,7 @@
 import torch
 import pytorch_lightning as pl
-from mlcvs.utils.decorators import decorate_methods, allowed_hooks, apply_hooks
 
 
-@decorate_methods(apply_hooks,methods=allowed_hooks)
 class PairwiseDistances(pl.LightningModule):
     """
     TODO
