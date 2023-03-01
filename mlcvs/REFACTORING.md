@@ -50,6 +50,10 @@ TODO
 
 [X] set optimizer
 
+## CORE
+
+[ ] add base class for stats and add inheritance to lda/tica
+
 ## IO
 
 [ ] to do?
@@ -58,7 +62,9 @@ TODO
 
 [X] Change names to data utils ==> "DictionaryDataset","DictionaryDataModule","FastDictionaryLoader"
 [X] Refactor FastDictionaryLoader
+[X] add get_stats to datamodule ?
 [ ] Mixed dataset?
+[ ] apply transform to dataset (only to 'data' tensors)
 
 ## TRANSFORM 
  
@@ -67,16 +73,9 @@ TODO
 
 ## MODELS
 
-[ ] NN ==> add batchnorm / dropout / activation function  per layer
-[ ] ADD PRE / POST BLOCKS + options whether to use them 
+[X] NN ==> add batchnorm / dropout / activation function  per layer
 [ ] add torch.nn.module as block (load existing module)  
 [ ] print optim and loss options in summary
-
-## TRAINER
-
-[ ] subclass trainer / use hooks to achieve:
-    [ ] on_fit_start --> preprocess dataset + disable pre/post in model
-    [ ] on_fit_end --> enable pre/post ?
 
 ## EXTRA
 

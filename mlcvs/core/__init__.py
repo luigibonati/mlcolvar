@@ -1,6 +1,6 @@
-__all__ = ["loss","models","transform","stats"]
+__all__ = ["loss","nn","transform","stats"]
 
 from .loss import *
-from .models import *
+from .nn import *
 from .transform import *
 from .stats import *
