@@ -1,12 +1,11 @@
-import warnings
-import math
 import torch
 import numpy as np
 import pytorch_lightning as pl
+import warnings
+import math
 from torch.utils.data import TensorDataset, random_split, Subset
 from torch._utils import _accumulate
-from . import FastDictionaryLoader
-from . import DictionaryDataset
+from mlcvs.data import FastDictionaryLoader, DictionaryDataset
 
 __all__ = ["DictionaryDataModule"]
 

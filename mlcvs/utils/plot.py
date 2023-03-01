@@ -1,5 +1,3 @@
-__all__ = ["paletteFessa"]
-
 ##########################################################################
 ## FESSA COLOR PALETTE
 #  https://github.com/luigibonati/fessa-color-palette/blob/master/fessa.py
@@ -7,6 +5,8 @@ __all__ = ["paletteFessa"]
 
 from matplotlib.colors import LinearSegmentedColormap, ColorConverter
 from matplotlib.cm import register_cmap
+
+__all__ = ["paletteFessa"]
 
 paletteFessa = [
     '#1F3B73', # dark-blue

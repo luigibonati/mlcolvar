@@ -1,9 +1,9 @@
 import torch 
 import pytorch_lightning as pl
-from mlcvs.core import FeedForward, Normalization
-from mlcvs.core import TDA_loss
-from mlcvs.data import DictionaryDataModule
 from mlcvs.cvs import BaseCV
+from mlcvs.core import FeedForward, Normalization
+from mlcvs.core.loss import TDA_loss
+from mlcvs.data import DictionaryDataModule
 
 __all__ = ["DeepTDA_CV"]
 

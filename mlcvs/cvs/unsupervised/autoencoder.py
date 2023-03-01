@@ -1,10 +1,8 @@
 from typing import Any
 import torch
 import pytorch_lightning as pl
-
-from mlcvs.cvs.cv import BaseCV
-from mlcvs.core.nn import FeedForward
-from mlcvs.core.transform import Normalization
+from mlcvs.cvs import BaseCV
+from mlcvs.core import FeedForward, Normalization
 from mlcvs.core.loss import MSE_loss
 
 __all__ = ["AutoEncoder_CV"]

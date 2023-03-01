@@ -1,12 +1,10 @@
 import torch
 import pytorch_lightning as pl
-from mlcvs.core.nn import FeedForward
-from mlcvs.core.transform import Normalization
+from mlcvs.cvs import BaseCV
+from mlcvs.core import FeedForward, Normalization
 from mlcvs.data import DictionaryDataModule
-from torch.utils.data import TensorDataset
-from mlcvs.cvs.cv import BaseCV
-from mlcvs.core.stats.lda import LDA
-from mlcvs.core.loss.eigvals import reduce_eigenvalues
+from mlcvs.core.stats import LDA
+from mlcvs.core.loss import reduce_eigenvalues
 
 __all__ = ["DeepLDA_CV"]
 

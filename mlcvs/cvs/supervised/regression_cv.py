@@ -1,8 +1,8 @@
 import torch
 import pytorch_lightning as pl
+from mlcvs.cvs import BaseCV
 from mlcvs.core import FeedForward, Normalization
 from mlcvs.core.loss import MSE_loss
-from mlcvs.cvs import BaseCV
 
 __all__ = ["Regression_CV"]
 

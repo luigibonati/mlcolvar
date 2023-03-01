@@ -1,12 +1,9 @@
-"""Datasets."""
-
 import torch 
+from torch.utils.data import Subset
 from mlcvs.data import DictionaryDataset
 from mlcvs.core.transform.utils import RunningStats
 
 __all__ = ["FastDictionaryLoader"]
-
-from torch.utils.data import Dataset,Subset
 
 class FastDictionaryLoader:
     """

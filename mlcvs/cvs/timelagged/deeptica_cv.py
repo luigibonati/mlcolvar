@@ -1,14 +1,11 @@
-"""Time-lagged independent component analysis-based CV"""
-
-__all__ = ["DeepTICA_CV"] 
-
 import torch
 import pytorch_lightning as pl
-from mlcvs.core import FeedForward
-from mlcvs.core.stats import TICA
-from mlcvs.core.transform import Normalization
 from mlcvs.cvs import BaseCV
+from mlcvs.core import FeedForward,Normalization
+from mlcvs.core.stats import TICA
 from mlcvs.core.loss import reduce_eigenvalues
+
+__all__ = ["DeepTICA_CV"] 
 
 class DeepTICA_CV(BaseCV, pl.LightningModule):
     """Time-lagged independent component analysis-based CV."""
