@@ -58,13 +58,16 @@ TODO
 
 [ ] to do?
 
+## CVS
+[ ] training --> options = self.loss_options.copy()
+
 ## UTILS.DATA
 
 [X] Change names to data utils ==> "DictionaryDataset","DictionaryDataModule","FastDictionaryLoader"
 [X] Refactor FastDictionaryLoader
 [X] add get_stats to datamodule ?
 [ ] Mixed dataset?
-[ ] apply transform to dataset (only to 'data' tensors)
+[ ] mv from mlcvs.utils.data to mlcvs.data
 
 ## TRANSFORM 
  
@@ -81,6 +84,7 @@ TODO
 
 [ ] check device for normalization buffers 
 [ ] add export function?
+[ ] how to handle imports 
 
 
 
