@@ -4,11 +4,10 @@ import pytorch_lightning as pl
 from typing import Union
 from warnings import warn
 
-from mlcvs.utils.decorators import decorate_methods, allowed_hooks, apply_hooks
+from mlcvs.core.transform import Transform
 
 
-@decorate_methods(apply_hooks,methods=allowed_hooks)
-class PairwiseDistances(pl.LightningModule):
+class PairwiseDistances(Transform):
     '''
     TODO 
     '''
