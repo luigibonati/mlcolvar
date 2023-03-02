@@ -1,3 +1,5 @@
+"""Linear discriminant analysis"""
+
 import torch
 from .utils import cholesky_eigh
 

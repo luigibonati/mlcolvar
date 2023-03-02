@@ -1,18 +1,12 @@
-"""Time-lagged independent component analysis-based CV"""
+import torch
+import pytorch_lightning as pl
+from mlcvs.cvs import BaseCV
+from mlcvs.core import FeedForward,Normalization
+from mlcvs.core.stats import TICA
+from mlcvs.core.loss import reduce_eigenvalues
 
 __all__ = ["DeepTICA_CV"] 
 
-import torch
-import pytorch_lightning as pl
-# cv
-from mlcvs.utils.decorators import decorate_methods, allowed_hooks, call_submodules_hooks
-from mlcvs.core.nn import FeedForward
-from mlcvs.core.stats import TICA
-from mlcvs.core.transform import Normalization
-from mlcvs.cvs.cv import BaseCV
-from mlcvs.core.loss.eigvals import reduce_eigenvalues
-
-@decorate_methods(call_submodules_hooks, methods=allowed_hooks)
 class DeepTICA_CV(BaseCV, pl.LightningModule):
     """Time-lagged independent component analysis-based CV."""
     
@@ -101,6 +95,7 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
         2) Remove average (inside forward_nn)
         3) Compute TICA
         """
+        options = self.loss_options.copy()
         # =================get data===================
         x_t   = train_batch['data']
         x_lag = train_batch['data_lag']
@@ -114,7 +109,7 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
                                                     weights = [w_t,w_lag],
                                                     save_params=True)
         # ===================loss=====================
-        loss = self.loss_function(eigvals,**self.loss_options)
+        loss = self.loss_function(eigvals,**options)
         # ====================log=====================          
         name = 'train' if self.training else 'valid'       
         loss_dict = {f'{name}_loss' : loss}

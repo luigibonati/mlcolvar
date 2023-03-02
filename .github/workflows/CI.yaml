@@ -57,9 +57,10 @@ jobs:
         shell: bash -l {0}
         run: |
           pytest -v --cov=mlcvs --cov-report=xml --color=yes mlcvs/tests/
+          pytest --nbmake docs/notebooks/
 
       - name: CodeCov
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@v3
         with:
           file: ./coverage.xml
           flags: unittests

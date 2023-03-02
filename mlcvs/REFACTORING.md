@@ -56,7 +56,7 @@ TODO
 
 ## DOC
 
-[ ] add nbmake in tests and CI
+[X] add nbmake in tests and CI
 [ ] tutorialsssss
 
 ## IO
@@ -65,7 +65,8 @@ TODO
 
 ## CVS
 
-[ ] training --> options = self.loss_options.copy()
+[X] remove decorators! 
+[X] training --> options = self.loss_options.copy()
 [ ] add option to add postprocessing after init
 [ ] print optim and loss options in summary
 [ ] add flag to apply preprocessing during training (default = None, complain when preprocessing is not None)

@@ -1,4 +1,4 @@
-"""Time-lagged independent component analysis-based CV"""
+"""Time-lagged independent component analysis"""
 
 __all__ = ["TICA"]
 

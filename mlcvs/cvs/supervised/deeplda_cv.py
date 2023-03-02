@@ -1,17 +1,13 @@
 import torch
 import pytorch_lightning as pl
-from mlcvs.utils.decorators import decorate_methods, allowed_hooks, call_submodules_hooks
-from mlcvs.core.nn import FeedForward
-from mlcvs.core.transform import Normalization
+from mlcvs.cvs import BaseCV
+from mlcvs.core import FeedForward, Normalization
 from mlcvs.data import DictionaryDataModule
-from torch.utils.data import TensorDataset
-from mlcvs.cvs.cv import BaseCV
-from mlcvs.core.stats.lda import LDA
-from mlcvs.core.loss.eigvals import reduce_eigenvalues
+from mlcvs.core.stats import LDA
+from mlcvs.core.loss import reduce_eigenvalues
 
 __all__ = ["DeepLDA_CV"]
 
-@decorate_methods(call_submodules_hooks, methods=allowed_hooks)
 class DeepLDA_CV(BaseCV, pl.LightningModule):
     """Neural network-based discriminant collective variables.
     
@@ -137,6 +133,7 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
         return loss
 
     def training_step(self, train_batch, batch_idx):
+        options = self.loss_options.copy()
         # =================get data===================
         x = train_batch['data']
         y = train_batch['labels']
@@ -145,7 +142,7 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
         # ===================lda======================
         eigvals,_ = self.lda.compute(h,y,save_params=True if self.training else False) 
         # ===================loss=====================
-        loss = self.loss_function(eigvals, **self.loss_options)
+        loss = self.loss_function(eigvals, **options)
         if self.lorentzian_reg > 0:
             lorentzian_reg = self.regularization_lorentzian(h)
             loss += lorentzian_reg

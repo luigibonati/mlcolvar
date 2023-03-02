@@ -1,15 +1,12 @@
 from typing import Any
 import torch
 import pytorch_lightning as pl
-from mlcvs.utils.decorators import decorate_methods, allowed_hooks, call_submodules_hooks
-from mlcvs.core.nn import FeedForward
-from mlcvs.core.transform import Normalization
-from mlcvs.cvs.cv import BaseCV
+from mlcvs.cvs import BaseCV
+from mlcvs.core import FeedForward, Normalization
 from mlcvs.core.loss import MSE_loss
 
 __all__ = ["AutoEncoder_CV"]
 
-@decorate_methods(call_submodules_hooks, methods=allowed_hooks)
 class AutoEncoder_CV(BaseCV, pl.LightningModule):
     """AutoEncoding Collective Variable.
     
@@ -83,7 +80,7 @@ class AutoEncoder_CV(BaseCV, pl.LightningModule):
         return MSE_loss(diff,**kwargs)
 
     def training_step(self, train_batch, batch_idx):
-        options = self.loss_options
+        options = self.loss_options.copy()
         # =================get data===================
         x = train_batch['data']
         if 'weights' in train_batch:

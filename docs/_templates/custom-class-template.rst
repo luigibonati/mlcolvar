@@ -5,7 +5,7 @@
 .. autoclass:: {{ objname }}
    :members:                                   
    :show-inheritance:                           
-   :inherited-members: Module                       
+   :inherited-members: Module,LightningModule                       
 
    {% block methods %}
    .. automethod:: __init__

@@ -1,14 +1,11 @@
 import torch
 import pytorch_lightning as pl
-
+from mlcvs.cvs import BaseCV
 from mlcvs.core import FeedForward, Normalization
-from mlcvs.utils.decorators import decorate_methods,call_submodules_hooks,allowed_hooks
-from mlcvs.cvs.cv import BaseCV
 from mlcvs.core.loss import MSE_loss
 
 __all__ = ["Regression_CV"]
 
-@decorate_methods(call_submodules_hooks,methods=allowed_hooks)
 class Regression_CV(BaseCV, pl.LightningModule):
     """
     Example of collective variable obtained with a regression task.

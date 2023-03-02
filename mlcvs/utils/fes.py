@@ -1,5 +1,8 @@
-__all__ = ["compute_fes"]
+#__all__ = ["compute_fes"]
 
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
 # check whether KDEpy or scikit-learn is installed
 kdelib = 'KDEpy'
 try:
@@ -11,11 +14,6 @@ except ImportError:
         from sklearn.neighbors import KernelDensity
     except ImportError:
         kdelib = None
-
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from torch import Tensor
 
 def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0.01, kernel='gaussian', weights=None, scale_by = None, blocks = 1, fes_to_zero = None, plot=False, plot_max_fes=None, ax = None, backend=None, eps = 0):
     """Compute the Free Energy Surface along the given variables.
@@ -98,7 +96,7 @@ def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0
         X = np.vstack(X).T
     elif type(X) == pd.DataFrame:
         X = X.values
-    elif type(X) == Tensor:
+    elif type(X) == torch.Tensor:
         X = X.numpy()
     
     if X.ndim == 1:

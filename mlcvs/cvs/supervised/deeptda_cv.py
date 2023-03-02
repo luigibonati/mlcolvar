@@ -1,20 +1,12 @@
 import torch 
 import pytorch_lightning as pl
-from typing import Any
-
+from mlcvs.cvs import BaseCV
 from mlcvs.core import FeedForward, Normalization
-from mlcvs.core import TDA_loss
-
+from mlcvs.core.loss import TDA_loss
 from mlcvs.data import DictionaryDataModule
-from torch.utils.data import TensorDataset
-
-from mlcvs.utils.decorators import decorate_methods,call_submodules_hooks,allowed_hooks
-
-from mlcvs.cvs.cv import BaseCV
 
 __all__ = ["DeepTDA_CV"]
 
-@decorate_methods(call_submodules_hooks,methods=allowed_hooks)
 class DeepTDA_CV(BaseCV, pl.LightningModule):
     """
     Define Deep Targeted Discriminant Analysis (Deep-TDA) CV.
@@ -95,7 +87,7 @@ class DeepTDA_CV(BaseCV, pl.LightningModule):
         return loss, loss_centers, loss_sigmas
 
     def training_step(self, train_batch, batch_idx):
-        options = self.loss_options
+        options = self.loss_options.copy()
         # =================get data===================
         x = train_batch['data']
         labels = train_batch['labels']

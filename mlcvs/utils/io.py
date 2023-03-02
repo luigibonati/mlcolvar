@@ -4,9 +4,7 @@ import pandas as pd
 import numpy as np
 import string
 import torch
-from torch.utils.data import TensorDataset, random_split
-from mlcvs.data import FastDictionaryLoader
-
+from torch.utils.data import TensorDataset
 
 __all__ = ["load_dataframe", "plumed_to_pandas", "dataset_from_file"]
 
