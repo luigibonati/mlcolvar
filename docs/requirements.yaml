@@ -3,13 +3,12 @@ channels:
 
   - conda-forge
   - pytorch
-
   - defaults
 
 dependencies:
 
   # Base depends
-  - python
+  - python <=3.10
   - pip
 
   # Core dependencies
