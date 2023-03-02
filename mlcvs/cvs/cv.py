@@ -89,7 +89,6 @@ class BaseCV:
             self.__setattr__(b,None)
 
     def setup(self, stage=None):
-        print('CV SETUP')
         if stage == "fit":
             self.initialize_transforms(self.trainer.datamodule)
 
