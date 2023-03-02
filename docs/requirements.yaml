@@ -21,6 +21,7 @@ dependencies:
   - matplotlib
   - nbsphinx
   - ipython
+  - ipykernel
 
   # Pip-only installs
   - pip:
