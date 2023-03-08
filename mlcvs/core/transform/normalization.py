@@ -4,6 +4,26 @@ from mlcvs.core.transform import Transform
 
 __all__ = ["Normalization"]
 
+def sanitize_range( Range : torch.Tensor):
+    """Sanitize
+
+    Parameters
+    ----------
+    Range : torch.tensor
+        range to be used for standardization
+
+    """
+
+    if (Range < 1e-6).nonzero().sum() > 0:
+        print(
+        "[Warning] Normalization: the following features have a range of values < 1e-6:",
+        (Range < 1e-6).nonzero(),
+        )
+    Range[Range < 1e-6] = 1.0
+
+    return Range
+
+
 class Normalization(Transform):
     """
     Normalizing block, used for computing standardized inputs/outputs.
@@ -45,12 +65,12 @@ class Normalization(Transform):
     def extra_repr(self) -> str:
         return f"in_features={self.in_features}, out_features={self.out_features}, mode={self.mode}"
 
-    def set_custom(self,mean : torch.Tensor = None, range : torch.Tensor = None): # TODO DOC
+    def set_custom(self, mean : torch.Tensor = None, range : torch.Tensor = None): # TODO DOC
 
         if mean is not None:
             self.Mean = mean
         if range is not None:
-            self.Range = range
+            self.Range = sanitize_range(range)
 
         if mean is not None or range is not None:
             self.is_initialized = True
@@ -61,13 +81,15 @@ class Normalization(Transform):
             mode = self.mode
 
         if mode == 'mean_std':
-                self.Mean = stats['Mean']
-                self.Range = stats['Std']
+            self.Mean = stats['Mean']
+            Range = stats['Std'] 
+            self.Range = sanitize_range( Range ) 
         elif mode == 'min_max':
             Min = stats['Min']
             Max = stats['Max']
             self.Mean = (Max + Min) / 2.0
-            self.Range = (Max - Min) / 2.0
+            Range = (Max - Min) / 2.0
+            self.Range = sanitize_range( Range ) 
         elif mode == 'custom':
             raise AttributeError('If mode is custom the parameters should be supplied when creating the Normalization object or with the set_custom, not with set_from_stats')
         else: 

@@ -50,11 +50,7 @@ class DictionaryDataModule(pl.LightningDataModule):
         self.valid_loader = None
         self.test_loader  = None
 
-    def prepare_data(self):
-        print('DATALOADER PREPARE DATA')
-
     def setup(self, stage: str):
-        print('DATALOADER SETUP')
         if self.random_splits:
             self.dataset_splits = random_split(self.dataset, self.lengths, generator=self.generator)
         else:

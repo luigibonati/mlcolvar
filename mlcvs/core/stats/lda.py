@@ -132,7 +132,6 @@ class LDA(Stats):
         # states
         states = torch.unique(labels)
         n_states = len(states)
-        self.n_states = n_states
 
         # Mean centered observations for entire population
         X_bar = X - torch.mean(X, 0, True)
