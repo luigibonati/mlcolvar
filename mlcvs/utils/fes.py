@@ -3,6 +3,8 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import torch
+
 # check whether KDEpy or scikit-learn is installed
 kdelib = 'KDEpy'
 try:
