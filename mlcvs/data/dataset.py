@@ -7,7 +7,7 @@ __all__ = ["DictionaryDataset"]
 
 class DictionaryDataset(Dataset):
     """Define a torch dataset from a dictionary of lists/array/tensors and names.
-    E.g. { 'data' : torch.tensor([1,2,3,4]), 
+    E.g. { 'data' : torch.Tensor([1,2,3,4]), 
            'labels' : [0,0,1,1],
            'weights' : np.asarray([0.5,1.5,1.5,0.5]) }
     """
@@ -30,7 +30,7 @@ class DictionaryDataset(Dataset):
         # convert to torch.tensors
         for key,val in dictionary.items():
             if not isinstance(val,torch.Tensor):
-                dictionary[key] = torch.tensor(val)
+                dictionary[key] = torch.Tensor(val)
 
         # save dictionary
         self.dictionary = dictionary
@@ -70,7 +70,7 @@ class DictionaryDataset(Dataset):
 
 def test_DictionaryDataset():
     # from list
-    dataset_dict = { 'data' : torch.tensor([[1.],[2.],[.3],[.4]]), 
+    dataset_dict = { 'data' : torch.Tensor([[1.],[2.],[.3],[.4]]), 
                      'labels' : [0,0,1,1],
                      'weights' : np.asarray([0.5,1.5,1.5,0.5]) }
 

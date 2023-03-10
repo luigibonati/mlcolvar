@@ -164,7 +164,7 @@ def test_deeplda(n_states=2):
     n_points= 500
     X, y = [],[]
     for i in range(n_states):
-        X.append( torch.randn(n_points,in_features)*(i+1) + torch.tensor([10*i,(i-1)*10]) )
+        X.append( torch.randn(n_points,in_features)*(i+1) + torch.Tensor([10*i,(i-1)*10]) )
         y.append( torch.ones(n_points)*i )
 
     X = torch.cat(X,dim=0)
