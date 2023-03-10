@@ -143,9 +143,9 @@ def compute_distances_components_matrices(pos : torch.Tensor,
      
     # Convert cell to tensor and shape it to have 3 dims
     if isinstance(real_cell, float) or isinstance(real_cell, int):
-        real_cell = torch.tensor([real_cell])
+        real_cell = torch.Tensor([real_cell])
     elif isinstance(real_cell, list):    
-        real_cell = torch.tensor(real_cell)
+        real_cell = torch.Tensor(real_cell)
 
     if real_cell.shape[0] != 1 and real_cell.shape[0] != 3:
         raise ValueError(f"Cell must have either shape (1) or (3). Found {cell.shape} ")
@@ -157,7 +157,7 @@ def compute_distances_components_matrices(pos : torch.Tensor,
 
     # Set which cell to be used for PBC
     if scaled_coords:
-        cell = torch.tensor([1., 1., 1.])
+        cell = torch.Tensor([1., 1., 1.])
     else:
         cell = real_cell
 
@@ -380,7 +380,7 @@ def test_runningstats():
 
 
 def test_switchingfunctions():
-    x = torch.tensor([1., 2., 3.])
+    x = torch.Tensor([1., 2., 3.])
     cutoff = 2
     switch = SwitchingFunctions('Fermi', cutoff)
     out = switch(x)
@@ -390,12 +390,12 @@ def test_switchingfunctions():
 
 
 def test_distances_and_cutoff():
-    pos = torch.tensor([ [ [0., 0., 0.],
+    pos = torch.Tensor([ [ [0., 0., 0.],
                            [1., 1., 1.] ],
                          [ [0., 0., 0.],
                            [1., 1., 1.] ] ]
                       )
-    real_cell = torch.tensor([1., 2, 1.])
+    real_cell = torch.Tensor([1., 2, 1.])
     
     # TEST no scaled coords
     out = compute_distances_matrix(pos=pos,
@@ -406,6 +406,11 @@ def test_distances_and_cutoff():
     
     cutoff = 1.8
     switching_function=SwitchingFunctions('Fermi', cutoff, options={'q':0.01})
+    out2 = apply_cutoff(out, cutoff, mode='continuous', switching_function=switching_function)
+    
+    def silly_switch(x):
+        return torch.pow(x, 2)
+    switching_function = silly_switch
     out2 = apply_cutoff(out, cutoff, mode='continuous', switching_function=switching_function)
     out2 = apply_cutoff(out, cutoff, mode='discontinuous')
 
@@ -420,3 +425,5 @@ def test_distances_and_cutoff():
     switching_function=SwitchingFunctions('Fermi', cutoff, options={'q':0.01})
     out2 = apply_cutoff(out, cutoff, mode='continuous', switching_function=switching_function)
     out2 = apply_cutoff(out, cutoff, mode='discontinuous')
+
+
