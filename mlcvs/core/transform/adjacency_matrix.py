@@ -39,7 +39,7 @@ class AdjacencyMatrix(Transform):
         scaled_coords : bool
             Switch for coordinates scaled on cell's vectors use
         switching_function : _type_, optional
-            Switching function to be applied for the cutoff, can be either initialized as a utils/SwitchingFunctions class or a simple function, by default None
+            Switching function to be applied for the cutoff, can be either initialized as a switching_functions/SwitchingFunctions class or a simple function, by default None
 
         Returns
         -------
@@ -74,7 +74,7 @@ class AdjacencyMatrix(Transform):
         return x
 
 def test_adjacency_matrix():
-    from mlcvs.core.transform.utils import SwitchingFunctions
+    from mlcvs.core.transform.switching_functions import SwitchingFunctions
 
     pos = torch.Tensor([ [ [0., 0., 0.],
                            [1., 1., 1.] ],
@@ -94,7 +94,6 @@ def test_adjacency_matrix():
                             scaled_coords = False,
                             switching_function=switching_function)
     out = model(pos)
-    print(out)
 
 if __name__ == "__main__":
     test_adjacency_matrix()

@@ -40,7 +40,7 @@ class RadiusGraph(Transform):
         scaled_coords : bool
             Switch for coordinates scaled on cell's vectors use
         switching_function : _type_, optional
-            Switching function to be applied for the cutoff, can be either initialized as a utils/SwitchingFunctions class or a simple function, by default None
+            Switching function to be applied for the cutoff, can be either initialized as a switching_functions/SwitchingFunctions class or a simple function, by default None
         zero_threshold : float, optional
             Threshold to be considered zero when in continuous mode, it is ignored if in discontinuous mode, by default 1e-4
 
@@ -102,7 +102,7 @@ class RadiusGraph(Transform):
         return x
 
 def test_radiusgraph():
-    from mlcvs.core.transform.utils import SwitchingFunctions
+    from mlcvs.core.transform.switching_functions import SwitchingFunctions
 
     pos = torch.Tensor([ [ [0., 0., 0.],
                            [1., 1., 1.] ],

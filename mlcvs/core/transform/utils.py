@@ -259,7 +259,6 @@ def apply_cutoff(x : torch.Tensor,
     switching_function : function, optional
         Switching function to be applied if in continuous mode, by default None.
         This can be either a user-defined and torch-based function or a method of class SwitchingFuncitons
-        If None it applies a default SwitchingFunction(name="Fermi", cutoff=cutoff, options={"q" : 0.01}
 
     Returns
     -------
@@ -267,16 +266,13 @@ def apply_cutoff(x : torch.Tensor,
         Cutoffed quantity
     """
     if mode == 'continuous' and switching_function is None:
-        warn('Continuous cutoff will be applied with default SwitchingFunction(name="Fermi", cutoff=cutoff, options={"q" : 0.01}. To change this behaviour pass a different switching function!')
+        warn('switching_function is required to use continuous mode! Set This can be either a user-defined and torch-based function or a method of class switching_functions/SwitchingFunctions')
     
     batch_size = x.shape[0]
     mask_diag = ~torch.eye(x.shape[-1], dtype=bool)
     mask_diag = torch.tile(mask_diag, (batch_size, 1, 1))
 
     if mode == 'continuous':
-        if switching_function is None:
-            switching_function = SwitchingFunctions(name='Fermi', cutoff=cutoff, options={'q' : 0.01})
-        
         x[mask_diag] = switching_function( x[mask_diag] )
 
     if mode == 'discontinuous':  
@@ -285,51 +281,6 @@ def apply_cutoff(x : torch.Tensor,
         mask = torch.logical_and(~mask_cutoff, mask_diag)
         x[mask] = x[mask] ** 0
     return x
-
-
-class SwitchingFunctions(torch.nn.Module):
-    """
-    Transform utils class to define some common switching functions
-    """
-    SWITCH_FUNCS = ['Fermi', 'Rational']
-
-    def __init__(self, name : str, cutoff : float, options : dict = None):
-        f"""Initialize switching function object
-
-        Parameters
-        ----------
-        name : str
-            Name of the switching function to be used, available {",".join(self.SWITCH_FUNCS)}
-        cutoff : float
-            Cutoff for the swtiching functions
-        options : dict, optional
-            Dictionary with all the arguments of the switching function, by default None
-        """
-        super().__init__()
-
-        self.name = name
-        self.cutoff = cutoff
-        if options is None:
-            options = {}
-        self.options = options
-       
-        if name not in self.SWITCH_FUNCS:
-            raise NotImplementedError(f'''The switching function {name} is not implemented in this class. The available options are: {",".join(self.SWITCH_FUNCS)}.
-                    You can initialize it as a method of the SwitchingFunctions class and tell us on Github, contributions are welcome!''')  
-
-    def forward(self, x : torch.Tensor):
-        switch_function = self.__getattribute__(f'{self.name}_switch')
-        y = switch_function(x, self.cutoff, **self.options)
-        return y
-    
-    # ========================== define here switching functions ==========================
-    def Fermi_switch(self, x : torch.Tensor, cutoff : float, q : float = 0.01):
-        y = torch.div( 1, ( 1 + torch.exp( torch.div((x - 1.01*cutoff) , q ))))
-        return y
-
-    def Rational_switch(self, x : torch.Tensor, cutoff : float, n : int = 6, m : int = 12 ):
-        y = torch.div((1 - torch.pow(x/cutoff, n)) , (1 - torch.pow(x/cutoff, m)  + 1e-8) )
-        return y
 
 
 # ================================================================================================
@@ -379,17 +330,8 @@ def test_runningstats():
         print(key,stats[key])
 
 
-def test_switchingfunctions():
-    x = torch.Tensor([1., 2., 3.])
-    cutoff = 2
-    switch = SwitchingFunctions('Fermi', cutoff)
-    out = switch(x)
-
-    switch = SwitchingFunctions('Fermi', cutoff, options = {'q' : 0.5})
-    out = switch(x)
-
-
 def test_distances_and_cutoff():
+    from mlcvs.core.transform.switching_functions import SwitchingFunctions
     pos = torch.Tensor([ [ [0., 0., 0.],
                            [1., 1., 1.] ],
                          [ [0., 0., 0.],
@@ -427,3 +369,6 @@ def test_distances_and_cutoff():
     out2 = apply_cutoff(out, cutoff, mode='discontinuous')
 
 
+if __name__ == "__main__":
+    test_distances_and_cutoff()
+    test_runningstats()
