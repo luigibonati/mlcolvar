@@ -86,9 +86,10 @@ TODO
 
 ## TRANSFORM 
 
-[ ] Pairwise distances
+[X] Pairwise distances
 [ ] symmetry functions
-[ ] Add utils for switching functions? 
+[X] Add utils for switching functions? 
+[ ] Add in_features out_features to transform classes
 
 ## MODELS
 
