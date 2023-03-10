@@ -2,11 +2,11 @@
 
 import pandas as pd
 import numpy as np
-import string
 import torch
-from torch.utils.data import TensorDataset
+import os
+from mlcvs.data import DictionaryDataset
 
-__all__ = ["load_dataframe", "plumed_to_pandas", "dataset_from_file"]
+__all__ = ["load_dataframe", "plumed_to_pandas", "create_dataset_from_files"]
 
 def is_plumed_file(filename):
     """
@@ -131,44 +131,40 @@ def load_dataframe(data, start = 0, stop = None, stride = 1, **kwargs):
 
     return df
 
-def dataset_from_file(file_names : list, 
-                    max_rows : int or list,
-                    create_labels : bool = True, 
-                    skip_rows : int or list = 0,
-                    regex_string : str = '',
-                    files_folder : str = None,
-                    dtype : torch.dtype = None,
-                    return_dataframe : bool = False,
+def create_dataset_from_files(
+                    file_names : list,
+                    folder : str = None,
+                    create_labels : bool = None, 
+                    load_args : list = None,
+                    filter_args : dict = None,
                     modifier_function = None, 
-                    verbose : bool =  True):
+                    return_dataframe : bool = False,
+                    verbose : bool =  True, 
+                    **kwargs):
     """
-    Initialize a torch labeled dataset from a list of files.
+    Initialize a dataset from (a list of) files.
 
     Parameters
     ----------
     file_names : list
-        Names of files from which import the data, one per class
-    max_rows : int or list
-        Maximum number of rows to be imported for each file. 
-        If int, it is set for all file
-    skip_rows : int or list, optional
-        Number of rows to be skipped for each file, by default 0
-        If int, it is set for all file
-    regex_string : str, optional
-        String for regex filtering of the inputs from pandas dataframe to torch dataset, by default ''
-        The default already filters out the 'time' column
-    files_folder : str, optional
-        Common path for the files to be imported, by default None
-        If set, filenames become 'files_folder/file_name'
-    dtype : torch.dtype, optional
-        Torch dtype for the tensor in the dataset, by default None
+        Names of files from which import the data
+    folder : str, optional
+        Common path for the files to be imported, by default None. If set, filenames become 'folder/file_name'.
+    create_labels: bool, optional
+        Assign a label to each file, default True if more than a file is given, otherwise False
+    load_args: list[dict], optional
+        List of dictionaries with the arguments passed to load_dataframe function for each file (keys: start,stop,stride and pandas.read_csv options), by default None 
+    filter_args: dict, optional
+        Dictionary of arguments which are passed to df.filter() to select descriptors (keys: items, like, regex), by default None 
+        Note that 'time' and '*.bias' columns are always discarded.
     return_dataframe : bool, optional
         Return also the imported Pandas dataframe for convenience, by default False
     modifier_function : function, optional
-        Function to be applied to the imported data, by default None.
-        If regex_string is given, the funciton is applied only to the selected data
+        Function to be applied to the input data, by default None.
     verbose : bool, optional
-        Print info on the imported data, by default True
+        Print info on the datasets, by default False
+    kwargs : optional
+        args passed to mlcvs.utils.io.load_dataframe
 
     Returns
     -------
@@ -176,111 +172,119 @@ def dataset_from_file(file_names : list,
         Torch labeled dataset of the given data
     optional, pandas.Dataframe
         Pandas dataframe of the given data #TODO improve
+
+    See also
+    --------
+    mlcvs.utils.io.load_dataframe
+        Function that is used to load the files
+
     """
     num_files = len(file_names)
-
-    # parse rows to be imported
-    if type(max_rows) == int:
-        max_rows = np.ones(num_files, dtype=int) * max_rows
-    if type(skip_rows) == int:
-        skip_rows = np.ones(num_files, dtype=int) * skip_rows
-
+    
     # set file paths
-    if files_folder is not None:
-            for i in range(len(file_names)):
-                file_names[i] = files_folder + '/' + file_names[i]
+    if folder is not None:
+        file_names = [ os.path.join(folder, fname ) for fname in file_names]
+
+    # check if per file args are given, otherwise set to {}
+    if load_args is None:
+        load_args = [ {} for _ in file_names ]
+    else:
+        if (not isinstance(load_args,list)) or (len(file_names) != len(load_args)):
+            raise TypeError('load_args should be a list of dictionaries of arguments of same length as file_names. If you want to use the same args for all file pass them directly as **kwargs.')
+
+    # check if create_labels if given, otherwise set it to True if more than one file is given
+    if create_labels is None:
+        create_labels = False if len(file_names) == 1 else True
 
     # initialize pandas dataframe
-    dataframe = pd.DataFrame()
+    df = pd.DataFrame()
 
     # load data
     for i in range(num_files):
-        dataframe_tmp = load_dataframe(file_names[i], 
-                                        start = skip_rows[i], 
-                                        stop = max_rows[i])
+        df_tmp = load_dataframe(file_names[i], **load_args[i], **kwargs)
+        
         # add label in the dataframe
-        if create_labels: dataframe_tmp['Label'] = i
-
-        if verbose: print(f' - Class {list(string.ascii_uppercase)[i]} dataframe shape: ', np.shape(dataframe_tmp))
+        if create_labels: df_tmp['labels'] = i
+        if verbose: print(f'Class {i} dataframe shape: ', np.shape(df_tmp))
 
         # update collective dataframe
-        dataframe = pd.concat([dataframe, dataframe_tmp], ignore_index=True)
+        df = pd.concat([df, df_tmp], ignore_index=True)
     
+    # filter inputs
+    df_data = df.filter(**filter_args) if filter_args is not None else df.copy()
+    df_data = df_data.filter(regex='^(?!.*labels)^(?!.*time)(?!.*bias)' ) 
+
     if verbose: 
-        print(' - Imported pandas dataframe shape: ', np.shape(dataframe))
-        print(' - Filtered pandas dataframe shape: ', np.shape(dataframe.filter(regex=f'^(?!.*Label)^(?!.*time)({regex_string})')))
+        print(f'\n - Loaded dataframe {df.shape}:', list(df.columns)  )
+        print(f' - Descriptors {df_data.shape}:', list(df_data.columns)  ) 
 
-    input_names = list(dataframe.filter(regex=f'^(?!.*Label)^(?!.*time)({regex_string})').columns)
-
+    # apply transformation 
     if modifier_function is not None:
-        dataframe[input_names] = dataframe[input_names].apply(modifier_function)
+        df_data = df_data.apply(modifier_function)
 
-    # create torch dataset
+    # create DictionaryDataset
+    dictionary = {'data' : torch.Tensor(df_data.values) } 
     if create_labels: 
-        dataset = TensorDataset(torch.Tensor(dataframe[input_names].values), torch.Tensor(dataframe.filter(like='Label').values))
-    else:
-        dataset = TensorDataset(torch.Tensor(dataframe[input_names].values))
-    
-    if verbose:
-        print()
-        print(f' - Samples in torch dataset: ', dataset.__len__())
-        print(f' - Descriptors in dataset: ', list(dataset)[0][0].shape[0])
+        dictionary['labels'] = torch.Tensor(df['labels'].values)
+    dataset = DictionaryDataset(dictionary)
     
     if return_dataframe:
-        return dataset, dataframe
+        return dataset, df
     else:
         return dataset
 
 def test_datasetFromFile():
-    print('Test no regex on two states..')
-    torch_dataset, pd_dataframe = dataset_from_file(file_names = ['state_A.dat', 'state_B.dat'], 
-                                                    max_rows = 5, 
-                                                    skip_rows =  0,
-                                                    create_labels=True,
-                                                    files_folder = 'mlcvs/tests/data',
-                                                    return_dataframe = True,
-                                                    regex_string='',
-                                                    verbose = True)
+    # Test with unlabeled dataset
+    torch_dataset, pd_dataframe = create_dataset_from_files(file_names = ['state_A.dat','state_B.dat','state_C.dat'],
+                                                            folder = 'mlcvs/tests/data',
+                                                            create_labels=False,
+                                                            load_args=None,
+                                                            filter_args=None,
+                                                            return_dataframe=True,
+                                                            start=0, #kwargs to load_dataframe
+                                                            stop=5,
+                                                            stride=1,                     
+    )
 
-    print()
-    print('Test limited regex on two states..')
-    torch_dataset, pd_dataframe = dataset_from_file(file_names = ['state_A.dat', 'state_B.dat'], 
-                                                    max_rows = 5, 
-                                                    skip_rows =  0,
-                                                    create_labels=True,
-                                                    files_folder = 'mlcvs/tests/data',
-                                                    return_dataframe = True,
-                                                    regex_string='n|o',
-                                                    verbose = True)
+    # Test no regex on two states
+    torch_dataset, pd_dataframe = create_dataset_from_files(file_names = ['state_A.dat', 'state_B.dat'],
+                                                            folder = 'mlcvs/tests/data',
+                                                            create_labels = True,
+                                                            load_args=None,
+                                                            filter_args=None,
+                                                            return_dataframe=True,
+                                                            start=0, #kwargs to load_dataframe
+                                                            stop=5,
+                                                            stride=1,                     
+    )
+                                                            
+    # Test with filter regex on two states
+    torch_dataset = create_dataset_from_files(file_names = ['state_A.dat', 'state_B.dat'],
+                                                            folder = 'mlcvs/tests/data',
+                                                            create_labels = True,
+                                                            load_args=None,
+                                                            filter_args={'regex':'n|o'},
+                                                            return_dataframe=False,
+                                                            start=0, #kwargs to load_dataframe
+                                                            stop=5,
+                                                            stride=1,                     
+    )
 
     def test_modifier(x):
         return x**2
 
-    print()
-    print('Test limited regex on two states with modifier..')
-    #print('[TEST] Dataframe before mod: ', pd_dataframe)
-
-    torch_dataset, pd_dataframe = dataset_from_file(file_names = ['state_A.dat', 'state_B.dat'], 
-                                                    max_rows = 5, 
-                                                    skip_rows =  0,
-                                                    create_labels=True,
-                                                    files_folder = 'mlcvs/tests/data',
-                                                    return_dataframe = True,
-                                                    regex_string='n|o',
-                                                    modifier_function=test_modifier,
-                                                    verbose = True)
-    #print('[TEST] Dataframe after mod: ', pd_dataframe)
-    
-    print()
-    print('Test unlabeled on three states..')
-    torch_dataset, pd_dataframe = dataset_from_file(file_names = ['state_A.dat', 'state_B.dat', 'state_C.dat'], 
-                                                    max_rows = 5, 
-                                                    skip_rows =  0,
-                                                    create_labels=False,
-                                                    files_folder = 'mlcvs/tests/data',
-                                                    return_dataframe = True,
-                                                    regex_string='',
-                                                    verbose = True)
+    # Test with filter regex on two states with modifier
+    torch_dataset, pd_dataframe = create_dataset_from_files(file_names = ['state_A.dat', 'state_B.dat'],
+                                                            folder = 'mlcvs/tests/data',
+                                                            create_labels = True,
+                                                            load_args=None,
+                                                            filter_args={'regex':'n|o'},
+                                                            modifier_function=test_modifier,
+                                                            return_dataframe=True,
+                                                            start=0, #kwargs to load_dataframe
+                                                            stop=5,
+                                                            stride=1,                     
+    )
 
 if __name__ == "__main__":
     test_datasetFromFile()
