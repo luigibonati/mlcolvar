@@ -26,7 +26,7 @@ class AdjacencyMatrix(Transform):
         ----------
         mode : str
             Mode for cutoff application, either:
-            - 'continuous': applies a switching function to the distances wich can be specified with switching_fucniton keyword, has stable derivatives
+            - 'continuous': applies a switching function to the distances which can be specified with switching_function keyword, has stable derivatives
             - 'discontinuous': set at zero everything above the cutoff and one below, derivatives may be be incorrect
         cutoff : float
             Cutoff for the adjacency criterion 
@@ -63,7 +63,10 @@ class AdjacencyMatrix(Transform):
                                         PBC=self.PBC,
                                         real_cell=self.real_cell,
                                         scaled_coords=self.scaled_coords)
-        adj_matrix = apply_cutoff(dist, self.cutoff, mode=mode, switching_function = self.switching_function)
+        adj_matrix = apply_cutoff(x=dist, 
+                                  cutoff=self.cutoff, 
+                                  mode=mode, 
+                                  switching_function = self.switching_function)
         return adj_matrix
 
     def forward(self, x: torch.Tensor):
@@ -73,19 +76,16 @@ class AdjacencyMatrix(Transform):
 def test_adjacency_matrix():
     from mlcvs.core.transform.utils import SwitchingFunctions
 
-    pos = torch.tensor([ [ [0., 0., 0.],
+    pos = torch.Tensor([ [ [0., 0., 0.],
                            [1., 1., 1.] ],
                          [ [0., 0., 0.],
                            [1., 1.1, 1.] ] ]
                       )
     
-    real_cell = torch.tensor([1., 2., 1.])
+    real_cell = torch.Tensor([1., 2., 1.])
     cutoff = 1.8
     switching_function=SwitchingFunctions('Fermi', cutoff, options={'q':0.01})
-    
-    def silly_switch(x):
-        return torch.pow(x, 2)
-    switching_function = silly_switch
+  
     model = AdjacencyMatrix(mode = 'continuous',
                             cutoff = cutoff, 
                             n_atoms = 2,
