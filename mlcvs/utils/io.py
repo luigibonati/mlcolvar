@@ -217,9 +217,9 @@ def dataset_from_file(file_names : list,
 
     # create torch dataset
     if create_labels: 
-        dataset = TensorDataset(torch.tensor(dataframe[input_names].values, dtype=dtype), torch.tensor(dataframe.filter(like='Label').values, dtype=dtype))
+        dataset = TensorDataset(torch.Tensor(dataframe[input_names].values, dtype=dtype), torch.Tensor(dataframe.filter(like='Label').values, dtype=dtype))
     else:
-        dataset = TensorDataset(torch.tensor(dataframe[input_names].values, dtype=dtype))
+        dataset = TensorDataset(torch.Tensor(dataframe[input_names].values, dtype=dtype))
     
     if verbose:
         print()
