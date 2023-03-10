@@ -4,7 +4,7 @@ import pandas as pd
 from bisect import bisect_left
 from mlcvs.data import DictionaryDataset
 
-__all__ = ['Find_Time_Lagged_Configurations','Build_TimeLagged_Dataset']
+__all__ = ['Find_Time_Lagged_Configurations','Create_TimeLagged_Dataset']
 
 def closest_idx(array, value):
         '''
@@ -122,7 +122,7 @@ def Find_Time_Lagged_Configurations(x,t,lag_time):
 
     return x_t,x_lag,w_t,w_lag
 
-def Build_TimeLagged_Dataset(X, t = None, lag_time = 1, logweights = None, tprime = None, interval = None):
+def Create_TimeLagged_Dataset(X, t = None, lag_time = 1, logweights = None, tprime = None, interval = None):
     """
     Create a DictionaryDataset of time-lagged configurations. If a set of (log)weights is given the search is performed in the accelerated time.
     
@@ -180,26 +180,24 @@ def Build_TimeLagged_Dataset(X, t = None, lag_time = 1, logweights = None, tprim
 
     dataset = DictionaryDataset({'data':x_t, 'data_lag':x_lag, 'weights':w_t, 'weights_lag':w_lag})
 
-    #return torch.utils.data.TensorDataset(*data)
     return dataset 
 
-
-def test_Build_TimeLagged_Dataset():
+def test_Create_TimeLagged_Dataset():
     in_features = 2
     n_points = 100
     X = torch.rand(n_points,in_features)*100
 
-    dataset = Build_TimeLagged_Dataset(X)
+    dataset = Create_TimeLagged_Dataset(X)
     print(dataset)
     print(len(dataset))
 
     t = np.arange(n_points)
-    dataset = Build_TimeLagged_Dataset(X,t,lag_time=10)
+    dataset = Create_TimeLagged_Dataset(X,t,lag_time=10)
     print(len(dataset))
 
     logweights = np.random.rand(n_points)
-    dataset =  Build_TimeLagged_Dataset(X,t,logweights=logweights)
+    dataset =  Create_TimeLagged_Dataset(X,t,logweights=logweights)
     print(len(dataset))  
 
 if __name__ == "__main__":
-    test_Build_TimeLagged_Dataset()
+    test_Create_TimeLagged_Dataset()
