@@ -53,9 +53,9 @@ class PairwiseDistances(Transform):
 
         # Convert cell to tensor and shape it to have 3 dims
         if isinstance(cell, float) or isinstance(cell, int):
-            cell = torch.tensor([cell])
+            cell = torch.Tensor([cell])
         elif isinstance(cell, list):    
-            cell = torch.tensor(cell)
+            cell = torch.Tensor(cell)
 
         if cell.shape[0] != 1 and cell.shape[0] != 3:
             raise ValueError(f"Cell must have either shape (1) or (3). Found {cell.shape} ")
@@ -302,14 +302,14 @@ class PairwiseDistances(Transform):
         
 
 def test_pairwise_distance():
-    pos = torch.tensor([ [ [0., 0., 0.],
+    pos = torch.Tensor([ [ [0., 0., 0.],
                            [0.4, 0., 0.]], 
                          [ [0., 0., 0.],
                            [0., 0.4, 0.]] 
                         ])
     pos.requires_grad = True
     print(pos.shape)
-    cell = torch.tensor([10., 6., 10.,])
+    cell = torch.Tensor([10., 6., 10.,])
     cutoff = None
     model = PairwiseDistances(n_atoms = 2,
                               mode = 'components_distances_matrix', 

@@ -73,13 +73,13 @@ class AdjacencyMatrix(Transform):
 def test_adjacency_matrix():
     from mlcvs.core.transform.utils import SwitchingFunctions
 
-    pos = torch.tensor([ [ [0., 0., 0.],
+    pos = torch.Tensor([ [ [0., 0., 0.],
                            [1., 1., 1.] ],
                          [ [0., 0., 0.],
                            [1., 1.1, 1.] ] ]
                       )
     
-    real_cell = torch.tensor([1., 2., 1.])
+    real_cell = torch.Tensor([1., 2., 1.])
     cutoff = 1.8
     switching_function=SwitchingFunctions('Fermi', cutoff, options={'q':0.01})
     
