@@ -4,7 +4,7 @@ import pandas as pd
 from bisect import bisect_left
 from mlcvs.data import DictionaryDataset
 
-__all__ = ['Find_Time_Lagged_Configurations','Build_TimeLagged_Dataset']
+__all__ = ['find_timelagged_configurations','create_timelagged_dataset']
 
 def closest_idx(array, value):
         '''
@@ -70,7 +70,7 @@ def tprime_evaluation(t, logweights = None):
 
     return tprime
 
-def Find_Time_Lagged_Configurations(x,t,lag_time):
+def find_timelagged_configurations(x,t,lag_time):
     '''
     Searches for all the pairs which are distant 'lag' in time, and returns the weights associated to lag=lag as well as the weights for lag=0.
 
@@ -122,7 +122,7 @@ def Find_Time_Lagged_Configurations(x,t,lag_time):
 
     return x_t,x_lag,w_t,w_lag
 
-def Build_TimeLagged_Dataset(X, t = None, lag_time = 1, logweights = None, tprime = None, interval = None):
+def create_timelagged_dataset(X, t = None, lag_time = 1, logweights = None, tprime = None, interval = None):
     """
     Create a DictionaryDataset of time-lagged configurations. If a set of (log)weights is given the search is performed in the accelerated time.
     
@@ -167,7 +167,7 @@ def Build_TimeLagged_Dataset(X, t = None, lag_time = 1, logweights = None, tprim
         tprime = tprime_evaluation(t, logweights)
 
     # find pairs of configurations separated by lag_time
-    x_t,x_lag,w_t,w_lag = Find_Time_Lagged_Configurations(X, tprime,lag_time=lag_time)
+    x_t,x_lag,w_t,w_lag = find_timelagged_configurations(X, tprime,lag_time=lag_time)
 
     if interval is not None:
         # convert to a list
@@ -180,26 +180,24 @@ def Build_TimeLagged_Dataset(X, t = None, lag_time = 1, logweights = None, tprim
 
     dataset = DictionaryDataset({'data':x_t, 'data_lag':x_lag, 'weights':w_t, 'weights_lag':w_lag})
 
-    #return torch.utils.data.TensorDataset(*data)
     return dataset 
 
-
-def test_Build_TimeLagged_Dataset():
+def test_create_timelagged_dataset():
     in_features = 2
     n_points = 100
     X = torch.rand(n_points,in_features)*100
 
-    dataset = Build_TimeLagged_Dataset(X)
+    dataset = create_timelagged_dataset(X)
     print(dataset)
     print(len(dataset))
 
     t = np.arange(n_points)
-    dataset = Build_TimeLagged_Dataset(X,t,lag_time=10)
+    dataset = create_timelagged_dataset(X,t,lag_time=10)
     print(len(dataset))
 
     logweights = np.random.rand(n_points)
-    dataset =  Build_TimeLagged_Dataset(X,t,logweights=logweights)
+    dataset =  create_timelagged_dataset(X,t,logweights=logweights)
     print(len(dataset))  
 
 if __name__ == "__main__":
-    test_Build_TimeLagged_Dataset()
+    test_create_timelagged_dataset()
