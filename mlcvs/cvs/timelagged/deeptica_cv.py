@@ -120,8 +120,8 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
 def test_deep_tica():
     # tests
     import numpy as np
-    from mlcvs.data import DictionaryDataModule, create_timelagged_dataset
-    from mlcvs.data import DictionaryDataset
+    from mlcvs.data import DictionaryDataModule
+    from mlcvs.utils.timelagged import create_timelagged_dataset
 
     # create dataset
     X = np.loadtxt('mlcvs/tests/data/mb-mcmc.dat')

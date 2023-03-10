@@ -4,7 +4,7 @@ import pandas as pd
 from bisect import bisect_left
 from mlcvs.data import DictionaryDataset
 
-__all__ = ['Find_Time_Lagged_Configurations','create_timelagged_dataset']
+__all__ = ['find_timelagged_configurations','create_timelagged_dataset']
 
 def closest_idx(array, value):
         '''
@@ -70,7 +70,7 @@ def tprime_evaluation(t, logweights = None):
 
     return tprime
 
-def Find_Time_Lagged_Configurations(x,t,lag_time):
+def find_timelagged_configurations(x,t,lag_time):
     '''
     Searches for all the pairs which are distant 'lag' in time, and returns the weights associated to lag=lag as well as the weights for lag=0.
 
@@ -167,7 +167,7 @@ def create_timelagged_dataset(X, t = None, lag_time = 1, logweights = None, tpri
         tprime = tprime_evaluation(t, logweights)
 
     # find pairs of configurations separated by lag_time
-    x_t,x_lag,w_t,w_lag = Find_Time_Lagged_Configurations(X, tprime,lag_time=lag_time)
+    x_t,x_lag,w_t,w_lag = find_timelagged_configurations(X, tprime,lag_time=lag_time)
 
     if interval is not None:
         # convert to a list
