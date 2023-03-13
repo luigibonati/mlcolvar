@@ -178,12 +178,12 @@ def compute_distances_components_matrices(pos : torch.Tensor,
         shifts = torch.zeros_like(dist_components)
         # avoid loop if cell is cubic
         if cell[0]==cell[1] and cell[1]==cell[2]:
-            shifts = torch.div(dist_components, cell[0]/2, rounding_mode='trunc')*cell[0]
+            shifts = torch.div(dist_components, cell[0]/2, rounding_mode='trunc')*cell[0]/2
         else: 
             # loop over dimensions of the cell
             for d in range(3):
-                shifts[:, d, :, :] = torch.div(dist_components[:, d, :, :], cell[d]/2, rounding_mode='trunc')*cell[d]
-
+                shifts[:, d, :, :] = torch.div(dist_components[:, d, :, :], cell[d]/2, rounding_mode='trunc')*cell[d]/2
+            
         # apply shifts
         dist_components = dist_components - shifts
     return dist_components, real_cell, scaled_coords
