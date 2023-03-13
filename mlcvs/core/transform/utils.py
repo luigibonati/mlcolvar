@@ -132,14 +132,31 @@ def compute_distances_components_matrices(pos : torch.Tensor,
     """
     # ======================= CHECKS =======================
     # check if we have batch dimension in positions tensor
+    
+    if len(pos.shape)==3:
+        # check that index 0: batch, 1: atom, 2: coord
+        if pos.shape[1] != n_atoms:
+            raise ValueError(f"The given positions tensor has the wrong format, probably the wrong number of atoms. Expected {n_atoms} found {pos.shape[1]}")
+        if pos.shape[2] != 3:
+            raise ValueError(f"The given position tensor has the wrong format, probably the wrong number of spatial coordinates. Expected 3 found {pos.shape[2]}")
+            
     if len(pos.shape)==2:
-        pos = pos.unsqueeze(0)
-    batch_size = pos.shape[0]
+        # check that index 0: atoms, 2: coord
+        if pos.shape[0]==n_atoms and pos.shape[1] == 3:
+            pos = pos.unsqueeze(0) # add batch dimension
+            batch_size = pos.shape[0]
+        # check that is not 0: batch, 1: atom*coord
+        elif not pos.shape[1] == int(n_atoms * 3):
+            raise ValueError()
 
-    if pos.shape[-2] != n_atoms:
-        raise ValueError(f"The given positions tensor has the wrong number of atoms. Expected {n_atoms} found {pos.shape[-2]}")
-    if pos.shape[-1] != 3:
-        raise ValueError(f"The given position tensor has a wrong number of spatial coordinates. Expected 3 found {pos.shape[-1]}")
+    if len(pos.shape)==1:
+        # check that index 0: atoms*coord
+        if len(pos) != n_atoms*3:
+            raise ValueError(f"The given positions tensor has the wrong format. It should be at least of shape {int(n_atoms*3)}, found {pos.shape[0]}")
+        else:
+            pos = pos.unsqueeze(0) # add batch dimension
+    
+    batch_size = pos.shape[0]
      
     # Convert cell to tensor and shape it to have 3 dims
     if isinstance(real_cell, float) or isinstance(real_cell, int):
@@ -329,8 +346,7 @@ def test_runningstats():
     for key in loader.keys:
         print(key,stats[key])
 
-
-def test_distances_and_cutoff():
+def test_applycutoff():
     from mlcvs.core.transform.switching_functions import SwitchingFunctions
     pos = torch.Tensor([ [ [0., 0., 0.],
                            [1., 1., 1.] ],
@@ -370,5 +386,5 @@ def test_distances_and_cutoff():
 
 
 if __name__ == "__main__":
-    test_distances_and_cutoff()
+    test_applycutoff()
     test_runningstats()
