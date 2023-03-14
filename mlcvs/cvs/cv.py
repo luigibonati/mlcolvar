@@ -24,6 +24,7 @@ class BaseCV:
             
         """
         super().__init__(*args, **kwargs)
+        self.save_hyperparameters()
 
         # MODEL 
         self.initialize_blocks()
