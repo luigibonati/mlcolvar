@@ -19,7 +19,7 @@ class FastDictionaryLoader:
     Adapted from https://discuss.pytorch.org/t/dataloader-much-slower-than-manual-batching/27014/6. 
 
     """
-    def __init__(self, dataset : DictionaryDataset or dict, batch_size : int = 0, shuffle : bool = False):
+    def __init__(self, dataset : DictionaryDataset or dict, batch_size : int = 0, shuffle : bool = True):
         """Initialize a FastDictionaryLoader.
 
         Parameters
@@ -29,7 +29,7 @@ class FastDictionaryLoader:
             batch size, by default 0 (==single batch)
         shuffle : bool, optional
             if True, shuffle the data *in-place* whenever an
-            iterator is created out of this object, by default False
+            iterator is created out of this object, by default True
 
         Returns
         -------
@@ -87,6 +87,10 @@ class FastDictionaryLoader:
     def keys(self):
         return self.dictionary.keys
     
+    def __repr__(self) -> str:
+        string = f'FastDictionaryLoader(length={self.dataset_len}, batch_size={self.batch_size}, shuffle={self.shuffle})'
+        return string
+
     def get_stats(self):
         """Compute statistics ('Mean','Std','Min','Max') of the dataloader. 
 
@@ -110,7 +114,7 @@ class FastDictionaryLoader:
             stats[k] = stats[k].to_dict()
 
         return stats
-        
+
 
 def test_FastDictionaryLoader(): 
     X = torch.arange(1,11).unsqueeze(1)
