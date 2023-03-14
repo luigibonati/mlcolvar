@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from mlcvs.core.transform.utils import RunningStats
+from mlcvs.core.transform.utils import Statistics
 from torch.utils.data import Dataset
 
 __all__ = ["DictionaryDataset"]
@@ -63,7 +63,7 @@ class DictionaryDataset(Dataset):
         """
         stats = {}
         for k in self.keys:
-            stats[k] = RunningStats(self.dictionary[k]).to_dict()
+            stats[k] = Statistics(self.dictionary[k]).to_dict()
         return stats
     
     def __repr__(self) -> str:

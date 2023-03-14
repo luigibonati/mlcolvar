@@ -1,7 +1,7 @@
 import torch 
 from torch.utils.data import Subset
 from mlcvs.data import DictionaryDataset
-from mlcvs.core.transform.utils import RunningStats
+from mlcvs.core.transform.utils import Statistics
 
 __all__ = ["FastDictionaryLoader"]
 
@@ -104,7 +104,7 @@ class FastDictionaryLoader:
             for k in self.keys:
                 #initialize
                 if k not in stats:
-                    stats[k] = RunningStats(batch[k])
+                    stats[k] = Statistics(batch[k])
                 # or accumulate
                 else:
                     stats[k].update(batch[k])

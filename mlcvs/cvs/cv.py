@@ -7,7 +7,7 @@ class BaseCV:
     """
 
     def __init__(self, in_features, out_features, 
-                        preprocessing : list = None, postprocessing : list = None,
+                        preprocessing : torch.nn.Module = None, postprocessing : torch.nn.Module = None,
                         *args, **kwargs):
         """ Base CV class options.
 
@@ -17,8 +17,10 @@ class BaseCV:
             Number of inputs of the CV model
         out_features : int
             Number of outputs of the CV model, should be the number of CVs
-        preprocessing : list,optional
-            List of preprocessing modules, default None
+        preprocessing : torch.nn.Module, optional
+            Preprocessing module, default None
+        postprocessing : torch.nn.Module, optional
+            Postprocessing module, default None
             
         """
         super().__init__(*args, **kwargs)
@@ -26,27 +28,13 @@ class BaseCV:
         # MODEL 
         self.initialize_blocks()
 
-        # Set pre/post
-        self.do_preprocessing = False
-        self.do_postprocessing = False
-
-        if preprocessing is not None:
-            self.do_preprocessing = True
-            if not isinstance(preprocessing,list):
-                preprocessing = [preprocessing]
-            in_features_pre = preprocessing[0].in_features
+        # Set pre/post processing 
         self.preprocessing = preprocessing
-
-        if postprocessing is not None:
-            self.do_postprocessing = True
-            if not isinstance(postprocessing,list):
-                postprocessing = [postprocessing]
-            out_features_post = postprocessing[-1].out_features
         self.postprocessing = postprocessing
 
         # adapt no. input and output features based on pre/post processing
-        self.in_features = in_features if preprocessing is None else in_features_pre
-        self.out_features = out_features if postprocessing is None else out_features_post
+        self.in_features = in_features if preprocessing is None else preprocessing.in_features
+        self.out_features = out_features if postprocessing is None else postprocessing.out_features
 
         self.example_input_array = torch.randn(self.in_features)
 
@@ -116,15 +104,14 @@ class BaseCV:
             Output of the forward operation of the model
         """
 
-        if self.preprocessing is not None and self.do_preprocessing:
-            for p in self.preprocessing:
-                x = p(x)
+        if self.preprocessing is not None:
+            x = self.preprocessing(x)
 
         x = self.forward_blocks(x)
 
-        if self.postprocessing is not None and self.do_postprocessing:
-            for p in self.postprocessing:
-                x = p(x)
+        if self.postprocessing is not None:
+            x = self.postprocessing(x)
+
         return x
 
     def forward_blocks(self, x : torch.tensor) -> (torch.tensor):
@@ -153,9 +140,15 @@ class BaseCV:
 
     def validation_step(self, val_batch, batch_idx):
         """ 
-        Equal to training step if not overridden. Different behaviors for train/valid step can be enforced based on the self.training variable. 
+        Equal to training step if not overridden. Different behaviors for train/valid step can be enforced in training_step() based on the self.training variable. 
         """
         self.training_step(val_batch, batch_idx)
+
+    def test_step(self, test_batch, batch_idx):
+        """ 
+        Equal to training step if not overridden. Different behaviors for train/valid step can be enforced in training_step() based on the self.training variable. 
+        """
+        self.training_step(test_batch, batch_idx)
 
     def set_loss_fn(self, fn):
         """
@@ -198,7 +191,7 @@ class BaseCV:
         optim : str
             Name of the torch.optim optimizer
         """
-        if not hasattr(torch.optim,optim_name):
+        if not hasattr(torch.optim, optim_name):
             raise AttributeError (f'torch.optim does not have a {optim_name} optimizer.')
         self.optim_name = optim_name
 

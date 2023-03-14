@@ -1,5 +1,5 @@
 import torch
-from mlcvs.core.transform.utils import batch_reshape
+from mlcvs.core.transform.utils import batch_reshape,Statistics
 from mlcvs.core.transform import Transform
 
 __all__ = ["Normalization"]
@@ -29,8 +29,8 @@ class Normalization(Transform):
     Normalizing block, used for computing standardized inputs/outputs.
     """
 
-    def __init__(self, in_features : int, mean : torch.Tensor = None, range : torch.Tensor = None, mode : str = 'mean_std'):
-        """Initialize a normalization object. 
+    def __init__(self, in_features : int, mean : torch.Tensor = None, range : torch.Tensor = None, stats : dict = None, mode : str = 'mean_std'):
+        """Initialize a normalization object. Values will be subtracted by self.Mean and then divided by self.Range.
         The parameters for the standardization can be either given from the user (via mean/range keywords), or they can be calculated from a datamodule. 
         In the former, the mode will be overriden as 'custom'. 'In the latter, the standardization mode can be either 'mean_std' (remove by the mean and divide by the standard deviation) or 'min_max' (scale and shift the range of values such that all inputs are between -1 and 1).
                                                         
@@ -55,8 +55,10 @@ class Normalization(Transform):
         self.mode = mode
         self.is_initialized = False
 
-        # set mean and range if provided
+        # set values based on args if provided
         self.set_custom(mean,range)
+        if stats is not None:
+            self.set_from_stats(stats,mode=mode)
 
         # save params
         self.in_features = in_features
@@ -65,7 +67,16 @@ class Normalization(Transform):
     def extra_repr(self) -> str:
         return f"in_features={self.in_features}, out_features={self.out_features}, mode={self.mode}"
 
-    def set_custom(self, mean : torch.Tensor = None, range : torch.Tensor = None): # TODO DOC
+    def set_custom(self, mean : torch.Tensor = None, range : torch.Tensor = None): 
+        """ Set parameter of the normalization layer. 
+
+        Parameters
+        ----------
+        mean : torch.Tensor
+            Value that will be removed.
+        range : torch.Tensor, optional
+            Value that will be divided for.
+        """
 
         if mean is not None:
             self.Mean = mean
@@ -76,9 +87,21 @@ class Normalization(Transform):
             self.is_initialized = True
             self.mode = 'custom'
 
-    def set_from_stats(self,stats : dict ,mode=None): # TODO DOC
+    def set_from_stats(self, stats : dict or Statistics, mode : str = None): 
+        """ Set parameters of the normalization layer based on a dictionary with statistics 
+
+        Parameters
+        ----------
+        stats : dict or Statistics
+            dictionary with statistics
+        mode : str, optional
+            standardization mode ('mean_std' or 'min_max'), by default None (will use self.mode)
+        """
+
         if mode is None:
             mode = self.mode
+        if isinstance(stats, Statistics):
+            stats = stats.to_dict()
 
         if mode == 'mean_std':
             self.Mean = stats['Mean']
@@ -91,7 +114,7 @@ class Normalization(Transform):
             Range = (Max - Min) / 2.0
             self.Range = sanitize_range( Range ) 
         elif mode == 'custom':
-            raise AttributeError('If mode is custom the parameters should be supplied when creating the Normalization object or with the set_custom, not with set_from_stats')
+            raise AttributeError('If mode is custom the parameters should be supplied via mean and range values when creating the Normalization object or with the set_custom, not with set_from_stats.')
         else: 
             raise ValueError(f'Mode {self.mode} unknonwn. Available modes: "mean_std", "min_max","custom"')
     
@@ -155,8 +178,8 @@ def test_normalization():
     X = torch.randn((100,in_features))*10
 
     # get stats
-    from mlcvs.core.transform.utils import RunningStats
-    stats = RunningStats(X).to_dict()
+    from mlcvs.core.transform.utils import Statistics
+    stats = Statistics(X).to_dict()
     norm = Normalization(in_features, mean=stats['Mean'],range=stats['Std'])
 
     y = norm(X)
