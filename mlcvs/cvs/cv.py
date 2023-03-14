@@ -6,9 +6,13 @@ class BaseCV:
     To inherit from this class, the class must define a BLOCKS class attribute.
     """
 
-    def __init__(self, in_features, out_features, 
-                        preprocessing : list = None, postprocessing : list = None,
-                        *args, **kwargs):
+    def __init__(self,
+                 in_features : int, 
+                 out_features : int,
+                 preprocessing : list = None, 
+                 postprocessing : list = None,
+                 *args, 
+                 **kwargs):
         """ Base CV class options.
 
         Parameters
