@@ -12,6 +12,7 @@ class SwitchingFunctions(Transform):
     SWITCH_FUNCS = ['Fermi', 'Rational']
 
     def __init__(self,
+                 in_features : int,
                  name : str, 
                  cutoff : float, 
                  options : dict = None):
@@ -26,7 +27,7 @@ class SwitchingFunctions(Transform):
         options : dict, optional
             Dictionary with all the arguments of the switching function, by default None
         """
-        super().__init__()
+        super().__init__(in_features=in_features, out_features=in_features)
 
         self.name = name
         self.cutoff = cutoff
@@ -66,13 +67,13 @@ class SwitchingFunctions(Transform):
 def test_switchingfunctions():
     x = torch.Tensor([1., 2., 3.])
     cutoff = 2
-    switch = SwitchingFunctions('Fermi', cutoff)
+    switch = SwitchingFunctions(in_features=len(x), name='Fermi', cutoff=cutoff)
     out = switch(x)
 
-    switch = SwitchingFunctions('Fermi', cutoff, options = {'q' : 0.5})
+    switch = SwitchingFunctions(in_features=len(x), name='Fermi', cutoff=cutoff, options = {'q' : 0.5})
     out = switch(x)
 
-    switch = SwitchingFunctions('Rational', cutoff, options = {'n' : 6, 'm' : 12})
+    switch = SwitchingFunctions(in_features=len(x), name='Rational', cutoff=cutoff, options = {'n' : 6, 'm' : 12})
     out = switch(x)
 
 if __name__ == "__main__":

@@ -35,7 +35,7 @@ class PairwiseDistances(Transform):
         torch.Tensor
             Non duplicated pairwise distances between all the atoms
         """
-        super().__init__()
+        super().__init__(in_features=int(n_atoms*3), out_features=int(n_atoms*(n_atoms-1) / 2))
 
         # parse args
         self.n_atoms = n_atoms
@@ -62,7 +62,6 @@ class PairwiseDistances(Transform):
         return x
 
 def test_pairwise_distances():
-    from mlcvs.core.transform.switching_functions import SwitchingFunctions
 
     pos = torch.Tensor([ [ [0., 0., 0.],
                            [1., 1., 1.],
@@ -80,6 +79,7 @@ def test_pairwise_distances():
                               real_cell = real_cell,
                               scaled_coords = False)
     out = model(pos)
+    assert(out.reshape(pos.shape[0], -1).shape[-1] == model.out_features)
 
 if __name__ == "__main__":
     test_pairwise_distances()

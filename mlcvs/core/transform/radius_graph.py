@@ -55,7 +55,7 @@ class RadiusGraph(Transform):
 
 
         """
-        super().__init__()
+        super().__init__(in_features=int(n_atoms*3), out_features=None)
 
         # parse args
         self.mode = mode
@@ -104,6 +104,7 @@ class RadiusGraph(Transform):
 def test_radiusgraph():
     from mlcvs.core.transform.switching_functions import SwitchingFunctions
 
+    n_atoms=3
     pos = torch.Tensor([ [ [0., 0., 0.],
                            [1., 1., 1.] ],
                          [ [0., 0., 0.],
@@ -112,7 +113,7 @@ def test_radiusgraph():
     
     real_cell = torch.Tensor([1., 2., 1.])
     cutoff = 1.8
-    switching_function=SwitchingFunctions('Fermi', cutoff, options={'q':0.01})
+    switching_function=SwitchingFunctions(in_features=n_atoms*3, name='Fermi', cutoff=cutoff, options={'q':0.01})
     model = RadiusGraph(mode = 'continuous',
                         cutoff = cutoff, 
                         n_atoms = 2,
