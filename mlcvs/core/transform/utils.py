@@ -2,11 +2,13 @@ import torch
 from typing import Union
 from warnings import warn
 
-__all__ = ["RunningStats"]
+__all__ = ["Statistics"]
 
-class RunningStats(object):
+class Statistics(object):
     """
     Calculate statistics (running mean and std.dev based on Welford's algorithm, as well as min and max).
+    If used with an iterable (such as a dataloader) provides the running estimates. 
+    To get the dictionary with the results use the .to_dict() method.
     """
     def __init__(self, X : torch.Tensor = None):
         self.count = 0
@@ -304,7 +306,7 @@ def apply_cutoff(x : torch.Tensor,
 # ======================================== TEST FUNCTIONS ========================================
 # ================================================================================================
 
-def test_runningstats():
+def test_statistics():
     # create fake data
     X = torch.arange(0,100)
     X = torch.stack([X+0.,X+100.,X-1000.],dim=1)
@@ -314,7 +316,7 @@ def test_runningstats():
 
     # compute stats
     
-    stats = RunningStats()
+    stats = Statistics()
     stats(X)
     print(stats)
     stats.to_dict()
@@ -325,20 +327,20 @@ def test_runningstats():
 
     # compute statistics of a single key of loader
     key = 'data'
-    stats = RunningStats()
+    stats = Statistics()
     for batch in loader:
         stats.update(batch[key])
     print(stats)
 
     # compute stats of all keys in dataloader
 
-    # init a runningstats object for each key
+    # init a statistics object for each key
     stats = {}
     for batch in loader:
         for key in loader.keys:
             #initialize
             if key not in stats:
-                stats[key] = RunningStats(batch[key])
+                stats[key] = Statistics(batch[key])
             # or accumulate
             else:
                 stats[key].update(batch[key])
@@ -387,4 +389,4 @@ def test_applycutoff():
 
 if __name__ == "__main__":
     test_applycutoff()
-    test_runningstats()
+    test_statistics()

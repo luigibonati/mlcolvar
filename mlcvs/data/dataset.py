@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from mlcvs.core.transform.utils import RunningStats
+from mlcvs.core.transform.utils import Statistics
 from torch.utils.data import Dataset
 
 __all__ = ["DictionaryDataset"]
@@ -42,6 +42,8 @@ class DictionaryDataset(Dataset):
             raise ValueError('not all arrays in dictionary have same length!')
 
     def __getitem__(self, index):
+        if isinstance(index,str):
+            raise TypeError(f'Index ("{index}") should be a slice, and not a string. To access the stored dictionary use .dictionary["{index}"] instead.')
         slice_dict = {}
         for key,val in self.dictionary.items():
             slice_dict[key] = val[index]
@@ -61,9 +63,16 @@ class DictionaryDataset(Dataset):
         """
         stats = {}
         for k in self.keys:
-            stats[k] = RunningStats(self.dictionary[k]).to_dict()
+            stats[k] = Statistics(self.dictionary[k]).to_dict()
         return stats
     
+    def __repr__(self) -> str:
+        string = 'DictionaryDataset('
+        for key,val in self.dictionary.items():
+            string += f'"{key}": {list(val.shape)}'
+        string += ')'
+        return string
+
     @property
     def keys(self):
         return tuple(self.dictionary.keys())
