@@ -1,15 +1,15 @@
 import torch
 
 from mlcvs.core.transform import Transform
-from mlcvs.core.transform.utils import compute_distances_matrix,apply_cutoff
+from mlcvs.core.transform.utils import compute_adjacency_matrix
 
 from typing import Union
 
-__all__ = ["AdjacencyMatrix"]
+__all__ = ["EigsAdjMat"]
 
-class AdjacencyMatrix(Transform):
+class EigsAdjMat(Transform):
     """
-    Adjacency matrix transform, compute the adjacency matrix for a set of atoms from their positions
+    Eigenvalues of adjacency matrix transform, compute the eigenvalues of the adjacency matrix for a set of atoms from their positions
     """
 
     def __init__(self,
@@ -19,9 +19,8 @@ class AdjacencyMatrix(Transform):
                  PBC: bool,
                  real_cell: Union[float, list],
                  scaled_coords : bool,
-                 switching_function = None,
-                 flatten = False) -> torch.Tensor:
-        """Initialize an adjacency matrix object.
+                 switching_function = None) -> torch.Tensor:
+        """Initialize an eigenvalues of an adjacency matrix object.
 
         Parameters
         ----------
@@ -47,7 +46,7 @@ class AdjacencyMatrix(Transform):
         torch.Tensor
             Adjacency matrix of all the n_atoms according to cutoff
         """
-        super().__init__(in_features=int(n_atoms*3), out_features=int(n_atoms*n_atoms) if flatten else None)
+        super().__init__(in_features=int(n_atoms*3), out_features=n_atoms)
 
         # parse args
         self.mode = mode
@@ -57,27 +56,28 @@ class AdjacencyMatrix(Transform):
         self.real_cell = real_cell
         self.scaled_coords = scaled_coords
         self.switching_function = switching_function
-        self.flatten = flatten
 
-    def compute_adjacency_matrix(self, pos, mode):
-        dist = compute_distances_matrix(pos=pos,
-                                        n_atoms=self.n_atoms,
-                                        PBC=self.PBC,
-                                        real_cell=self.real_cell,
-                                        scaled_coords=self.scaled_coords)
-        adj_matrix = apply_cutoff(x=dist, 
-                                  cutoff=self.cutoff, 
-                                  mode=mode, 
-                                  switching_function = self.switching_function)
-        return adj_matrix
+    def compute_adjacency_matrix(self, x):
+        x = compute_adjacency_matrix(pos=x,
+                                     mode = self.mode,
+                                     cutoff = self.cutoff, 
+                                     n_atoms = self.n_atoms,
+                                     PBC = self.PBC,
+                                     real_cell = self.real_cell,
+                                     scaled_coords = self.scaled_coords,
+                                     switching_function=self.switching_function)
+        return x
+    
+    def get_eigenvalues(self, x):
+        eigs = torch.linalg.eigvalsh(x)
+        return eigs
 
     def forward(self, x: torch.Tensor):
-        x = self.compute_adjacency_matrix(x, mode=self.mode)
-        if self.flatten:
-            x = torch.flatten(x, start_dim = 1, end_dim=2)
-        return x
+        x = self.compute_adjacency_matrix(x)
+        eigs = self.get_eigenvalues(x)
+        return eigs
 
-def test_adjacency_matrix():
+def test_eigs_of_adj_matrix():
     from mlcvs.core.transform.switching_functions import SwitchingFunctions
     
     n_atoms=2
@@ -91,25 +91,24 @@ def test_adjacency_matrix():
     cutoff = 1.8
     switching_function=SwitchingFunctions(in_features=n_atoms*3, name='Fermi', cutoff=cutoff, options={'q':0.01})
   
-    model = AdjacencyMatrix(mode = 'continuous',
-                            cutoff = cutoff, 
-                            n_atoms = n_atoms,
-                            PBC = True,
-                            real_cell = real_cell,
-                            scaled_coords = False,
-                            switching_function=switching_function)
+    model = EigsAdjMat(mode = 'continuous',
+                       cutoff = cutoff, 
+                       n_atoms = n_atoms,
+                       PBC = True,
+                       real_cell = real_cell,
+                       scaled_coords = False,
+                       switching_function=switching_function)
     out = model(pos)
 
-    model = AdjacencyMatrix(mode = 'continuous',
-                            cutoff = cutoff, 
-                            n_atoms = n_atoms,
-                            PBC = True,
-                            real_cell = real_cell,
-                            scaled_coords = False,
-                            switching_function=switching_function,
-                            flatten=True)
+    model = EigsAdjMat(mode = 'continuous',
+                       cutoff = cutoff, 
+                       n_atoms = n_atoms,
+                       PBC = True,
+                       real_cell = real_cell,
+                       scaled_coords = False,
+                       switching_function=switching_function)
     out = model(pos)
     assert(out.shape[-1] == model.out_features)
 
 if __name__ == "__main__":
-    test_adjacency_matrix()
+    test_eigs_of_adj_matrix()
