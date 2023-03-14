@@ -19,7 +19,8 @@ class AdjacencyMatrix(Transform):
                  PBC: bool,
                  real_cell: Union[float, list],
                  scaled_coords : bool,
-                 switching_function = None) -> torch.Tensor:
+                 switching_function = None,
+                 flatten = False) -> torch.Tensor:
         """Initialize an adjacency matrix object.
 
         Parameters
@@ -56,6 +57,7 @@ class AdjacencyMatrix(Transform):
         self.real_cell = real_cell
         self.scaled_coords = scaled_coords
         self.switching_function = switching_function
+        self.flatten = flatten
 
     def compute_adjacency_matrix(self, pos, mode):
         dist = compute_distances_matrix(pos=pos,
@@ -71,6 +73,8 @@ class AdjacencyMatrix(Transform):
 
     def forward(self, x: torch.Tensor):
         x = self.compute_adjacency_matrix(x, mode=self.mode)
+        if self.flatten:
+            x = torch.flatten(x, start_dim = 1, end_dim=2)
         return x
 
 def test_adjacency_matrix():
@@ -95,7 +99,17 @@ def test_adjacency_matrix():
                             scaled_coords = False,
                             switching_function=switching_function)
     out = model(pos)
-    assert(out.reshape(pos.shape[0], -1).shape[-1] == model.out_features)
+
+    model = AdjacencyMatrix(mode = 'continuous',
+                            cutoff = cutoff, 
+                            n_atoms = n_atoms,
+                            PBC = True,
+                            real_cell = real_cell,
+                            scaled_coords = False,
+                            switching_function=switching_function,
+                            flatten=True)
+    out = model(pos)
+    assert(out.shape[-1] == model.out_features)
 
 if __name__ == "__main__":
     test_adjacency_matrix()
