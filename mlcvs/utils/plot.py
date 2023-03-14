@@ -125,7 +125,8 @@ def plot_isolines_2D(function, component=None,
         return ax
 
 def plot_metrics(metrics, 
-                keys = ['train_loss','valid_loss'],
+                keys = ['train_loss_epoch','valid_loss'],
+                x = None, # 'epoch'
                 labels = None, #['Train','Valid'],
                 linestyles = None, #['-','--']
                 colors = None, # ['fessa0','fessa1']
@@ -140,15 +141,15 @@ def plot_metrics(metrics,
         _, ax = plt.subplots(figsize=(5,4),dpi=100)
 
     # Plot metrics 
-    epoch = metrics['epoch']
+    auto_x = True if x is None else False
     for i,key in enumerate(keys):
-        loss = metrics[key]
+        y = metrics[key]
         lstyle=linestyles[i] if linestyles is not None else None
         label=labels[i] if labels is not None else key
         color=colors[i] if colors is not None else None
-        # fix length mismatch between train_loss_epoch and others metrics
-        x = epoch if len(epoch) == len(loss) else epoch[1:]
-        ax.plot(x,loss,linestyle=lstyle,label=label,color=color)
+        if auto_x:
+            x = np.arange( len(y) )
+        ax.plot(x,y,linestyle=lstyle,label=label,color=color)
 
     # Plot settings
     if xlabel is not None:
