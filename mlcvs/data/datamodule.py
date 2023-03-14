@@ -53,15 +53,15 @@ class DictionaryDataModule(pl.LightningDataModule):
         self.test_loader  = None
 
     def setup(self, stage: str = None):
-        if self.random_splits:
-            self.dataset_splits = random_split(self.dataset, self.lengths, generator=self.generator)
-        else:
-            self.dataset_splits = sequential_split(self.dataset, self.lengths)
-        self.is_setup = True
+        if self.dataset_splits is None:
+            if self.random_splits:
+                self.dataset_splits = random_split(self.dataset, self.lengths, generator=self.generator)
+            else:
+                self.dataset_splits = sequential_split(self.dataset, self.lengths)
 
     def train_dataloader(self):
         """Return training dataloader."""
-        if not self.is_setup:
+        if self.dataset_splits is None:
             raise AttributeError('The datamodule has not been set up yet. If you want to get the dataloaders outside a Lightning trainer please call .setup() first.')
         if self.train_loader is None:
             self.train_loader = FastDictionaryLoader(self.dataset_splits[0], batch_size=self.batch_size[0],shuffle=self.shuffle[0])
@@ -69,7 +69,7 @@ class DictionaryDataModule(pl.LightningDataModule):
 
     def val_dataloader(self):
         """Return validation dataloader."""
-        if not self.is_setup:
+        if self.dataset_splits is None:
             raise AttributeError('The datamodule has not been set up yet. If you want to get the dataloaders outside a Lightning trainer please call .setup() first.')
         if self.valid_loader is None:
             self.valid_loader = FastDictionaryLoader(self.dataset_splits[1], batch_size=self.batch_size[1],shuffle=self.shuffle[1])
@@ -78,7 +78,7 @@ class DictionaryDataModule(pl.LightningDataModule):
     def test_dataloader(self):
         """Return test dataloader."""
         if len(self.lengths) >= 3:
-            if not self.is_setup:
+            if self.dataset_splits is None:
                 raise AttributeError('The datamodule has not been set up yet. If you want to get the dataloaders outside a Lightning trainer please call .setup() first.')
             if self.test_loader is None:
                 self.test_loader = FastDictionaryLoader(self.dataset_splits[2], batch_size=self.batch_size[2],shuffle=self.shuffle[2])
