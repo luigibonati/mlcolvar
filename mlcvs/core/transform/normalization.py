@@ -46,7 +46,7 @@ class Normalization(Transform):
             normalization mode (mean_std, min_max), by default 'mean_std'
         """
 
-        super().__init__()
+        super().__init__(in_features=in_features, out_features=in_features)
         
         # buffers containing mean and range for standardization
         self.register_buffer("Mean", torch.zeros(in_features))
@@ -162,6 +162,7 @@ def test_normalization():
     y = norm(X)
     print(X.mean(0),y.mean(0))
     print(X.std(0),y.std(0))
+    
 
 if __name__ == "__main__":
     test_normalization()

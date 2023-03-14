@@ -46,7 +46,7 @@ class AdjacencyMatrix(Transform):
         torch.Tensor
             Adjacency matrix of all the n_atoms according to cutoff
         """
-        super().__init__()
+        super().__init__(in_features=int(n_atoms*3), out_features=int(n_atoms*n_atoms) if flatten else None)
 
         # parse args
         self.mode = mode
@@ -75,7 +75,8 @@ class AdjacencyMatrix(Transform):
 
 def test_adjacency_matrix():
     from mlcvs.core.transform.switching_functions import SwitchingFunctions
-
+    
+    n_atoms=2
     pos = torch.Tensor([ [ [0., 0., 0.],
                            [1., 1., 1.] ],
                          [ [0., 0., 0.],
@@ -84,16 +85,17 @@ def test_adjacency_matrix():
     
     real_cell = torch.Tensor([1., 2., 1.])
     cutoff = 1.8
-    switching_function=SwitchingFunctions('Fermi', cutoff, options={'q':0.01})
+    switching_function=SwitchingFunctions(in_features=n_atoms*3, name='Fermi', cutoff=cutoff, options={'q':0.01})
   
     model = AdjacencyMatrix(mode = 'continuous',
                             cutoff = cutoff, 
-                            n_atoms = 2,
+                            n_atoms = n_atoms,
                             PBC = True,
                             real_cell = real_cell,
                             scaled_coords = False,
                             switching_function=switching_function)
     out = model(pos)
+    assert(out.reshape(pos.shape[0], -1).shape[-1] == model.out_features)
 
 if __name__ == "__main__":
     test_adjacency_matrix()
