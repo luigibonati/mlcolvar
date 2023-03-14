@@ -146,11 +146,13 @@ def plot_metrics(metrics,
         lstyle=linestyles[i] if linestyles is not None else None
         label=labels[i] if labels is not None else key
         color=colors[i] if colors is not None else None
-        ax.plot(epoch,loss,linestyle=lstyle,label=label,color=color)
+        # fix length mismatch between train_loss_epoch and others metrics
+        x = epoch if len(epoch) == len(loss) else epoch[1:]
+        ax.plot(x,loss,linestyle=lstyle,label=label,color=color)
 
     # Plot settings
     if xlabel is not None:
-        ax.set_ylabel(xlabel)
+        ax.set_xlabel(xlabel)
     if ylabel is not None:
         ax.set_ylabel(ylabel)
     if title is not None:
