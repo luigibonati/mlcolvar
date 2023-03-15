@@ -1,4 +1,9 @@
 """Input/output functions."""
+# pandas
+try:
+    import pandas as pd
+except ImportError as e:
+    raise ImportError('pandas is required to use the i/o utils (mlcvs.utils.io)\n',e)
 
 import pandas as pd
 import numpy as np

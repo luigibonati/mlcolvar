@@ -1,8 +1,22 @@
 import torch
 import numpy as np
-import pandas as pd
 from bisect import bisect_left
 from mlcvs.data import DictionaryDataset
+import warnings
+
+# optional packages
+# pandas
+try:
+    import pandas as pd
+    PANDAS_IS_INSTALLED = True
+except ImportError:
+    PANDAS_IS_INSTALLED = False
+# tqdm (progress bar)
+try:
+    from tqdm import tqdm
+    TQDM_IS_INSTALLED = True
+except ImportError:
+    TQDM_IS_INSTALLED = False
 
 __all__ = ['find_timelagged_configurations','create_timelagged_dataset']
 
@@ -70,7 +84,7 @@ def tprime_evaluation(t, logweights = None):
 
     return tprime
 
-def find_timelagged_configurations(x,t,lag_time):
+def find_timelagged_configurations(x,t,lag_time,progress_bar=True):
     '''
     Searches for all the pairs which are distant 'lag' in time, and returns the weights associated to lag=lag as well as the weights for lag=0.
 
@@ -78,6 +92,7 @@ def find_timelagged_configurations(x,t,lag_time):
         x (tensor): array whose columns are the descriptors and rows the time evolution
         time (tensor): array with the simulation time
         lag (float): lag-time
+        progress_bar(bool): display progress bar with tqdm (if installed)
 
     Returns:
         x_t (tensor): array of descriptors at time t
@@ -95,8 +110,15 @@ def find_timelagged_configurations(x,t,lag_time):
     #start_j = 0
     N = len(t)
     
+    def progress(iter,progress_bar=progress_bar):
+        if progress_bar and TQDM_IS_INSTALLED:
+            return tqdm(iter)
+        else:
+            return iter
+            warnings.warn('Monitoring the progress for the search of time-lagged configurations with a progress_bar requires `tqdm`.')
+
     #loop over time array and find pairs which are far away by lag_time
-    for i in range(idx_end):
+    for i in progress(range(idx_end)):
         stop_condition = lag_time+t[i+1]
         n_j = 0
         
@@ -122,7 +144,7 @@ def find_timelagged_configurations(x,t,lag_time):
 
     return x_t,x_lag,w_t,w_lag
 
-def create_timelagged_dataset(X, t = None, lag_time = 1, logweights = None, tprime = None, interval = None):
+def create_timelagged_dataset(X, t = None, lag_time = 1, logweights = None, tprime = None, interval = None, progress_bar = False):
     """
     Create a DictionaryDataset of time-lagged configurations. If a set of (log)weights is given the search is performed in the accelerated time.
     
@@ -141,6 +163,8 @@ def create_timelagged_dataset(X, t = None, lag_time = 1, logweights = None, tpri
     interval : list or np.array or tuple, optional
         Range for slicing the returned dataset. Useful to work with batches of same sizes.
         Recall that with different lag_times one obtains different datasets, with different lengths 
+    progress_bar: bool
+        Display progress bar with tqdm
 
     Returns
     -------
@@ -148,12 +172,13 @@ def create_timelagged_dataset(X, t = None, lag_time = 1, logweights = None, tpri
         Dataset with keys 'data', 'data_lag' (data at time t and t+lag), 'weights', 'weights_lag' (weights at time t and t+lag). 
 
     """
-
-    # check if dataframe
-    if type(X) == pd.core.frame.DataFrame:
-        X = X.values
-    if type(t) == pd.core.frame.DataFrame:
-        t = t.values
+    
+    if PANDAS_IS_INSTALLED:
+        # check if dataframe
+        if type(X) == pd.core.frame.DataFrame:
+            X = X.values
+        if type(t) == pd.core.frame.DataFrame:
+            t = t.values
 
     # define time if not given
     if t is None:
@@ -167,7 +192,7 @@ def create_timelagged_dataset(X, t = None, lag_time = 1, logweights = None, tpri
         tprime = tprime_evaluation(t, logweights)
 
     # find pairs of configurations separated by lag_time
-    x_t,x_lag,w_t,w_lag = find_timelagged_configurations(X, tprime,lag_time=lag_time)
+    x_t,x_lag,w_t,w_lag = find_timelagged_configurations(X, tprime,lag_time=lag_time, progress_bar=progress_bar)
 
     if interval is not None:
         # convert to a list

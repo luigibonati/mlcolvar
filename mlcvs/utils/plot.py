@@ -61,8 +61,8 @@ def muller_brown_potential(x,y):
 
 def plot_isolines_2D(function, component=None, 
                      limits=((-1.8,1.2),(-0.4,2.1)),num_points=(100,100),
-                     mode='contourf',levels=12,vmax=None,cmap=None,colorbar=None,
-                     ax=None):
+                     mode='contourf',levels=12,cmap=None,colorbar=None,
+                     max_value = None,ax=None,**kwargs):
     """Plot isolines of a function/model in a 2D space."""
 
     # Define grid where to evaluate function
@@ -90,8 +90,8 @@ def plot_isolines_2D(function, component=None,
     else:
         z = function(xv,yv)
 
-    if vmax is not None:
-        z[z>vmax] = vmax
+    if max_value is not None:
+        z[z>max_value] = max_value
 
     # Setup plot
     return_axs = False
@@ -115,11 +115,11 @@ def plot_isolines_2D(function, component=None,
 
     # Plot
     if mode == 'contourf':
-        pp = ax.contourf(xv,yv,z,levels=levels,cmap=cmap)
+        pp = ax.contourf(xv,yv,z,levels=levels,cmap=cmap,**kwargs)
         if colorbar:
             plt.colorbar(pp,ax=ax)
     else:
-        pp =  ax.contour(xv,yv,z,levels=levels,cmap=cmap)
+        pp =  ax.contour(xv,yv,z,levels=levels,cmap=cmap,**kwargs)
     
     if return_axs:
         return ax

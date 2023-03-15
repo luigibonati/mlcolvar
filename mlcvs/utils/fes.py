@@ -4,18 +4,34 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
+import warnings
 
-# check whether KDEpy or scikit-learn is installed
-kdelib = 'KDEpy'
+# optional packages
+# pandas
+try:
+    import pandas as pd
+    PANDAS_IS_INSTALLED = True
+except ImportError:
+    PANDAS_IS_INSTALLED = False
+# check whether KDEpy and scikit-learn are installed (used for FES)
 try:
     from KDEpy import FFTKDE
     from KDEpy.utils import cartesian
+    KDEPY_IS_INSTALLED = True
 except ImportError:
+    KDEPY_IS_INSTALLED = False
+try:
+    from sklearn.neighbors import KernelDensity
+    SKLEARN_IS_INSTALLED = True
+except ImportError:
+    SKLEARN_IS_INSTALLED = False
+# set default backend based on installation
+if KDEPY_IS_INSTALLED:
+    kdelib = 'KDEpy'
+elif SKLEARN_IS_INSTALLED:
     kdelib = 'sklearn'
-    try:
-        from sklearn.neighbors import KernelDensity
-    except ImportError:
-        kdelib = None
+else:
+    kdelib = None
 
 def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0.01, kernel='gaussian', weights=None, scale_by = None, blocks = 1, fes_to_zero = None, plot=False, plot_max_fes=None, ax = None, backend=None, eps = 0):
     """Compute the Free Energy Surface along the given variables.
@@ -81,7 +97,7 @@ def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0
     if kdelib is None:
         raise NotImplementedError ('The function compute_fes requires either KDEpy (fast) or scikit-learn (slow) to work.')
     if kdelib == 'sklearn':
-        print('Warning: KDEpy is not installed, falling back to scikit-learn for kernel density estimation.')
+        warnings.warn('Warning: KDEpy is not installed, falling back to scikit-learn for kernel density estimation (very slow for d>1).')
 
     if backend == 'sklearn':
         from sklearn.neighbors import KernelDensity
@@ -94,13 +110,13 @@ def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0
         kbt = kb * temp
     
     # dataset
+    if PANDAS_IS_INSTALLED:
+        if type(X) == pd.DataFrame:
+            X = X.values
     if type(X) == list:
         X = np.vstack(X).T
-    elif type(X) == pd.DataFrame:
-        X = X.values
     elif type(X) == torch.Tensor:
         X = X.numpy()
-    
     if X.ndim == 1:
         X = X.reshape([-1,1])  
 
