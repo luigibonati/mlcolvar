@@ -29,7 +29,7 @@ cvs
 utils 
     [ ] io
         [X] load_dataframe
-        [ ] dataloader_from_file >> CHANGE IT (1) more general (2) datamodules
+        [X] dataloader_from_file >> CHANGE IT (1) more general (2) datamodules
     [ ] data
         [X] FastDictionaryLoader
         [X] DictionaryDataModule
@@ -61,15 +61,16 @@ TODO
 
 ## IO
 
-[ ] to do? 
+[X] to do? 
 
 ## CVS
 
 [X] remove decorators! 
 [X] training --> options = self.loss_options.copy()
-[ ] add option to add postprocessing after init
+[X] add option to add postprocessing after init
 [ ] print optim and loss options in summary
 [ ] add flag to apply preprocessing during training (default = None, complain when preprocessing is not None)
+[ ] assert out_features of preprocessing is consistent with in_features of blocks
 
 ## UTILS.DATA
 
@@ -82,14 +83,14 @@ TODO
 
 ## STATS
 
-[ ] Add base class
+[X] Add base class
 
 ## TRANSFORM 
 
 [X] Pairwise distances
 [ ] symmetry functions
 [X] Add utils for switching functions? 
-[ ] Add in_features out_features to transform classes
+[X] Add in_features out_features to transform classes
 
 ## MODELS
 
@@ -98,7 +99,7 @@ TODO
 
 ## EXPORT
 
-[ ] check device for normalization buffers 
+[~] check device for normalization buffers 
 [ ] add export function?
 [ ] export torchscript model as checkpoint
 
