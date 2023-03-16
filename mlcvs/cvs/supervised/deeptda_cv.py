@@ -126,7 +126,7 @@ def test_deeptda_cv():
         print(model)
 
         # create dataset
-        samples = 50
+        samples = 100
         X = torch.randn((samples * n_states, 2))
 
         # create labels
