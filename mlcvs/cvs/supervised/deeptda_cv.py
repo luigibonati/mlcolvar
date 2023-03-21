@@ -97,9 +97,9 @@ class DeepTDA_CV(BaseCV, pl.LightningModule):
         loss, loss_centers, loss_sigmas = self.loss_function(z, labels, **options)
         # ====================log=====================+
         name = 'train' if self.training else 'valid'
-        self.log(f'{name}_loss', loss.to(float), on_epoch=True)
-        self.log(f'{name}_loss_centers', loss_centers.to(float), on_epoch=True)
-        self.log(f'{name}_loss_sigmas', loss_sigmas.to(float), on_epoch=True)
+        self.log(f'{name}_loss', loss, on_epoch=True)
+        self.log(f'{name}_loss_centers', loss_centers, on_epoch=True)
+        self.log(f'{name}_loss_sigmas', loss_sigmas, on_epoch=True)
         return loss
 
 # TODO signature of tests?

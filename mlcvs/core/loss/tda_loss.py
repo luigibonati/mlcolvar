@@ -8,7 +8,7 @@ def TDA_loss(H : torch.tensor,
             n_states : int,
             target_centers : list or torch.tensor,
             target_sigmas : list or torch.tensor,
-            alfa : float = 1,
+            alpha : float = 1,
             beta : float = 100) -> torch.tensor:
     """
     Compute a loss function as the distance from a simple Gaussian target distribution.
@@ -27,10 +27,10 @@ def TDA_loss(H : torch.tensor,
     target_sigmas : list or torch.tensor
         Standard deviations of the Gaussian targets
         Shape: (n_states, n_cvs)
-    alfa : float, optional
+    alpha : float, optional
         Centers_loss component prefactor, by default 1
     beta : float, optional
-        Sigmas loss compontent prefactor, by default 100
+        Sigmas loss component prefactor, by default 100
 
     Returns
     -------
@@ -50,17 +50,17 @@ def TDA_loss(H : torch.tensor,
             raise ValueError(f'State {i} was not represented in this batch! Either use bigger batch_size or a more equilibrated dataset composition!')
         else:
             H_red = H[torch.nonzero(labels == i, as_tuple=True)]
-
+            
             # compute mean and standard deviation over the class i
             mu = torch.mean(H_red, 0)
             if len(torch.nonzero(labels == i)) == 1:
-                warn(f'There is only sample for state {i} in this batch! Std is set to 0, this may affect the training! Either use bigger batch_size or a more equilibrated dataset composition!')
+                warn(f'There is only one sample for state {i} in this batch! Std is set to 0, this may affect the training! Either use bigger batch_size or a more equilibrated dataset composition!')
                 sigma = 0
             else:
                 sigma = torch.std(H_red, 0)
 
         # compute loss function contributes for class i
-        loss_centers[i] = alfa*(mu - target_centers[i]).pow(2)
+        loss_centers[i] = alpha*(mu - target_centers[i]).pow(2)
         loss_sigmas[i] = beta*(sigma - target_sigmas[i]).pow(2)
         
         
