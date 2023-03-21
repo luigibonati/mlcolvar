@@ -1,0 +1,61 @@
+#!/usr/bin/env python
+
+
+# =============================================================================
+# MODULE DOCSTRING
+# =============================================================================
+
+"""
+Test objects and function in mlcvs.cvs.unsupervised.vae.
+"""
+
+
+# =============================================================================
+# GLOBAL IMPORTS
+# =============================================================================
+
+import pytest
+import pytorch_lightning as pl
+import torch
+
+from mlcvs.cvs.unsupervised.vae import VAE_CV
+from mlcvs.data import DictionaryDataset, DictionaryDataModule
+
+
+# =============================================================================
+# TESTS
+# =============================================================================
+
+@pytest.mark.parametrize('weights', [False, True])
+def test_vae_cv_training(weights):
+    """Run a full training of a VAECv."""
+    # Create VAE CV.
+    n_cvs = 2
+    in_features = 8
+    model = VAE_CV(
+        n_cvs=n_cvs,
+        encoder_layers=[in_features, 6, 4],
+        options={
+            'normIn': None,
+            'encoder': {'activation' : 'relu'},
+        }
+    )
+
+    # Create input data.
+    batch_size = 100
+    x = torch.randn(batch_size, in_features)
+    data = {'data': x}
+
+    # Create weights.
+    if weights is True:
+        data['weights'] = torch.rand(batch_size)
+
+    # Train.
+    datamodule = DictionaryDataModule(DictionaryDataset(data))
+    trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2, logger=None, enable_checkpointing=False)
+    trainer.fit(model, datamodule)
+
+    # Eval.
+    model.eval()
+    x_hat = model(x)
+    assert x_hat.shape == (batch_size, n_cvs)
