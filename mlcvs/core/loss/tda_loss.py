@@ -3,28 +3,28 @@ from warnings import warn
 
 __all__ = ["TDA_loss"]
 
-def TDA_loss(H : torch.tensor,
-            labels : torch.tensor,
+def TDA_loss(H : torch.Tensor,
+            labels : torch.Tensor,
             n_states : int,
-            target_centers : list or torch.tensor,
-            target_sigmas : list or torch.tensor,
+            target_centers : list or torch.Tensor,
+            target_sigmas : list or torch.Tensor,
             alfa : float = 1,
-            beta : float = 100) -> torch.tensor:
+            beta : float = 100) -> torch.Tensor:
     """
     Compute a loss function as the distance from a simple Gaussian target distribution.
     
     Parameters
     ----------
-    H : torch.tensor
+    H : torch.Tensor
         Output of the NN
-    labels : torch.tensor
+    labels : torch.Tensor
         Labels of the dataset
     n_states : int
         Number of states in the target
-    target_centers : list or torch.tensor
+    target_centers : list or torch.Tensor
         Centers of the Gaussian targets
         Shape: (n_states, n_cvs)
-    target_sigmas : list or torch.tensor
+    target_sigmas : list or torch.Tensor
         Standard deviations of the Gaussian targets
         Shape: (n_states, n_cvs)
     alfa : float, optional
@@ -34,7 +34,7 @@ def TDA_loss(H : torch.tensor,
 
     Returns
     -------
-    torch.tensor
+    torch.Tensor
         Total loss, centers loss, sigmas loss
     """
     if not isinstance(target_centers,torch.Tensor):

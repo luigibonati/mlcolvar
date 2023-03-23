@@ -8,7 +8,7 @@ def reduce_eigenvalues( evals : torch.Tensor, mode = 'sum', n_eig = 0 ):
 
         Parameters
         ----------
-        eval : torch.tensor
+        eval : torch.Tensor
             Eigenvalues
         mode : str
             function of the eigenvalues to optimize (see notes)
@@ -27,7 +27,7 @@ def reduce_eigenvalues( evals : torch.Tensor, mode = 'sum', n_eig = 0 ):
 
         Returns
         -------
-        loss : torch.tensor (scalar)
+        loss : torch.Tensor (scalar)
             score
         """
 

@@ -62,13 +62,13 @@ class AutoEncoder_CV(BaseCV, pl.LightningModule):
         # ===== LOSS OPTIONS =====
         self.loss_options = {}   
 
-    def forward_blocks(self, x: torch.tensor) -> (torch.tensor):
+    def forward_blocks(self, x: torch.Tensor) -> (torch.Tensor):
         if self.normIn is not None:
             x = self.normIn(x)
         x = self.encoder(x)
         return x
 
-    def encode_decode(self, x: torch.tensor) -> (torch.tensor):
+    def encode_decode(self, x: torch.Tensor) -> (torch.Tensor):
         x = self.forward(x)
         x = self.decoder(x)
         if self.normIn is not None:

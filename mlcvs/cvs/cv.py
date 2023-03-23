@@ -86,7 +86,7 @@ class BaseCV:
             if isinstance(getattr(self,b), Transform): 
                 getattr(self,b).setup_from_datamodule(datamodule)
 
-    def forward(self, x : torch.tensor) -> (torch.tensor):
+    def forward(self, x : torch.Tensor) -> (torch.Tensor):
         """
         Evaluation of the CV
 
@@ -96,12 +96,12 @@ class BaseCV:
 
         Parameters
         ----------
-        x : torch.tensor
+        x : torch.Tensor
             Input of the forward operation of the model
 
         Returns
         -------
-        torch.tensor
+        torch.Tensor
             Output of the forward operation of the model
         """
 
@@ -115,7 +115,7 @@ class BaseCV:
 
         return x
 
-    def forward_blocks(self, x : torch.tensor) -> (torch.tensor):
+    def forward_blocks(self, x : torch.Tensor) -> (torch.Tensor):
         """
         Execute sequentially all the blocks in self.BLOCKS unless they are not initialized.
         
@@ -123,12 +123,12 @@ class BaseCV:
 
         Parameters
         ----------
-        x : torch.tensor
+        x : torch.Tensor
             Input of the forward operation of the model
 
         Returns
         -------
-        torch.tensor
+        torch.Tensor
             Output of the forward operation of the model
         """
 

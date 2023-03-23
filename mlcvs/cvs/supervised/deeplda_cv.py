@@ -60,7 +60,7 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
         # ===== LOSS OPTIONS =====
         self.loss_options = {'mode':'sum'}      # eigenvalue reduction mode
 
-    def forward_nn(self, x: torch.tensor) -> (torch.tensor):
+    def forward_nn(self, x: torch.Tensor) -> (torch.Tensor):
         if self.normIn is not None:
             x = self.normIn(x)
         x = self.nn(x)
@@ -120,12 +120,12 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
 
         Parameters
         ----------
-        eigenvalues : torch.tensor
+        eigenvalues : torch.Tensor
             LDA eigenvalues
 
         Returns
         -------
-        loss : torch.tensor
+        loss : torch.Tensor
             loss function
         """
         loss = - reduce_eigenvalues(eigenvalues, **kwargs)

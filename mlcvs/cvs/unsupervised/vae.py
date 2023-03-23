@@ -104,7 +104,7 @@ class VAE_CV(BaseCV, pl.LightningModule):
         """Number of CVs."""
         return self.decoder.in_features
 
-    def forward_blocks(self, x: torch.tensor) -> torch.Tensor:
+    def forward_blocks(self, x: torch.Tensor) -> torch.Tensor:
         """Compute the value of the CV from preprocessed input.
 
         Return the mean output (ignoring the variance output) of the encoder
@@ -129,7 +129,7 @@ class VAE_CV(BaseCV, pl.LightningModule):
         # Take only the means and ignore the log variances.
         return x[..., :self.n_cvs]
 
-    def encode_decode(self, x: torch.tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def encode_decode(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Run a pass of encoding + decoding.
 
         The function applies the normalizing to the inputs and its reverse on

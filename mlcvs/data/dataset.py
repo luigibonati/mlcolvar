@@ -27,7 +27,7 @@ class DictionaryDataset(Dataset):
         # Add kwargs to dict
         dictionary = {**dictionary, **locals()['kwargs']}
 
-        # convert to torch.tensors
+        # convert to torch.Tensors
         for key,val in dictionary.items():
             if not isinstance(val,torch.Tensor):
                 dictionary[key] = torch.Tensor(val)
