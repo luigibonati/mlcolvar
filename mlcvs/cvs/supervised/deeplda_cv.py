@@ -35,7 +35,7 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
 
         # ===== BLOCKS =====
 
-        options = self.sanitize_options(options)
+        options = self.parse_options(options)
 
         # Save n_states
         self.n_states = n_states
@@ -57,7 +57,8 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
         self.lorentzian_reg = 40 # == 2/sw_reg, see set_regularization   
         self.set_regularization(sw_reg=0.05)
 
-        # ===== LOSS OPTIONS =====
+        # ===== LOSS  =====
+
         self.loss_kwargs = {'mode':'sum'}      # eigenvalue reduction mode
 
     def forward_nn(self, x: torch.Tensor) -> (torch.Tensor):

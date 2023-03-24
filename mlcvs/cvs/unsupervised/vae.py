@@ -76,7 +76,7 @@ class VAE_CV(BaseCV, pl.LightningModule):
 
         # ===== BLOCKS =====
 
-        options = self.sanitize_options(options)
+        options = self.parse_options(options)
 
         # parse info from args
         if decoder_layers is None:

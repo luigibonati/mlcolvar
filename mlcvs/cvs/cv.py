@@ -46,8 +46,11 @@ class BaseCV:
         # LOSS
         self.loss_kwargs = {}
 
-    def sanitize_options(self, options : dict = None):
+    def parse_options(self, options : dict = None):
         """
+        Sanitize options and create defaults ({}) if not in options.
+        Furthermore, sets loss and optimizer kwargs if given. 
+
         Parameters
         ----------
         options : dict[str, Any], optional
@@ -63,10 +66,10 @@ class BaseCV:
             if o not in self.BLOCKS:
                 if o == 'loss':
                     self.set_loss_kwargs(options[o])
-                elif o == 'optim':
+                elif o == 'optimizer':
                     self.set_optimizer_kwargs(options[o])
                 else:
-                    raise ValueError(f'The key {o} is not available in this class. The available keys are: {",".join(self.BLOCKS)},loss,optim ')
+                    raise ValueError(f'The key {o} is not available in this class. The available keys are: {",".join(self.BLOCKS)}, + (loss,optimizer) ')
 
         return options
 
@@ -189,7 +192,7 @@ class BaseCV:
 
         Parameters
         ----------
-        optim : str
+        optimizer_name : str
             Name of the torch.optim optimizer
         """
         if not hasattr(torch.optim, optimizer_name):

@@ -38,7 +38,7 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
 
         # ===== BLOCKS =====
 
-        options = self.sanitize_options(options)
+        options = self.parse_options(options)
 
         # initialize normIn
         o = 'normIn'
