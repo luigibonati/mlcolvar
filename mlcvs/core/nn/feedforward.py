@@ -69,7 +69,7 @@ class FeedForward(pl.LightningModule):
     #    repr = f"in_features={self.in_features}, out_features={self.out_features}"
     #    return repr
 
-    def forward(self, x: torch.tensor) -> (torch.tensor):
+    def forward(self, x: torch.Tensor) -> (torch.Tensor):
         return self.nn(x)
 
 def test_feedforward():

@@ -97,14 +97,14 @@ class VAE_CV(BaseCV, pl.LightningModule):
         self.decoder = FeedForward([n_cvs] + decoder_layers, **options[o])
 
         # ===== LOSS OPTIONS =====
-        self.loss_options = {}   
+        self.loss_kwargs = {}   
 
     @property
     def n_cvs(self):
         """Number of CVs."""
         return self.decoder.in_features
 
-    def forward_blocks(self, x: torch.tensor) -> torch.Tensor:
+    def forward_cv(self, x: torch.Tensor) -> torch.Tensor:
         """Compute the value of the CV from preprocessed input.
 
         Return the mean output (ignoring the variance output) of the encoder
@@ -129,7 +129,7 @@ class VAE_CV(BaseCV, pl.LightningModule):
         # Take only the means and ignore the log variances.
         return x[..., :self.n_cvs]
 
-    def encode_decode(self, x: torch.tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def encode_decode(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Run a pass of encoding + decoding.
 
         The function applies the normalizing to the inputs and its reverse on
@@ -179,7 +179,7 @@ class VAE_CV(BaseCV, pl.LightningModule):
 
     def training_step(self, train_batch, batch_idx):
         """Single training step performed by the PyTorch Lightning Trainer."""
-        options = self.loss_options.copy()
+        options = self.loss_kwargs.copy()
         x = train_batch['data']
         if 'weights' in train_batch:
             options['weights'] = train_batch['weights']

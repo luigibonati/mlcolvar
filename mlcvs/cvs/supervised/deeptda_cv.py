@@ -76,7 +76,7 @@ class DeepTDA_CV(BaseCV, pl.LightningModule):
         o = 'nn'
         self.nn = FeedForward(layers, **options[o])
     
-        self.loss_options = {'n_states': n_states,
+        self.loss_kwargs = {'n_states': n_states,
                              'target_centers': target_centers,
                              'target_sigmas':  target_sigmas                     
                             }
@@ -87,12 +87,12 @@ class DeepTDA_CV(BaseCV, pl.LightningModule):
         return loss, loss_centers, loss_sigmas
 
     def training_step(self, train_batch, batch_idx):
-        options = self.loss_options.copy()
+        options = self.loss_kwargs.copy()
         # =================get data===================
         x = train_batch['data']
         labels = train_batch['labels']
         # =================forward====================
-        z = self.forward_blocks(x)
+        z = self.forward_cv(x)
         # ===================loss=====================
         loss, loss_centers, loss_sigmas = self.loss_function(z, labels, **options)
         # ====================log=====================+

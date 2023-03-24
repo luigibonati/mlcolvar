@@ -48,21 +48,21 @@ class Regression_CV(BaseCV, pl.LightningModule):
         self.nn = FeedForward(layers, **options[o])
 
         # ===== LOSS OPTIONS =====
-        self.loss_options = {}   
+        self.loss_kwargs = {}   
 
     def loss_function(self, diff, **kwargs):
         # Reconstruction (MSE) loss
         return MSE_loss(diff, **kwargs)
 
     def training_step(self, train_batch, batch_idx):
-        options = self.loss_options.copy()
+        options = self.loss_kwargs.copy()
         # =================get data===================
         x = train_batch['data']
         labels = train_batch['target']
         if 'weights' in train_batch:
             options['weights'] = train_batch['weights'] 
         # =================forward====================
-        y = self.forward_blocks(x)
+        y = self.forward_cv(x)
         # ===================loss=====================
         diff = y - labels
         loss = self.loss_function(diff, **options)
@@ -94,8 +94,8 @@ def test_regression_cv():
     dataset = DictionaryDataset({'data':X,'target':y})
     datamodule = DictionaryDataModule(dataset,lengths=[0.75,0.2,0.05], batch_size=25)
     # train model
-    model.set_optim_name('SGD')
-    model.set_optim_options(lr=1e-2)
+    model.set_optimizer_name('SGD')
+    model.set_optimizer_kwargs(lr=1e-2)
     trainer = pl.Trainer(accelerator='cpu',max_epochs=1,logger=None, enable_checkpointing=False)
     trainer.fit( model, datamodule )
     model.eval()

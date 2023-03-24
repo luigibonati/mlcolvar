@@ -9,7 +9,7 @@ def sanitize_range( Range : torch.Tensor):
 
     Parameters
     ----------
-    Range : torch.tensor
+    Range : torch.Tensor
         range to be used for standardization
 
     """
