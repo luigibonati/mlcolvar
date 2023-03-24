@@ -104,7 +104,7 @@ class VAE_CV(BaseCV, pl.LightningModule):
         """Number of CVs."""
         return self.decoder.in_features
 
-    def forward_blocks(self, x: torch.Tensor) -> torch.Tensor:
+    def forward_cv(self, x: torch.Tensor) -> torch.Tensor:
         """Compute the value of the CV from preprocessed input.
 
         Return the mean output (ignoring the variance output) of the encoder

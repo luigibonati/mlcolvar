@@ -108,14 +108,14 @@ class BaseCV:
         if self.preprocessing is not None:
             x = self.preprocessing(x)
 
-        x = self.forward_blocks(x)
+        x = self.forward_cv(x)
 
         if self.postprocessing is not None:
             x = self.postprocessing(x)
 
         return x
 
-    def forward_blocks(self, x : torch.Tensor) -> (torch.Tensor):
+    def forward_cv(self, x : torch.Tensor) -> (torch.Tensor):
         """
         Execute sequentially all the blocks in self.BLOCKS unless they are not initialized.
         
