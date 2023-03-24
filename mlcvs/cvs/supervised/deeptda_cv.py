@@ -32,7 +32,7 @@ class DeepTDA_CV(BaseCV, pl.LightningModule):
         n_states : int
             Number of states for the training
         n_cvs : int
-            Numnber of collective variables to be trained
+            Number of collective variables to be trained
         target_centers : list
             Centers of the Gaussian targets
         target_sigmas : list

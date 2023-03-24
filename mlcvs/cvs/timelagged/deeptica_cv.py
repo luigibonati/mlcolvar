@@ -12,7 +12,7 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
     
     BLOCKS = ['normIn','nn','tica'] 
 
-    def __init__(self, layers : list , out_features : int = None, options : dict = None, **kwargs): 
+    def __init__(self, layers : list , n_cvs : int = None, options : dict = None, **kwargs): 
         """ 
         Neural network-based TICA CV.
         Perform a non-linear featurization of the inputs with a neural-network and optimize it as to maximize autocorrelation (e.g. eigenvalues of the transfer operator approximation).
@@ -21,7 +21,7 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
         ----------
         layers : list
             Number of neurons per layer
-        n_eig : int, optional
+        n_cvs : int, optional
             Number of cvs to optimize, default None (= last layer)
         options : dict[str, Any], optional
             Options for the building blocks of the model, by default {}.
@@ -29,7 +29,7 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
             Set 'block_name' = None or False to turn off that block
         """
         super().__init__(in_features=layers[0], 
-                         out_features=out_features if out_features is not None else layers[-1], 
+                         out_features=n_cvs if n_cvs is not None else layers[-1], 
                          **kwargs)
 
         # =======   LOSS  ======= 
@@ -56,7 +56,7 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
 
         # initialize lda
         o = 'tica'
-        self.tica = TICA(layers[-1], self.out_features, **options[o])
+        self.tica = TICA(layers[-1], n_cvs, **options[o])
         
     def forward_nn(self, x: torch.Tensor) -> (torch.Tensor):
         if self.normIn is not None:
@@ -117,10 +117,10 @@ def test_deep_tica():
 
     # create cv
     layers = [2,10,10,2]
-    model = DeepTICA_CV(layers,out_features=1)
+    model = DeepTICA_CV(layers,n_cvs=1)
 
     # change loss options
-    model.set_loss_kwargs({'mode': 'sum2'})
+    model.loss_kwargs.update({'mode': 'sum2'})
 
     # create trainer and fit
     trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2, logger=None, enable_checkpointing=False)

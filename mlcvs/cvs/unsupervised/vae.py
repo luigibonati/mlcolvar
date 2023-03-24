@@ -101,7 +101,7 @@ class VAE_CV(BaseCV, pl.LightningModule):
         o = 'decoder'
         self.decoder = FeedForward([n_cvs] + decoder_layers, **options[o])
 
-    @property
+    @property # TODO: shall we remove it as it is equal to the one in baseCV?
     def n_cvs(self):
         """Number of CVs."""
         return self.decoder.in_features
