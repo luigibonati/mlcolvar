@@ -97,7 +97,7 @@ class VAE_CV(BaseCV, pl.LightningModule):
         self.decoder = FeedForward([n_cvs] + decoder_layers, **options[o])
 
         # ===== LOSS OPTIONS =====
-        self.loss_options = {}   
+        self.loss_kwargs = {}   
 
     @property
     def n_cvs(self):
@@ -179,7 +179,7 @@ class VAE_CV(BaseCV, pl.LightningModule):
 
     def training_step(self, train_batch, batch_idx):
         """Single training step performed by the PyTorch Lightning Trainer."""
-        options = self.loss_options.copy()
+        options = self.loss_kwargs.copy()
         x = train_batch['data']
         if 'weights' in train_batch:
             options['weights'] = train_batch['weights']

@@ -58,7 +58,7 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
         self.set_regularization(sw_reg=0.05)
 
         # ===== LOSS OPTIONS =====
-        self.loss_options = {'mode':'sum'}      # eigenvalue reduction mode
+        self.loss_kwargs = {'mode':'sum'}      # eigenvalue reduction mode
 
     def forward_nn(self, x: torch.Tensor) -> (torch.Tensor):
         if self.normIn is not None:
@@ -133,7 +133,7 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
         return loss
 
     def training_step(self, train_batch, batch_idx):
-        options = self.loss_options.copy()
+        options = self.loss_kwargs.copy()
         # =================get data===================
         x = train_batch['data']
         y = train_batch['labels']

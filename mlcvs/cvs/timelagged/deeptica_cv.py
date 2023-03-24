@@ -33,7 +33,7 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
                          **kwargs)
 
         # ===== LOSS OPTIONS ===== 
-        self.loss_options = {'mode':'sum2',     # eigenvalue reduction mode
+        self.loss_kwargs = {'mode':'sum2',     # eigenvalue reduction mode
                             'n_eig': 0 }        # how many eigenvalues to optimize (0 == all) 
 
         # ===== BLOCKS =====
@@ -95,7 +95,7 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
         2) Remove average (inside forward_nn)
         3) Compute TICA
         """
-        options = self.loss_options.copy()
+        options = self.loss_kwargs.copy()
         # =================get data===================
         x_t   = train_batch['data']
         x_lag = train_batch['data_lag']
@@ -134,7 +134,7 @@ def test_deep_tica():
     model = DeepTICA_CV(layers,out_features=1)
 
     # change loss options
-    model.set_loss_options({'mode': 'sum2'})
+    model.set_loss_kwargs({'mode': 'sum2'})
 
     # create trainer and fit
     trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2, logger=None, enable_checkpointing=False)

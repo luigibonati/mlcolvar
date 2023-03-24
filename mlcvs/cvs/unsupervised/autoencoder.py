@@ -60,7 +60,7 @@ class AutoEncoder_CV(BaseCV, pl.LightningModule):
         self.decoder = FeedForward(decoder_layers, **options[o])
 
         # ===== LOSS OPTIONS =====
-        self.loss_options = {}   
+        self.loss_kwargs = {}   
 
     def forward_cv(self, x: torch.Tensor) -> (torch.Tensor):
         if self.normIn is not None:
@@ -80,7 +80,7 @@ class AutoEncoder_CV(BaseCV, pl.LightningModule):
         return MSE_loss(diff,**kwargs)
 
     def training_step(self, train_batch, batch_idx):
-        options = self.loss_options.copy()
+        options = self.loss_kwargs.copy()
         # =================get data===================
         x = train_batch['data']
         if 'weights' in train_batch:

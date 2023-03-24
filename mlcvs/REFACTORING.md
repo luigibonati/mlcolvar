@@ -66,7 +66,7 @@ TODO
 ## CVS
 
 [X] remove decorators! 
-[X] training --> options = self.loss_options.copy()
+[X] training --> options = self.loss_kwargs.copy()
 [X] add option to add postprocessing after init
 [ ] print optim and loss options in summary
 [ ] add flag to apply preprocessing during training (default = None, complain when preprocessing is not None)

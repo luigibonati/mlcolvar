@@ -40,11 +40,11 @@ class BaseCV:
         self.example_input_array = torch.randn(self.in_features)
 
         # OPTIM
-        self.optim_name = 'Adam'
-        self.optim_options = {}
+        self.optimizer_name = 'Adam'
+        self.optimizer_kwargs = {}
 
         # LOSS
-        self.loss_options = {}
+        self.loss_kwargs = {}
 
     def sanitize_options(self, options : dict = None):
         """
@@ -62,9 +62,9 @@ class BaseCV:
         for o in options.keys():
             if o not in self.BLOCKS:
                 if o == 'loss':
-                    self.set_loss_options(options[o])
+                    self.set_loss_kwargs(options[o])
                 elif o == 'optim':
-                    self.set_optim_options(options[o])
+                    self.set_optimizer_kwargs(options[o])
                 else:
                     raise ValueError(f'The key {o} is not available in this class. The available keys are: {",".join(self.BLOCKS)},loss,optim ')
 
@@ -165,14 +165,14 @@ class BaseCV:
         """
         self.loss_function = fn
 
-    def set_loss_options(self, options : dict = None, **kwargs):
+    def set_loss_kwargs(self, options : dict = None, **kwargs):
 
         """
         Save loss functions options to be used in train/valid step. It can either take a dictionary or arguments. 
 
         Examples:
-        >>> cvs.set_loss_options(options = {'a' : 1, 'b' : 2})
-        >>> cvs.set_loss_options(a=1,b=2)
+        >>> cvs.set_loss_kwargs(options = {'a' : 1, 'b' : 2})
+        >>> cvs.set_loss_kwargs(a=1,b=2)
 
         Parameters
         ----------
@@ -182,27 +182,27 @@ class BaseCV:
         if options is None:
             options = {}
         #update saved options based on both provided dict options and kwargs
-        self.loss_options.update({**options, **locals()['kwargs']})
+        self.loss_kwargs.update({**options, **locals()['kwargs']})
 
-    def set_optim_name(self, optim_name : str): 
-        """Choose optimizer. Options can be set using set_optim_options. Actual optimizer will be return from configure_optimizer function.
+    def set_optimizer_name(self, optimizer_name : str): 
+        """Choose optimizer. Options can be set using set_optimizer_kwargs. Actual optimizer will be return from configure_optimizer function.
 
         Parameters
         ----------
         optim : str
             Name of the torch.optim optimizer
         """
-        if not hasattr(torch.optim, optim_name):
-            raise AttributeError (f'torch.optim does not have a {optim_name} optimizer.')
-        self.optim_name = optim_name
+        if not hasattr(torch.optim, optimizer_name):
+            raise AttributeError (f'torch.optim does not have a {optimizer_name} optimizer.')
+        self.optimizer_name = optimizer_name
 
-    def set_optim_options(self, options : dict = None, **kwargs):
+    def set_optimizer_kwargs(self, options : dict = None, **kwargs):
         """
         Save options to be used for creating optimizer in configure_optimizer function.
 
         Examples:
-        >>> cvs.set_optim_options(options = {'weight_decay' : 1e-5, 'lr' : 1e-3})
-        >>> cvs.set_optim_options(lr=1e-3)
+        >>> cvs.set_optimizer_kwargs(options = {'weight_decay' : 1e-5, 'lr' : 1e-3})
+        >>> cvs.set_optimizer_kwargs(lr=1e-3)
 
         Parameters
         ----------
@@ -212,16 +212,16 @@ class BaseCV:
         if options is None:
             options = {}
         #update saved options based on both provided dict options and kwargs
-        self.optim_options.update({**options, **locals()['kwargs']})
+        self.optimizer_kwargs.update({**options, **locals()['kwargs']})
 
     def configure_optimizers(self): 
         """
-        Initialize the optimizer based on self.optim_name and self.optim_options.
+        Initialize the optimizer based on self.optimizer_name and self.optimizer_kwargs.
 
         Returns
         -------
         torch.optim
             Torch optimizer
         """ 
-        optimizer = getattr(torch.optim,self.optim_name)(self.parameters(),**self.optim_options)
+        optimizer = getattr(torch.optim,self.optimizer_name)(self.parameters(),**self.optimizer_kwargs)
         return optimizer
