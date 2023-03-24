@@ -94,8 +94,8 @@ def test_regression_cv():
     dataset = DictionaryDataset({'data':X,'target':y})
     datamodule = DictionaryDataModule(dataset,lengths=[0.75,0.2,0.05], batch_size=25)
     # train model
-    model.set_optimizer_name('SGD')
-    model.set_optimizer_kwargs(lr=1e-2)
+    model.optimizer_name ='SGD'
+    model.optimizer_kwargs.update(dict(lr=1e-2))
     trainer = pl.Trainer(accelerator='cpu',max_epochs=1,logger=None, enable_checkpointing=False)
     trainer.fit( model, datamodule )
     model.eval()
@@ -114,7 +114,7 @@ def test_regression_cv():
     trainer = pl.Trainer(accelerator='cpu',max_epochs=1,logger=None, enable_checkpointing=False)
 
     model = Regression_CV( layers = [2,10,10,1])
-    model.set_loss_fn( lambda x: x.abs().mean() )
+    model.loss_fn = lambda x: x.abs().mean() 
     trainer.fit( model, datamodule )
 
 if __name__ == "__main__":
