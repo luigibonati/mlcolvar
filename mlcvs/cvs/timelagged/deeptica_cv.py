@@ -32,13 +32,18 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
                          out_features=out_features if out_features is not None else layers[-1], 
                          **kwargs)
 
-        # ===== LOSS OPTIONS ===== 
-        self.loss_kwargs = {'mode':'sum2',     # eigenvalue reduction mode
-                            'n_eig': 0 }        # how many eigenvalues to optimize (0 == all) 
+        # =======   LOSS  ======= 
+        self.loss_fn     = reduce_eigenvalues   # maximize TICA eigenvalues        
+        self.loss_kwargs = {                    # set default values before parsing options
+                            'mode':'sum2',      # eigenvalue reduction mode
+                            'n_eig': 0          # how many eigenvalues to optimize (0 == all) 
+                            }
 
-        # ===== BLOCKS =====
-
+        # ======= OPTIONS ======= 
+        # parse and sanitize
         options = self.parse_options(options)
+
+        # ======= BLOCKS =======
 
         # initialize normIn
         o = 'normIn'
@@ -70,25 +75,6 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
         """
         self.tica.reg_c0 = c0_reg
 
-    def loss_function(self, eigenvalues, **kwargs):
-        """
-        Loss function for the DeepTICA CV. Correspond to maximizing the eigenvalue(s) of TICA.
-        By default the sum of the squares is maximized.
-
-        Parameters
-        ----------
-        eigenvalues : torch.Tensor
-            TICA eigenvalues
-
-        Returns
-        -------
-        loss : torch.Tensor
-            loss function
-        """
-        loss = - reduce_eigenvalues(eigenvalues, **kwargs)
-
-        return loss
-
     def training_step(self, train_batch, batch_idx):
         """
         1) Calculate the NN output
@@ -109,7 +95,7 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
                                                     weights = [w_t,w_lag],
                                                     save_params=True)
         # ===================loss=====================
-        loss = self.loss_function(eigvals,**options)
+        loss = self.loss_fn(eigvals,**options)
         # ====================log=====================          
         name = 'train' if self.training else 'valid'       
         loss_dict = {f'{name}_loss' : loss}

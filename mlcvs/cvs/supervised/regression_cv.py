@@ -34,8 +34,12 @@ class Regression_CV(BaseCV, pl.LightningModule):
         """
         super().__init__(in_features=layers[0], out_features=layers[-1], **kwargs)
 
-        # ===== BLOCKS =====
+        # =======   LOSS  =======
+        self.loss_fn     = MSE_loss            # Reconstruction (MSE) loss
+        self.loss_kwargs = {'mode':'sum'}      # set default values before parsing options
 
+        # ======= OPTIONS ======= 
+        # parse and sanitize
         options = self.parse_options(options)
 
         # Initialize normIn
@@ -50,10 +54,6 @@ class Regression_CV(BaseCV, pl.LightningModule):
         # ===== LOSS OPTIONS =====
         self.loss_kwargs = {}   
 
-    def loss_function(self, diff, **kwargs):
-        # Reconstruction (MSE) loss
-        return MSE_loss(diff, **kwargs)
-
     def training_step(self, train_batch, batch_idx):
         options = self.loss_kwargs.copy()
         # =================get data===================
@@ -65,7 +65,7 @@ class Regression_CV(BaseCV, pl.LightningModule):
         y = self.forward_cv(x)
         # ===================loss=====================
         diff = y - labels
-        loss = self.loss_function(diff, **options)
+        loss = self.loss_fn(diff, **options)
         # ====================log===================== 
         name = 'train' if self.training else 'valid'       
         self.log(f'{name}_loss', loss, on_epoch=True)

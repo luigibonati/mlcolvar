@@ -40,11 +40,12 @@ class BaseCV:
         self.example_input_array = torch.randn(self.in_features)
 
         # OPTIM
-        self.optimizer_name = 'Adam'
-        self.optimizer_kwargs = {}
+        self.optimizer_name     = 'Adam'
+        self.optimizer_kwargs   = {}
 
         # LOSS
-        self.loss_kwargs = {}
+        self.loss_fn            = None
+        self.loss_kwargs        = {}
 
     def parse_options(self, options : dict = None):
         """
@@ -157,16 +158,16 @@ class BaseCV:
     def set_loss_fn(self, fn):
         """
         Overload loss function with given function. 'fn' need to have the following signature:
-        def f(x : torch.Tensor, options : dict = {} ) -> torch.Tensor 
-        where x is the same input as in the loss_function implemented in the CV.
-        Lambda functions can also be used: fn = lambda x, options : -x.sum()
+        def f(x : torch.Tensor, **kwargs ) -> torch.Tensor 
+        where x is the same input as in the loss_fn implemented in the CV.
+        Lambda functions can also be used: fn = lambda x : -x.sum()
 
         Parameters
         ----------
         fn : function
             Loss function to be used in train/valid
         """
-        self.loss_function = fn
+        self.loss_fn = fn
 
     def set_loss_kwargs(self, options : dict = None, **kwargs):
 

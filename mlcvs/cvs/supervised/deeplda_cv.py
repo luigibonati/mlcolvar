@@ -33,12 +33,19 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
         """
         super().__init__(in_features=layers[0], out_features=layers[-1], **kwargs)
 
-        # ===== BLOCKS =====
+        # =======   LOSS  ======= 
+        self.loss_fn     = reduce_eigenvalues   # maximize LDA eigenvalues
+        self.loss_kwargs = {                    # set default values before parsing options
+                            'mode':'sum'}       # eigenvalue reduction mode
 
+        # ======= OPTIONS ======= 
+        # parse and sanitize
         options = self.parse_options(options)
 
         # Save n_states
         self.n_states = n_states
+
+        # ======= BLOCKS =======
 
         # initialize normIn
         o = 'normIn'
@@ -56,10 +63,6 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
         # regularization
         self.lorentzian_reg = 40 # == 2/sw_reg, see set_regularization   
         self.set_regularization(sw_reg=0.05)
-
-        # ===== LOSS  =====
-
-        self.loss_kwargs = {'mode':'sum'}      # eigenvalue reduction mode
 
     def forward_nn(self, x: torch.Tensor) -> (torch.Tensor):
         if self.normIn is not None:
@@ -114,24 +117,6 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
         reg_loss_lor = -self.lorentzian_reg / (1 + (reg_loss - 1).pow(2))
         return reg_loss_lor
 
-    def loss_function(self, eigenvalues, **kwargs):
-        """
-        Loss function for the DeepLDA CV. Correspond to maximizing the eigenvalue(s) of LDA.
-        If there are C classes the sum of the C-1 eigenvalues will be maximized.
-
-        Parameters
-        ----------
-        eigenvalues : torch.Tensor
-            LDA eigenvalues
-
-        Returns
-        -------
-        loss : torch.Tensor
-            loss function
-        """
-        loss = - reduce_eigenvalues(eigenvalues, **kwargs)
-
-        return loss
 
     def training_step(self, train_batch, batch_idx):
         options = self.loss_kwargs.copy()
@@ -143,7 +128,7 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
         # ===================lda======================
         eigvals,_ = self.lda.compute(h,y,save_params=True if self.training else False) 
         # ===================loss=====================
-        loss = self.loss_function(eigvals, **options)
+        loss = self.loss_fn(eigvals, **options)
         if self.lorentzian_reg > 0:
             lorentzian_reg = self.regularization_lorentzian(h)
             loss += lorentzian_reg

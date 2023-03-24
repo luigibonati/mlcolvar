@@ -47,8 +47,18 @@ class DeepTDA_CV(BaseCV, pl.LightningModule):
 
         super().__init__(in_features=layers[0], out_features=layers[-1], **kwargs)
 
+        # =======   LOSS  ======= 
+        self.loss_fn     = TDA_loss                                 # TDA loss 
+        self.loss_kwargs = {                                        # set default values before parsing options
+                             'n_states': n_states,                   
+                             'target_centers': target_centers,
+                             'target_sigmas':  target_sigmas                     
+                            } 
+
+        # ======= OPTIONS ======= 
+        # parse and sanitize
         options = self.parse_options(options)
-        
+        # Save n_states
         self.n_states = n_states
         if self.out_features != n_cvs:
             raise ValueError("Number of neurons of last layer should match the number of CVs!")
@@ -67,6 +77,8 @@ class DeepTDA_CV(BaseCV, pl.LightningModule):
             if n_cvs != target_centers.shape[1]:
                 raise ValueError((f"Size of target_centers at dimension 1 should match the number of cvs! Expected {n_cvs} found {target_centers.shape[1]}"))
 
+        # ======= BLOCKS =======
+
         # Initialize normIn
         o = 'normIn'
         if ( not options[o] ) and (options[o] is not None):
@@ -75,16 +87,6 @@ class DeepTDA_CV(BaseCV, pl.LightningModule):
         # initialize NN
         o = 'nn'
         self.nn = FeedForward(layers, **options[o])
-    
-        self.loss_kwargs = {'n_states': n_states,
-                             'target_centers': target_centers,
-                             'target_sigmas':  target_sigmas                     
-                            }
-
-    # TODO change to have standard signature?
-    def loss_function(self, input, labels, **kwargs):
-        loss, loss_centers, loss_sigmas = TDA_loss(input, labels, **kwargs)
-        return loss, loss_centers, loss_sigmas
 
     def training_step(self, train_batch, batch_idx):
         options = self.loss_kwargs.copy()
@@ -94,7 +96,7 @@ class DeepTDA_CV(BaseCV, pl.LightningModule):
         # =================forward====================
         z = self.forward_cv(x)
         # ===================loss=====================
-        loss, loss_centers, loss_sigmas = self.loss_function(z, labels, **options)
+        loss, loss_centers, loss_sigmas = self.loss_fn(z, labels, **options)
         # ====================log=====================+
         name = 'train' if self.training else 'valid'
         self.log(f'{name}_loss', loss.to(float), on_epoch=True)
