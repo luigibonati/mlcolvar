@@ -38,13 +38,19 @@ class AutoEncoder_CV(BaseCV, pl.LightningModule):
         """
         super().__init__(in_features=encoder_layers[0], out_features=encoder_layers[-1], **kwargs)
 
-        # ===== BLOCKS =====
+        # =======   LOSS  ======= 
+        self.loss_fn     = MSE_loss             # reconstruction (MSE) loss
+        self.loss_kwargs = {}                   # set default values before parsing options
 
-        options = self.sanitize_options(options)
+        # ======= OPTIONS ======= 
+        # parse and sanitize
+        options = self.parse_options(options)
 
-        # parse info from args
+        # if decoder is not given reverse the encoder
         if decoder_layers is None:
             decoder_layers = encoder_layers[::-1]
+
+        # ======= BLOCKS =======
 
         # initialize normIn
         o = 'normIn'
@@ -59,9 +65,6 @@ class AutoEncoder_CV(BaseCV, pl.LightningModule):
         o = 'decoder'
         self.decoder = FeedForward(decoder_layers, **options[o])
 
-        # ===== LOSS OPTIONS =====
-        self.loss_kwargs = {}   
-
     def forward_cv(self, x: torch.Tensor) -> (torch.Tensor):
         if self.normIn is not None:
             x = self.normIn(x)
@@ -75,10 +78,6 @@ class AutoEncoder_CV(BaseCV, pl.LightningModule):
             x = self.normIn.inverse(x)
         return x
 
-    def loss_function(self, diff, **kwargs):
-        # Reconstruction (MSE) loss
-        return MSE_loss(diff,**kwargs)
-
     def training_step(self, train_batch, batch_idx):
         options = self.loss_kwargs.copy()
         # =================get data===================
@@ -89,7 +88,7 @@ class AutoEncoder_CV(BaseCV, pl.LightningModule):
         x_hat = self.encode_decode(x)
         # ===================loss=====================
         diff = x - x_hat
-        loss = self.loss_function(diff, **options)
+        loss = self.loss_fn(diff, **options)
         # ====================log=====================     
         name = 'train' if self.training else 'valid'       
         self.log(f'{name}_loss', loss, on_epoch=True)

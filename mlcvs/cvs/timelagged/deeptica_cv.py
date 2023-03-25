@@ -12,7 +12,7 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
     
     BLOCKS = ['normIn','nn','tica'] 
 
-    def __init__(self, layers : list , out_features : int = None, options : dict = None, **kwargs): 
+    def __init__(self, layers : list , n_cvs : int = None, options : dict = None, **kwargs): 
         """ 
         Neural network-based TICA CV.
         Perform a non-linear featurization of the inputs with a neural-network and optimize it as to maximize autocorrelation (e.g. eigenvalues of the transfer operator approximation).
@@ -21,7 +21,7 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
         ----------
         layers : list
             Number of neurons per layer
-        n_eig : int, optional
+        n_cvs : int, optional
             Number of cvs to optimize, default None (= last layer)
         options : dict[str, Any], optional
             Options for the building blocks of the model, by default {}.
@@ -29,16 +29,21 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
             Set 'block_name' = None or False to turn off that block
         """
         super().__init__(in_features=layers[0], 
-                         out_features=out_features if out_features is not None else layers[-1], 
+                         out_features=n_cvs if n_cvs is not None else layers[-1], 
                          **kwargs)
 
-        # ===== LOSS OPTIONS ===== 
-        self.loss_kwargs = {'mode':'sum2',     # eigenvalue reduction mode
-                            'n_eig': 0 }        # how many eigenvalues to optimize (0 == all) 
+        # =======   LOSS  ======= 
+        self.loss_fn     = reduce_eigenvalues   # maximize TICA eigenvalues        
+        self.loss_kwargs = {                    # set default values before parsing options
+                            'mode':'sum2',      # eigenvalue reduction mode
+                            'n_eig': 0          # how many eigenvalues to optimize (0 == all) 
+                            }
 
-        # ===== BLOCKS =====
+        # ======= OPTIONS ======= 
+        # parse and sanitize
+        options = self.parse_options(options)
 
-        options = self.sanitize_options(options)
+        # ======= BLOCKS =======
 
         # initialize normIn
         o = 'normIn'
@@ -51,7 +56,7 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
 
         # initialize lda
         o = 'tica'
-        self.tica = TICA(layers[-1], self.out_features, **options[o])
+        self.tica = TICA(layers[-1], n_cvs, **options[o])
         
     def forward_nn(self, x: torch.Tensor) -> (torch.Tensor):
         if self.normIn is not None:
@@ -69,25 +74,6 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
             Regularization value for C_0.
         """
         self.tica.reg_c0 = c0_reg
-
-    def loss_function(self, eigenvalues, **kwargs):
-        """
-        Loss function for the DeepTICA CV. Correspond to maximizing the eigenvalue(s) of TICA.
-        By default the sum of the squares is maximized.
-
-        Parameters
-        ----------
-        eigenvalues : torch.Tensor
-            TICA eigenvalues
-
-        Returns
-        -------
-        loss : torch.Tensor
-            loss function
-        """
-        loss = - reduce_eigenvalues(eigenvalues, **kwargs)
-
-        return loss
 
     def training_step(self, train_batch, batch_idx):
         """
@@ -109,7 +95,7 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
                                                     weights = [w_t,w_lag],
                                                     save_params=True)
         # ===================loss=====================
-        loss = self.loss_function(eigvals,**options)
+        loss = self.loss_fn(eigvals,**options)
         # ====================log=====================          
         name = 'train' if self.training else 'valid'       
         loss_dict = {f'{name}_loss' : loss}
@@ -131,10 +117,10 @@ def test_deep_tica():
 
     # create cv
     layers = [2,10,10,2]
-    model = DeepTICA_CV(layers,out_features=1)
+    model = DeepTICA_CV(layers,n_cvs=1)
 
     # change loss options
-    model.set_loss_kwargs({'mode': 'sum2'})
+    model.loss_kwargs.update({'mode': 'sum2'})
 
     # create trainer and fit
     trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2, logger=None, enable_checkpointing=False)

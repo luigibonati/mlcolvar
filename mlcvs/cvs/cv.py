@@ -28,26 +28,34 @@ class BaseCV:
 
         # MODEL 
         self.initialize_blocks()
-
-        # Set pre/post processing 
-        self.preprocessing = preprocessing
-        self.postprocessing = postprocessing
-
-        # adapt no. input and output features based on pre/post processing
-        self.in_features = in_features if preprocessing is None else preprocessing.in_features
-        self.out_features = out_features if postprocessing is None else postprocessing.out_features
-
-        self.example_input_array = torch.randn(self.in_features)
-
+        self.in_features        = in_features
+        self.out_features       = out_features
+    
         # OPTIM
-        self.optimizer_name = 'Adam'
-        self.optimizer_kwargs = {}
+        self._optimizer_name     = 'Adam'
+        self.optimizer_kwargs    = {}
 
         # LOSS
-        self.loss_kwargs = {}
+        self.loss_kwargs         = {}
 
-    def sanitize_options(self, options : dict = None):
+        # PRE/POST
+        self.preprocessing      = preprocessing
+        self.postprocessing     = postprocessing
+
+    @property
+    def n_cvs(self):
+        """Number of CVs."""
+        return self.out_features
+
+    @property
+    def example_input_array(self):
+        return torch.randn(self.in_features if self.preprocessing is None else self.preprocessing.in_features)
+
+    def parse_options(self, options : dict = None):
         """
+        Sanitize options and create defaults ({}) if not in options.
+        Furthermore, sets loss and optimizer kwargs if given. 
+
         Parameters
         ----------
         options : dict[str, Any], optional
@@ -62,11 +70,11 @@ class BaseCV:
         for o in options.keys():
             if o not in self.BLOCKS:
                 if o == 'loss':
-                    self.set_loss_kwargs(options[o])
-                elif o == 'optim':
-                    self.set_optimizer_kwargs(options[o])
+                    self.loss_kwargs.update(options[o])
+                elif o == 'optimizer':
+                    self.optimizer_kwargs.update(options[o])
                 else:
-                    raise ValueError(f'The key {o} is not available in this class. The available keys are: {",".join(self.BLOCKS)},loss,optim ')
+                    raise ValueError(f'The key {o} is not available in this class. The available keys are: {",".join(self.BLOCKS)}, + (loss,optimizer) ')
 
         return options
 
@@ -151,77 +159,26 @@ class BaseCV:
         """
         self.training_step(test_batch, batch_idx)
 
-    def set_loss_fn(self, fn):
+    @property
+    def optimizer_name(self) -> str:
+        """Optimizer name. Options can be set using optimizer_kwargs. Actual optimizer will be return during training from configure_optimizer function.
         """
-        Overload loss function with given function. 'fn' need to have the following signature:
-        def f(x : torch.Tensor, options : dict = {} ) -> torch.Tensor 
-        where x is the same input as in the loss_function implemented in the CV.
-        Lambda functions can also be used: fn = lambda x, options : -x.sum()
-
-        Parameters
-        ----------
-        fn : function
-            Loss function to be used in train/valid
-        """
-        self.loss_function = fn
-
-    def set_loss_kwargs(self, options : dict = None, **kwargs):
-
-        """
-        Save loss functions options to be used in train/valid step. It can either take a dictionary or arguments. 
-
-        Examples:
-        >>> cvs.set_loss_kwargs(options = {'a' : 1, 'b' : 2})
-        >>> cvs.set_loss_kwargs(a=1,b=2)
-
-        Parameters
-        ----------
-        options : dict
-            Dictionary of options to be passed to the loss during train/valid steps.
-        """
-        if options is None:
-            options = {}
-        #update saved options based on both provided dict options and kwargs
-        self.loss_kwargs.update({**options, **locals()['kwargs']})
-
-    def set_optimizer_name(self, optimizer_name : str): 
-        """Choose optimizer. Options can be set using set_optimizer_kwargs. Actual optimizer will be return from configure_optimizer function.
-
-        Parameters
-        ----------
-        optim : str
-            Name of the torch.optim optimizer
-        """
+        return self._optimizer_name
+    
+    @optimizer_name.setter
+    def optimizer_name(self, optimizer_name : str): 
         if not hasattr(torch.optim, optimizer_name):
             raise AttributeError (f'torch.optim does not have a {optimizer_name} optimizer.')
-        self.optimizer_name = optimizer_name
-
-    def set_optimizer_kwargs(self, options : dict = None, **kwargs):
-        """
-        Save options to be used for creating optimizer in configure_optimizer function.
-
-        Examples:
-        >>> cvs.set_optimizer_kwargs(options = {'weight_decay' : 1e-5, 'lr' : 1e-3})
-        >>> cvs.set_optimizer_kwargs(lr=1e-3)
-
-        Parameters
-        ----------
-        options : dict
-            Dictionary of options
-        """
-        if options is None:
-            options = {}
-        #update saved options based on both provided dict options and kwargs
-        self.optimizer_kwargs.update({**options, **locals()['kwargs']})
+        self._optimizer_name = optimizer_name
 
     def configure_optimizers(self): 
         """
-        Initialize the optimizer based on self.optimizer_name and self.optimizer_kwargs.
+        Initialize the optimizer based on self._optimizer_name and self.optimizer_kwargs.
 
         Returns
         -------
         torch.optim
             Torch optimizer
         """ 
-        optimizer = getattr(torch.optim,self.optimizer_name)(self.parameters(),**self.optimizer_kwargs)
+        optimizer = getattr(torch.optim,self._optimizer_name)(self.parameters(),**self.optimizer_kwargs)
         return optimizer

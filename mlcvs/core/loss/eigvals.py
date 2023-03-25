@@ -2,9 +2,9 @@ import torch
 
 __all__ = ['reduce_eigenvalues']
 
-def reduce_eigenvalues( evals : torch.Tensor, mode = 'sum', n_eig = 0 ):
+def reduce_eigenvalues( evals : torch.Tensor, mode = 'sum', n_eig = 0, invert_sign = True ):
         """
-        Calculate a monotonic function of the eigenvalues, by default the sum.
+        Calculate a monotonic function f(x) of the eigenvalues, by default the sum. By default it returns -f(x) to be used as loss function to maximize eigenvalues in gradient descent schemes. 
 
         Parameters
         ----------
@@ -14,7 +14,9 @@ def reduce_eigenvalues( evals : torch.Tensor, mode = 'sum', n_eig = 0 ):
             function of the eigenvalues to optimize (see notes)
         n_eig: int, optional
             number of eigenvalues to include in the loss (default: 0 --> all). in case of single and single2 is used to specify which eigenvalue to use.
-
+        invert_sign: bool, optional
+            whether to return the opposite of the function (in order to minized with GD methods), default tru
+            
         Notes
         -----
         The following mode are implemented:
@@ -58,5 +60,8 @@ def reduce_eigenvalues( evals : torch.Tensor, mode = 'sum', n_eig = 0 ):
             loss = torch.pow(evals[n_eig-1],2)
         else:
             raise ValueError(f"unknown mode : {mode}. options: 'sum','sum2','gap','single','its'.")
+
+        if invert_sign:
+            loss *= -1
 
         return loss

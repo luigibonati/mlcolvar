@@ -10,7 +10,6 @@ Variational Autoencoder collective variable.
 
 __all__ = ["VAE_CV"]
 
-
 # =============================================================================
 # GLOBAL IMPORTS
 # =============================================================================
@@ -74,13 +73,19 @@ class VAE_CV(BaseCV, pl.LightningModule):
         """
         super().__init__(in_features=encoder_layers[0], out_features=n_cvs, **kwargs)
 
-        # ===== BLOCKS =====
+        # =======   LOSS  ======= 
+        self.loss_fn     = elbo_gaussians_loss  #ELBO loss function when latent space and reconstruction distributions are Gaussians.      
+        self.loss_kwargs = {}                   # set default values before parsing options
 
-        options = self.sanitize_options(options)
+        # ======= OPTIONS ======= 
+        # parse and sanitize
+        options = self.parse_options(options)
 
-        # parse info from args
+        # if decoder is not given reverse the encoder
         if decoder_layers is None:
             decoder_layers = encoder_layers[::-1]
+
+        # ======= BLOCKS =======
 
         # initialize normIn
         o = 'normIn'
@@ -96,10 +101,7 @@ class VAE_CV(BaseCV, pl.LightningModule):
         o = 'decoder'
         self.decoder = FeedForward([n_cvs] + decoder_layers, **options[o])
 
-        # ===== LOSS OPTIONS =====
-        self.loss_kwargs = {}   
-
-    @property
+    @property # TODO: shall we remove it as it is equal to the one in baseCV?
     def n_cvs(self):
         """Number of CVs."""
         return self.decoder.in_features
@@ -173,10 +175,6 @@ class VAE_CV(BaseCV, pl.LightningModule):
 
         return mean, log_variance, x_hat
 
-    def loss_function(self, diff, mean, log_variance, **kwargs):
-        """ELBO loss function when latent space and reconstruction distributions are Gaussians."""
-        return elbo_gaussians_loss(diff, mean, log_variance, **kwargs)
-
     def training_step(self, train_batch, batch_idx):
         """Single training step performed by the PyTorch Lightning Trainer."""
         options = self.loss_kwargs.copy()
@@ -191,7 +189,7 @@ class VAE_CV(BaseCV, pl.LightningModule):
 
         # Loss function.
         diff = x - x_hat
-        loss = self.loss_function(diff, mean, log_variance, **options)
+        loss = self.loss_fn(diff, mean, log_variance, **options)
 
         # Log.
         name = 'train' if self.training else 'valid'       
