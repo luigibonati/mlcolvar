@@ -147,7 +147,7 @@ def create_dataset_from_files(
                     verbose : bool =  True, 
                     **kwargs):
     """
-    Initialize a dataset from (a list of) files.
+    Initialize a dataset from (a list of) files. Suitable for supervised/unsupervised tasks.
 
     Parameters
     ----------
