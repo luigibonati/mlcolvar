@@ -1,4 +1,48 @@
 import torch
+from torch import Tensor
+from typing import Optional
+
+def generalized_eigh(A: Tensor, B: Tensor) -> tuple:
+     #A workaround to solve a real symmetric GEP Av = \lambda Bv problem. (!! Not numerically efficient)
+     Lambda, Q = torch.linalg.eigh(B)
+     rsqrt_Lambda = torch.diag(Lambda.rsqrt())
+     rsqrt_B = Q@rsqrt_Lambda
+     _A = 0.5*(rsqrt_B.T@(A@rsqrt_B) + rsqrt_B.T@((A.T)@rsqrt_B)) #Force Symmetrization
+     values, _tmp_vecs = torch.linalg.eigh(_A) 
+     vectors = rsqrt_B@_tmp_vecs
+     return values, vectors
+
+def spd_norm(vecs: Tensor, spd_matrix: Tensor) -> Tensor:
+     _v = torch.mm(spd_matrix, vecs)
+     _v_T = torch.mm(spd_matrix.T, vecs)
+     return torch.sqrt(0.5*torch.linalg.vecdot(vecs, _v + _v_T, dim = 0).real)
+
+def reduced_rank_eig(
+    input_covariance: Tensor,
+    lagged_covariance: Tensor, #C_{0t}
+    tikhonov_reg: float,
+    rank: Optional[int] = None,
+    ) -> tuple:
+    
+    n = input_covariance.shape[0]
+    reg_input_covariance = input_covariance + tikhonov_reg*torch.eye(n, dtype=input_covariance.dtype, device=input_covariance.device)
+
+    _crcov = torch.mm(lagged_covariance, lagged_covariance.T)
+    _, _vectors = generalized_eigh(_crcov, reg_input_covariance) 
+    
+    _norms = spd_norm(_vectors, reg_input_covariance)
+    vectors = _vectors*(1/_norms)
+
+    if rank is not None:
+        _, idxs = torch.topk(vectors.values, rank)
+        U = vectors[:, idxs]
+    else:
+        U = vectors
+    
+    #U@(U.T)@Tw = v w -> (U.T)@T@Uq = vq and w = Uq 
+    values, Q = torch.linalg.eig((U.T)@(lagged_covariance@U))
+    return values, U@Q
+
 
 def cholesky_eigh(A, B, reg_B = 1e-6, n_eig = None ):
     """
