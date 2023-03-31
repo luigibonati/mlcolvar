@@ -64,8 +64,7 @@ class Regression_CV(BaseCV, pl.LightningModule):
         # =================forward====================
         y = self.forward_cv(x)
         # ===================loss=====================
-        diff = y - labels
-        loss = self.loss_fn(diff, **options)
+        loss = self.loss_fn(y,labels, **options)
         # ====================log===================== 
         name = 'train' if self.training else 'valid'       
         self.log(f'{name}_loss', loss, on_epoch=True)
@@ -114,7 +113,7 @@ def test_regression_cv():
     trainer = pl.Trainer(accelerator='cpu',max_epochs=1,logger=None, enable_checkpointing=False)
 
     model = Regression_CV( layers = [2,10,10,1])
-    model.loss_fn = lambda x: x.abs().mean() 
+    model.loss_fn = lambda y,y_ref: (y-y_ref).abs().mean() 
     trainer.fit( model, datamodule )
 
 if __name__ == "__main__":
