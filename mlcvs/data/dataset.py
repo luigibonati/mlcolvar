@@ -69,8 +69,8 @@ class DictionaryDataset(Dataset):
     def __repr__(self) -> str:
         string = 'DictionaryDataset('
         for key,val in self.dictionary.items():
-            string += f'"{key}": {list(val.shape)}'
-        string += ')'
+            string += f' "{key}": {list(val.shape)},'
+        string = string[:-1]+' )'
         return string
 
     @property
