@@ -44,7 +44,7 @@ class Regression_CV(BaseCV, pl.LightningModule):
 
         # Initialize normIn
         o = 'normIn'
-        if ( not options[o] ) and (options[o] is not None):
+        if ( options[o] is not False ) and (options[o] is not None):
             self.normIn = Normalization(self.in_features,**options[o])
 
         # initialize NN
