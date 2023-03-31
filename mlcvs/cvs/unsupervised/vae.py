@@ -188,8 +188,7 @@ class VAE_CV(BaseCV, pl.LightningModule):
         mean, log_variance, x_hat = self.encode_decode(x)
 
         # Loss function.
-        diff = x - x_hat
-        loss = self.loss_fn(diff, mean, log_variance, **options)
+        loss = self.loss_fn(x, x_hat, mean, log_variance, **options)
 
         # Log.
         name = 'train' if self.training else 'valid'       

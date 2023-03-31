@@ -25,7 +25,8 @@ from mlcvs.core.loss.mse import MSE_loss
 # =============================================================================
 
 def elbo_gaussians_loss(
-        diff: torch.Tensor,
+        input: torch.Tensor,
+        target: torch.Tensor,
         mean: torch.Tensor,
         log_variance: torch.Tensor,
         weights: Optional[torch.Tensor] = None
@@ -39,9 +40,10 @@ def elbo_gaussians_loss(
 
     Parameters
     ----------
-    diff : torch.Tensor
-        Shape ``(n_batches, in_features)``. The difference between the input of
-        the encoder and the output of the decoder.
+    input : torch.Tensor
+        Shape ``(n_batches, in_features)``. Input of the encoder.
+    output : torch.Tensor
+        Shape ``(n_batches, in_features)``. Output of the decoder.        
     mean : torch.Tensor
         Shape ``(n_batches, latent_features)``. The means of the Gaussian
         distributions associated to the inputs.
@@ -68,6 +70,6 @@ def elbo_gaussians_loss(
         kl = (kl * weights).sum()
 
     # Reconstruction loss.
-    reconstruction = MSE_loss(diff, weights=weights)
+    reconstruction = MSE_loss(input, target, weights=weights)
 
     return reconstruction + kl

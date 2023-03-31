@@ -87,8 +87,7 @@ class AutoEncoder_CV(BaseCV, pl.LightningModule):
         # =================forward====================
         x_hat = self.encode_decode(x)
         # ===================loss=====================
-        diff = x - x_hat
-        loss = self.loss_fn(diff, **options)
+        loss = self.loss_fn(x,x_hat, **options)
         # ====================log=====================     
         name = 'train' if self.training else 'valid'       
         self.log(f'{name}_loss', loss, on_epoch=True)
