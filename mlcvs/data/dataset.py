@@ -43,12 +43,13 @@ class DictionaryDataset(Dataset):
 
     def __getitem__(self, index):
         if isinstance(index,str):
-            raise TypeError(f'Index ("{index}") should be a slice, and not a string. To access the stored dictionary use .dictionary["{index}"] instead.')
-        slice_dict = {}
-        for key,val in self.dictionary.items():
-            slice_dict[key] = val[index]
-        
-        return slice_dict
+            #raise TypeError(f'Index ("{index}") should be a slice, and not a string. To access the stored dictionary use .dictionary["{index}"] instead.')
+            return self.dictionary[index]
+        else:
+            slice_dict = {}
+            for key,val in self.dictionary.items():
+                slice_dict[key] = val[index]
+            return slice_dict
     
     def __len__(self):
         return self.length
