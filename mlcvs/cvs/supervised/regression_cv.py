@@ -36,7 +36,7 @@ class Regression_CV(BaseCV, pl.LightningModule):
 
         # =======   LOSS  =======
         self.loss_fn     = MSE_loss            # Reconstruction (MSE) loss
-        self.loss_kwargs = {'mode':'sum'}      # set default values before parsing options
+        self.loss_kwargs = {}                  # set default values before parsing options
 
         # ======= OPTIONS ======= 
         # parse and sanitize
