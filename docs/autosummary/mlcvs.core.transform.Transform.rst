@@ -16,6 +16,7 @@
 
    .. autosummary::
    
+      ~Transform.__init__
       ~Transform.forward
       ~Transform.setup_from_datamodule
       ~Transform.teardown
