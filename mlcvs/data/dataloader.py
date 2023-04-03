@@ -48,8 +48,8 @@ class FastDictionaryLoader:
                 dataset = DictionaryDataset(dataset.dataset[dataset.indices])
 
         # Save parameters
-        self.dictionary = dataset
-        self.dataset_len = len(self.dictionary)
+        self.dataset = dataset
+        self.dataset_len = len(self.dataset)
         self.batch_size = batch_size if batch_size > 0 else self.dataset_len
         self.shuffle = shuffle
 
@@ -73,9 +73,9 @@ class FastDictionaryLoader:
         
         if self.indices is not None:
             indices = self.indices[self.i:self.i+self.batch_size]
-            batch = self.dictionary[indices]
+            batch = self.dataset[indices]
         else:
-            batch = self.dictionary[self.i:self.i+self.batch_size]
+            batch = self.dataset[self.i:self.i+self.batch_size]
 
         self.i += self.batch_size
         return batch
@@ -85,7 +85,7 @@ class FastDictionaryLoader:
 
     @property
     def keys(self):
-        return self.dictionary.keys
+        return self.dataset.keys
     
     def __repr__(self) -> str:
         string = f'FastDictionaryLoader(length={self.dataset_len}, batch_size={self.batch_size}, shuffle={self.shuffle})'
