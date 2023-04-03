@@ -182,13 +182,17 @@ class VAE_CV(BaseCV, pl.LightningModule):
         if 'weights' in train_batch:
             options['weights'] = train_batch['weights']
 
-        # TODO: Should we do preprocessing here?
-
         # Encode/decode.
         mean, log_variance, x_hat = self.encode_decode(x)
 
+        # Reference output (compare with a 'target' key if any, otherwise with input 'data')
+        if 'target' in train_batch:
+            x_ref = train_batch['target']
+        else:
+            x_ref = x 
+
         # Loss function.
-        loss = self.loss_fn(x, x_hat, mean, log_variance, **options)
+        loss = self.loss_fn(x_ref, x_hat, mean, log_variance, **options)
 
         # Log.
         name = 'train' if self.training else 'valid'       

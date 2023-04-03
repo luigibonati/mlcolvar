@@ -8,9 +8,16 @@ from mlcvs.core.loss import MSE_loss
 __all__ = ["AutoEncoder_CV"]
 
 class AutoEncoder_CV(BaseCV, pl.LightningModule):
-    """AutoEncoding Collective Variable.
-    
-    For training it requires a DictionaryDataset with the key 'data' and optionally 'weights'.
+    """AutoEncoding Collective Variable. It is composed by a first neural network (encoder) which projects 
+    the input data into a latent space (the CVs). Then a second network (decoder) takes 
+    the CVs and tries to reconstruct the input data based on them. It is an unsupervised learning approach, 
+    typically used when no labels are available.
+    Furthermore, it can also be used lo learn a representation which can be used not to reconstruct the data but 
+    to predict, e.g. future configurations. 
+
+    For training it requires a DictionaryDataset with the key 'data' and optionally 'weights'. If a 'target' 
+    key is present this will be used as reference for the output of the decoder, otherway this will be compared
+    with the input 'data'.
     """
     
     BLOCKS = ['normIn','encoder','decoder'] 
@@ -87,7 +94,13 @@ class AutoEncoder_CV(BaseCV, pl.LightningModule):
         # =================forward====================
         x_hat = self.encode_decode(x)
         # ===================loss=====================
-        loss = self.loss_fn(x,x_hat, **options)
+        # Reference output (compare with a 'target' key
+        # if any, otherwise with input 'data')
+        if 'target' in train_batch:
+            x_ref = train_batch['target']
+        else:
+            x_ref = x 
+        loss = self.loss_fn(x_hat,x_ref, **options)
         # ====================log=====================     
         name = 'train' if self.training else 'valid'       
         self.log(f'{name}_loss', loss, on_epoch=True)
@@ -124,6 +137,12 @@ def test_autoencodercv():
     trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)
     trainer.fit( model, datamodule )
     
+    # train with different input and ouput 
+    print('train 3 - timelagged')
+    dataset = DictionaryDataset({'data': torch.randn(100,in_features), 'target' : torch.randn(100,in_features) })
+    datamodule = DictionaryDataModule(dataset)
+    trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)
+    trainer.fit( model, datamodule )
 
 if __name__ == "__main__":
     test_autoencodercv() 
