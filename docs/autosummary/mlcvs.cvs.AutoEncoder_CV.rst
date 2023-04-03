@@ -18,8 +18,7 @@
    
       ~AutoEncoder_CV.__init__
       ~AutoEncoder_CV.encode_decode
-      ~AutoEncoder_CV.forward_blocks
-      ~AutoEncoder_CV.loss_function
+      ~AutoEncoder_CV.forward_cv
       ~AutoEncoder_CV.training_step
    
    
@@ -43,6 +42,7 @@
       ~AutoEncoder_CV.dtype
       ~AutoEncoder_CV.dump_patches
       ~AutoEncoder_CV.example_input_array
+      ~AutoEncoder_CV.fabric
       ~AutoEncoder_CV.global_rank
       ~AutoEncoder_CV.global_step
       ~AutoEncoder_CV.hparams
@@ -50,10 +50,10 @@
       ~AutoEncoder_CV.local_rank
       ~AutoEncoder_CV.logger
       ~AutoEncoder_CV.loggers
+      ~AutoEncoder_CV.n_cvs
       ~AutoEncoder_CV.on_gpu
+      ~AutoEncoder_CV.optimizer_name
       ~AutoEncoder_CV.trainer
-      ~AutoEncoder_CV.truncated_bptt_steps
-      ~AutoEncoder_CV.use_amp
       ~AutoEncoder_CV.training
    
    

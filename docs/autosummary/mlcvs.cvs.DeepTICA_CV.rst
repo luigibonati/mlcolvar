@@ -18,7 +18,6 @@
    
       ~DeepTICA_CV.__init__
       ~DeepTICA_CV.forward_nn
-      ~DeepTICA_CV.loss_function
       ~DeepTICA_CV.set_regularization
       ~DeepTICA_CV.training_step
    
@@ -43,6 +42,7 @@
       ~DeepTICA_CV.dtype
       ~DeepTICA_CV.dump_patches
       ~DeepTICA_CV.example_input_array
+      ~DeepTICA_CV.fabric
       ~DeepTICA_CV.global_rank
       ~DeepTICA_CV.global_step
       ~DeepTICA_CV.hparams
@@ -50,10 +50,10 @@
       ~DeepTICA_CV.local_rank
       ~DeepTICA_CV.logger
       ~DeepTICA_CV.loggers
+      ~DeepTICA_CV.n_cvs
       ~DeepTICA_CV.on_gpu
+      ~DeepTICA_CV.optimizer_name
       ~DeepTICA_CV.trainer
-      ~DeepTICA_CV.truncated_bptt_steps
-      ~DeepTICA_CV.use_amp
       ~DeepTICA_CV.training
    
    

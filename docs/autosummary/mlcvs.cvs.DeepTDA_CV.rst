@@ -17,7 +17,6 @@
    .. autosummary::
    
       ~DeepTDA_CV.__init__
-      ~DeepTDA_CV.loss_function
       ~DeepTDA_CV.training_step
    
    
@@ -41,6 +40,7 @@
       ~DeepTDA_CV.dtype
       ~DeepTDA_CV.dump_patches
       ~DeepTDA_CV.example_input_array
+      ~DeepTDA_CV.fabric
       ~DeepTDA_CV.global_rank
       ~DeepTDA_CV.global_step
       ~DeepTDA_CV.hparams
@@ -48,10 +48,10 @@
       ~DeepTDA_CV.local_rank
       ~DeepTDA_CV.logger
       ~DeepTDA_CV.loggers
+      ~DeepTDA_CV.n_cvs
       ~DeepTDA_CV.on_gpu
+      ~DeepTDA_CV.optimizer_name
       ~DeepTDA_CV.trainer
-      ~DeepTDA_CV.truncated_bptt_steps
-      ~DeepTDA_CV.use_amp
       ~DeepTDA_CV.training
    
    

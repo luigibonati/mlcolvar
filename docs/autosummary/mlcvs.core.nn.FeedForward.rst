@@ -17,7 +17,6 @@
    .. autosummary::
    
       ~FeedForward.__init__
-      ~FeedForward.extra_repr
       ~FeedForward.forward
    
    
@@ -40,6 +39,7 @@
       ~FeedForward.dtype
       ~FeedForward.dump_patches
       ~FeedForward.example_input_array
+      ~FeedForward.fabric
       ~FeedForward.global_rank
       ~FeedForward.global_step
       ~FeedForward.hparams
@@ -49,8 +49,6 @@
       ~FeedForward.loggers
       ~FeedForward.on_gpu
       ~FeedForward.trainer
-      ~FeedForward.truncated_bptt_steps
-      ~FeedForward.use_amp
       ~FeedForward.training
    
    
