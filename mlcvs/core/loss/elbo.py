@@ -25,8 +25,8 @@ from mlcvs.core.loss.mse import MSE_loss
 # =============================================================================
 
 def elbo_gaussians_loss(
-        input: torch.Tensor,
         target: torch.Tensor,
+        output: torch.Tensor,
         mean: torch.Tensor,
         log_variance: torch.Tensor,
         weights: Optional[torch.Tensor] = None
@@ -40,8 +40,8 @@ def elbo_gaussians_loss(
 
     Parameters
     ----------
-    input : torch.Tensor
-        Shape ``(n_batches, in_features)``. Input of the encoder.
+    target : torch.Tensor
+        Shape ``(n_batches, in_features)``. Data points (e.g. input of encoder or time-lagged features).
     output : torch.Tensor
         Shape ``(n_batches, in_features)``. Output of the decoder.        
     mean : torch.Tensor
@@ -51,7 +51,7 @@ def elbo_gaussians_loss(
         Shape ``(n_batches, latent_features)``. The logarithm of the variances
         of the Gaussian distributions associated to the inputs.
     weights : torch.Tensor, optional
-        Shape ``(n_batches,)`. If given, the average over batches is weighted.
+        Shape ``(n_batches,)`` or ``(n_batches,1)``. If given, the average over batches is weighted.
         The default (``None``) is unweighted.
 
     Returns
@@ -67,9 +67,12 @@ def elbo_gaussians_loss(
     if weights is None:
         kl = kl.mean()
     else:
+        weights = weights.squeeze()
+        if weights.shape != kl.shape:
+            raise ValueError(f'weights should be a tensor of shape (n_batches,) or (n_batches,1), not {weights.shape}.')
         kl = (kl * weights).sum()
 
     # Reconstruction loss.
-    reconstruction = MSE_loss(input, target, weights=weights)
+    reconstruction = MSE_loss(output, target, weights=weights)
 
     return reconstruction + kl
