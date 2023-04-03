@@ -192,7 +192,7 @@ class VAE_CV(BaseCV, pl.LightningModule):
             x_ref = x 
 
         # Loss function.
-        loss = self.loss_fn(x_hat, x_ref, mean, log_variance, **options)
+        loss = self.loss_fn(x_ref, x_hat, mean, log_variance, **options)
 
         # Log.
         name = 'train' if self.training else 'valid'       
