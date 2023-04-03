@@ -16,7 +16,7 @@ class SimpleMetricsCallback(Callback):
             self.metrics.append(metrics)
 
 class MetricsCallback(Callback):
-    """Lightning which saves logged metrics into a dictionary. 
+    """Lightning callback which saves logged metrics into a dictionary. 
        The metrics are recorded at the end of each validation epoch.
     """
 
