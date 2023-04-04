@@ -1,9 +1,9 @@
 import torch
 from warnings import warn
 
-__all__ = ["TDA_loss"]
+__all__ = ["tda_loss"]
 
-def TDA_loss(H : torch.Tensor,
+def tda_loss(H : torch.Tensor,
             labels : torch.Tensor,
             n_states : int,
             target_centers : list or torch.Tensor,

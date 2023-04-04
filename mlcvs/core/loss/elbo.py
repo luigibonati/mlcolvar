@@ -17,7 +17,7 @@ __all__ = ['elbo_gaussians_loss']
 
 from typing import Optional
 import torch
-from mlcvs.core.loss.mse import MSE_loss
+from mlcvs.core.loss.mse import mse_loss
 
 
 # =============================================================================
@@ -73,6 +73,6 @@ def elbo_gaussians_loss(
         kl = (kl * weights).sum()
 
     # Reconstruction loss.
-    reconstruction = MSE_loss(output, target, weights=weights)
+    reconstruction = mse_loss(output, target, weights=weights)
 
     return reconstruction + kl

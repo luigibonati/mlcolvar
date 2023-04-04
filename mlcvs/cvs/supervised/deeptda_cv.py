@@ -2,7 +2,7 @@ import torch
 import pytorch_lightning as pl
 from mlcvs.cvs import BaseCV
 from mlcvs.core import FeedForward, Normalization
-from mlcvs.core.loss import TDA_loss
+from mlcvs.core.loss import tda_loss
 from mlcvs.data import DictionaryDataModule
 
 __all__ = ["DeepTDA_CV"]
@@ -13,7 +13,7 @@ class DeepTDA_CV(BaseCV, pl.LightningModule):
     Combine the inputs with a neural-network and optimize it in a way such that the data are distributed accordingly to a target distribution.
     """
 
-    BLOCKS = ['normIn', 'nn']
+    BLOCKS = ['norm_in', 'nn']
 
     # TODO n_states optional?
     def __init__(self,
@@ -41,14 +41,14 @@ class DeepTDA_CV(BaseCV, pl.LightningModule):
             Number of neurons per layer
         options : dict[str, Any], optional
             Options for the building blocks of the model, by default {}.
-            Available blocks: ['normIn', 'nn'].
+            Available blocks: ['norm_in', 'nn'].
             Set 'block_name' = None or False to turn off that block
         """
 
         super().__init__(in_features=layers[0], out_features=layers[-1], **kwargs)
 
         # =======   LOSS  ======= 
-        self.loss_fn     = TDA_loss                                 # TDA loss 
+        self.loss_fn     = tda_loss                                 # TDA loss 
         self.loss_kwargs = {                                        # set default values before parsing options
                              'n_states': n_states,                   
                              'target_centers': target_centers,
@@ -79,10 +79,10 @@ class DeepTDA_CV(BaseCV, pl.LightningModule):
 
         # ======= BLOCKS =======
 
-        # Initialize normIn
-        o = 'normIn'
+        # Initialize norm_in
+        o = 'norm_in'
         if ( options[o] is not False ) and (options[o] is not None):
-            self.normIn = Normalization(self.in_features,**options[o])
+            self.norm_in = Normalization(self.in_features,**options[o])
 
         # initialize NN
         o = 'nn'

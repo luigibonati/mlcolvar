@@ -3,7 +3,7 @@
 
 .. currentmodule:: mlcvs.core.loss
 
-.. autoclass:: TDA_loss
+.. autoclass:: tda_loss
    :members:                                   
    :show-inheritance:                           
    :inherited-members: Module,LightningModule                       

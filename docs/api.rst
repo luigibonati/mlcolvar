@@ -83,8 +83,8 @@ These are the building blocks which are used to construct the CVs.
    :toctree: autosummary
    :template: custom-class-template.rst
 
-   MSE_loss
-   TDA_loss
+   mse_loss
+   tda_loss
    reduce_eigenvalues
 
 

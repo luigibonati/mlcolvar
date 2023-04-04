@@ -133,7 +133,7 @@ class LDA(Stats):
         states = torch.unique(labels)
         n_states = len(states)
 
-        # Mean centered observations for entire population
+        # mean centered observations for entire population
         X_bar = X - torch.mean(X, 0, True)
         # Total scatter matrix (cov matrix over all observations)
         S_t = X_bar.t().matmul(X_bar) / (N - 1)

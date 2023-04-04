@@ -36,7 +36,7 @@ def test_vae_cv_training(weights):
         n_cvs=n_cvs,
         encoder_layers=[in_features, 6, 4],
         options={
-            'normIn': None,
+            'norm_in': None,
             'encoder': {'activation' : 'relu'},
         }
     )

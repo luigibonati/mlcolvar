@@ -3,7 +3,7 @@
 
 .. currentmodule:: mlcvs.core.loss
 
-.. autoclass:: MSE_loss
+.. autoclass:: mse_loss
    :members:                                   
    :show-inheritance:                           
    :inherited-members: Module,LightningModule                       

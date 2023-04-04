@@ -92,7 +92,7 @@ class FastDictionaryLoader:
         return string
 
     def get_stats(self):
-        """Compute statistics ('Mean','Std','Min','Max') of the dataloader. 
+        """Compute statistics ('mean','Std','Min','Max') of the dataloader. 
 
         Returns
         -------
