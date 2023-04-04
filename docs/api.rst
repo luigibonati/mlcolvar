@@ -13,6 +13,7 @@ Collective variables
    :template: custom-class-template.rst
 
    AutoEncoder_CV
+   VAE_CV
 
 .. rubric:: Supervised learning 
 
