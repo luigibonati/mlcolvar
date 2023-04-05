@@ -3,11 +3,11 @@ import pytorch_lightning as pl
 from mlcvs.cvs import BaseCV
 from mlcvs.core import FeedForward,Normalization
 from mlcvs.core.stats import TICA
-from mlcvs.core.loss import reduce_eigenvalues
+from mlcvs.core.loss import reduce_eigenvalues_loss
 
-__all__ = ["DeepTICA_CV"] 
+__all__ = ["DeepTICA"] 
 
-class DeepTICA_CV(BaseCV, pl.LightningModule):
+class DeepTICA(BaseCV, pl.LightningModule):
     """Time-lagged independent component analysis-based CV."""
     
     BLOCKS = ['norm_in','nn','tica'] 
@@ -33,7 +33,7 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
                          **kwargs)
 
         # =======   LOSS  ======= 
-        self.loss_fn     = reduce_eigenvalues   # maximize TICA eigenvalues        
+        self.loss_fn     = reduce_eigenvalues_loss   # maximize TICA eigenvalues        
         self.loss_kwargs = {                    # set default values before parsing options
                             'mode':'sum2',      # eigenvalue reduction mode
                             'n_eig': 0          # how many eigenvalues to optimize (0 == all) 
@@ -117,7 +117,7 @@ def test_deep_tica():
 
     # create cv
     layers = [2,10,10,2]
-    model = DeepTICA_CV(layers,n_cvs=1)
+    model = DeepTICA(layers,n_cvs=1)
 
     # change loss options
     model.loss_kwargs.update({'mode': 'sum2'})

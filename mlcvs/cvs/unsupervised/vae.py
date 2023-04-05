@@ -8,7 +8,7 @@
 Variational Autoencoder collective variable.
 """
 
-__all__ = ["VAE_CV"]
+__all__ = ["VariationalAutoEncoderCV"]
 
 # =============================================================================
 # GLOBAL IMPORTS
@@ -26,7 +26,7 @@ from mlcvs.core.loss import elbo_gaussians_loss
 # VARIATIONAL AUTOENCODER CV
 # =============================================================================
 
-class VAE_CV(BaseCV, pl.LightningModule):
+class VariationalAutoEncoderCV(BaseCV, pl.LightningModule):
     """Variational AutoEncoder Collective Variable.
 
     At training time, the encoder outputs a mean and a variance for each CV

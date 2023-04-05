@@ -5,9 +5,9 @@ from mlcvs.cvs import BaseCV
 from mlcvs.core import FeedForward, Normalization
 from mlcvs.core.loss import mse_loss
 
-__all__ = ["AutoEncoder_CV"]
+__all__ = ["AutoEncoderCV"]
 
-class AutoEncoder_CV(BaseCV, pl.LightningModule):
+class AutoEncoderCV(BaseCV, pl.LightningModule):
     """AutoEncoding Collective Variable. It is composed by a first neural network (encoder) which projects 
     the input data into a latent space (the CVs). Then a second network (decoder) takes 
     the CVs and tries to reconstruct the input data based on them. It is an unsupervised learning approach, 
@@ -117,7 +117,7 @@ def test_autoencodercv():
     opts = { 'norm_in'  : None,
              'encoder' : { 'activation' : 'relu' },
            } 
-    model = AutoEncoder_CV( encoder_layers=layers, options=opts )
+    model = AutoEncoderCV( encoder_layers=layers, options=opts )
     print(model)
 
     # train

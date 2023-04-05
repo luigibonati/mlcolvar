@@ -18,7 +18,7 @@ import pytest
 import pytorch_lightning as pl
 import torch
 
-from mlcvs.cvs.unsupervised.vae import VAE_CV
+from mlcvs.cvs.unsupervised.vae import VariationalAutoEncoderCV
 from mlcvs.data import DictionaryDataset, DictionaryDataModule
 
 
@@ -32,7 +32,7 @@ def test_vae_cv_training(weights):
     # Create VAE CV.
     n_cvs = 2
     in_features = 8
-    model = VAE_CV(
+    model = VariationalAutoEncoderCV(
         n_cvs=n_cvs,
         encoder_layers=[in_features, 6, 4],
         options={

@@ -5,9 +5,9 @@ from mlcvs.core import FeedForward, Normalization
 from mlcvs.core.loss import tda_loss
 from mlcvs.data import DictionaryDataModule
 
-__all__ = ["DeepTDA_CV"]
+__all__ = ["DeepTDA"]
 
-class DeepTDA_CV(BaseCV, pl.LightningModule):
+class DeepTDA(BaseCV, pl.LightningModule):
     """
     Define Deep Targeted Discriminant Analysis (Deep-TDA) CV.
     Combine the inputs with a neural-network and optimize it in a way such that the data are distributed accordingly to a target distribution.
@@ -122,7 +122,7 @@ def test_deeptda_cv():
         # test initialize via dictionary
         options= { 'nn' : { 'activation' : 'relu' } }
 
-        model = DeepTDA_CV(n_states = n_states, n_cvs = n_cvs, target_centers = target_centers, target_sigmas = target_sigmas, layers = layers, options=options)
+        model = DeepTDA(n_states = n_states, n_cvs = n_cvs, target_centers = target_centers, target_sigmas = target_sigmas, layers = layers, options=options)
         
         print('----------')
         print(model)

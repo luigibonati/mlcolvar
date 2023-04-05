@@ -4,9 +4,9 @@ from mlcvs.cvs import BaseCV
 from mlcvs.core import FeedForward, Normalization
 from mlcvs.core.loss import mse_loss
 
-__all__ = ["Regression_CV"]
+__all__ = ["RegressionCV"]
 
-class Regression_CV(BaseCV, pl.LightningModule):
+class RegressionCV(BaseCV, pl.LightningModule):
     """
     Example of collective variable obtained with a regression task.
     Combine the inputs with a neural-network and optimize it to match a target function.
@@ -72,7 +72,7 @@ class Regression_CV(BaseCV, pl.LightningModule):
 
 def test_regression_cv():
     """
-    Create a synthetic dataset and test functionality of the Regression_CV class
+    Create a synthetic dataset and test functionality of the RegressionCV class
     """
     from mlcvs.data import DictionaryDataset, DictionaryDataModule
 
@@ -82,7 +82,7 @@ def test_regression_cv():
     # initialize via dictionary
     options= { 'nn' : { 'activation' : 'relu' } }
 
-    model = Regression_CV( layers = layers,
+    model = RegressionCV( layers = layers,
                         options = options)
     print('----------')
     print(model)
@@ -112,7 +112,7 @@ def test_regression_cv():
     print('custom loss')
     trainer = pl.Trainer(accelerator='cpu',max_epochs=1,logger=None, enable_checkpointing=False)
 
-    model = Regression_CV( layers = [2,10,10,1])
+    model = RegressionCV( layers = [2,10,10,1])
     model.loss_fn = lambda y,y_ref: (y-y_ref).abs().mean() 
     trainer.fit( model, datamodule )
 

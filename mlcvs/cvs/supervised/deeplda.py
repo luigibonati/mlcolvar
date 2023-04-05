@@ -4,11 +4,11 @@ from mlcvs.cvs import BaseCV
 from mlcvs.core import FeedForward, Normalization
 from mlcvs.data import DictionaryDataModule
 from mlcvs.core.stats import LDA
-from mlcvs.core.loss import reduce_eigenvalues
+from mlcvs.core.loss import reduce_eigenvalues_loss
 
-__all__ = ["DeepLDA_CV"]
+__all__ = ["DeepLDA"]
 
-class DeepLDA_CV(BaseCV, pl.LightningModule):
+class DeepLDA(BaseCV, pl.LightningModule):
     """Neural network-based discriminant collective variables.
     
     For the training it requires a DictionaryDataset with the keys 'data' and 'labels'.
@@ -34,7 +34,7 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
         super().__init__(in_features=layers[0], out_features=layers[-1], **kwargs)
 
         # =======   LOSS  ======= 
-        self.loss_fn     = reduce_eigenvalues   # maximize LDA eigenvalues
+        self.loss_fn     = reduce_eigenvalues_loss   # maximize LDA eigenvalues
         self.loss_kwargs = {                    # set default values before parsing options
                             'mode':'sum'}       # eigenvalue reduction mode
 
@@ -164,7 +164,7 @@ def test_deeplda(n_states=2):
              'nn' :      { 'activation' : 'relu' },
              'lda' :     {} ,
            } 
-    model = DeepLDA_CV( layers, n_states, options=opts )
+    model = DeepLDA( layers, n_states, options=opts )
 
     # create trainer and fit
     trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)

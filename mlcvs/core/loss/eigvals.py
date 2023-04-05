@@ -1,8 +1,8 @@
 import torch
 
-__all__ = ['reduce_eigenvalues']
+__all__ = ['reduce_eigenvalues_loss']
 
-def reduce_eigenvalues( evals : torch.Tensor, mode = 'sum', n_eig = 0, invert_sign = True ):
+def reduce_eigenvalues_loss( evals : torch.Tensor, mode = 'sum', n_eig = 0, invert_sign = True ):
         """
         Calculate a monotonic function f(x) of the eigenvalues, by default the sum. By default it returns -f(x) to be used as loss function to maximize eigenvalues in gradient descent schemes. 
 

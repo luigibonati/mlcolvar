@@ -1,6 +1,6 @@
 import pytest
 
-from mlcvs.cvs.supervised.deeplda_cv import test_deeplda
+from mlcvs.cvs.supervised.deeplda import test_deeplda
 
 if __name__ == "__main__":
     test_deeplda(n_states=2)

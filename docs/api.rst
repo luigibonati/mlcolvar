@@ -12,8 +12,8 @@ Collective variables
    :toctree: autosummary
    :template: custom-class-template.rst
 
-   AutoEncoder_CV
-   VAE_CV
+   AutoEncoderCV
+   VariationalAutoEncoderCV
 
 .. rubric:: Supervised learning 
 
@@ -23,9 +23,9 @@ Collective variables
    :toctree: autosummary
    :template: custom-class-template.rst
 
-   Regression_CV
-   DeepLDA_CV
-   DeepTDA_CV
+   RegressionCV
+   DeepLDA
+   DeepTDA
 
 .. rubric:: Time lagged CVs
 
@@ -35,24 +35,13 @@ Collective variables
    :toctree: autosummary
    :template: custom-class-template.rst
 
-   DeepTICA_CV
+   DeepTICA
 
 
-Base classes
+Core modules
 ------------
 
 These are the building blocks which are used to construct the CVs.
-
-.. rubric:: Stats 
-
-.. currentmodule:: mlcvs.core.stats
-
-.. autosummary::
-   :toctree: autosummary
-   :template: custom-class-template.rst
-
-   LDA 
-   TICA
 
 .. rubric:: NN
 
@@ -64,17 +53,6 @@ These are the building blocks which are used to construct the CVs.
 
    FeedForward
 
-.. rubric:: Transform
-
-.. currentmodule:: mlcvs.core.transform
-
-.. autosummary::
-   :toctree: autosummary
-   :template: custom-class-template.rst
-
-   Transform
-   Normalization
-
 .. rubric:: Loss
 
 .. currentmodule:: mlcvs.core.loss
@@ -85,6 +63,30 @@ These are the building blocks which are used to construct the CVs.
 
    mse_loss
    tda_loss
-   reduce_eigenvalues
+   reduce_eigenvalues_loss
+   elbo_gaussians_loss
+
+.. rubric:: Stats 
+
+.. currentmodule:: mlcvs.core.stats
+
+.. autosummary::
+   :toctree: autosummary
+   :template: custom-class-template.rst
+
+   Stats
+   LDA 
+   TICA
+
+.. rubric:: Transform
+
+.. currentmodule:: mlcvs.core.transform
+
+.. autosummary::
+   :toctree: autosummary
+   :template: custom-class-template.rst
+
+   Transform
+   Normalization
 
 
