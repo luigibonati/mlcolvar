@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 import torch
 import os
-import subprocess
+import urllib.request
 
 from mlcvs.data import DictionaryDataset
 
@@ -112,7 +112,7 @@ def load_dataframe(file_names, start = 0, stop = None, stride = 1, delete_downlo
             download = True
             url = filename 
             filename = 'tmp_'+filename.split('/')[-1]
-            subprocess.run(f"wget -O {filename} {url}", shell=True)
+            urllib.request.urlretrieve(url,filename)
 
         # check if file is in PLUMED format
         if is_plumed_file(filename):
@@ -131,8 +131,7 @@ def load_dataframe(file_names, start = 0, stop = None, stride = 1, delete_downlo
         # delete temporary data if necessary
         if download:
             if delete_download:
-                print('DEELETESDAD')
-                subprocess.run(f"rm {filename}", shell=True)
+                os.remove(filename)
             else:
                 print(f'downloaded file ({url}) saved as ({filename}).')
 
@@ -244,12 +243,6 @@ def create_dataset_from_files(
     else:
         return dataset
 
-def test_loadDataframe():
-    # load plumed data
-    df = load_dataframe(file_names='mlcvs/tests/data/state_A.dat', start=0, stop=10, stride=1)
-
-    # download from internet 
-    df = load_dataframe(file_names='https://raw.githubusercontent.com/luigibonati/mlcvs/main/mlcvs/tests/data/2d_model/COLVAR_stateA', start=0, stop=10, stride=1)
 
 def test_datasetFromFile():
     # Test with unlabeled dataset
