@@ -69,7 +69,7 @@ class DictionaryDataset(Dataset):
         return len(value)
     
     def get_stats(self):
-        """Compute statistics ('Mean','Std','Min','Max') of the dataset. 
+        """Compute statistics ('mean','Std','Min','Max') of the dataset. 
 
         Returns
         -------

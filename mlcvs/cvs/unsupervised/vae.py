@@ -8,7 +8,7 @@
 Variational Autoencoder collective variable.
 """
 
-__all__ = ["VAE_CV"]
+__all__ = ["VariationalAutoEncoderCV"]
 
 # =============================================================================
 # GLOBAL IMPORTS
@@ -26,7 +26,7 @@ from mlcvs.core.loss import elbo_gaussians_loss
 # VARIATIONAL AUTOENCODER CV
 # =============================================================================
 
-class VAE_CV(BaseCV, pl.LightningModule):
+class VariationalAutoEncoderCV(BaseCV, pl.LightningModule):
     """Variational AutoEncoder Collective Variable.
 
     At training time, the encoder outputs a mean and a variance for each CV
@@ -42,7 +42,7 @@ class VAE_CV(BaseCV, pl.LightningModule):
     optionally ``'weights'``.
     """
     
-    BLOCKS = ['normIn', 'encoder', 'decoder']
+    BLOCKS = ['norm_in', 'encoder', 'decoder']
     
     def __init__(self,
                  n_cvs : int,
@@ -67,7 +67,7 @@ class VAE_CV(BaseCV, pl.LightningModule):
             the reversed architecture of the encoder.
         options : dict[str, Any], optional
             Options for the building blocks of the model, by default ``None``.
-            Available blocks are: ``'normIn'``, ``'encoder'``, and ``'decoder'``.
+            Available blocks are: ``'norm_in'``, ``'encoder'``, and ``'decoder'``.
             Set ``'block_name' = None`` or ``False`` to turn off a block. Encoder
             and decoder cannot be turned off.
         """
@@ -87,10 +87,10 @@ class VAE_CV(BaseCV, pl.LightningModule):
 
         # ======= BLOCKS =======
 
-        # initialize normIn
-        o = 'normIn'
+        # initialize norm_in
+        o = 'norm_in'
         if ( options[o] is not False ) and (options[o] is not None):
-            self.normIn = Normalization(self.in_features, **options[o])
+            self.norm_in = Normalization(self.in_features, **options[o])
 
         # initialize encoder
         # The encoder outputs two values for each CV representig mean and std.
@@ -124,8 +124,8 @@ class VAE_CV(BaseCV, pl.LightningModule):
             Shape ``(n_batches, n_cvs)``. The CVs, i.e., the mean output of the
             encoder (the variance output is discarded).
         """
-        if self.normIn is not None:
-            x = self.normIn(x)
+        if self.norm_in is not None:
+            x = self.norm_in(x)
         x = self.encoder(x)
 
         # Take only the means and ignore the log variances.
@@ -157,8 +157,8 @@ class VAE_CV(BaseCV, pl.LightningModule):
             reconstructed descriptors.
         """
         # Normalize inputs.
-        if self.normIn is not None:
-            x = self.normIn(x)
+        if self.norm_in is not None:
+            x = self.norm_in(x)
 
         # Encode input into a Gaussian distribution.
         x = self.encoder(x)
@@ -170,8 +170,8 @@ class VAE_CV(BaseCV, pl.LightningModule):
 
         # Decode sample.
         x_hat = self.decoder(z)
-        if self.normIn is not None:
-            x_hat = self.normIn.inverse(x)
+        if self.norm_in is not None:
+            x_hat = self.norm_in.inverse(x)
 
         return mean, log_variance, x_hat
 

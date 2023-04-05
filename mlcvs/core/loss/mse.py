@@ -1,8 +1,8 @@
 import torch
 
-__all__ = ['MSE_loss']
+__all__ = ['mse_loss']
 
-def MSE_loss(input : torch.Tensor, target : torch.Tensor, weights = None):
+def mse_loss(input : torch.Tensor, target : torch.Tensor, weights = None):
     """(Weighted) Mean Square Error
 
     Parameters

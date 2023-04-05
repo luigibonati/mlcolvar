@@ -1,9 +1,9 @@
-﻿mlcvs.core.loss.reduce\_eigenvalues
-===================================
+﻿mlcvs.core.loss.elbo\_gaussians\_loss
+=====================================
 
 .. currentmodule:: mlcvs.core.loss
 
-.. autoclass:: reduce_eigenvalues
+.. autoclass:: elbo_gaussians_loss
    :members:                                   
    :show-inheritance:                           
    :inherited-members: Module,LightningModule                       

@@ -4,24 +4,24 @@ from mlcvs.core.transform import Transform
 
 __all__ = ["Normalization"]
 
-def sanitize_range( Range : torch.Tensor):
+def sanitize_range( range : torch.Tensor):
     """Sanitize
 
     Parameters
     ----------
-    Range : torch.Tensor
+    range : torch.Tensor
         range to be used for standardization
 
     """
 
-    if (Range < 1e-6).nonzero().sum() > 0:
+    if (range < 1e-6).nonzero().sum() > 0:
         print(
         "[Warning] Normalization: the following features have a range of values < 1e-6:",
-        (Range < 1e-6).nonzero(),
+        (range < 1e-6).nonzero(),
         )
-    Range[Range < 1e-6] = 1.0
+    range[range < 1e-6] = 1.0
 
-    return Range
+    return range
 
 
 class Normalization(Transform):
@@ -30,7 +30,7 @@ class Normalization(Transform):
     """
 
     def __init__(self, in_features : int, mean : torch.Tensor = None, range : torch.Tensor = None, stats : dict = None, mode : str = 'mean_std'):
-        """Initialize a normalization object. Values will be subtracted by self.Mean and then divided by self.Range.
+        """Initialize a normalization object. Values will be subtracted by self.mean and then divided by self.range.
         The parameters for the standardization can be either given from the user (via mean/range keywords), or they can be calculated from a datamodule. 
         In the former, the mode will be overriden as 'custom'. 'In the latter, the standardization mode can be either 'mean_std' (remove by the mean and divide by the standard deviation) or 'min_max' (scale and shift the range of values such that all inputs are between -1 and 1).
                                                         
@@ -49,8 +49,8 @@ class Normalization(Transform):
         super().__init__(in_features=in_features, out_features=in_features)
         
         # buffers containing mean and range for standardization
-        self.register_buffer("Mean", torch.zeros(in_features))
-        self.register_buffer("Range", torch.ones(in_features))
+        self.register_buffer("mean", torch.zeros(in_features))
+        self.register_buffer("range", torch.ones(in_features))
         
         self.mode = mode
         self.is_initialized = False
@@ -79,9 +79,9 @@ class Normalization(Transform):
         """
 
         if mean is not None:
-            self.Mean = mean
+            self.mean = mean
         if range is not None:
-            self.Range = sanitize_range(range)
+            self.range = sanitize_range(range)
 
         if mean is not None or range is not None:
             self.is_initialized = True
@@ -104,15 +104,15 @@ class Normalization(Transform):
             stats = stats.to_dict()
 
         if mode == 'mean_std':
-            self.Mean = stats['Mean']
-            Range = stats['Std'] 
-            self.Range = sanitize_range( Range ) 
+            self.mean = stats['mean']
+            range = stats['std'] 
+            self.range = sanitize_range( range ) 
         elif mode == 'min_max':
-            Min = stats['Min']
-            Max = stats['Max']
-            self.Mean = (Max + Min) / 2.0
-            Range = (Max - Min) / 2.0
-            self.Range = sanitize_range( Range ) 
+            min = stats['min']
+            max = stats['max']
+            self.mean = (max + min) / 2.0
+            range = (max - min) / 2.0
+            self.range = sanitize_range( range ) 
         elif mode == 'custom':
             raise AttributeError('If mode is custom the parameters should be supplied via mean and range values when creating the Normalization object or with the set_custom, not with set_from_stats.')
         else: 
@@ -145,10 +145,10 @@ class Normalization(Transform):
         """
             
         # get mean and range
-        Mean  = batch_reshape(self.Mean, x.size())
-        Range = batch_reshape(self.Range, x.size())
+        mean  = batch_reshape(self.mean, x.size())
+        range = batch_reshape(self.range, x.size())
 
-        return x.sub(Mean).div(Range)
+        return x.sub(mean).div(range)
 
     def inverse(self, x: torch.Tensor) -> (torch.Tensor):
         """
@@ -165,10 +165,10 @@ class Normalization(Transform):
             un-normalized inputs
         """
         # get mean and range
-        Mean  = batch_reshape(self.Mean, x.size())
-        Range = batch_reshape(self.Range, x.size())
+        mean  = batch_reshape(self.mean, x.size())
+        range = batch_reshape(self.range, x.size())
 
-        return x.mul(Range).add(Mean)
+        return x.mul(range).add(mean)
 
 
 def test_normalization():
@@ -180,7 +180,7 @@ def test_normalization():
     # get stats
     from mlcvs.core.transform.utils import Statistics
     stats = Statistics(X).to_dict()
-    norm = Normalization(in_features, mean=stats['Mean'],range=stats['Std'])
+    norm = Normalization(in_features, mean=stats['mean'],range=stats['std'])
 
     y = norm(X)
     print(X.mean(0),y.mean(0))

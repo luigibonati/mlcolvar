@@ -3,11 +3,11 @@ import torch
 import pytorch_lightning as pl
 from mlcvs.cvs import BaseCV
 from mlcvs.core import FeedForward, Normalization
-from mlcvs.core.loss import MSE_loss
+from mlcvs.core.loss import mse_loss
 
-__all__ = ["AutoEncoder_CV"]
+__all__ = ["AutoEncoderCV"]
 
-class AutoEncoder_CV(BaseCV, pl.LightningModule):
+class AutoEncoderCV(BaseCV, pl.LightningModule):
     """AutoEncoding Collective Variable. It is composed by a first neural network (encoder) which projects 
     the input data into a latent space (the CVs). Then a second network (decoder) takes 
     the CVs and tries to reconstruct the input data based on them. It is an unsupervised learning approach, 
@@ -20,7 +20,7 @@ class AutoEncoder_CV(BaseCV, pl.LightningModule):
     with the input 'data'.
     """
     
-    BLOCKS = ['normIn','encoder','decoder'] 
+    BLOCKS = ['norm_in','encoder','decoder'] 
     
     def __init__(self,
                 encoder_layers : list, 
@@ -40,13 +40,13 @@ class AutoEncoder_CV(BaseCV, pl.LightningModule):
             If not set it takes automaically the reversed architecture of the encoder
         options : dict[str,Any], optional
             Options for the building blocks of the model, by default None.
-            Available blocks: ['normIn', 'encoder','decoder'].
+            Available blocks: ['norm_in', 'encoder','decoder'].
             Set 'block_name' = None or False to turn off that block
         """
         super().__init__(in_features=encoder_layers[0], out_features=encoder_layers[-1], **kwargs)
 
         # =======   LOSS  ======= 
-        self.loss_fn     = MSE_loss             # reconstruction (MSE) loss
+        self.loss_fn     = mse_loss             # reconstruction (MSE) loss
         self.loss_kwargs = {}                   # set default values before parsing options
 
         # ======= OPTIONS ======= 
@@ -59,10 +59,10 @@ class AutoEncoder_CV(BaseCV, pl.LightningModule):
 
         # ======= BLOCKS =======
 
-        # initialize normIn
-        o = 'normIn'
+        # initialize norm_in
+        o = 'norm_in'
         if ( options[o] is not False ) and (options[o] is not None):
-            self.normIn = Normalization(self.in_features,**options[o]) 
+            self.norm_in = Normalization(self.in_features,**options[o]) 
 
         # initialize encoder
         o = 'encoder'
@@ -73,16 +73,16 @@ class AutoEncoder_CV(BaseCV, pl.LightningModule):
         self.decoder = FeedForward(decoder_layers, **options[o])
 
     def forward_cv(self, x: torch.Tensor) -> (torch.Tensor):
-        if self.normIn is not None:
-            x = self.normIn(x)
+        if self.norm_in is not None:
+            x = self.norm_in(x)
         x = self.encoder(x)
         return x
 
     def encode_decode(self, x: torch.Tensor) -> (torch.Tensor):
         x = self.forward(x)
         x = self.decoder(x)
-        if self.normIn is not None:
-            x = self.normIn.inverse(x)
+        if self.norm_in is not None:
+            x = self.norm_in.inverse(x)
         return x
 
     def training_step(self, train_batch, batch_idx):
@@ -114,10 +114,10 @@ def test_autoencodercv():
     layers = [in_features, 6, 4, out_features]
 
     # initialize via dictionary
-    opts = { 'normIn'  : None,
+    opts = { 'norm_in'  : None,
              'encoder' : { 'activation' : 'relu' },
            } 
-    model = AutoEncoder_CV( encoder_layers=layers, options=opts )
+    model = AutoEncoderCV( encoder_layers=layers, options=opts )
     print(model)
 
     # train

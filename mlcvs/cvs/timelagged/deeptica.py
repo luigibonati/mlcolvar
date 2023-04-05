@@ -3,14 +3,14 @@ import pytorch_lightning as pl
 from mlcvs.cvs import BaseCV
 from mlcvs.core import FeedForward,Normalization
 from mlcvs.core.stats import TICA
-from mlcvs.core.loss import reduce_eigenvalues
+from mlcvs.core.loss import reduce_eigenvalues_loss
 
-__all__ = ["DeepTICA_CV"] 
+__all__ = ["DeepTICA"] 
 
-class DeepTICA_CV(BaseCV, pl.LightningModule):
+class DeepTICA(BaseCV, pl.LightningModule):
     """Time-lagged independent component analysis-based CV."""
     
-    BLOCKS = ['normIn','nn','tica'] 
+    BLOCKS = ['norm_in','nn','tica'] 
 
     def __init__(self, layers : list , n_cvs : int = None, options : dict = None, **kwargs): 
         """ 
@@ -25,7 +25,7 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
             Number of cvs to optimize, default None (= last layer)
         options : dict[str, Any], optional
             Options for the building blocks of the model, by default {}.
-            Available blocks: ['normIn','nn','tica'].
+            Available blocks: ['norm_in','nn','tica'].
             Set 'block_name' = None or False to turn off that block
         """
         super().__init__(in_features=layers[0], 
@@ -33,7 +33,7 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
                          **kwargs)
 
         # =======   LOSS  ======= 
-        self.loss_fn     = reduce_eigenvalues   # maximize TICA eigenvalues        
+        self.loss_fn     = reduce_eigenvalues_loss   # maximize TICA eigenvalues        
         self.loss_kwargs = {                    # set default values before parsing options
                             'mode':'sum2',      # eigenvalue reduction mode
                             'n_eig': 0          # how many eigenvalues to optimize (0 == all) 
@@ -45,10 +45,10 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
 
         # ======= BLOCKS =======
 
-        # initialize normIn
-        o = 'normIn'
+        # initialize norm_in
+        o = 'norm_in'
         if ( options[o] is not False ) and (options[o] is not None):
-            self.normIn = Normalization(self.in_features, **options[o]) 
+            self.norm_in = Normalization(self.in_features, **options[o]) 
 
         # initialize nn
         o = 'nn'
@@ -59,8 +59,8 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
         self.tica = TICA(layers[-1], n_cvs, **options[o])
         
     def forward_nn(self, x: torch.Tensor) -> (torch.Tensor):
-        if self.normIn is not None:
-            x = self.normIn(x)
+        if self.norm_in is not None:
+            x = self.norm_in(x)
         x = self.nn(x)
         return x
 
@@ -73,7 +73,7 @@ class DeepTICA_CV(BaseCV, pl.LightningModule):
         c0_reg : float
             Regularization value for C_0.
         """
-        self.tica.reg_c0 = c0_reg
+        self.tica.reg_C_0 = c0_reg
 
     def training_step(self, train_batch, batch_idx):
         """
@@ -117,7 +117,7 @@ def test_deep_tica():
 
     # create cv
     layers = [2,10,10,2]
-    model = DeepTICA_CV(layers,n_cvs=1)
+    model = DeepTICA(layers,n_cvs=1)
 
     # change loss options
     model.loss_kwargs.update({'mode': 'sum2'})

@@ -34,7 +34,7 @@ class TICA(Stats):
         self.C_lag = None
 
         # Regularization
-        self.reg_c0 = 1e-6
+        self.reg_C_0 = 1e-6
 
     def extra_repr(self) -> str:
         repr = f"in_features={self.in_features}, out_features={self.out_features}"
@@ -75,7 +75,7 @@ class TICA(Stats):
         C_0 = correlation_matrix(x_t,x_t,w_t)
         C_lag = correlation_matrix(x_t,x_lag,w_lag)
 
-        evals, evecs = cholesky_eigh(C_lag,C_0,self.reg_c0,n_eig=self.out_features) 
+        evals, evecs = cholesky_eigh(C_lag,C_0,self.reg_C_0,n_eig=self.out_features) 
 
         if save_params:
             self.evals = evals
@@ -123,9 +123,9 @@ class TICA(Stats):
         out : torch.Tensor
             output
         """
-        Mean = batch_reshape( self.mean, x.size() )
+        mean = batch_reshape( self.mean, x.size() )
         
-        return torch.matmul(x.sub(Mean), self.evecs)
+        return torch.matmul(x.sub(mean), self.evecs)
         
 def test_tica():
     in_features = 2
