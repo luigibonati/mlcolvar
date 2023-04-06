@@ -8,7 +8,7 @@
 Evidence Lower BOund (ELBO) loss functions used to train variational Autoencoders.
 """
 
-__all__ = ['elbo_gaussians_loss']
+__all__ = ['ELBOGaussiansLoss', 'elbo_gaussians_loss']
 
 
 # =============================================================================
@@ -24,13 +24,56 @@ from mlcvs.core.loss.mse import mse_loss
 # LOSS FUNCTIONS
 # =============================================================================
 
+class ELBOGaussiansLoss(torch.nn.Module):
+    """ELBO loss function assuming the latent and reconstruction distributions are Gaussian.
+
+    The ELBO uses the MSE as the reconstruction loss (i.e., assumes that the
+    decoder outputs the mean of a Gaussian distribution with variance 1), and
+    the KL divergence between two normal distributions ``N(mean, var)`` and
+    ``N(0, 1)``, where ``mean`` and ``var`` are the output of the encoder.
+    """
+    def forward(
+            self,
+            target: torch.Tensor,
+            output: torch.Tensor,
+            mean: torch.Tensor,
+            log_variance: torch.Tensor,
+            weights: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        """Compute the value of the loss function.
+
+        Parameters
+        ----------
+        target : torch.Tensor
+            Shape ``(n_batches, in_features)``. Data points (e.g. input of encoder
+            or time-lagged features).
+        output : torch.Tensor
+            Shape ``(n_batches, in_features)``. Output of the decoder.
+        mean : torch.Tensor
+            Shape ``(n_batches, latent_features)``. The means of the Gaussian
+            distributions associated to the inputs.
+        log_variance : torch.Tensor
+            Shape ``(n_batches, latent_features)``. The logarithm of the variances
+            of the Gaussian distributions associated to the inputs.
+        weights : torch.Tensor, optional
+            Shape ``(n_batches,)`` or ``(n_batches,1)``. If given, the average over
+            batches is weighted. The default (``None``) is unweighted.
+
+        Returns
+        -------
+        loss: torch.Tensor
+            The value of the loss function.
+        """
+        return elbo_gaussians_loss(target, output, mean, log_variance, weights)
+
+
 def elbo_gaussians_loss(
         target: torch.Tensor,
         output: torch.Tensor,
         mean: torch.Tensor,
         log_variance: torch.Tensor,
         weights: Optional[torch.Tensor] = None
-):
+) -> torch.Tensor:
     """ELBO loss function assuming the latent and reconstruction distributions are Gaussian.
 
     The ELBO uses the MSE as the reconstruction loss (i.e., assumes that the
@@ -41,7 +84,8 @@ def elbo_gaussians_loss(
     Parameters
     ----------
     target : torch.Tensor
-        Shape ``(n_batches, in_features)``. Data points (e.g. input of encoder or time-lagged features).
+        Shape ``(n_batches, in_features)``. Data points (e.g. input of encoder
+        or time-lagged features).
     output : torch.Tensor
         Shape ``(n_batches, in_features)``. Output of the decoder.        
     mean : torch.Tensor
@@ -51,8 +95,8 @@ def elbo_gaussians_loss(
         Shape ``(n_batches, latent_features)``. The logarithm of the variances
         of the Gaussian distributions associated to the inputs.
     weights : torch.Tensor, optional
-        Shape ``(n_batches,)`` or ``(n_batches,1)``. If given, the average over batches is weighted.
-        The default (``None``) is unweighted.
+        Shape ``(n_batches,)`` or ``(n_batches,1)``. If given, the average over
+        batches is weighted. The default (``None``) is unweighted.
 
     Returns
     -------

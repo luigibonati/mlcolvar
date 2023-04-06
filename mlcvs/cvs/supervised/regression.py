@@ -105,8 +105,9 @@ def test_regression_cv():
     # weighted loss
     print('weighted loss') 
     w = torch.randn((100))
-    dataset = DictionaryDataset({'data':X,'target':y,'weights':w})
-    trainer.fit( model, datamodule )
+    dataset_weights = DictionaryDataset({'data':X, 'target':y, 'weights':w})
+    datamodule_weights = DictionaryDataModule(dataset, lengths=[0.75,0.2,0.05], batch_size=25)
+    trainer.fit(model, datamodule_weights)
         
     # use custom loss
     print('custom loss')

@@ -1,51 +1,134 @@
+#!/usr/bin/env python
+
+# =============================================================================
+# MODULE DOCSTRING
+# =============================================================================
+
+"""
+Autocorrelation loss.
+"""
+
+__all__ = ['AutocorrelationLoss', 'autocorrelation_loss']
+
+
+# =============================================================================
+# GLOBAL IMPORTS
+# =============================================================================
+
+from typing import Optional
+
 import torch
 
-__all__ = ['autocorrelation_loss']
 
-def autocorrelation_loss(z_t : torch.Tensor, z_lag : torch.Tensor, weights = None, invert_sign = True ):
+# =============================================================================
+# LOSS FUNCTIONS
+# =============================================================================
+
+class AutocorrelationLoss(torch.nn.Module):
+    r"""(Weighted) autocorrelation loss.
+
+    .. math::
+
+        L = - \frac{\langle (x(t)-\bar{x}(t))(x(t+\tau)-\bar{x}(t)) \rangle}{\sigma(x_t)^2}
+
+    """
+
+    def __init__(self, invert_sign: bool = True):
+        """Constructor.
+
+        Parameters
+        ----------
+        invert_sign: bool, optional
+            Whether to return the negative autocorrelation in order to be minimized
+            with gradient descent methods. Default is ``True``.
+        """
+        super().__init__()
+        self.invert_sign = invert_sign
+
+    def forward(
+            self,
+            x_t: torch.Tensor,
+            x_lag: torch.Tensor,
+            weights: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """Estimate the autocorrelation.
+
+        Parameters
+        ----------
+        x_t : torch.Tensor
+            Shape ``(n_batches, n_features)``. The features of the sample at
+            time ``t``.
+        x_lag : torch.Tensor
+            Shape ``(n_batches, n_features)``. The features of the sample at
+            time ``t + lag``.
+        weights : torch.Tensor, optional
+            Shape ``(n_batches,)`` or ``(n_batches, 1)``. The weight associated
+            to each batch sample. Default is ``None``.
+
+        Returns
+        -------
+        loss : torch.Tensor
+            Loss value.
+        """
+        return autocorrelation_loss(x_t, x_lag, weights=weights, invert_sign=self.invert_sign)
+
+
+def autocorrelation_loss(
+        x_t: torch.Tensor,
+        x_lag: torch.Tensor,
+        weights: Optional[torch.Tensor] = None,
+        invert_sign: bool = True,
+) -> torch.Tensor:
     """(Weighted) autocorrelation loss.
 
-    $$L = - \frac{\langle (x(t)-\bar{x}(t))(x(t+\tau)-\bar{x}(t)) \rangle}{\sigma(x_t)^2}$$
+    .. math::
+
+        L = - \frac{\langle (x(t)-\bar{x}(t))(x(t+\tau)-\bar{x}(t)) \rangle}{\sigma(x_t)^2}
     
     Parameters
     ----------
-    z_t : torch.Tensor
-        values at time t
-    z_lag : torch.Tensor
-        values at time t+lag
+    x_t : torch.Tensor
+        Shape ``(n_batches, n_features)``. The features of the sample at
+        time ``t``.
+    x_lag : torch.Tensor
+        Shape ``(n_batches, n_features)``. The features of the sample at
+        time ``t + lag``.
     weights : torch.Tensor, optional
-        sample weights, by default None
+        Shape ``(n_batches,)`` or ``(n_batches, 1)``. The weight associated
+        to each batch sample. Default is ``None``.
     invert_sign: bool, optional
-        whether to return the opposite of the function (in order to be minimized with GD methods), by default true
+        Whether to return the negative autocorrelation in order to be minimized
+        with gradient descent methods. Default is ``True``.
 
     Returns
     -------
     loss: torch.Tensor
-        loss function
+        Loss value.
     """
-
-    if z_t.ndim == 2:
-        if z_t.shape[1] > 1:
-            raise ValueError (f'autocorrelation_loss should be used on (batches of) scalar outputs, found tensor of shape {z_t.shape} instead.')
+    # Currently we support only 1 dimensional features.
+    if x_t.ndim == 2:
+        if x_t.shape[1] > 1:
+            raise ValueError('The autocorrelation loss should be used on (batches of) scalar '
+                             f'outputs, found tensor of shape {z_t.shape} instead.')
         else:
-            z_t = z_t.squeeze()
-            z_lag = z_lag.squeeze()
+            x_t = x_t.squeeze()
+            x_lag = x_lag.squeeze()
 
     if weights is None:
-        mean = z_t.mean()
-        std = z_t.std()
+        mean = x_t.mean()
+        std = x_t.std()
         
-        loss = ((z_t-mean)*(z_lag-mean)).mean()/std**2
+        loss = ((x_t-mean)*(x_lag-mean)).mean()/std**2
     else:
         weights = weights.squeeze()
         weighted_mean = lambda x,w : (x*w).sum()/w.sum()
 
-        mean = weighted_mean(z_t,weights)
-        std = weighted_mean((z_t-mean)**2,weights).sqrt()
+        mean = weighted_mean(x_t, weights)
+        std = weighted_mean((x_t - mean)**2, weights).sqrt()
         
-        loss = weighted_mean((z_t-mean)*(z_lag-mean), weights)/std**2
+        loss = weighted_mean((x_t-mean)*(x_lag-mean), weights)/std**2
     
     if invert_sign:
-        loss *= -1
+        return -loss
 
     return loss

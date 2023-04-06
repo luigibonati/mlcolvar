@@ -1,8 +1,47 @@
+#!/usr/bin/env python
+
+# =============================================================================
+# MODULE DOCSTRING
+# =============================================================================
+
+"""
+(Weighted) Mean Squared Error (MSE) loss function.
+"""
+
+__all__ = ['MSELoss', 'mse_loss']
+
+
+# =============================================================================
+# GLOBAL IMPORTS
+# =============================================================================
+
+from typing import Optional
+
 import torch
 
-__all__ = ['mse_loss']
 
-def mse_loss(input : torch.Tensor, target : torch.Tensor, weights = None):
+# =============================================================================
+# LOSS FUNCTIONS
+# =============================================================================
+
+class MSELoss(torch.nn.Module):
+    """(Weighted) Mean Square Error"""
+
+    def forward(
+            self,
+            input: torch.Tensor,
+            target: torch.Tensor,
+            weights: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        """Compute the value of the loss function."""
+        return mse_loss(input, target, weights)
+
+
+def mse_loss(
+        input: torch.Tensor,
+        target: torch.Tensor,
+        weights: Optional[torch.Tensor] = None
+) -> torch.Tensor:
     """(Weighted) Mean Square Error
 
     Parameters
@@ -25,7 +64,7 @@ def mse_loss(input : torch.Tensor, target : torch.Tensor, weights = None):
     if target.ndim == 1:
         target = target.unsqueeze(1)
     # take the different
-    diff = input - target 
+    diff = input - target
     # weight them
     if weights is not None:
         if weights.ndim == 1:

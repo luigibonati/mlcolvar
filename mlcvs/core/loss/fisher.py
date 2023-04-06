@@ -1,26 +1,85 @@
+#!/usr/bin/env python
+
+# =============================================================================
+# MODULE DOCSTRING
+# =============================================================================
+
+"""
+Fisher discriminant loss for (Deep) Linear Discriminant Analysis.
+"""
+
+__all__ = ['FisherDiscriminantLoss', 'fisher_discriminant_loss']
+
+
+# =============================================================================
+# GLOBAL IMPORTS
+# =============================================================================
+
 import torch
 from mlcvs.core.stats import LDA
 
-__all__ = ['fisher_discriminant_loss']
 
-def fisher_discriminant_loss(X : torch.Tensor, labels : torch.Tensor, invert_sign = True):
+# =============================================================================
+# LOSS FUNCTIONS
+# =============================================================================
+
+class FisherDiscriminantLoss(torch.nn.Module):
     """ Fisher's discriminant ratio.
 
-    $$L = - \frac{S_b(X)}{S_w(X)}$$
+    .. math::
+        L = - \frac{S_b(X)}{S_w(X)}
+    """
+
+    def __init__(self, invert_sign : bool = True):
+        super().__init__()
+        self.invert_sign = invert_sign
+
+    def forward(
+            self,
+            X: torch.Tensor,
+            labels: torch.Tensor,
+    ) -> torch.Tensor:
+        """Compute the value of the loss function.
+
+        Parameters
+        ----------
+        X : torch.Tensor
+            Shape ``(n_batches, n_features)``. Input features.
+        labels : torch.Tensor
+            Shape ``(n_batches,)``. Classes labels.
+
+        Returns
+        -------
+        loss : torch.Tensor
+            Loss value.
+        """
+        return fisher_discriminant_loss(X, labels. self.invert_sign)
+
+
+def fisher_discriminant_loss(
+        X: torch.Tensor,
+        labels: torch.Tensor,
+        invert_sign: bool = True
+) -> torch.Tensor:
+    """ Fisher's discriminant ratio.
+
+    .. math::
+        L = - \frac{S_b(X)}{S_w(X)}
     
     Parameters
     ----------
     X : torch.Tensor
-        input variable
+        Shape ``(n_batches, n_features)``. Input features.
     labels : torch.Tensor
-        classes labels
+        Shape ``(n_batches,)``. Classes labels.
     invert_sign: bool, optional
-        whether to return the opposite of the function (in order to be minimized with GD methods), by default true
+        whether to return the negative Fisher's discriminant ratio in order to be
+        minimized with gradient descent methods. Default is ``True``.
 
     Returns
     -------
     loss: torch.Tensor
-        loss function
+        Loss value.
     """
 
     if X.ndim == 1:
@@ -33,7 +92,7 @@ def fisher_discriminant_loss(X : torch.Tensor, labels : torch.Tensor, invert_sig
     n_classes = len(labels.unique())
 
     # define LDA object to compute S_b / S_w ratio
-    lda = LDA(in_features=d,n_states=n_classes)
+    lda = LDA(in_features=d, n_states=n_classes)
 
     s_b, s_w = lda.compute_scatter_matrices(X,labels)
 
