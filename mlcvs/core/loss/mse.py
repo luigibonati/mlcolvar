@@ -7,12 +7,12 @@ def mse_loss(input : torch.Tensor, target : torch.Tensor, weights = None):
 
     Parameters
     ----------
-    x : torch.Tensor
+    input : torch.Tensor
         prediction
-    x_hat : torch.Tensor
+    target : torch.Tensor
         reference
-    options : dict, optional
-        available options: 'weights', by default {}
+    weights : torch.Tensor, optional
+        sample weights, by default None
 
     Returns
     -------

@@ -82,8 +82,8 @@ class Statistics(object):
 
 def batch_reshape(t: torch.Tensor, size : torch.Size) -> (torch.Tensor):
     """Return value reshaped according to size. 
-    In case of batch expand unsqueeze and expand along the first dimension.
-    For single inputs just pass:
+    In case of batch unsqueeze and expand along the first dimension.
+    For single inputs just pass.
 
     Parameters
     ----------
