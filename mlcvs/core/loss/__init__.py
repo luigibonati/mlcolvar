@@ -1,4 +1,11 @@
-__all__ = ["mse_loss","tda_loss","elbo_gaussians_loss","reduce_eigenvalues_loss","autocorrelation_loss","fisher_discriminant_loss"]
+__all__ = [
+    "MSELoss", "mse_loss",
+    "TDALoss", "tda_loss",
+    "ELBOGaussiansLoss", "elbo_gaussians_loss",
+    "ReduceEigenvaluesLoss", "reduce_eigenvalues_loss",
+    "AutocorrelationLoss", "autocorrelation_loss",
+    "FisherDiscriminantLoss", "fisher_discriminant_loss",
+]
 
 from .mse import MSELoss, mse_loss
 from .tda_loss import TDALoss, tda_loss
