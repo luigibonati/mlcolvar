@@ -177,3 +177,18 @@ class BaseCV:
         """ 
         optimizer = getattr(torch.optim,self._optimizer_name)(self.parameters(),**self.optimizer_kwargs)
         return optimizer
+
+    def __setattr__(self, key, value):
+        # PyTorch overrides __setattr__ to raise a TypeError when you try to assign
+        # an attribute that is a Module to avoid substituting the model's component
+        # by mistake. This means we can't simply assign to loss_fn a lambda function
+        # after it's been assigned a Module, but we need to delete the Module first.
+        #    https://github.com/pytorch/pytorch/issues/51896
+        #    https://stackoverflow.com/questions/61116433/maybe-i-found-something-strange-on-pytorch-which-result-in-property-setter-not
+        try:
+            super().__setattr__(key, value)
+        except TypeError as e:
+            # We make an exception only for loss_fn.
+            if (key == 'loss_fn') and ('cannot assign' in str(e)):
+                del self.loss_fn
+                super().__setattr__(key, value)
