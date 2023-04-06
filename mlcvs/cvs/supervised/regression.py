@@ -2,7 +2,7 @@ import torch
 import pytorch_lightning as pl
 from mlcvs.cvs import BaseCV
 from mlcvs.core import FeedForward, Normalization
-from mlcvs.core.loss import mse_loss
+from mlcvs.core.loss import MSELoss
 
 __all__ = ["RegressionCV"]
 
@@ -35,8 +35,7 @@ class RegressionCV(BaseCV, pl.LightningModule):
         super().__init__(in_features=layers[0], out_features=layers[-1], **kwargs)
 
         # =======   LOSS  =======
-        self.loss_fn     = mse_loss            # Reconstruction (MSE) loss
-        self.loss_kwargs = {}                  # set default values before parsing options
+        self.loss_fn = MSELoss()
 
         # ======= OPTIONS ======= 
         # parse and sanitize
@@ -51,20 +50,17 @@ class RegressionCV(BaseCV, pl.LightningModule):
         o = 'nn'
         self.nn = FeedForward(layers, **options[o])
 
-        # ===== LOSS OPTIONS =====
-        self.loss_kwargs = {}   
-
     def training_step(self, train_batch, batch_idx):
-        options = self.loss_kwargs.copy()
         # =================get data===================
         x = train_batch['data']
         labels = train_batch['target']
+        loss_kwargs = {}
         if 'weights' in train_batch:
-            options['weights'] = train_batch['weights'] 
+            loss_kwargs['weights'] = train_batch['weights']
         # =================forward====================
         y = self.forward_cv(x)
         # ===================loss=====================
-        loss = self.loss_fn(y,labels, **options)
+        loss = self.loss_fn(y, labels, **loss_kwargs)
         # ====================log===================== 
         name = 'train' if self.training else 'valid'       
         self.log(f'{name}_loss', loss, on_epoch=True)

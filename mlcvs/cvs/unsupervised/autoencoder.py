@@ -3,7 +3,7 @@ import torch
 import pytorch_lightning as pl
 from mlcvs.cvs import BaseCV
 from mlcvs.core import FeedForward, Normalization
-from mlcvs.core.loss import mse_loss
+from mlcvs.core.loss import MSELoss
 
 __all__ = ["AutoEncoderCV"]
 
@@ -45,9 +45,9 @@ class AutoEncoderCV(BaseCV, pl.LightningModule):
         """
         super().__init__(in_features=encoder_layers[0], out_features=encoder_layers[-1], **kwargs)
 
-        # =======   LOSS  ======= 
-        self.loss_fn     = mse_loss             # reconstruction (MSE) loss
-        self.loss_kwargs = {}                   # set default values before parsing options
+        # =======   LOSS  =======
+        # Reconstruction (MSE) loss
+        self.loss_fn = MSELoss()
 
         # ======= OPTIONS ======= 
         # parse and sanitize
@@ -86,11 +86,11 @@ class AutoEncoderCV(BaseCV, pl.LightningModule):
         return x
 
     def training_step(self, train_batch, batch_idx):
-        options = self.loss_kwargs.copy()
         # =================get data===================
         x = train_batch['data']
+        loss_kwargs = {}
         if 'weights' in train_batch:
-            options['weights'] = train_batch['weights'] 
+            loss_kwargs['weights'] = train_batch['weights']
         # =================forward====================
         x_hat = self.encode_decode(x)
         # ===================loss=====================
@@ -100,7 +100,7 @@ class AutoEncoderCV(BaseCV, pl.LightningModule):
             x_ref = train_batch['target']
         else:
             x_ref = x 
-        loss = self.loss_fn(x_hat,x_ref, **options)
+        loss = self.loss_fn(x_hat, x_ref, **loss_kwargs)
         # ====================log=====================     
         name = 'train' if self.training else 'valid'       
         self.log(f'{name}_loss', loss, on_epoch=True)

@@ -35,9 +35,6 @@ class BaseCV:
         self._optimizer_name     = 'Adam'
         self.optimizer_kwargs    = {}
 
-        # LOSS
-        self.loss_kwargs         = {}
-
         # PRE/POST
         self.preprocessing      = preprocessing
         self.postprocessing     = postprocessing
@@ -54,7 +51,7 @@ class BaseCV:
     def parse_options(self, options : dict = None):
         """
         Sanitize options and create defaults ({}) if not in options.
-        Furthermore, sets loss and optimizer kwargs if given. 
+        Furthermore, it sets the optimizer kwargs, if given.
 
         Parameters
         ----------
@@ -69,12 +66,10 @@ class BaseCV:
 
         for o in options.keys():
             if o not in self.BLOCKS:
-                if o == 'loss':
-                    self.loss_kwargs.update(options[o])
-                elif o == 'optimizer':
+                if o == 'optimizer':
                     self.optimizer_kwargs.update(options[o])
                 else:
-                    raise ValueError(f'The key {o} is not available in this class. The available keys are: {",".join(self.BLOCKS)}, + (loss,optimizer) ')
+                    raise ValueError(f'The key {o} is not available in this class. The available keys are: {", ".join(self.BLOCKS)}, and optimizer.')
 
         return options
 
