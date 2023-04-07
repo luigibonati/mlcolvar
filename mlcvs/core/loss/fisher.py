@@ -24,7 +24,7 @@ from mlcvs.core.stats import LDA
 # =============================================================================
 
 class FisherDiscriminantLoss(torch.nn.Module):
-    """ Fisher's discriminant ratio.
+    r""" Fisher's discriminant ratio.
 
     .. math::
         L = - \frac{S_b(X)}{S_w(X)}
@@ -61,9 +61,10 @@ def fisher_discriminant_loss(
         labels: torch.Tensor,
         invert_sign: bool = True
 ) -> torch.Tensor:
-    """ Fisher's discriminant ratio.
+    r""" Fisher's discriminant ratio.
 
     .. math::
+
         L = - \frac{S_b(X)}{S_w(X)}
     
     Parameters

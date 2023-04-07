@@ -79,7 +79,7 @@ def autocorrelation_loss(
         weights: Optional[torch.Tensor] = None,
         invert_sign: bool = True,
 ) -> torch.Tensor:
-    """(Weighted) autocorrelation loss.
+    r"""(Weighted) autocorrelation loss.
 
     .. math::
 
