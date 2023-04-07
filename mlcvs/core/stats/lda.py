@@ -13,17 +13,19 @@ class LDA(Stats):
 
     Attributes
     ----------
-    n_features : int
-        Number of features
+    in_features : int
+        Number of input features
+    out_features : int
+        Number of ouput features (n_states - 1)
     n_states : int
         Number of states
-    evals_ : torch.Tensor
+    evals : torch.Tensor
         LDA eigenvalues
-    evecs_ : torch.Tensor
+    evecs : torch.Tensor
         LDA eigenvectors
-    S_b_ : torch.Tensor
+    S_b : torch.Tensor
         Between scatter matrix
-    S_w_ : torch.Tensor
+    S_w : torch.Tensor
         Within scatter matrix
     sw_reg : float
         Regularization to S_w matrix
