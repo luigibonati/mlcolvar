@@ -15,13 +15,16 @@ __all__ = ['DictionaryDataModule']
 # GLOBAL IMPORTS
 # =============================================================================
 
+import math
+from typing import Sequence, Union, Optional
+import warnings
+
 import torch
 import numpy as np
 import pytorch_lightning as pl
-import warnings
-import math
 from torch.utils.data import random_split, Subset
 from torch._utils import _accumulate
+
 from mlcvs.data import FastDictionaryLoader, DictionaryDataset
 
 
@@ -30,31 +33,43 @@ from mlcvs.data import FastDictionaryLoader, DictionaryDataset
 # =============================================================================
 
 class DictionaryDataModule(pl.LightningDataModule):
-    """Lightning DataModule constructed for DictionaryDataset(s).
+    """Lightning DataModule constructed for :class:`~mlcvs.data.dataset.DictionaryDataset`(s).
 
-    The DataModule automatically splits the ``DictionaryDataset``s (using either
-    random or sequential splitting) into training, validation, and test sets.
+    The DataModule automatically splits the :class:`~mlcvs.data.dataset.DictionaryDataset`s
+    (using either random or sequential splitting) into training, validation, and (optionally)
+    test sets.
 
     """
-    def __init__(self, dataset: DictionaryDataset, lengths=[0.8,0.2], batch_size: int or list = 0, random_splits: bool = True, shuffle : bool or list = True, generator : torch.Generator = None):
-        """Create a DataModule derived from a DictionaryDataset, which returns train/valid/test dataloaders.
+    def __init__(
+            self,
+            dataset: DictionaryDataset,
+            lengths: Sequence = (0.8, 0.2),
+            batch_size: Union[int, Sequence] = 0,
+            random_splits: bool = True,
+            shuffle: Union[bool, Sequence] = True,
+            generator: Optional[torch.Generator] = None
+    ):
+        """Create a ``DataModule`` derived from a :class:`~mlcvs.data.dataset.DictionaryDataset`,
+        which returns train/valid/test ``DataLoader``s.
 
-        For the batch_size and shuffle parameters either a single value or a list-type of values (with same size as lenghts) can be provided.
+        For the ``batch_size`` and ``shuffle`` parameters, either a single value
+        or a list-type of values (with same size as lengths) can be provided.
 
         Parameters
         ----------
         dataset : DictionaryDataset
-            Dataset
-        lengths : list, optional
-            Lenghts of the training/validation/test datasets , by default [0.8,0.2]
-        batch_size : int or list, optional
-            Batch size, by default 0 (== len(dataset))
+            The dataset.
+        lengths : list-like, optional
+            Lengths of the training/validation/test datasets. This can be a list
+            of integers or of (float) fractions. The default is ``[0.8,0.2]``.
+        batch_size : int or list-like, optional
+            Batch size, by default 0 (== ``len(dataset)``).
         random_splits: bool, optional
-            whether to randomly split train/valid/test or sequentially, by default True
-        shuffle : Union[bool,list], optional
-            whether to shuffle the batches from the dataloader, by default True
+            Whether to randomly split train/valid/test or sequentially, by default ``True``.
+        shuffle : int or list-like, optional
+            Whether to shuffle the batches in the ``DataLoader``, by default ``True``.
         generator : torch.Generator, optional
-            set random generator for reproducibility, by default None
+            Set random generator for reproducibility, by default ``None``.
         """
         super().__init__()
         self.dataset = dataset
@@ -128,7 +143,7 @@ class DictionaryDataModule(pl.LightningDataModule):
         return string
 
 
-def sequential_split(dataset, lengths: list ) -> list:
+def sequential_split(dataset, lengths: Sequence) -> list:
     """
     Sequentially split a dataset into non-overlapping new datasets of given lengths.
     
