@@ -49,8 +49,7 @@ class DictionaryDataModule(pl.LightningDataModule):
             shuffle: Union[bool, Sequence] = True,
             generator: Optional[torch.Generator] = None
     ):
-        """Create a ``DataModule`` derived from a :class:`~mlcvs.data.dataset.DictionaryDataset`,
-        which returns train/valid/test ``DataLoader``s.
+        """Create a ``DataModule`` wrapping a :class:`~mlcvs.data.dataset.DictionaryDataset`.
 
         For the ``batch_size`` and ``shuffle`` parameters, either a single value
         or a list-type of values (with same size as lengths) can be provided.
@@ -74,58 +73,61 @@ class DictionaryDataModule(pl.LightningDataModule):
         super().__init__()
         self.dataset = dataset
         self.lengths = lengths
-        if isinstance(batch_size,int):
-            self.batch_size = [batch_size for _ in lengths ]
-        else:
-            self.batch_size = batch_size
-        if isinstance(shuffle,bool):
-            self.shuffle = [shuffle for _ in lengths ]
-        else:
-            self.shuffle = shuffle
         self.random_splits = random_splits
         self.generator = generator
+
+        # Make sure batch_size and shuffle are lists.
+        if isinstance(batch_size, int):
+            self.batch_size = [batch_size for _ in lengths]
+        else:
+            self.batch_size = batch_size
+        if isinstance(shuffle, bool):
+            self.shuffle = [shuffle for _ in lengths]
+        else:
+            self.shuffle = shuffle
         
-        # setup
-        self.dataset_splits = None
+        # This is initialized in setup().
+        self._dataset_split = None
         
         # dataloaders
         self.train_loader = None
         self.valid_loader = None
         self.test_loader  = None
 
+    @property
+    def dataset_split(self):
+        # Handle the error message.
+        if self._dataset_split is None:
+            raise AttributeError('The datamodule has not been set up yet. If you want to get the '
+                                 'dataloaders outside a Lightning trainer please call .setup() first.')
+        return self._dataset_split
+
     def setup(self, stage: str = None):
-        if self.dataset_splits is None:
+        if self._dataset_split is None:
             if self.random_splits:
-                self.dataset_splits = random_split(self.dataset, self.lengths, generator=self.generator)
+                self._dataset_split = random_split(self.dataset, self.lengths, generator=self.generator)
             else:
-                self.dataset_splits = sequential_split(self.dataset, self.lengths)
+                self._dataset_split = sequential_split(self.dataset, self.lengths)
 
     def train_dataloader(self):
         """Return training dataloader."""
-        if self.dataset_splits is None:
-            raise AttributeError('The datamodule has not been set up yet. If you want to get the dataloaders outside a Lightning trainer please call .setup() first.')
         if self.train_loader is None:
-            self.train_loader = FastDictionaryLoader(self.dataset_splits[0], batch_size=self.batch_size[0],shuffle=self.shuffle[0])
+            self.train_loader = FastDictionaryLoader(self.dataset_split[0], batch_size=self.batch_size[0], shuffle=self.shuffle[0])
         return self.train_loader
 
     def val_dataloader(self):
         """Return validation dataloader."""
-        if self.dataset_splits is None:
-            raise AttributeError('The datamodule has not been set up yet. If you want to get the dataloaders outside a Lightning trainer please call .setup() first.')
         if self.valid_loader is None:
-            self.valid_loader = FastDictionaryLoader(self.dataset_splits[1], batch_size=self.batch_size[1],shuffle=self.shuffle[1])
+            self.valid_loader = FastDictionaryLoader(self.dataset_split[1], batch_size=self.batch_size[1], shuffle=self.shuffle[1])
         return self.valid_loader
 
     def test_dataloader(self):
         """Return test dataloader."""
-        if len(self.lengths) >= 3:
-            if self.dataset_splits is None:
-                raise AttributeError('The datamodule has not been set up yet. If you want to get the dataloaders outside a Lightning trainer please call .setup() first.')
-            if self.test_loader is None:
-                self.test_loader = FastDictionaryLoader(self.dataset_splits[2], batch_size=self.batch_size[2],shuffle=self.shuffle[2])
-            return self.test_loader
-        else: 
+        if len(self.lengths) < 3:
             raise ValueError('Test dataset not available, you need to pass three lengths to datamodule.')
+        if self.test_loader is None:
+            self.test_loader = FastDictionaryLoader(self.dataset_split[2], batch_size=self.batch_size[2], shuffle=self.shuffle[2])
+        return self.test_loader
 
     def predict_dataloader(self):
         raise NotImplementedError()
