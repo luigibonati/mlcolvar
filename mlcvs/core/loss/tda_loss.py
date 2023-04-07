@@ -52,6 +52,7 @@ class TDALoss(torch.nn.Module):
         beta : float, optional
             Sigmas loss compontent prefactor, by default 100.
         """
+        super().__init__()
         self.n_states = n_states
         self.target_centers = target_centers
         self.target_sigmas = target_sigmas

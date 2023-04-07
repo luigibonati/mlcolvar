@@ -19,7 +19,7 @@ import torch
 import pytorch_lightning as pl
 from mlcvs.cvs import BaseCV
 from mlcvs.core import FeedForward, Normalization
-from mlcvs.core.loss import elbo_gaussians_loss
+from mlcvs.core.loss import ELBOGaussiansLoss
 
 
 # =============================================================================
@@ -73,9 +73,9 @@ class VariationalAutoEncoderCV(BaseCV, pl.LightningModule):
         """
         super().__init__(in_features=encoder_layers[0], out_features=n_cvs, **kwargs)
 
-        # =======   LOSS  ======= 
-        self.loss_fn     = elbo_gaussians_loss  #ELBO loss function when latent space and reconstruction distributions are Gaussians.      
-        self.loss_kwargs = {}                   # set default values before parsing options
+        # =======   LOSS  =======
+        #ELBO loss function when latent space and reconstruction distributions are Gaussians.
+        self.loss_fn = ELBOGaussiansLoss()
 
         # ======= OPTIONS ======= 
         # parse and sanitize
@@ -177,10 +177,10 @@ class VariationalAutoEncoderCV(BaseCV, pl.LightningModule):
 
     def training_step(self, train_batch, batch_idx):
         """Single training step performed by the PyTorch Lightning Trainer."""
-        options = self.loss_kwargs.copy()
         x = train_batch['data']
+        loss_kwargs = {}
         if 'weights' in train_batch:
-            options['weights'] = train_batch['weights']
+            loss_kwargs['weights'] = train_batch['weights']
 
         # Encode/decode.
         mean, log_variance, x_hat = self.encode_decode(x)
@@ -192,7 +192,7 @@ class VariationalAutoEncoderCV(BaseCV, pl.LightningModule):
             x_ref = x 
 
         # Loss function.
-        loss = self.loss_fn(x_ref, x_hat, mean, log_variance, **options)
+        loss = self.loss_fn(x_ref, x_hat, mean, log_variance, **loss_kwargs)
 
         # Log.
         name = 'train' if self.training else 'valid'       
