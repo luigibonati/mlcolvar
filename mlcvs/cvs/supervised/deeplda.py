@@ -4,7 +4,7 @@ from mlcvs.cvs import BaseCV
 from mlcvs.core import FeedForward, Normalization
 from mlcvs.data import DictionaryDataModule
 from mlcvs.core.stats import LDA
-from mlcvs.core.loss import reduce_eigenvalues_loss
+from mlcvs.core.loss import ReduceEigenvaluesLoss
 
 __all__ = ["DeepLDA"]
 
@@ -33,10 +33,9 @@ class DeepLDA(BaseCV, pl.LightningModule):
         """
         super().__init__(in_features=layers[0], out_features=layers[-1], **kwargs)
 
-        # =======   LOSS  ======= 
-        self.loss_fn     = reduce_eigenvalues_loss   # maximize LDA eigenvalues
-        self.loss_kwargs = {                    # set default values before parsing options
-                            'mode':'sum'}       # eigenvalue reduction mode
+        # =======   LOSS  =======
+        # Maximize the sum of all the LDA eigenvalues.
+        self.loss_fn = ReduceEigenvaluesLoss(mode='sum')
 
         # ======= OPTIONS ======= 
         # parse and sanitize
@@ -119,7 +118,6 @@ class DeepLDA(BaseCV, pl.LightningModule):
 
 
     def training_step(self, train_batch, batch_idx):
-        options = self.loss_kwargs.copy()
         # =================get data===================
         x = train_batch['data']
         y = train_batch['labels']
@@ -128,7 +126,7 @@ class DeepLDA(BaseCV, pl.LightningModule):
         # ===================lda======================
         eigvals,_ = self.lda.compute(h,y,save_params=True if self.training else False) 
         # ===================loss=====================
-        loss = self.loss_fn(eigvals, **options)
+        loss = self.loss_fn(eigvals)
         if self.lorentzian_reg > 0:
             lorentzian_reg = self.regularization_lorentzian(h)
             loss += lorentzian_reg

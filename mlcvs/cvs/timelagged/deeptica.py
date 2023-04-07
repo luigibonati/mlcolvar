@@ -3,7 +3,7 @@ import pytorch_lightning as pl
 from mlcvs.cvs import BaseCV
 from mlcvs.core import FeedForward,Normalization
 from mlcvs.core.stats import TICA
-from mlcvs.core.loss import reduce_eigenvalues_loss
+from mlcvs.core.loss import ReduceEigenvaluesLoss
 
 __all__ = ["DeepTICA"] 
 
@@ -32,12 +32,9 @@ class DeepTICA(BaseCV, pl.LightningModule):
                          out_features=n_cvs if n_cvs is not None else layers[-1], 
                          **kwargs)
 
-        # =======   LOSS  ======= 
-        self.loss_fn     = reduce_eigenvalues_loss   # maximize TICA eigenvalues        
-        self.loss_kwargs = {                    # set default values before parsing options
-                            'mode':'sum2',      # eigenvalue reduction mode
-                            'n_eig': 0          # how many eigenvalues to optimize (0 == all) 
-                            }
+        # =======   LOSS  =======
+        # Maximize the squared sum of all the TICA eigenvalues.
+        self.loss_fn = ReduceEigenvaluesLoss(mode='sum2')
 
         # ======= OPTIONS ======= 
         # parse and sanitize
@@ -81,7 +78,6 @@ class DeepTICA(BaseCV, pl.LightningModule):
         2) Remove average (inside forward_nn)
         3) Compute TICA
         """
-        options = self.loss_kwargs.copy()
         # =================get data===================
         x_t   = train_batch['data']
         x_lag = train_batch['data_lag']
@@ -95,7 +91,7 @@ class DeepTICA(BaseCV, pl.LightningModule):
                                                     weights = [w_t,w_lag],
                                                     save_params=True)
         # ===================loss=====================
-        loss = self.loss_fn(eigvals,**options)
+        loss = self.loss_fn(eigvals)
         # ====================log=====================          
         name = 'train' if self.training else 'valid'       
         loss_dict = {f'{name}_loss' : loss}
@@ -120,7 +116,7 @@ def test_deep_tica():
     model = DeepTICA(layers,n_cvs=1)
 
     # change loss options
-    model.loss_kwargs.update({'mode': 'sum2'})
+    model.loss_fn.mode = 'sum2'
 
     # create trainer and fit
     trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2, logger=None, enable_checkpointing=False)

@@ -2,7 +2,7 @@ import torch
 import pytorch_lightning as pl
 from mlcvs.cvs import BaseCV
 from mlcvs.core import FeedForward, Normalization
-from mlcvs.core.loss import tda_loss
+from mlcvs.core.loss import TDALoss
 from mlcvs.data import DictionaryDataModule
 
 __all__ = ["DeepTDA"]
@@ -47,13 +47,12 @@ class DeepTDA(BaseCV, pl.LightningModule):
 
         super().__init__(in_features=layers[0], out_features=layers[-1], **kwargs)
 
-        # =======   LOSS  ======= 
-        self.loss_fn     = tda_loss                                 # TDA loss 
-        self.loss_kwargs = {                                        # set default values before parsing options
-                             'n_states': n_states,                   
-                             'target_centers': target_centers,
-                             'target_sigmas':  target_sigmas                     
-                            } 
+        # =======   LOSS  =======
+        self.loss_fn = TDALoss(
+            n_states=n_states,
+            target_centers=target_centers,
+            target_sigmas=target_sigmas,
+        )
 
         # ======= OPTIONS ======= 
         # parse and sanitize
@@ -89,14 +88,13 @@ class DeepTDA(BaseCV, pl.LightningModule):
         self.nn = FeedForward(layers, **options[o])
 
     def training_step(self, train_batch, batch_idx):
-        options = self.loss_kwargs.copy()
         # =================get data===================
         x = train_batch['data']
         labels = train_batch['labels']
         # =================forward====================
         z = self.forward_cv(x)
         # ===================loss=====================
-        loss, loss_centers, loss_sigmas = self.loss_fn(z, labels, **options)
+        loss, loss_centers, loss_sigmas = self.loss_fn(z, labels)
         # ====================log=====================+
         name = 'train' if self.training else 'valid'
         self.log(f'{name}_loss', loss.to(float), on_epoch=True)
