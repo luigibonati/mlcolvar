@@ -165,22 +165,3 @@ def sequential_split(dataset, lengths: list ) -> list:
 
         # LB change: do sequential rather then random splitting
         return [Subset(dataset, np.arange(offset-length,offset)) for offset, length in zip(_accumulate(lengths), lengths)]
-
-def test_DictionaryDataModule():
-    torch.manual_seed(42)
-    X = torch.randn((100,2))
-    y = X.square()
-    dataset = DictionaryDataset( {'data':X,'labels':y} )
-    datamodule = DictionaryDataModule(dataset,lengths=[0.75,0.2,0.05],batch_size=25)
-    datamodule.setup('fit')
-    loader = datamodule.train_dataloader()
-    for data in loader:
-        print(data)
-        x_i = data['data']
-        y_i = data['labels']
-        print(x_i.shape, y_i.shape)
-    datamodule.val_dataloader()
-    datamodule.test_dataloader()
-
-if __name__ == "__main__":
-    test_DictionaryDataModule()
