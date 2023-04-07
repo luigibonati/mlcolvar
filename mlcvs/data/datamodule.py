@@ -30,7 +30,12 @@ from mlcvs.data import FastDictionaryLoader, DictionaryDataset
 # =============================================================================
 
 class DictionaryDataModule(pl.LightningDataModule):
-    """Lightning DataModule constructed for TensorDataset(s)."""
+    """Lightning DataModule constructed for DictionaryDataset(s).
+
+    The DataModule automatically splits the ``DictionaryDataset``s (using either
+    random or sequential splitting) into training, validation, and test sets.
+
+    """
     def __init__(self, dataset: DictionaryDataset, lengths=[0.8,0.2], batch_size: int or list = 0, random_splits: bool = True, shuffle : bool or list = True, generator : torch.Generator = None):
         """Create a DataModule derived from a DictionaryDataset, which returns train/valid/test dataloaders.
 
@@ -66,7 +71,6 @@ class DictionaryDataModule(pl.LightningDataModule):
         self.generator = generator
         
         # setup
-        self.is_setup = False
         self.dataset_splits = None
         
         # dataloaders
