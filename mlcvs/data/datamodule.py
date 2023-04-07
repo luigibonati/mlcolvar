@@ -1,11 +1,33 @@
+#!/usr/bin/env python
+
+# =============================================================================
+# MODULE DOCSTRING
+# =============================================================================
+
+"""
+PyTorch Lightning DataModule object for DictionaryDatasets.
+"""
+
+__all__ = ['DictionaryDataModule']
+
+
+# =============================================================================
+# GLOBAL IMPORTS
+# =============================================================================
+
 import torch
 import numpy as np
 import pytorch_lightning as pl
 import warnings
 import math
-from torch.utils.data import TensorDataset, random_split, Subset
+from torch.utils.data import random_split, Subset
 from torch._utils import _accumulate
 from mlcvs.data import FastDictionaryLoader, DictionaryDataset
+
+
+# =============================================================================
+# DICTIONARY DATAMODULE CLASS
+# =============================================================================
 
 class DictionaryDataModule(pl.LightningDataModule):
     """Lightning DataModule constructed for TensorDataset(s)."""
@@ -84,7 +106,7 @@ class DictionaryDataModule(pl.LightningDataModule):
                 self.test_loader = FastDictionaryLoader(self.dataset_splits[2], batch_size=self.batch_size[2],shuffle=self.shuffle[2])
             return self.test_loader
         else: 
-            raise ValueError('Test dataset not available, you need to pass three lenghts to datamodule.')  
+            raise ValueError('Test dataset not available, you need to pass three lengths to datamodule.')
 
     def predict_dataloader(self):
         raise NotImplementedError()
@@ -100,6 +122,7 @@ class DictionaryDataModule(pl.LightningDataModule):
             string+=f',\n\t\t\ttest_loader =FastDictionaryLoader(length={self.lengths[2]}, batch_size={self.batch_size[2]}, shuffle={self.shuffle[2]})'
         string+=f')'
         return string
+
 
 def sequential_split(dataset, lengths: list ) -> list:
     """
@@ -160,4 +183,4 @@ def test_DictionaryDataModule():
     datamodule.test_dataloader()
 
 if __name__ == "__main__":
-    test_DictionaryDataModule() 
+    test_DictionaryDataModule()
