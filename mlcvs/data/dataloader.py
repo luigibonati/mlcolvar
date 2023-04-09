@@ -57,32 +57,34 @@ class FastDictionaryLoader:
             dataset = DictionaryDataset(dataset)
         
         # Retrieve selection if it a subset
-        if isinstance(dataset ,Subset):
+        if isinstance(dataset, Subset):
             if isinstance(dataset.dataset, DictionaryDataset):
                 dataset = DictionaryDataset(dataset.dataset[dataset.indices])
 
         # Save parameters
         self.dataset = dataset
-        self.dataset_len = len(self.dataset)
-        self.batch_size = batch_size if batch_size > 0 else self.dataset_len
+        self._batch_size = batch_size
         self.shuffle = shuffle
 
-        # Calculate # batches
-        n_batches, remainder = divmod(self.dataset_len, self.batch_size)
-        if remainder > 0:
-            n_batches += 1
-        self.n_batches = n_batches
+    @property
+    def batch_size(self):
+        """Batch size."""
+        return self._batch_size if self._batch_size > 0 else len(self.dataset)
+
+    @batch_size.setter
+    def batch_size(self, new_batch_size):
+        self._batch_size = new_batch_size
 
     def __iter__(self):
         if self.shuffle:
-            self.indices = torch.randperm(self.dataset_len)
+            self.indices = torch.randperm(len(self.dataset))
         else:
             self.indices = None
         self.i = 0
         return self
 
     def __next__(self):
-        if self.i >= self.dataset_len:
+        if self.i >= len(self.dataset):
             raise StopIteration
         
         if self.indices is not None:
@@ -95,14 +97,15 @@ class FastDictionaryLoader:
         return batch
 
     def __len__(self):
-        return self.n_batches
+        # Number of batches
+        return (len(self.dataset) + self.batch_size - 1) // self.batch_size
 
     @property
     def keys(self):
         return self.dataset.keys
     
     def __repr__(self) -> str:
-        string = f'FastDictionaryLoader(length={self.dataset_len}, batch_size={self.batch_size}, shuffle={self.shuffle})'
+        string = f'FastDictionaryLoader(length={len(self.dataset)}, batch_size={self.batch_size}, shuffle={self.shuffle})'
         return string
 
     def get_stats(self):
