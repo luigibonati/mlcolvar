@@ -1,50 +1,64 @@
-import torch 
+#!/usr/bin/env python
+
+# =============================================================================
+# MODULE DOCSTRING
+# =============================================================================
+
+"""
+PyTorch Lightning DataModule object for DictionaryDatasets.
+"""
+
+__all__ = ["FastDictionaryLoader"]
+
+
+# =============================================================================
+# GLOBAL IMPORTS
+# =============================================================================
+
+from typing import Union
+import torch
 from torch.utils.data import Subset
 from mlcvs.data import DictionaryDataset
 from mlcvs.core.transform.utils import Statistics
 
-__all__ = ["FastDictionaryLoader"]
+
+# =============================================================================
+# FAST DICTIONARY LOADER CLASS
+# =============================================================================
 
 class FastDictionaryLoader:
-    """
-    A DataLoader-like object for a set of tensors.
+    """PyTorch DataLoader for :class:`~mlcvs.data.dataset.DictionaryDataset`s.
     
-    It is much faster than TensorDataset + DataLoader because dataloader grabs individual indices of the dataset and calls cat (slow).
-
-    Adapted to work with dictionaries (incl. Dictionary Dataloader).
+    It is much faster than TensorDataset + DataLoader because ``DataLoader``
+    grabs individual indices of the dataset and calls cat (slow).
 
     Notes
-    =====
+    -----
 
     Adapted from https://discuss.pytorch.org/t/dataloader-much-slower-than-manual-batching/27014/6. 
 
     """
-    def __init__(self, dataset : DictionaryDataset or dict, batch_size : int = 0, shuffle : bool = True):
-        """Initialize a FastDictionaryLoader.
+    def __init__(self, dataset: Union[dict, DictionaryDataset], batch_size: int = 0, shuffle: bool = True):
+        """Initialize a ``FastDictionaryLoader``.
 
         Parameters
         ----------
         dataset : DictionaryDataset or dict
+            The dataset.
         batch_size : int, optional
-            batch size, by default 0 (==single batch)
+            Batch size, by default 0 (==single batch).
         shuffle : bool, optional
-            if True, shuffle the data *in-place* whenever an
-            iterator is created out of this object, by default True
-
-        Returns
-        -------
-        FastDictionaryLoader
-            dataloader-like object
-
+            If ``True``, shuffle the data *in-place* whenever an
+            iterator is created out of this object, by default ``True``.
         """
 
         # Convert to DictionaryDataset if a dict is given
-        if isinstance(dataset,dict):
+        if isinstance(dataset, dict):
             dataset = DictionaryDataset(dataset)
         
         # Retrieve selection if it a subset
-        if isinstance(dataset,Subset): 
-            if isinstance(dataset.dataset,DictionaryDataset):
+        if isinstance(dataset ,Subset):
+            if isinstance(dataset.dataset, DictionaryDataset):
                 dataset = DictionaryDataset(dataset.dataset[dataset.indices])
 
         # Save parameters
