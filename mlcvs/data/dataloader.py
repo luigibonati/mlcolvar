@@ -29,7 +29,7 @@ from mlcvs.core.transform.utils import Statistics
 class FastDictionaryLoader:
     """PyTorch DataLoader for :class:`~mlcvs.data.dataset.DictionaryDataset`s.
     
-    It is much faster than TensorDataset + DataLoader because ``DataLoader``
+    It is much faster than ``TensorDataset`` + ``DataLoader`` because ``DataLoader``
     grabs individual indices of the dataset and calls cat (slow).
 
     Notes
@@ -42,15 +42,18 @@ class FastDictionaryLoader:
 
     >>> x = torch.arange(1,11)
 
-    >>> # Intialize from dictionary
+    A ``FastDictionaryLoader`` can be initialize from a ``dict``, a :class:`~mlcvs.data.dataset.DictionaryDataset`,
+    or a ``Subset`` wrapping a :class:`~mlcvs.data.dataset.DictionaryDataset`.
+
+    >>> # Initialize from a dictionary.
     >>> d = {'data': x.unsqueeze(1), 'labels': x**2}
     >>> dataloader = FastDictionaryLoader(d, batch_size=1, shuffle=False)
-    >>> len(dataloader.dataset)  # number of samples
+    >>> dataloader.dataset_len  # number of samples
     10
     >>> next(iter(dataloader))  # first batch
     {'data': tensor([[1]]), 'labels': tensor([1])}
 
-    >>> # Initialize from DictionaryDataset
+    >>> # Initialize from a DictionaryDataset.
     >>> dict_dataset = DictionaryDataset(d)
     >>> dataloader = FastDictionaryLoader(dict_dataset, batch_size=2, shuffle=False)
     >>> len(dataloader)  # Number of batches
@@ -60,17 +63,22 @@ class FastDictionaryLoader:
     tensor([[1],
             [2]])
 
-    >>> # Initialize from a Subset
+    >>> # Initialize from a Subset.
     >>> train, _ = torch.utils.data.random_split(dict_dataset, [0.5, 0.5])
     >>> dataloader = FastDictionaryLoader(train, batch_size=1, shuffle=False)
 
     """
-    def __init__(self, dataset: Union[dict, DictionaryDataset], batch_size: int = 0, shuffle: bool = True):
+    def __init__(
+            self,
+            dataset: Union[dict, DictionaryDataset, Subset],
+            batch_size: int = 0,
+            shuffle: bool = True,
+    ):
         """Initialize a ``FastDictionaryLoader``.
 
         Parameters
         ----------
-        dataset : DictionaryDataset or dict
+        dataset : dict or DictionaryDataset or Subset or list-like.
             The dataset.
         batch_size : int, optional
             Batch size, by default 0 (==single batch).
@@ -84,23 +92,22 @@ class FastDictionaryLoader:
 
     @property
     def dataset(self):
-        """The dictionary dataset."""
+        """DictionaryDataset or list-like of DictionaryDataset: The dictionary dataset(s)."""
         return self._dataset
 
     @dataset.setter
     def dataset(self, dataset):
-        # Convert to DictionaryDataset if a dict is given
-        if isinstance(dataset, dict):
-            dataset = DictionaryDataset(dataset)
-        elif isinstance(dataset, Subset) and isinstance(dataset.dataset, DictionaryDataset):
-            # Retrieve selection if it a subset
-            dataset = dataset.dataset.__class__(dataset.dataset[dataset.indices])
-        self._dataset = dataset
+        self._dataset = self._to_dict_dataset(dataset)
+
+    @property
+    def dataset_len(self):
+        """int: Number of samples in the dataset(s)."""
+        return len(self.dataset)
 
     @property
     def batch_size(self):
-        """Batch size."""
-        return self._batch_size if self._batch_size > 0 else len(self.dataset)
+        """int: Batch size."""
+        return self._batch_size if self._batch_size > 0 else self.dataset_len
 
     @batch_size.setter
     def batch_size(self, batch_size):
@@ -108,14 +115,14 @@ class FastDictionaryLoader:
 
     def __iter__(self):
         if self.shuffle:
-            self.indices = torch.randperm(len(self.dataset))
+            self.indices = torch.randperm(self.dataset_len)
         else:
             self.indices = None
         self.i = 0
         return self
 
     def __next__(self):
-        if self.i >= len(self.dataset):
+        if self.i >= self.dataset_len:
             raise StopIteration
         
         if self.indices is not None:
@@ -129,14 +136,14 @@ class FastDictionaryLoader:
 
     def __len__(self):
         # Number of batches.
-        return (len(self.dataset) + self.batch_size - 1) // self.batch_size
+        return (self.dataset_len + self.batch_size - 1) // self.batch_size
 
     @property
     def keys(self):
         return self.dataset.keys
     
     def __repr__(self) -> str:
-        string = f'FastDictionaryLoader(length={len(self.dataset)}, batch_size={self.batch_size}, shuffle={self.shuffle})'
+        string = f'FastDictionaryLoader(length={self.dataset_len}, batch_size={self.batch_size}, shuffle={self.shuffle})'
         return string
 
     def get_stats(self):
@@ -162,6 +169,17 @@ class FastDictionaryLoader:
             stats[k] = stats[k].to_dict()
 
         return stats
+
+    def _to_dict_dataset(self, d):
+        """Convert Dict[Tensor] and Subset[DictionaryDataset] to DictionaryDataset."""
+        # Convert to DictionaryDataset if a dict is given.
+        if isinstance(d, dict):
+            d = DictionaryDataset(d)
+        elif isinstance(d, Subset) and isinstance(d.dataset, DictionaryDataset):
+            # Retrieve selection if it a subset.
+            # TODO: This is not safe for classes that inherit from Subset or DictionaryDatset.
+            d = d.dataset.__class__(d.dataset[d.indices])
+        return d
 
 
 if __name__ == '__main__':
