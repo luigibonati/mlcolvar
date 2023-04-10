@@ -82,11 +82,9 @@ class FastDictionaryLoader:
         # Convert to DictionaryDataset if a dict is given
         if isinstance(dataset, dict):
             dataset = DictionaryDataset(dataset)
-        
-        # Retrieve selection if it a subset
-        if isinstance(dataset, Subset):
-            if isinstance(dataset.dataset, DictionaryDataset):
-                dataset = DictionaryDataset(dataset.dataset[dataset.indices])
+        elif isinstance(dataset, Subset) and isinstance(dataset.dataset, DictionaryDataset):
+            # Retrieve selection if it a subset
+            dataset = dataset.dataset.__class__(dataset.dataset[dataset.indices])
 
         # Save parameters
         self.dataset = dataset
