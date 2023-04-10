@@ -78,18 +78,24 @@ class FastDictionaryLoader:
             If ``True``, shuffle the data *in-place* whenever an
             iterator is created out of this object, by default ``True``.
         """
+        self.dataset = dataset
+        self.batch_size = batch_size
+        self.shuffle = shuffle
 
+    @property
+    def dataset(self):
+        """The dictionary dataset."""
+        return self._dataset
+
+    @dataset.setter
+    def dataset(self, dataset):
         # Convert to DictionaryDataset if a dict is given
         if isinstance(dataset, dict):
             dataset = DictionaryDataset(dataset)
         elif isinstance(dataset, Subset) and isinstance(dataset.dataset, DictionaryDataset):
             # Retrieve selection if it a subset
             dataset = dataset.dataset.__class__(dataset.dataset[dataset.indices])
-
-        # Save parameters
-        self.dataset = dataset
-        self._batch_size = batch_size
-        self.shuffle = shuffle
+        self._dataset = dataset
 
     @property
     def batch_size(self):
@@ -97,8 +103,8 @@ class FastDictionaryLoader:
         return self._batch_size if self._batch_size > 0 else len(self.dataset)
 
     @batch_size.setter
-    def batch_size(self, new_batch_size):
-        self._batch_size = new_batch_size
+    def batch_size(self, batch_size):
+        self._batch_size = batch_size
 
     def __iter__(self):
         if self.shuffle:
