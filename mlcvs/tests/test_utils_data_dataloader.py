@@ -33,7 +33,7 @@ def test_fast_dictionary_loader_init():
     batch_size = 2
 
     def _check_dataloader(dl, n_samples=10, n_batches=5, shuffled=False):
-        assert len(dl.dataset) == n_samples
+        assert dl.dataset_len == n_samples
         assert len(dl) == n_batches
 
         # The detaset is converted to a DictionaryDataset.
@@ -53,10 +53,15 @@ def test_fast_dictionary_loader_init():
 
     # or from DictionaryDataset
     dict_dataset = DictionaryDataset(d)
-    dataloader = FastDictionaryLoader(dict_dataset,batch_size=batch_size, shuffle=False)
+    dataloader = FastDictionaryLoader(dict_dataset, batch_size=batch_size, shuffle=False)
     _check_dataloader(dataloader)
 
     # or from subset
     train, _ = torch.utils.data.random_split(dict_dataset, [0.5, 0.5])
     dataloader = FastDictionaryLoader(train, batch_size=batch_size, shuffle=False)
     _check_dataloader(dataloader, n_samples=5, n_batches=3, shuffled=True)
+
+    # an error is raised if initialized from anything else.
+    dataset = torch.utils.data.TensorDataset(x)
+    with pytest.raises(ValueError, match='must be of type'):
+        FastDictionaryLoader(dataset)

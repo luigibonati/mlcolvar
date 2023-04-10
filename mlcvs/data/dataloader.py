@@ -179,6 +179,8 @@ class FastDictionaryLoader:
             # Retrieve selection if it a subset.
             # TODO: This is not safe for classes that inherit from Subset or DictionaryDatset.
             d = d.dataset.__class__(d.dataset[d.indices])
+        elif not isinstance(d, DictionaryDataset):
+            raise ValueError('The data must be of type dict, DictionaryDataset or Subset[DictionaryDataset].')
         return d
 
 
