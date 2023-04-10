@@ -35,7 +35,34 @@ class FastDictionaryLoader:
     Notes
     -----
 
-    Adapted from https://discuss.pytorch.org/t/dataloader-much-slower-than-manual-batching/27014/6. 
+    Adapted from https://discuss.pytorch.org/t/dataloader-much-slower-than-manual-batching/27014/6.
+
+    Examples
+    --------
+
+    >>> x = torch.arange(1,11)
+
+    >>> # Intialize from dictionary
+    >>> d = {'data': x.unsqueeze(1), 'labels': x**2}
+    >>> dataloader = FastDictionaryLoader(d, batch_size=1, shuffle=False)
+    >>> len(dataloader.dataset)  # number of samples
+    10
+    >>> next(iter(dataloader))  # first batch
+    {'data': tensor([[1]]), 'labels': tensor([1])}
+
+    >>> # Initialize from DictionaryDataset
+    >>> dict_dataset = DictionaryDataset(d)
+    >>> dataloader = FastDictionaryLoader(dict_dataset, batch_size=2, shuffle=False)
+    >>> len(dataloader)  # Number of batches
+    5
+    >>> batch = next(iter(dataloader))  # first batch
+    >>> batch['data']
+    tensor([[1],
+            [2]])
+
+    >>> # Initialize from a Subset
+    >>> train, _ = torch.utils.data.random_split(dict_dataset, [0.5, 0.5])
+    >>> dataloader = FastDictionaryLoader(train, batch_size=1, shuffle=False)
 
     """
     def __init__(self, dataset: Union[dict, DictionaryDataset], batch_size: int = 0, shuffle: bool = True):
@@ -97,7 +124,7 @@ class FastDictionaryLoader:
         return batch
 
     def __len__(self):
-        # Number of batches
+        # Number of batches.
         return (len(self.dataset) + self.batch_size - 1) // self.batch_size
 
     @property
@@ -109,7 +136,7 @@ class FastDictionaryLoader:
         return string
 
     def get_stats(self):
-        """Compute statistics ('mean','Std','Min','Max') of the dataloader. 
+        """Compute statistics ``('mean','std','min','max')`` of the dataloader.
 
         Returns
         -------
@@ -133,27 +160,6 @@ class FastDictionaryLoader:
         return stats
 
 
-def test_FastDictionaryLoader(): 
-    X = torch.arange(1,11).unsqueeze(1)
-    y = X**2
-
-    # Start from dictionary
-    d = {'data': X, 'labels': y}
-    dataloader = FastDictionaryLoader(d,batch_size=1,shuffle=False)
-    print(len(dataloader))
-    print(next(iter(dataloader)))
-
-    # or from dict dataset
-    dict_dataset = DictionaryDataset(d)
-    dataloader = FastDictionaryLoader(dict_dataset,batch_size=1,shuffle=False)
-    print(len(dataloader))
-    print(next(iter(dataloader)))
-
-    # or from subset
-    train, _ = torch.utils.data.random_split(dict_dataset, [0.5,0.5])
-    dataloader = FastDictionaryLoader(train,batch_size=1,shuffle=False)
-    print(len(dataloader))
-    print(next(iter(dataloader)))
-
-if __name__ == "__main__":
-    test_FastDictionaryLoader()
+if __name__ == '__main__':
+    import doctest
+    doctest.testmod()
