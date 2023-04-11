@@ -24,7 +24,7 @@ from mlcvs.data.datamodule import DictionaryDataModule
 # TESTS
 # =============================================================================
 
-@pytest.mark.parametrize('lengths', [[40, 10], [0.8, 0.2], [0.7, 0.2, 0.1]])
+@pytest.mark.parametrize('lengths', [[0.8, 0.2], [0.7, 0.2, 0.1]])
 @pytest.mark.parametrize('fields', [[], ['labels', 'weights']])
 @pytest.mark.parametrize('random_split', [True, False])
 def test_dictionary_data_module_split(lengths, fields, random_split):

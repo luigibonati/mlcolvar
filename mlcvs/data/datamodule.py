@@ -100,8 +100,9 @@ class DictionaryDataModule(pl.LightningDataModule):
             The dataset or a list of datasets. If a list, the datasets can have
             different keys but they must all have the same number of samples.
         lengths : list-like, optional
-            Lengths of the training/validation/test datasets. This can be a list
-            of integers or of (float) fractions. The default is ``[0.8,0.2]``.
+            Lengths of the training, validation, and (optionally) test datasets.
+            This must be a list of (float) fractions summing to 1. The default is
+            ``[0.8,0.2]``.
         batch_size : int or list-like, optional
             Batch size, by default 0 (== ``len(dataset)``).
         random_split: bool, optional
@@ -250,6 +251,8 @@ def sequential_split(dataset, lengths: Sequence) -> list:
 
         # LB change: do sequential rather then random splitting
         return [Subset(dataset, np.arange(offset-length,offset)) for offset, length in zip(_accumulate(lengths), lengths)]
+    else:
+        raise NotImplementedError('The lengths must sum to 1.')
 
 
 if __name__ == '__main__':
