@@ -15,6 +15,7 @@ Tests for the members of the mlcvs.data.dataloader module.
 
 import pytest
 import torch
+from torch.utils.data import Subset
 
 from mlcvs.data.dataset import DictionaryDataset
 from mlcvs.data.dataloader import FastDictionaryLoader
@@ -65,3 +66,40 @@ def test_fast_dictionary_loader_init():
     dataset = torch.utils.data.TensorDataset(x)
     with pytest.raises(ValueError, match='must be of type'):
         FastDictionaryLoader(dataset)
+
+
+def test_fast_dictionary_loader_multidataset():
+    """FastDictionaryLoader combines multiple datasets into one."""
+    # Create datasets with different fields.
+    n_samples = 10
+    datasets = [
+        Subset(DictionaryDataset({'data': torch.randn(n_samples+2, 2)}), indices=list(range(1, 11))),
+        DictionaryDataset({'data': torch.randn(n_samples, 2), 'labels': torch.randn(n_samples)}),
+        {'data': torch.randn(n_samples, 2), 'labels': torch.randn(n_samples), 'weights': torch.randn(n_samples)},
+    ]
+
+    # Create the dataloader.
+    batch_size = 2
+    dataloader = FastDictionaryLoader(datasets, batch_size=batch_size)
+
+    # Check that dataset_len and number of batches are computed correctly.
+    assert dataloader.dataset_len == n_samples
+    assert len(dataloader) == 5
+
+    # Test that the batches are correct.
+    for batch in dataloader:
+        assert len(batch) == len(datasets)
+        for i in range(3):
+            assert len(batch[f'dataset{i}']) == i+1
+            assert batch[f'dataset{i}']['data'].shape == (batch_size, 2)
+        for i in range(1, 3):
+            assert batch[f'dataset{i}']['labels'].shape == (batch_size,)
+        assert batch[f'dataset{i}']['weights'].shape == (batch_size,)
+
+    # If datasets are not of the same dimension, the datamodule explodes.
+    datasets.append(DictionaryDataset({
+        'data': torch.randn(n_samples+1, 2),
+        'labels': torch.randn(n_samples+1),
+    }))
+    with pytest.raises(ValueError, match='must have the same number of samples'):
+        FastDictionaryLoader(datasets)

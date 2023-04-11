@@ -92,17 +92,30 @@ class FastDictionaryLoader:
 
     @property
     def dataset(self):
-        """DictionaryDataset or list-like of DictionaryDataset: The dictionary dataset(s)."""
+        """DictionaryDataset or list[DictionaryDataset]: The dictionary dataset(s)."""
         return self._dataset
 
     @dataset.setter
     def dataset(self, dataset):
-        self._dataset = self._to_dict_dataset(dataset)
+        try:
+            self._dataset = _to_dict_dataset(dataset)
+        except ValueError:
+            # This is a sequence of datasets.
+            datasets = [_to_dict_dataset(d) for d in dataset]
+
+            # Check that all datasets have the same number of samples.
+            if len(set([len(d) for d in datasets])) != 1:
+                raise ValueError('All the datasets must have the same number of samples.')
+
+            self._dataset = datasets
 
     @property
     def dataset_len(self):
         """int: Number of samples in the dataset(s)."""
-        return len(self.dataset)
+        if isinstance(self._dataset, DictionaryDataset):
+            return len(self.dataset)
+        # List of datasets.
+        return len(self.dataset[0])
 
     @property
     def batch_size(self):
@@ -114,6 +127,8 @@ class FastDictionaryLoader:
         self._batch_size = batch_size
 
     def __iter__(self):
+        # Even with multiple datasets (of the same length), we generate a single
+        # indices permutation since these datasets are normally uncorrelated.
         if self.shuffle:
             self.indices = torch.randperm(self.dataset_len)
         else:
@@ -124,12 +139,14 @@ class FastDictionaryLoader:
     def __next__(self):
         if self.i >= self.dataset_len:
             raise StopIteration
-        
-        if self.indices is not None:
-            indices = self.indices[self.i:self.i+self.batch_size]
-            batch = self.dataset[indices]
+
+        if isinstance(self.dataset, DictionaryDataset):
+            batch = self._get_batch(self.dataset)
         else:
-            batch = self.dataset[self.i:self.i+self.batch_size]
+            # List of dict datasets.
+            batch = {}
+            for dataset_idx, dataset in enumerate(self.dataset):
+                batch[f'dataset{dataset_idx}'] = self._get_batch(dataset)
 
         self.i += self.batch_size
         return batch
@@ -170,18 +187,31 @@ class FastDictionaryLoader:
 
         return stats
 
-    def _to_dict_dataset(self, d):
-        """Convert Dict[Tensor] and Subset[DictionaryDataset] to DictionaryDataset."""
-        # Convert to DictionaryDataset if a dict is given.
-        if isinstance(d, dict):
-            d = DictionaryDataset(d)
-        elif isinstance(d, Subset) and isinstance(d.dataset, DictionaryDataset):
-            # Retrieve selection if it a subset.
-            # TODO: This is not safe for classes that inherit from Subset or DictionaryDatset.
-            d = d.dataset.__class__(d.dataset[d.indices])
-        elif not isinstance(d, DictionaryDataset):
-            raise ValueError('The data must be of type dict, DictionaryDataset or Subset[DictionaryDataset].')
-        return d
+    def _get_batch(self, dataset):
+        """Return the current batch from the dataset."""
+        if self.indices is not None:
+            indices = self.indices[self.i:self.i+self.batch_size]
+            batch = dataset[indices]
+        else:
+            batch = dataset[self.i:self.i+self.batch_size]
+        return batch
+
+
+def _to_dict_dataset(d):
+    """Convert Dict[Tensor] and Subset[DictionaryDataset] to DictionaryDataset.
+
+    An error is raised if ``d`` cannot is of any other type.
+    """
+    # Convert to DictionaryDataset if a dict is given.
+    if isinstance(d, dict):
+        d = DictionaryDataset(d)
+    elif isinstance(d, Subset) and isinstance(d.dataset, DictionaryDataset):
+        # TODO: This might not not safe for classes that inherit from Subset or DictionaryDatset.
+        # Retrieve selection if it a subset.
+        d = d.dataset.__class__(d.dataset[d.indices])
+    elif not isinstance(d, DictionaryDataset):
+        raise ValueError('The data must be of type dict, DictionaryDataset or Subset[DictionaryDataset].')
+    return d
 
 
 if __name__ == '__main__':
