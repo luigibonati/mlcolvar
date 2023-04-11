@@ -43,6 +43,42 @@ class DictionaryDataModule(pl.LightningDataModule):
     that have different keys (see example below). The datasets must all have the
     same number of samples.
 
+    Examples
+    --------
+
+    >>> x = torch.randn((50, 2))
+    >>> dataset = DictionaryDataset({'data': x, 'labels': x.square().sum(dim=1)})
+    >>> datamodule = DictionaryDataModule(dataset, lengths=[0.75,0.2,0.05], batch_size=25)
+
+    >>> # This is usually called by PyTorch Lightning.
+    >>> datamodule.setup()
+    >>> train_loader = datamodule.train_dataloader()
+    >>> for batch in train_loader:
+    ...     batch_x = batch['data']
+    ...     batch_y = batch['labels']
+    ...     print(batch_x.shape, batch_y.shape)
+    torch.Size([25, 2]) torch.Size([25])
+    torch.Size([13, 2]) torch.Size([13])
+
+    >>> val_loader = datamodule.val_dataloader()
+    >>> test_loader = datamodule.test_dataloader()
+
+    You can also iterate over multiple datasets. These can have different keys,
+    but they must be of the same length.
+
+    >>> dataset2 = DictionaryDataset({'data2': torch.randn(50, 1), 'weights': torch.arange(50)})
+    >>> datamodule = DictionaryDataModule([dataset, dataset2], lengths=[0.8, 0.2], batch_size=5)
+    >>> datamodule.setup()
+    >>> train_loader = datamodule.train_dataloader()
+
+    >>> # Print first batch.
+    >>> for batch in train_loader:
+    ...     print('batch dataset0:', list(batch['dataset0'].keys()))
+    ...     print('batch dataset1:', list(batch['dataset1'].keys()))
+    ...     break
+    batch dataset0: ['data', 'labels']
+    batch dataset1: ['data2', 'weights']
+
     """
     def __init__(
             self,
@@ -214,3 +250,8 @@ def sequential_split(dataset, lengths: Sequence) -> list:
 
         # LB change: do sequential rather then random splitting
         return [Subset(dataset, np.arange(offset-length,offset)) for offset, length in zip(_accumulate(lengths), lengths)]
+
+
+if __name__ == '__main__':
+    import doctest
+    doctest.testmod()

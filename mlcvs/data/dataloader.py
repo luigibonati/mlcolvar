@@ -54,7 +54,10 @@ class FastDictionaryLoader:
     >>> dataloader = FastDictionaryLoader(d, batch_size=1, shuffle=False)
     >>> dataloader.dataset_len  # number of samples
     10
-    >>> next(iter(dataloader))  # first batch
+    >>> # Print first batch.
+    >>> for batch in dataloader:
+    ...     print(batch)
+    ...     break
     {'data': tensor([[1]]), 'labels': tensor([1])}
 
     >>> # Initialize from a DictionaryDataset.
@@ -62,12 +65,8 @@ class FastDictionaryLoader:
     >>> dataloader = FastDictionaryLoader(dict_dataset, batch_size=2, shuffle=False)
     >>> len(dataloader)  # Number of batches
     5
-    >>> batch = next(iter(dataloader))  # first batch
-    >>> batch['data']
-    tensor([[1],
-            [2]])
 
-    >>> # Initialize from a Subset.
+    >>> # Initialize from a PyTorch Subset object.
     >>> train, _ = torch.utils.data.random_split(dict_dataset, [0.5, 0.5])
     >>> dataloader = FastDictionaryLoader(train, batch_size=1, shuffle=False)
 
@@ -75,13 +74,16 @@ class FastDictionaryLoader:
     different keys for multi-task learning
 
     >>> dataloader = FastDictionaryLoader(
-    ...     dataset=[dict_dataset, {'some_unlabeled_data': torch.arange(11,21)}],
+    ...     dataset=[dict_dataset, {'some_unlabeled_data': torch.arange(10)+11}],
     ...     batch_size=1, shuffle=False,
     ... )
-    >>> batch = next(iter(dataloader))  # first batch
-
+    >>> dataloader.dataset_len  # This is the number of samples in one dataset.
+    10
+    >>>  # Print first batch.
     >>> from pprint import pprint
-    >>> pprint(batch)
+    >>> for batch in dataloader:
+    ...     pprint(batch)
+    ...     break
     {'dataset0': {'data': tensor([[1]]), 'labels': tensor([1])},
      'dataset1': {'some_unlabeled_data': tensor([11])}}
 
