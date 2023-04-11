@@ -32,6 +32,10 @@ class FastDictionaryLoader:
     It is much faster than ``TensorDataset`` + ``DataLoader`` because ``DataLoader``
     grabs individual indices of the dataset and calls cat (slow).
 
+    The class can also merge multiple :class:`~mlcvs.data.dataset.DictionaryDataset`s
+    that have different keys (see example below). The datasets must all have the
+    same number of samples.
+
     Notes
     -----
 
@@ -67,6 +71,20 @@ class FastDictionaryLoader:
     >>> train, _ = torch.utils.data.random_split(dict_dataset, [0.5, 0.5])
     >>> dataloader = FastDictionaryLoader(train, batch_size=1, shuffle=False)
 
+    It is also possible to iterate over multiple dictionary datasets having
+    different keys for multi-task learning
+
+    >>> dataloader = FastDictionaryLoader(
+    ...     dataset=[dict_dataset, {'some_unlabeled_data': torch.arange(11,21)}],
+    ...     batch_size=1, shuffle=False,
+    ... )
+    >>> batch = next(iter(dataloader))  # first batch
+
+    >>> from pprint import pprint
+    >>> pprint(batch)
+    {'dataset0': {'data': tensor([[1]]), 'labels': tensor([1])},
+     'dataset1': {'some_unlabeled_data': tensor([11])}}
+
     """
     def __init__(
             self,
@@ -78,8 +96,9 @@ class FastDictionaryLoader:
 
         Parameters
         ----------
-        dataset : dict or DictionaryDataset or Subset or list-like.
-            The dataset.
+        dataset : dict or DictionaryDataset or Subset of DictionaryDataset or list-like.
+            The dataset or a list of datasets. If a list, the datasets can have
+            different keys but they must all have the same number of samples.
         batch_size : int, optional
             Batch size, by default 0 (==single batch).
         shuffle : bool, optional
