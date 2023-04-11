@@ -15,7 +15,7 @@ __all__ = ["FastDictionaryLoader"]
 # GLOBAL IMPORTS
 # =============================================================================
 
-from typing import Union
+from typing import Union, Sequence
 import torch
 from torch.utils.data import Subset
 from mlcvs.data import DictionaryDataset
@@ -88,7 +88,7 @@ class FastDictionaryLoader:
     """
     def __init__(
             self,
-            dataset: Union[dict, DictionaryDataset, Subset],
+            dataset: Union[dict, DictionaryDataset, Subset, Sequence],
             batch_size: int = 0,
             shuffle: bool = True,
     ):
@@ -161,8 +161,7 @@ class FastDictionaryLoader:
 
         if isinstance(self.dataset, DictionaryDataset):
             batch = self._get_batch(self.dataset)
-        else:
-            # List of dict datasets.
+        else:  # List of dict datasets.
             batch = {}
             for dataset_idx, dataset in enumerate(self.dataset):
                 batch[f'dataset{dataset_idx}'] = self._get_batch(dataset)

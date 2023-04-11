@@ -39,6 +39,10 @@ class DictionaryDataModule(pl.LightningDataModule):
     (using either random or sequential splitting) into training, validation, and (optionally)
     test sets.
 
+    The class can also merge multiple :class:`~mlcvs.data.dataset.DictionaryDataset`s
+    that have different keys (see example below). The datasets must all have the
+    same number of samples.
+
     """
     def __init__(
             self,
@@ -52,12 +56,13 @@ class DictionaryDataModule(pl.LightningDataModule):
         """Create a ``DataModule`` wrapping a :class:`~mlcvs.data.dataset.DictionaryDataset`.
 
         For the ``batch_size`` and ``shuffle`` parameters, either a single value
-        or a list-type of values (with same size as lengths) can be provided.
+        or a list-type of values (with same size as ``lengths``) can be provided.
 
         Parameters
         ----------
-        dataset : DictionaryDataset
-            The dataset.
+        dataset : DictionaryDataset or Sequence[DictionaryDataset]
+            The dataset or a list of datasets. If a list, the datasets can have
+            different keys but they must all have the same number of samples.
         lengths : list-like, optional
             Lengths of the training/validation/test datasets. This can be a list
             of integers or of (float) fractions. The default is ``[0.8,0.2]``.
@@ -69,14 +74,20 @@ class DictionaryDataModule(pl.LightningDataModule):
             Whether to shuffle the batches in the ``DataLoader``, by default ``True``.
         generator : torch.Generator, optional
             Set random generator for reproducibility, by default ``None``.
+
+        See Also
+        --------
+        :class:`~mlcvs.data.dataloader.FastDictionaryLoader`
+            The PyTorch loader built by the data module.
+
         """
         super().__init__()
         self.dataset = dataset
         self.lengths = lengths
         self.generator = generator
 
-        # Keeping this private and read-only for now. Changing it at runtime
-        # would require changing dataset_split and the dataloaders.
+        # Keeping this private for now. Changing it at runtime would
+        # require changing dataset_split and the dataloaders.
         self._random_split = random_split
 
         # Make sure batch_size and shuffle are lists.
@@ -99,10 +110,12 @@ class DictionaryDataModule(pl.LightningDataModule):
 
     def setup(self, stage: Optional[str] = None):
         if self._dataset_split is None:
-            if self._random_split:
-                self._dataset_split = random_split(self.dataset, self.lengths, generator=self.generator)
-            else:
-                self._dataset_split = sequential_split(self.dataset, self.lengths)
+            if isinstance(self.dataset, DictionaryDataset):
+                self._dataset_split = self._split(self.dataset)
+            else:  # List of datasets.
+                dataset_split = [self._split(d) for d in self.dataset]
+                # Shape (n_datasets, n_loaders) -> (n_loaders, n_datasets)
+                self._dataset_split = list(map(list, zip(*dataset_split)))
 
     def train_dataloader(self):
         """Return training dataloader."""
@@ -131,7 +144,7 @@ class DictionaryDataModule(pl.LightningDataModule):
         raise NotImplementedError()
 
     def teardown(self, stage: str):
-        pass 
+        pass
 
     def __repr__(self) -> str:
         string = f'DictionaryDataModule(dataset -> {self.dataset.__repr__()}'
@@ -142,11 +155,22 @@ class DictionaryDataModule(pl.LightningDataModule):
         string+=f')'
         return string
 
+    def _split(self, dataset):
+        """Perform the random or sequential spliting of a single dataset.
+
+        Returns a list of Subset[DictionaryDataset] objects.
+        """
+        if self._random_split:
+            dataset_split = random_split(dataset, self.lengths, generator=self.generator)
+        else:
+            dataset_split = sequential_split(dataset, self.lengths)
+        return dataset_split
+
     def _check_setup(self):
         """Raise an error if setup() has not been called."""
         if self._dataset_split is None:
-            raise AttributeError('The datamodule has not been set up yet. To get the dataset split or the'
-                                 'dataloaders outside a Lightning trainer please call .setup() first.')
+            raise AttributeError('The datamodule has not been set up yet. To get the dataloaders '
+                                 'outside a Lightning trainer please call .setup() first.')
 
 
 def sequential_split(dataset, lengths: Sequence) -> list:
