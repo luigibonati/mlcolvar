@@ -1,9 +1,9 @@
-﻿mlcvs.core.loss.MSE\_loss
+﻿mlcvs.core.loss.tda\_loss
 =========================
 
 .. currentmodule:: mlcvs.core.loss
 
-.. autoclass:: MSE_loss
+.. autoclass:: tda_loss
    :members:                                   
    :show-inheritance:                           
    :inherited-members: Module,LightningModule                       

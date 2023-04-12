@@ -4,17 +4,17 @@ from mlcvs.cvs import BaseCV
 from mlcvs.core import FeedForward, Normalization
 from mlcvs.data import DictionaryDataModule
 from mlcvs.core.stats import LDA
-from mlcvs.core.loss import reduce_eigenvalues
+from mlcvs.core.loss import ReduceEigenvaluesLoss
 
-__all__ = ["DeepLDA_CV"]
+__all__ = ["DeepLDA"]
 
-class DeepLDA_CV(BaseCV, pl.LightningModule):
+class DeepLDA(BaseCV, pl.LightningModule):
     """Neural network-based discriminant collective variables.
     
     For the training it requires a DictionaryDataset with the keys 'data' and 'labels'.
     """
 
-    BLOCKS = ['normIn', 'nn', 'lda']
+    BLOCKS = ['norm_in', 'nn', 'lda']
     
     def __init__(self, layers : list , n_states : int, options : dict = None, **kwargs):
         """ 
@@ -28,15 +28,14 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
             Number of states for the training
         options : dict[str, Any], optional
             Options for the building blocks of the model, by default {}.
-            Available blocks: ['normIn','nn','lda'] .
+            Available blocks: ['norm_in','nn','lda'] .
             Set 'block_name' = None or False to turn off that block
         """
         super().__init__(in_features=layers[0], out_features=layers[-1], **kwargs)
 
-        # =======   LOSS  ======= 
-        self.loss_fn     = reduce_eigenvalues   # maximize LDA eigenvalues
-        self.loss_kwargs = {                    # set default values before parsing options
-                            'mode':'sum'}       # eigenvalue reduction mode
+        # =======   LOSS  =======
+        # Maximize the sum of all the LDA eigenvalues.
+        self.loss_fn = ReduceEigenvaluesLoss(mode='sum')
 
         # ======= OPTIONS ======= 
         # parse and sanitize
@@ -47,10 +46,10 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
 
         # ======= BLOCKS =======
 
-        # initialize normIn
-        o = 'normIn'
+        # initialize norm_in
+        o = 'norm_in'
         if ( options[o] is not False ) and (options[o] is not None):
-            self.normIn = Normalization(self.in_features, **options[o]) 
+            self.norm_in = Normalization(self.in_features, **options[o]) 
 
         # initialize nn
         o = 'nn'
@@ -65,8 +64,8 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
         self.set_regularization(sw_reg=0.05)
 
     def forward_nn(self, x: torch.Tensor) -> (torch.Tensor):
-        if self.normIn is not None:
-            x = self.normIn(x)
+        if self.norm_in is not None:
+            x = self.norm_in(x)
         x = self.nn(x)
         return x
 
@@ -119,7 +118,6 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
 
 
     def training_step(self, train_batch, batch_idx):
-        options = self.loss_kwargs.copy()
         # =================get data===================
         x = train_batch['data']
         y = train_batch['labels']
@@ -128,7 +126,7 @@ class DeepLDA_CV(BaseCV, pl.LightningModule):
         # ===================lda======================
         eigvals,_ = self.lda.compute(h,y,save_params=True if self.training else False) 
         # ===================loss=====================
-        loss = self.loss_fn(eigvals, **options)
+        loss = self.loss_fn(eigvals)
         if self.lorentzian_reg > 0:
             lorentzian_reg = self.regularization_lorentzian(h)
             loss += lorentzian_reg
@@ -160,11 +158,11 @@ def test_deeplda(n_states=2):
     datamodule = DictionaryDataModule(dataset, lengths = [0.8,0.2], batch_size=n_states*n_points)
 
     # initialize CV
-    opts = { 'normIn'  : { 'mode'   : 'mean_std' } ,
+    opts = { 'norm_in'  : { 'mode'   : 'mean_std' } ,
              'nn' :      { 'activation' : 'relu' },
              'lda' :     {} ,
            } 
-    model = DeepLDA_CV( layers, n_states, options=opts )
+    model = DeepLDA( layers, n_states, options=opts )
 
     # create trainer and fit
     trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)

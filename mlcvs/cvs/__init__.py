@@ -1,4 +1,4 @@
-__all__ = ["BaseCV", "DeepLDA_CV", "DeepTICA_CV","DeepTDA_CV","AutoEncoder_CV","Regression_CV"]
+__all__ = ["BaseCV", "DeepLDA", "DeepTICA","DeepTDA","AutoEncoderCV","RegressionCV"]
 
 from .cv import BaseCV
 from .unsupervised import *

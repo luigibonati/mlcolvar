@@ -1,5 +1,5 @@
-__all__ = ["DeepLDA_CV", "DeepTDA_CV", "Regression_CV"]
+__all__ = ["DeepLDA", "DeepTDA", "RegressionCV"]
 
-from .deeplda_cv import *
-from .deeptda_cv import *
-from .regression_cv import *
+from .deeplda import *
+from .deeptda import *
+from .regression import *

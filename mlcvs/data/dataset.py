@@ -25,15 +25,19 @@ class DictionaryDataset(Dataset):
             raise TypeError(f'DictionaryDataset requires a dictionary , not {type(dictionary)}.')
 
         # Add kwargs to dict
-        dictionary = {**dictionary, **locals()['kwargs']}
-
+        if dictionary is None:
+            dictionary = {}
+        dictionary = {**dictionary, **kwargs}
+        if len(dictionary) == 0:
+            raise ValueError('Empty datasets are not supported')
+        
         # convert to torch.Tensors
         for key,val in dictionary.items():
             if not isinstance(val,torch.Tensor):
                 dictionary[key] = torch.Tensor(val)
 
         # save dictionary
-        self.dictionary = dictionary
+        self._dictionary = dictionary
         
         # check that all elements of dict have same length
         it = iter(dictionary.values())
@@ -43,18 +47,29 @@ class DictionaryDataset(Dataset):
 
     def __getitem__(self, index):
         if isinstance(index,str):
-            raise TypeError(f'Index ("{index}") should be a slice, and not a string. To access the stored dictionary use .dictionary["{index}"] instead.')
-        slice_dict = {}
-        for key,val in self.dictionary.items():
-            slice_dict[key] = val[index]
-        
-        return slice_dict
+            #raise TypeError(f'Index ("{index}") should be a slice, and not a string. To access the stored dictionary use .dictionary["{index}"] instead.')
+            return self._dictionary[index]
+        else:
+            slice_dict = {}
+            for key,val in self._dictionary.items():
+                slice_dict[key] = val[index]
+            return slice_dict
+    
+    def __setitem__(self, index, value):
+        if isinstance(index,str):
+            # check lengths 
+            if len(value) != len(self):
+                raise ValueError(f'length of value ({len(value)}) != length of dataset ({len(self)}).')
+            self._dictionary[index] = value
+        else:
+            raise NotImplementedError(f'Only string indexes can be set, {type(index)} is not supported.')
     
     def __len__(self):
-        return self.length
+        value = next(iter(self._dictionary.values()))
+        return len(value)
     
     def get_stats(self):
-        """Compute statistics ('Mean','Std','Min','Max') of the dataset. 
+        """Compute statistics ('mean','Std','Min','Max') of the dataset. 
 
         Returns
         -------
@@ -63,19 +78,19 @@ class DictionaryDataset(Dataset):
         """
         stats = {}
         for k in self.keys:
-            stats[k] = Statistics(self.dictionary[k]).to_dict()
+            stats[k] = Statistics(self._dictionary[k]).to_dict()
         return stats
     
     def __repr__(self) -> str:
         string = 'DictionaryDataset('
-        for key,val in self.dictionary.items():
-            string += f'"{key}": {list(val.shape)}'
-        string += ')'
+        for key,val in self._dictionary.items():
+            string += f' "{key}": {list(val.shape)},'
+        string = string[:-1]+' )'
         return string
 
     @property
     def keys(self):
-        return tuple(self.dictionary.keys())
+        return tuple(self._dictionary.keys())
 
 def test_DictionaryDataset():
     # from list

@@ -35,9 +35,6 @@ class BaseCV:
         self._optimizer_name     = 'Adam'
         self.optimizer_kwargs    = {}
 
-        # LOSS
-        self.loss_kwargs         = {}
-
         # PRE/POST
         self.preprocessing      = preprocessing
         self.postprocessing     = postprocessing
@@ -54,7 +51,7 @@ class BaseCV:
     def parse_options(self, options : dict = None):
         """
         Sanitize options and create defaults ({}) if not in options.
-        Furthermore, sets loss and optimizer kwargs if given. 
+        Furthermore, it sets the optimizer kwargs, if given.
 
         Parameters
         ----------
@@ -69,12 +66,10 @@ class BaseCV:
 
         for o in options.keys():
             if o not in self.BLOCKS:
-                if o == 'loss':
-                    self.loss_kwargs.update(options[o])
-                elif o == 'optimizer':
+                if o == 'optimizer':
                     self.optimizer_kwargs.update(options[o])
                 else:
-                    raise ValueError(f'The key {o} is not available in this class. The available keys are: {",".join(self.BLOCKS)}, + (loss,optimizer) ')
+                    raise ValueError(f'The key {o} is not available in this class. The available keys are: {", ".join(self.BLOCKS)}, and optimizer.')
 
         return options
 
@@ -94,7 +89,7 @@ class BaseCV:
             if isinstance(getattr(self,b), Transform): 
                 getattr(self,b).setup_from_datamodule(datamodule)
 
-    def forward(self, x : torch.Tensor) -> (torch.Tensor):
+    def forward(self, x : torch.Tensor) -> torch.Tensor:
         """
         Evaluation of the CV
 
@@ -123,7 +118,7 @@ class BaseCV:
 
         return x
 
-    def forward_cv(self, x : torch.Tensor) -> (torch.Tensor):
+    def forward_cv(self, x : torch.Tensor) -> torch.Tensor:
         """
         Execute sequentially all the blocks in self.BLOCKS unless they are not initialized.
         
@@ -182,3 +177,18 @@ class BaseCV:
         """ 
         optimizer = getattr(torch.optim,self._optimizer_name)(self.parameters(),**self.optimizer_kwargs)
         return optimizer
+
+    def __setattr__(self, key, value):
+        # PyTorch overrides __setattr__ to raise a TypeError when you try to assign
+        # an attribute that is a Module to avoid substituting the model's component
+        # by mistake. This means we can't simply assign to loss_fn a lambda function
+        # after it's been assigned a Module, but we need to delete the Module first.
+        #    https://github.com/pytorch/pytorch/issues/51896
+        #    https://stackoverflow.com/questions/61116433/maybe-i-found-something-strange-on-pytorch-which-result-in-property-setter-not
+        try:
+            super().__setattr__(key, value)
+        except TypeError as e:
+            # We make an exception only for loss_fn.
+            if (key == 'loss_fn') and ('cannot assign' in str(e)):
+                del self.loss_fn
+                super().__setattr__(key, value)
