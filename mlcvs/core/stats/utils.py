@@ -3,19 +3,45 @@ from torch import Tensor
 from typing import Optional
 
 def generalized_eigh(A: Tensor, B: Tensor) -> tuple:
-     #A workaround to solve a real symmetric GEP Av = \lambda Bv problem. (!! Not numerically efficient)
-     Lambda, Q = torch.linalg.eigh(B)
-     rsqrt_Lambda = torch.diag(Lambda.rsqrt())
-     rsqrt_B = Q@rsqrt_Lambda
-     _A = 0.5*(rsqrt_B.T@(A@rsqrt_B) + rsqrt_B.T@((A.T)@rsqrt_B)) #Force Symmetrization
-     values, _tmp_vecs = torch.linalg.eigh(_A) 
-     vectors = rsqrt_B@_tmp_vecs
-     return values, vectors
+    """A workaround to solve a real symmetric generalized eigenvalue problem :math:`Av = \lambda Bv` using the eigenvalue decomposition of :math:`B^{-1/2}AB^{-1/2}`. This method is not numerically efficient.
+
+    Parameters
+    ----------
+    A : Tensor
+
+    B : Tensor
+
+    Returns
+    -------
+    tuple
+        Eigenvalues and eigenvectors of the generalized eigenvalue problem.
+    """
+    Lambda, Q = torch.linalg.eigh(B)
+    rsqrt_Lambda = torch.diag(Lambda.rsqrt())
+    rsqrt_B = Q@rsqrt_Lambda
+    _A = 0.5*(rsqrt_B.T@(A@rsqrt_B) + rsqrt_B.T@((A.T)@rsqrt_B)) #Force Symmetrization
+    values, _tmp_vecs = torch.linalg.eigh(_A) 
+    vectors = rsqrt_B@_tmp_vecs
+    return values, vectors
 
 def spd_norm(vecs: Tensor, spd_matrix: Tensor) -> Tensor:
-     _v = torch.mm(spd_matrix, vecs)
-     _v_T = torch.mm(spd_matrix.T, vecs)
-     return torch.sqrt(0.5*torch.linalg.vecdot(vecs, _v + _v_T, dim = 0).real)
+    """Compute the norm of a set of vectors with respect to a symmetric positive definite matrix.
+
+    Parameters
+    ----------
+    vecs : Tensor
+        Two dimensional tensor whose columns are the vectors whose norm is to be computed.
+    spd_matrix : Tensor
+        Symmetric positive matrix. Warning: this matrix is not checked for symmetry or positive definiteness.
+
+    Returns
+    -------
+    Tensor
+        One dimensional tensor whose i-th element is the norm of the i-th column of vecs with respect to spd_matrix.
+    """    
+    _v = torch.mm(spd_matrix, vecs)
+    _v_T = torch.mm(spd_matrix.T, vecs)
+    return torch.sqrt(0.5*torch.linalg.vecdot(vecs, _v + _v_T, dim = 0).real)
 
 def reduced_rank_eig(
     input_covariance: Tensor,
@@ -23,7 +49,26 @@ def reduced_rank_eig(
     tikhonov_reg: float,
     rank: Optional[int] = None,
     ) -> tuple:
+    """Reduced rank regression algorithm, as described in [1]_.
+
+    Parameters
+    ----------
+    input_covariance : Tensor
+        
+    lagged_covariance : Tensor
+        
+    rank : Optional[int], optional
+        Rank of the final estimator, by default None
+
+    Returns
+    -------
+    tuple
+        A tuple containing the eigenvalues and eigenvectors of the Koopman operator.
     
+    References
+    ----------
+    .. [1] V. Kostic, P. Novelli, A. Maurer, C. Ciliberto, L. Rosasco, and M. Pontil, "Learning Dynamical Systems via Koopman Operator Regression in Reproducing Kernel Hilbert Spaces" (2022).
+    """    
     n = input_covariance.shape[0]
     reg_input_covariance = input_covariance + tikhonov_reg*torch.eye(n, dtype=input_covariance.dtype, device=input_covariance.device)
 
