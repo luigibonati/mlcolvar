@@ -33,7 +33,7 @@ class TDALoss(torch.nn.Module):
             n_states: int,
             target_centers: Union[list, torch.Tensor],
             target_sigmas: Union[list, torch.Tensor],
-            alfa: float = 1,
+            alpha: float = 1,
             beta: float = 100,
     ):
         """Constructor.
@@ -47,7 +47,7 @@ class TDALoss(torch.nn.Module):
             Shape ``(n_states, n_cvs)``. Centers of the Gaussian targets.
         target_sigmas : list or torch.Tensor
             Shape ``(n_states, n_cvs)``. Standard deviations of the Gaussian targets.
-        alfa : float, optional
+        alpha : float, optional
             Centers_loss component prefactor, by default 1.
         beta : float, optional
             Sigmas loss compontent prefactor, by default 100.
@@ -56,7 +56,7 @@ class TDALoss(torch.nn.Module):
         self.n_states = n_states
         self.target_centers = target_centers
         self.target_sigmas = target_sigmas
-        self.alfa = alfa
+        self.alpha = alpha
         self.beta = beta
 
     def forward(
@@ -78,7 +78,7 @@ class TDALoss(torch.nn.Module):
         loss : torch.Tensor
             Loss value.
         """
-        return tda_loss(H, labels, self.n_states, self.target_centers, self.target_sigmas, self.alfa, self.beta)
+        return tda_loss(H, labels, self.n_states, self.target_centers, self.target_sigmas, self.alpha, self.beta)
 
 
 def tda_loss(
@@ -87,7 +87,7 @@ def tda_loss(
         n_states: int,
         target_centers: Union[list, torch.Tensor],
         target_sigmas: Union[list, torch.Tensor],
-        alfa: float = 1,
+        alpha: float = 1,
         beta: float = 100,
 ) -> torch.Tensor:
     """
@@ -105,7 +105,7 @@ def tda_loss(
         Shape ``(n_states, n_cvs)``. Centers of the Gaussian targets.
     target_sigmas : list or torch.Tensor
         Shape ``(n_states, n_cvs)``. Standard deviations of the Gaussian targets.
-    alfa : float, optional
+    alpha : float, optional
         Centers_loss component prefactor, by default 1.
     beta : float, optional
         Sigmas loss compontent prefactor, by default 100.
