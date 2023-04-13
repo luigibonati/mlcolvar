@@ -59,6 +59,22 @@ def muller_brown_potential(x,y):
         v += prefactor * A[i]*np.exp( a[i]*(x-x0[i])**2 + b[i]*(x-x0[i])*(y-y0[i]) + c[i]*(y-y0[i])**2 )
     return v
 
+def muller_brown_potential_three_states(x,y):
+    """Muller-Brown analytical potential"""
+    prefactor = 0.15
+    A=(-280,-170,-170,15)
+    a=(-15,-1,-6.5,0.7)
+    b=(0,0,11,0.6)
+    c=(-10,-10,-6.5,0.7)
+    x0=(1,0.2,-0.5,-1)
+    y0=(0,0.5,1.5,1)
+    offset = -146.7
+
+    v = -prefactor*offset
+    for i in range(4):
+        v += prefactor * A[i]*np.exp( a[i]*(x-x0[i])**2 + b[i]*(x-x0[i])*(y-y0[i]) + c[i]*(y-y0[i])**2 )
+    return v
+
 def plot_isolines_2D(function, component=None, 
                      limits=((-1.8,1.2),(-0.4,2.1)),num_points=(100,100),
                      mode='contourf',levels=12,cmap=None,colorbar=None,

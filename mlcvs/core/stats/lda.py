@@ -13,17 +13,19 @@ class LDA(Stats):
 
     Attributes
     ----------
-    n_features : int
-        Number of features
+    in_features : int
+        Number of input features
+    out_features : int
+        Number of ouput features (n_states - 1)
     n_states : int
         Number of states
-    evals_ : torch.Tensor
+    evals : torch.Tensor
         LDA eigenvalues
-    evecs_ : torch.Tensor
+    evecs : torch.Tensor
         LDA eigenvectors
-    S_b_ : torch.Tensor
+    S_b : torch.Tensor
         Between scatter matrix
-    S_w_ : torch.Tensor
+    S_w : torch.Tensor
         Within scatter matrix
     sw_reg : float
         Regularization to S_w matrix
@@ -133,7 +135,7 @@ class LDA(Stats):
         states = torch.unique(labels)
         n_states = len(states)
 
-        # Mean centered observations for entire population
+        # mean centered observations for entire population
         X_bar = X - torch.mean(X, 0, True)
         # Total scatter matrix (cov matrix over all observations)
         S_t = X_bar.t().matmul(X_bar) / (N - 1)

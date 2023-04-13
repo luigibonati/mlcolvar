@@ -9,6 +9,8 @@ import pandas as pd
 import numpy as np
 import torch
 import os
+import urllib.request
+
 from mlcvs.data import DictionaryDataset
 
 __all__ = ["load_dataframe", "plumed_to_pandas", "create_dataset_from_files"]
@@ -65,13 +67,24 @@ def plumed_to_pandas(filename="./COLVAR"):
     return df
 
 
-def load_dataframe(data, start = 0, stop = None, stride = 1, **kwargs):
-    """Load dataframe(s) from object or from file. In case of PLUMED colvar files automatically handles the column names.
+def load_dataframe(file_names, start = 0, stop = None, stride = 1, delete_download=True, **kwargs):
+    """Load dataframe(s) from file(s). It can be used also to open files from internet (if the string contains http).
+    In case of PLUMED colvar files automatically handles the column names, otherwise it is just a wrapper for pd.load_csv function.
 
     Parameters
     ----------
-    data : str, pandas.DataFrame, or list
-        input data
+    filenames : str or list[str]
+        filenames to be loaded
+    start: int, optional
+        read from this row, default 0
+    stop: int, optional
+        read until this row, default None 
+    stride: int, optional
+        read every this number, default 1    
+    delete_download: bool, optinal
+        whether to delete the downloaded file after it has been loaded, default True. 
+    kwargs: 
+        keyword arguments passed to pd.load_csv function
 
     Returns
     -------
@@ -83,56 +96,48 @@ def load_dataframe(data, start = 0, stop = None, stride = 1, **kwargs):
     TypeError
         if data is not a valid type
     """
-    # check if data is Dataframe
-    if type(data) == pd.DataFrame:
-        df = data
-        df = df.iloc[start:stop:stride, :]
-        df.reset_index(drop=True, inplace=True)
         
-    # or is a string
-    elif type(data) == str:
-        filename = data
+    # if it is a single string
+    if type(file_names) == str:
+        file_names = [file_names]
+    elif type(file_names) != list:
+        raise TypeError(f'only strings or list of strings are supported, not {type(file_names)}.')
+
+    # list of file_names
+    df_list = []
+    for i, filename in enumerate(file_names):
+        # check if filename is an url
+        download = False
+        if 'http' in filename:
+            download = True
+            url = filename 
+            filename = 'tmp_'+filename.split('/')[-1]
+            urllib.request.urlretrieve(url,filename)
+
         # check if file is in PLUMED format
         if is_plumed_file(filename):
-            df = plumed_to_pandas(filename)
+            df_tmp = plumed_to_pandas(filename)
+            df_tmp['walker'] = [i for _ in range(len(df_tmp))]
+            df_tmp = df_tmp.iloc[start:stop:stride, :]
+            df_list.append( df_tmp )
+            
         # else use read_csv with optional kwargs
         else:
-            df = pd.read_csv(filename, **kwargs)
-        
-        df = df.iloc[start:stop:stride, :]
-        df.reset_index(drop=True, inplace=True)
+            df_tmp = pd.read_csv(filename, **kwargs)
+            df_tmp['walker'] = [i for _ in range(len(df_tmp))]
+            df_tmp = df_tmp.iloc[start:stop:stride, :]
+            df_list.append( df_tmp )
 
-    # or a list 
-    elif type(data) == list:
-        # (a) list of filenames
-        if type(data[0]) == str:
-            df_list = []
-            for i, filename in enumerate(data):
-                # check if file is in PLUMED format
-                if is_plumed_file(filename):
-                    df_tmp = plumed_to_pandas(filename)
-                    df_tmp['walker'] = [i for _ in range(len(df_tmp))]
-                    df_tmp = df_tmp.iloc[start:stop:stride, :]
-                    df_list.append( df_tmp )
-                    
-                # else use read_csv with optional kwargs
-                else:
-                    df_tmp = pd.read_csv(filename, **kwargs)
-                    df_tmp['walker'] = [i for _ in range(len(df_tmp))]
-                    df_tmp = df_tmp.iloc[start:stop:stride, :]
-                    df_list.append( df_tmp )
+        # delete temporary data if necessary
+        if download:
+            if delete_download:
+                os.remove(filename)
+            else:
+                print(f'downloaded file ({url}) saved as ({filename}).')
 
-        elif type(data[0]) == pd.DataFrame:
-            df_list = []
-            for df_tmp in data:
-                df_tmp = df_tmp.iloc[start:stop:stride, :]
-                df_list.append(df_tmp)
-
+        # concatenate
         df = pd.concat(df_list)
         df.reset_index(drop=True, inplace=True)
-
-    else:
-        raise TypeError(f"{data}: Accepted types are 'pandas.Dataframe', 'str', or list")
 
     return df
 
@@ -147,7 +152,7 @@ def create_dataset_from_files(
                     verbose : bool =  True, 
                     **kwargs):
     """
-    Initialize a dataset from (a list of) files.
+    Initialize a dataset from (a list of) files. Suitable for supervised/unsupervised tasks.
 
     Parameters
     ----------
@@ -237,6 +242,7 @@ def create_dataset_from_files(
         return dataset, df
     else:
         return dataset
+
 
 def test_datasetFromFile():
     # Test with unlabeled dataset

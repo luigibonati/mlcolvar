@@ -2,18 +2,18 @@ import torch
 import pytorch_lightning as pl
 from mlcvs.cvs import BaseCV
 from mlcvs.core import FeedForward, Normalization
-from mlcvs.core.loss import TDA_loss
+from mlcvs.core.loss import TDALoss
 from mlcvs.data import DictionaryDataModule
 
-__all__ = ["DeepTDA_CV"]
+__all__ = ["DeepTDA"]
 
-class DeepTDA_CV(BaseCV, pl.LightningModule):
+class DeepTDA(BaseCV, pl.LightningModule):
     """
     Define Deep Targeted Discriminant Analysis (Deep-TDA) CV.
     Combine the inputs with a neural-network and optimize it in a way such that the data are distributed accordingly to a target distribution.
     """
 
-    BLOCKS = ['normIn', 'nn']
+    BLOCKS = ['norm_in', 'nn']
 
     # TODO n_states optional?
     def __init__(self,
@@ -32,7 +32,7 @@ class DeepTDA_CV(BaseCV, pl.LightningModule):
         n_states : int
             Number of states for the training
         n_cvs : int
-            Numnber of collective variables to be trained
+            Number of collective variables to be trained
         target_centers : list
             Centers of the Gaussian targets
         target_sigmas : list
@@ -41,14 +41,23 @@ class DeepTDA_CV(BaseCV, pl.LightningModule):
             Number of neurons per layer
         options : dict[str, Any], optional
             Options for the building blocks of the model, by default {}.
-            Available blocks: ['normIn', 'nn'].
+            Available blocks: ['norm_in', 'nn'].
             Set 'block_name' = None or False to turn off that block
         """
 
         super().__init__(in_features=layers[0], out_features=layers[-1], **kwargs)
 
-        options = self.sanitize_options(options)
-        
+        # =======   LOSS  =======
+        self.loss_fn = TDALoss(
+            n_states=n_states,
+            target_centers=target_centers,
+            target_sigmas=target_sigmas,
+        )
+
+        # ======= OPTIONS ======= 
+        # parse and sanitize
+        options = self.parse_options(options)
+        # Save n_states
         self.n_states = n_states
         if self.out_features != n_cvs:
             raise ValueError("Number of neurons of last layer should match the number of CVs!")
@@ -67,34 +76,25 @@ class DeepTDA_CV(BaseCV, pl.LightningModule):
             if n_cvs != target_centers.shape[1]:
                 raise ValueError((f"Size of target_centers at dimension 1 should match the number of cvs! Expected {n_cvs} found {target_centers.shape[1]}"))
 
-        # Initialize normIn
-        o = 'normIn'
-        if ( not options[o] ) and (options[o] is not None):
-            self.normIn = Normalization(self.in_features,**options[o])
+        # ======= BLOCKS =======
+
+        # Initialize norm_in
+        o = 'norm_in'
+        if ( options[o] is not False ) and (options[o] is not None):
+            self.norm_in = Normalization(self.in_features,**options[o])
 
         # initialize NN
         o = 'nn'
         self.nn = FeedForward(layers, **options[o])
-    
-        self.loss_kwargs = {'n_states': n_states,
-                             'target_centers': target_centers,
-                             'target_sigmas':  target_sigmas                     
-                            }
-
-    # TODO change to have standard signature?
-    def loss_function(self, input, labels, **kwargs):
-        loss, loss_centers, loss_sigmas = TDA_loss(input, labels, **kwargs)
-        return loss, loss_centers, loss_sigmas
 
     def training_step(self, train_batch, batch_idx):
-        options = self.loss_kwargs.copy()
         # =================get data===================
         x = train_batch['data']
         labels = train_batch['labels']
         # =================forward====================
         z = self.forward_cv(x)
         # ===================loss=====================
-        loss, loss_centers, loss_sigmas = self.loss_function(z, labels, **options)
+        loss, loss_centers, loss_sigmas = self.loss_fn(z, labels)
         # ====================log=====================+
         name = 'train' if self.training else 'valid'
         self.log(f'{name}_loss', loss, on_epoch=True)
@@ -120,7 +120,7 @@ def test_deeptda_cv():
         # test initialize via dictionary
         options= { 'nn' : { 'activation' : 'relu' } }
 
-        model = DeepTDA_CV(n_states = n_states, n_cvs = n_cvs, target_centers = target_centers, target_sigmas = target_sigmas, layers = layers, options=options)
+        model = DeepTDA(n_states = n_states, n_cvs = n_cvs, target_centers = target_centers, target_sigmas = target_sigmas, layers = layers, options=options)
         
         print('----------')
         print(model)

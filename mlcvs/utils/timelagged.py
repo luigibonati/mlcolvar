@@ -65,8 +65,7 @@ def tprime_evaluation(t, logweights = None):
         logweights = torch.Tensor(logweights)
         # when the bias is not deposited the value of bias potential is minimum 
         logweights -= torch.max(logweights)
-        # bug: exp(logweights/lognorm) != exp(logweights)/norm, where norm is sum_i beta V_i
-        # are we changing the temperature? 
+        # note: exp(logweights/lognorm) != exp(logweights)/norm, where norm is sum_i beta V_i
         """ possibilities:
             1) logweights /= torch.min(logweights) -> logweights belong to [0,1] 
             2) pass beta as an argument, then logweights *= beta
@@ -84,22 +83,35 @@ def tprime_evaluation(t, logweights = None):
 
     return tprime
 
-def find_timelagged_configurations(x,t,lag_time,progress_bar=True):
-    '''
-    Searches for all the pairs which are distant 'lag' in time, and returns the weights associated to lag=lag as well as the weights for lag=0.
+def find_timelagged_configurations(x : torch.Tensor, t : torch.Tensor, lag_time : float, logweights : torch.Tensor = None,progress_bar : bool = True):
+    """ Searches for all the pairs which are distant 'lag' in time, and returns the weights associated. 
+    If logweights are provided they will be returned both for x_t and x_t+lag (used only for `reweight_mode=weights_t` of create_time_lagged_dataset).
 
-    Parameters:
-        x (tensor): array whose columns are the descriptors and rows the time evolution
-        time (tensor): array with the simulation time
-        lag (float): lag-time
-        progress_bar(bool): display progress bar with tqdm (if installed)
+    Parameters
+    ----------
+    x : torch.Tensor
+        array whose columns are the descriptors and rows the time evolution
+    t : torch.Tensor
+        array with the simulation time
+    lag_time : float
+        lag-time
+    logweights : torch.Tensor, optional
+        logweights to be returned
+    progress_bar : bool, optional
+        display progress bar with tqdm (if installed), by default True
 
-    Returns:
-        x_t (tensor): array of descriptors at time t
-        x_lag (tensor): array of descriptors at time t+lag
-        w_t (tensor): weights at time t
-        w_lag (tensor): weights at time t+lag
-    '''
+    Returns
+    -------
+    x_t: torch.Tensor
+        descriptors at time t
+    x_lag: torch.Tensor
+        descriptors at time t+lag
+    w_t: torch.Tensor
+        weights at time t
+    w_lag: torch.Tensor
+        weights at time t+lag
+    """
+
     #define lists
     x_t = []
     x_lag = []
@@ -114,9 +126,16 @@ def find_timelagged_configurations(x,t,lag_time,progress_bar=True):
         if progress_bar and TQDM_IS_INSTALLED:
             return tqdm(iter)
         else:
-            return iter
             warnings.warn('Monitoring the progress for the search of time-lagged configurations with a progress_bar requires `tqdm`.')
+            return iter
 
+    # sanitize logweights if given
+    if logweights is not None:
+        if len(logweights) != len(x):
+            raise ValueError(f'Length of logweights ({len(logweights)}) is different from length of data ({len(x)}).')
+        logweights = torch.Tensor(logweights)
+        weights = torch.exp(logweights)
+         
     #loop over time array and find pairs which are far away by lag_time
     for i in progress(range(idx_end)):
         stop_condition = lag_time+t[i+1]
@@ -127,14 +146,23 @@ def find_timelagged_configurations(x,t,lag_time,progress_bar=True):
                 x_t.append(x[i])
                 x_lag.append(x[j])
                 deltaTau=min(t[i+1]+lag_time,t[j+1]) - max(t[i]+lag_time,t[j])
-                w_lag.append(deltaTau)
+
+                if logweights is None: 
+                    w_lag.append(deltaTau)
+                else: 
+                    w_lag.append(weights[i])
                 #if n_j == 0: #assign j as the starting point for the next loop
                 #    start_j = j
                 n_j +=1
             elif t[j] > stop_condition:
                 break
         for k in range(n_j):
-            w_t.append((t[i+1]-t[i])/float(n_j))
+            if logweights is None:
+                w_t.append((t[i+1]-t[i])/float(n_j))
+            else: 
+                if n_j>1:
+                    print(n_j)
+                w_t.append(weights[i]/float(n_j))
 
     x_t = torch.stack(x_t) if type(x) == torch.Tensor else torch.Tensor(x_t)
     x_lag = torch.stack(x_lag) if type(x) == torch.Tensor else torch.Tensor(x_lag)
@@ -144,25 +172,32 @@ def find_timelagged_configurations(x,t,lag_time,progress_bar=True):
 
     return x_t,x_lag,w_t,w_lag
 
-def create_timelagged_dataset(X, t = None, lag_time = 1, logweights = None, tprime = None, interval = None, progress_bar = False):
+def create_timelagged_dataset(X : torch.Tensor, t : torch.Tensor = None, lag_time : float = 1, reweight_mode : str = None, logweights : torch.Tensor = None, tprime : torch.Tensor= None, interval : list = None, progress_bar : bool = False):
     """
-    Create a DictionaryDataset of time-lagged configurations. If a set of (log)weights is given the search is performed in the accelerated time.
+    Create a DictionaryDataset of time-lagged configurations. 
     
+    In case of biased simulations the reweigth can be performed in two different ways (`reweight_mode`):
+    1) `rescale_time` : the search for time-lagged pairs is performed in the accelerated time (dt' = dt*exp(logweights)), see Yang and Parrinello (2018)
+    2) `weights_t` : the weight of each pair of configurations (t,t+lag_time) depends only on time t (logweights(t)), see Wu et. al. (2017) 
+    
+    If reweighting is None and tprime is given the `rescale_time` mode is used. If instead only the logweights are specified the user needs to choose the reweighting mode.
+
     Parameters
     ----------
     X : array-like
         input descriptors
     t : array-like, optional
         time series, by default np.arange(len(X))
+    reweight_mode: str, optional
+        how to do the reweighting, see documentation, by default none
     lag_time: float, optional
         lag between configurations, by default = 10        
     logweights : array-like,optional
-        logweights to evaluate rescaled time as dt' = dt*exp(logweights)
+        logweight of each configuration (typically beta*bias)
     tprime : array-like,optional
-        rescaled time estimated from the simulation. If not given 'tprime_evaluation(t,logweights)' is used instead
+        rescaled time estimated from the simulation. If not given and `reweighting_mode`=`rescale_time` then `tprime_evaluation(t,logweights)` is used
     interval : list or np.array or tuple, optional
-        Range for slicing the returned dataset. Useful to work with batches of same sizes.
-        Recall that with different lag_times one obtains different datasets, with different lengths 
+        Range for slicing the returned dataset. Useful to work with batches of same sizes. Recall that with different lag_times one obtains different datasets, with different lengths 
     progress_bar: bool
         Display progress bar with tqdm
 
@@ -180,20 +215,40 @@ def create_timelagged_dataset(X, t = None, lag_time = 1, logweights = None, tpri
         if type(t) == pd.core.frame.DataFrame:
             t = t.values
 
+    # check reweigthing mode if logweights are given:
+    # 1) if rescaled time tprime is given
+    if tprime is not None:
+        if reweight_mode is None:
+            reweight_mode = 'rescale_time'
+        elif reweight_mode != 'rescale_time':
+            raise ValueError('The `reweighting_mode` needs to be equal to `rescale_time`, and not {reweight_mode} if the rescale time `tprime` is given.')
+     # 2) if logweights are given
+    elif logweights is not None:
+        if reweight_mode is None: 
+            reweight_mode = 'rescale_time' 
+            # TODO output warning or error if mode not specified?
+            #warnings.warn('`reweight_mode` not specified, setting it to `rescale_time`.')
+
     # define time if not given
-    if t is None:
+    if t is None: 
         t = torch.arange(0,len(X))
     else:
         if len(t) != len(X):
             raise ValueError(f'The length of t ({len(t)}) is different from the one of X ({len(X)}) ')
-
-    #define tprime if not given
-    if tprime is None:
-        tprime = tprime_evaluation(t, logweights)
+        
+    # define tprime if not given:
+    if reweight_mode == 'rescale_time':
+        if tprime is None:
+            tprime = tprime_evaluation(t, logweights)
+    else: 
+        tprime = t
 
     # find pairs of configurations separated by lag_time
-    x_t,x_lag,w_t,w_lag = find_timelagged_configurations(X, tprime,lag_time=lag_time, progress_bar=progress_bar)
+    x_t,x_lag,w_t,w_lag = find_timelagged_configurations(X, tprime, lag_time=lag_time, 
+                                                            logweights=logweights if reweight_mode == 'weights_t' else None,
+                                                            progress_bar=progress_bar)
 
+    # return only a slice of the data (N. Pedrani)
     if interval is not None:
         # convert to a list
         data = list(data)
@@ -212,16 +267,19 @@ def test_create_timelagged_dataset():
     n_points = 100
     X = torch.rand(n_points,in_features)*100
 
-    dataset = create_timelagged_dataset(X)
-    print(dataset)
-    print(len(dataset))
-
+    # unbiased case
     t = np.arange(n_points)
     dataset = create_timelagged_dataset(X,t,lag_time=10)
     print(len(dataset))
 
+    # reweight mode rescale_time (default)
     logweights = np.random.rand(n_points)
     dataset =  create_timelagged_dataset(X,t,logweights=logweights)
+    print(len(dataset))  
+
+    # reweight mode weights_t
+    logweights = np.random.rand(n_points)
+    dataset =  create_timelagged_dataset(X,t,logweights=logweights,reweight_mode='weights_t')
     print(len(dataset))  
 
 if __name__ == "__main__":

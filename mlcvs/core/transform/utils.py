@@ -13,7 +13,7 @@ class Statistics(object):
     def __init__(self, X : torch.Tensor = None):
         self.count = 0
 
-        self.properties = ['Mean','Std','Min','Max']
+        self.properties = ['mean','std','min','max']
 
         # initialize properties and temp var M2
         for prop in self.properties:
@@ -43,8 +43,8 @@ class Statistics(object):
         new_count = self.count + batch_size
 
         # Initialize
-        if self.Mean is None:
-            for prop in ['Mean','M2','Std']:
+        if self.mean is None:
+            for prop in ['mean','M2','std']:
                 setattr(self,prop, torch.zeros(nfeatures))
 
         # compute sample mean
@@ -52,23 +52,23 @@ class Statistics(object):
         sample_m2 = torch.sum((x - sample_mean) ** 2, dim=0)
 
         # update stats
-        delta = sample_mean - self.Mean 
-        self.Mean += delta * batch_size / new_count
+        delta = sample_mean - self.mean 
+        self.mean += delta * batch_size / new_count
         corr = batch_size * self.count / new_count
         self.M2 += sample_m2 + delta**2 * corr
         self.count = new_count
-        self.Std = torch.sqrt(self.M2 / self.count)
+        self.std = torch.sqrt(self.M2 / self.count)
 
         # compute min/max
         sample_min = torch.min(x, dim=0).values
         sample_max = torch.max(x, dim=0).values
 
-        if self.Min is None:
-            self.Min = sample_min
-            self.Max = sample_max
+        if self.min is None:
+            self.min = sample_min
+            self.max = sample_max
         else:
-            self.Min = torch.min( torch.stack((sample_min,self.Min)), dim=0).values
-            self.Max = torch.max( torch.stack((sample_max,self.Max)), dim=0).values
+            self.min = torch.min( torch.stack((sample_min,self.min)), dim=0).values
+            self.max = torch.max( torch.stack((sample_max,self.max)), dim=0).values
 
     def to_dict(self) -> dict:
         return {prop: getattr(self,prop) for prop in self.properties}
@@ -82,12 +82,12 @@ class Statistics(object):
 
 def batch_reshape(t: torch.Tensor, size : torch.Size) -> (torch.Tensor):
     """Return value reshaped according to size. 
-    In case of batch expand unsqueeze and expand along the first dimension.
-    For single inputs just pass:
+    In case of batch unsqueeze and expand along the first dimension.
+    For single inputs just pass.
 
     Parameters
     ----------
-        Mean and range 
+        mean and range 
 
     """
     if len(size) == 1:

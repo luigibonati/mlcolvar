@@ -1,3 +1,4 @@
-__all__ = ["AutoEncoder_CV"]
+__all__ = ["AutoEncoderCV","VariationalAutoEncoderCV"]
 
 from .autoencoder import *
+from .vae import *

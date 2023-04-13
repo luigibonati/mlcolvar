@@ -17,7 +17,6 @@
    .. autosummary::
    
       ~FeedForward.__init__
-      ~FeedForward.extra_repr
       ~FeedForward.forward
    
    

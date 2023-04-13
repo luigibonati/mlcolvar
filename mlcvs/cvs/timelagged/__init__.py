@@ -1,3 +1,3 @@
-__all__ = ["DeepTICA_CV"]
+__all__ = ["DeepTICA"]
 
-from .deeptica_cv import *
+from .deeptica import *
