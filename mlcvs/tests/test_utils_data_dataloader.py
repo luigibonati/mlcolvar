@@ -22,6 +22,22 @@ from mlcvs.data.dataloader import FastDictionaryLoader
 
 
 # =============================================================================
+# FIXTURES
+# =============================================================================
+
+@pytest.fixture
+def random_datasets():
+    """A list of datasets with different keys."""
+    n_samples = 10
+    datasets = [
+        Subset(DictionaryDataset({'data': torch.randn(n_samples+2, 2)}), indices=list(range(1, 11))),
+        DictionaryDataset({'data': torch.randn(n_samples, 2), 'labels': torch.randn(n_samples)}),
+        {'data': torch.randn(n_samples, 2), 'labels': torch.randn(n_samples), 'weights': torch.randn(n_samples)},
+    ]
+    return datasets
+
+
+# =============================================================================
 # TESTS
 # =============================================================================
 
@@ -68,19 +84,13 @@ def test_fast_dictionary_loader_init():
         FastDictionaryLoader(dataset)
 
 
-def test_fast_dictionary_loader_multidataset():
-    """FastDictionaryLoader combines multiple datasets into one."""
-    # Create datasets with different fields.
-    n_samples = 10
-    datasets = [
-        Subset(DictionaryDataset({'data': torch.randn(n_samples+2, 2)}), indices=list(range(1, 11))),
-        DictionaryDataset({'data': torch.randn(n_samples, 2), 'labels': torch.randn(n_samples)}),
-        {'data': torch.randn(n_samples, 2), 'labels': torch.randn(n_samples), 'weights': torch.randn(n_samples)},
-    ]
+def test_fast_dictionary_loader_multidataset_batch(random_datasets):
+    """FastDictionaryLoader combines multiple datasets into a single batch."""
+    n_samples = len(random_datasets[0])
 
     # Create the dataloader.
     batch_size = 2
-    dataloader = FastDictionaryLoader(datasets, batch_size=batch_size)
+    dataloader = FastDictionaryLoader(random_datasets, batch_size=batch_size)
 
     # Check that dataset_len and number of batches are computed correctly.
     assert dataloader.dataset_len == n_samples
@@ -88,18 +98,49 @@ def test_fast_dictionary_loader_multidataset():
 
     # Test that the batches are correct.
     for batch in dataloader:
-        assert len(batch) == len(datasets)
+        assert len(batch) == len(random_datasets)
+        # Check shape 'data' (all datasets have it).
         for i in range(3):
-            assert len(batch[f'dataset{i}']) == i+1
+            n_dataset_keys = len(batch[f'dataset{i}'])
+            assert n_dataset_keys == i+1
             assert batch[f'dataset{i}']['data'].shape == (batch_size, 2)
+
+        # Check shape 'labels' (only the last two datasets have it).
         for i in range(1, 3):
             assert batch[f'dataset{i}']['labels'].shape == (batch_size,)
+
+        # Check shape 'weights' (only the last dataset has it).
         assert batch[f'dataset{i}']['weights'].shape == (batch_size,)
 
-    # If datasets are not of the same dimension, the datamodule explodes.
-    datasets.append(DictionaryDataset({
+
+def test_fast_dictionary_loader_multidataset_different_lengths(random_datasets):
+    """FastDictionaryLoader complains if multiple datasets of different dimensions are passed."""
+    n_samples = len(random_datasets[0])
+    random_datasets.append(DictionaryDataset({
         'data': torch.randn(n_samples+1, 2),
         'labels': torch.randn(n_samples+1),
     }))
     with pytest.raises(ValueError, match='must have the same number of samples'):
-        FastDictionaryLoader(datasets)
+        FastDictionaryLoader(random_datasets)
+
+
+def test_fast_dictionary_loader_multidataset_get_stats(random_datasets):
+    """FastDictionaryLoader compute stats for all or a subset of datasets."""
+    dataloader = FastDictionaryLoader(random_datasets)
+
+    # Stats for all datasets.
+    stats_all = dataloader.get_stats()
+    assert tuple(stats_all.keys()) == tuple(f'dataset{i}' for i in range(len(random_datasets)))
+
+    # Check that statistics for all the datasets's key have been computed.
+    for dataset_idx, dataset_keys in enumerate(dataloader.keys):
+        dataset_name = 'dataset' + str(dataset_idx)
+        assert tuple(stats_all[dataset_name].keys()) == dataset_keys
+
+    # Stats for single datasets.
+    stats_1 = dataloader.get_stats(dataset_idx=1)
+
+    # Check that the statistics for dataset1 agree for both implementations.
+    for dataset_key in dataloader.keys[1]:
+        for stat_name, stat in stats_1[dataset_key].items():
+            assert torch.allclose(stat, stats_all['dataset1'][dataset_key][stat_name])
