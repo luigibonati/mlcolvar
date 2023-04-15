@@ -109,7 +109,7 @@ def autocorrelation_loss(
     if x_t.ndim == 2:
         if x_t.shape[1] > 1:
             raise ValueError('The autocorrelation loss should be used on (batches of) scalar '
-                             f'outputs, found tensor of shape {z_t.shape} instead.')
+                             f'outputs, found tensor of shape {x_t.shape} instead.')
         else:
             x_t = x_t.squeeze()
             x_lag = x_lag.squeeze()

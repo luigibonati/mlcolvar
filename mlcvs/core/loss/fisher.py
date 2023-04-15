@@ -53,7 +53,7 @@ class FisherDiscriminantLoss(torch.nn.Module):
         loss : torch.Tensor
             Loss value.
         """
-        return fisher_discriminant_loss(X, labels. self.invert_sign)
+        return fisher_discriminant_loss(X, labels, self.invert_sign)
 
 
 def fisher_discriminant_loss(
