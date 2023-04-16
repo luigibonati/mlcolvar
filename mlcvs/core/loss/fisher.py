@@ -57,6 +57,9 @@ class FisherDiscriminantLoss(torch.nn.Module):
             minimized with gradient descent methods. Default is ``True``.
         """
         super().__init__()
+        self.n_states = n_states
+        self.lda_mode = lda_mode
+        self.reduce_mode = reduce_mode
         self.invert_sign = invert_sign
 
     def forward(
@@ -78,7 +81,13 @@ class FisherDiscriminantLoss(torch.nn.Module):
         loss : torch.Tensor
             Loss value.
         """
-        return fisher_discriminant_loss(x, labels, self.invert_sign)
+        return fisher_discriminant_loss(
+            x, labels,
+            n_states=self.n_states,
+            lda_mode=self.lda_mode,
+            reduce_mode=self.reduce_mode,
+            invert_sign=self.invert_sign
+        )
 
 
 def fisher_discriminant_loss(
