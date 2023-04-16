@@ -17,6 +17,7 @@ __all__ = ['FisherDiscriminantLoss', 'fisher_discriminant_loss']
 
 import torch
 from mlcvs.core.stats import LDA
+from mlcvs.core.loss import reduce_eigenvalues_loss
 
 
 # =============================================================================
@@ -24,26 +25,50 @@ from mlcvs.core.stats import LDA
 # =============================================================================
 
 class FisherDiscriminantLoss(torch.nn.Module):
-    r""" Fisher's discriminant ratio.
+    """Fisher's discriminant ratio.
 
-    .. math::
-        L = - \frac{S_b(X)}{S_w(X)}
+    Computes the sum (or another reducing functions) of the eigenvalues of the
+    ratio between the Fisher's scatter matrices. This is the same loss function
+    used in :class:`~mlcvs.cvs.supervised.deeplda.DeepLDA`.
     """
 
-    def __init__(self, invert_sign : bool = True):
+    def __init__(
+            self,
+            n_states: int,
+            lda_mode: str = 'standard',
+            reduce_mode: str = 'sum',
+            invert_sign: bool = True):
+        """Constructor.
+
+        Parameters
+        ----------
+        n_states : int
+            The number of states. Labels are in the range ``[0, n_states-1]``.
+        lda_mode : str
+            Either ``'standard'`` or ``'harmonic'``. This determines how the scatter
+            matrices are computed (see also :class:`~mlcvs.core.stats.lda.LDA`). The
+            default is ``'standard'``.
+        reduce_mode : str
+            This determines how the eigenvalues are reduced, e.g., ``sum``, ``sum2``
+            (see also :class:`~mlcvs.core.loss.eigvals.ReduceEigenvaluesLoss`). The
+            default is ``'sum'``.
+        invert_sign: bool, optional
+            Whether to return the negative Fisher's discriminant ratio in order to be
+            minimized with gradient descent methods. Default is ``True``.
+        """
         super().__init__()
         self.invert_sign = invert_sign
 
     def forward(
             self,
-            X: torch.Tensor,
+            x: torch.Tensor,
             labels: torch.Tensor,
     ) -> torch.Tensor:
         """Compute the value of the loss function.
 
         Parameters
         ----------
-        X : torch.Tensor
+        x : torch.Tensor
             Shape ``(n_batches, n_features)``. Input features.
         labels : torch.Tensor
             Shape ``(n_batches,)``. Classes labels.
@@ -53,28 +78,41 @@ class FisherDiscriminantLoss(torch.nn.Module):
         loss : torch.Tensor
             Loss value.
         """
-        return fisher_discriminant_loss(X, labels, self.invert_sign)
+        return fisher_discriminant_loss(x, labels, self.invert_sign)
 
 
 def fisher_discriminant_loss(
-        X: torch.Tensor,
+        x: torch.Tensor,
         labels: torch.Tensor,
-        invert_sign: bool = True
+        n_states: int,
+        lda_mode: str = 'standard',
+        reduce_mode: str = 'sum',
+        invert_sign: bool = True,
 ) -> torch.Tensor:
-    r""" Fisher's discriminant ratio.
+    """Fisher's discriminant ratio.
 
-    .. math::
-
-        L = - \frac{S_b(X)}{S_w(X)}
+    Computes the sum (or another reducing functions) of the eigenvalues of the
+    ratio between the Fisher's scatter matrices. This is the same loss function
+    used in :class:`~mlcvs.cvs.supervised.deeplda.DeepLDA`.
     
     Parameters
     ----------
-    X : torch.Tensor
+    x : torch.Tensor
         Shape ``(n_batches, n_features)``. Input features.
     labels : torch.Tensor
         Shape ``(n_batches,)``. Classes labels.
+    n_states : int
+        The number of states. Labels are in the range ``[0, n_states-1]``.
+    lda_mode : str
+        Either ``'standard'`` or ``'harmonic'``. This determines how the scatter
+        matrices are computed (see also :class:`~mlcvs.core.stats.lda.LDA`). The
+        default is ``'standard'``.
+    reduce_mode : str
+        This determines how the eigenvalues are reduced, e.g., ``sum``, ``sum2``
+        (see also :class:`~mlcvs.core.loss.eigvals.ReduceEigenvaluesLoss`). The
+        default is ``'sum'``.
     invert_sign: bool, optional
-        whether to return the negative Fisher's discriminant ratio in order to be
+        Whether to return the negative Fisher's discriminant ratio in order to be
         minimized with gradient descent methods. Default is ``True``.
 
     Returns
@@ -82,24 +120,7 @@ def fisher_discriminant_loss(
     loss: torch.Tensor
         Loss value.
     """
-
-    if X.ndim == 1:
-        X = X.unsqueeze(1) # for lda compute_scatter_matrices method
-    if X.ndim == 2 and X.shape[1] > 1:
-        raise ValueError (f'fisher_discriminant_loss should be used on (batches of) scalar outputs, found tensor of shape {X.shape} instead.')
-
-    # get params
-    d = X.shape[-1] if X.ndim == 2 else 1
-    n_classes = len(labels.unique())
-
-    # define LDA object to compute S_b / S_w ratio
-    lda = LDA(in_features=d, n_states=n_classes)
-
-    s_b, s_w = lda.compute_scatter_matrices(X,labels)
-
-    loss = s_b.squeeze() / s_w.squeeze()
-
-    if invert_sign:
-        loss *= -1
-
+    lda = LDA(in_features=x.shape[-1], n_states=n_states, mode=lda_mode)
+    eigvals, _ = lda.compute(x, labels)
+    loss = reduce_eigenvalues_loss(eigvals, mode=reduce_mode, invert_sign=invert_sign)
     return loss
