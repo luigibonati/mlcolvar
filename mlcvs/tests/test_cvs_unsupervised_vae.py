@@ -14,6 +14,7 @@ Test objects and function in mlcvs.cvs.unsupervised.vae.
 # GLOBAL IMPORTS
 # =============================================================================
 
+import os
 import tempfile
 
 import pytest
@@ -63,8 +64,13 @@ def test_vae_cv_training(weights):
     assert x_hat.shape == (batch_size, n_cvs)
 
     # Test export to torchscript.
-    with tempfile.NamedTemporaryFile('wb', suffix='.ptc') as f:
-        model.to_torchscript(file_path=f.name, method='trace')
-        model_loaded = torch.jit.load(f.name)
+    # This try-finally clause is a workaround for windows not allowing opening temp files twice.
+    try:
+        tmp_file = tempfile.NamedTemporaryFile('wb', suffix='.ptc', delete=False)
+        tmp_file.close()
+        model.to_torchscript(file_path=tmp_file.name, method='trace')
+        model_loaded = torch.jit.load(tmp_file.name)
+    finally:
+        os.unlink(tmp_file.name)
     x_hat2 = model_loaded(x)
     assert torch.allclose(x_hat, x_hat2)

@@ -14,6 +14,7 @@ Test objects and functions in mlcvs.cvs.multitask.multitask.
 # GLOBAL IMPORTS
 # =============================================================================
 
+import os
 import tempfile
 
 import pytest
@@ -283,8 +284,13 @@ def test_multitask_training(main_cv_name, weights, auxiliary_loss_names, loss_co
     assert x_hat.shape == (x.shape[0], N_CVS)
 
     # Do round-trip through torchscript.
-    with tempfile.NamedTemporaryFile('wb', suffix='.ptc') as f:
-        multi_cv.to_torchscript(file_path=f.name, method='trace')
-        multi_cv_loaded = torch.jit.load(f.name)
+    # This try-finally clause is a workaround for windows not allowing opening temp files twice.
+    try:
+        tmp_file = tempfile.NamedTemporaryFile('wb', suffix='.ptc', delete=False)
+        tmp_file.close()
+        multi_cv.to_torchscript(file_path=tmp_file.name, method='trace')
+        multi_cv_loaded = torch.jit.load(tmp_file.name)
+    finally:
+        os.unlink(tmp_file.name)
     x_hat2 = multi_cv_loaded(x)
     assert torch.allclose(x_hat, x_hat2)
