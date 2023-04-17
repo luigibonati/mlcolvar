@@ -63,7 +63,7 @@ def test_vae_cv_training(weights):
     assert x_hat.shape == (batch_size, n_cvs)
 
     # Test export to torchscript.
-    with tempfile.NamedTemporaryFile('r', suffix='.ptc') as f:
+    with tempfile.NamedTemporaryFile('wb', suffix='.ptc') as f:
         model.to_torchscript(file_path=f.name, method='trace')
         model_loaded = torch.jit.load(f.name)
     x_hat2 = model_loaded(x)

@@ -283,7 +283,7 @@ def test_multitask_training(main_cv_name, weights, auxiliary_loss_names, loss_co
     assert x_hat.shape == (x.shape[0], N_CVS)
 
     # Do round-trip through torchscript.
-    with tempfile.NamedTemporaryFile('r', suffix='.ptc') as f:
+    with tempfile.NamedTemporaryFile('wb', suffix='.ptc') as f:
         multi_cv.to_torchscript(file_path=f.name, method='trace')
         multi_cv_loaded = torch.jit.load(f.name)
     x_hat2 = multi_cv_loaded(x)
