@@ -14,6 +14,8 @@ Test objects and function in mlcvs.cvs.unsupervised.vae.
 # GLOBAL IMPORTS
 # =============================================================================
 
+import tempfile
+
 import pytest
 import pytorch_lightning as pl
 import torch
@@ -59,3 +61,10 @@ def test_vae_cv_training(weights):
     model.eval()
     x_hat = model(x)
     assert x_hat.shape == (batch_size, n_cvs)
+
+    # Test export to torchscript.
+    with tempfile.NamedTemporaryFile('r', suffix='.ptc') as f:
+        model.to_torchscript(file_path=f.name, method='trace')
+        model_loaded = torch.jit.load(f.name)
+    x_hat2 = model_loaded(x)
+    assert torch.allclose(x_hat, x_hat2)
