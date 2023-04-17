@@ -15,7 +15,10 @@ __all__ = ['FisherDiscriminantLoss', 'fisher_discriminant_loss']
 # GLOBAL IMPORTS
 # =============================================================================
 
+from typing import Optional
+
 import torch
+
 from mlcvs.core.stats import LDA
 from mlcvs.core.loss import reduce_eigenvalues_loss
 
@@ -37,7 +40,9 @@ class FisherDiscriminantLoss(torch.nn.Module):
             n_states: int,
             lda_mode: str = 'standard',
             reduce_mode: str = 'sum',
-            invert_sign: bool = True):
+            lorentzian_reg: Optional[float] = None,
+            invert_sign: bool = True
+    ):
         """Constructor.
 
         Parameters
@@ -52,6 +57,9 @@ class FisherDiscriminantLoss(torch.nn.Module):
             This determines how the eigenvalues are reduced, e.g., ``sum``, ``sum2``
             (see also :class:`~mlcvs.core.loss.eigvals.ReduceEigenvaluesLoss`). The
             default is ``'sum'``.
+        lorentzian_reg: float, optional
+            The magnitude of the regularization for Lorentzian regularization.
+            If not provided, this is automatically set.
         invert_sign: bool, optional
             Whether to return the negative Fisher's discriminant ratio in order to be
             minimized with gradient descent methods. Default is ``True``.
@@ -60,6 +68,7 @@ class FisherDiscriminantLoss(torch.nn.Module):
         self.n_states = n_states
         self.lda_mode = lda_mode
         self.reduce_mode = reduce_mode
+        self.lorentzian_reg = lorentzian_reg
         self.invert_sign = invert_sign
 
     def forward(
@@ -86,6 +95,7 @@ class FisherDiscriminantLoss(torch.nn.Module):
             n_states=self.n_states,
             lda_mode=self.lda_mode,
             reduce_mode=self.reduce_mode,
+            lorentzian_reg=self.lorentzian_reg,
             invert_sign=self.invert_sign
         )
 
@@ -96,13 +106,14 @@ def fisher_discriminant_loss(
         n_states: int,
         lda_mode: str = 'standard',
         reduce_mode: str = 'sum',
+        lorentzian_reg: Optional[float] = None,
         invert_sign: bool = True,
 ) -> torch.Tensor:
     """Fisher's discriminant ratio.
 
     Computes the sum (or another reducing functions) of the eigenvalues of the
-    ratio between the Fisher's scatter matrices. This is the same loss function
-    used in :class:`~mlcvs.cvs.supervised.deeplda.DeepLDA`.
+    ratio between the Fisher's scatter matrices with a Lorentzian regularization.
+    This is the same loss function used in :class:`~mlcvs.cvs.supervised.deeplda.DeepLDA`.
     
     Parameters
     ----------
@@ -112,14 +123,17 @@ def fisher_discriminant_loss(
         Shape ``(n_batches,)``. Classes labels.
     n_states : int
         The number of states. Labels are in the range ``[0, n_states-1]``.
-    lda_mode : str
+    lda_mode : str, optional
         Either ``'standard'`` or ``'harmonic'``. This determines how the scatter
         matrices are computed (see also :class:`~mlcvs.core.stats.lda.LDA`). The
         default is ``'standard'``.
-    reduce_mode : str
+    reduce_mode : str, optional
         This determines how the eigenvalues are reduced, e.g., ``sum``, ``sum2``
         (see also :class:`~mlcvs.core.loss.eigvals.ReduceEigenvaluesLoss`). The
         default is ``'sum'``.
+    lorentzian_reg: float, optional
+        The magnitude of the regularization for Lorentzian regularization. If not
+        provided, this is automatically set.
     invert_sign: bool, optional
         Whether to return the negative Fisher's discriminant ratio in order to be
         minimized with gradient descent methods. Default is ``True``.
@@ -132,4 +146,12 @@ def fisher_discriminant_loss(
     lda = LDA(in_features=x.shape[-1], n_states=n_states, mode=lda_mode)
     eigvals, _ = lda.compute(x, labels)
     loss = reduce_eigenvalues_loss(eigvals, mode=reduce_mode, invert_sign=invert_sign)
-    return loss
+
+    # Regularization. The heuristic is the same used by DeepLDA.
+    # TODO: ENCAPSULATE THIS IN A UTILITY FUNCTION USED BY BOTH THIS AND DEEPLDA?
+    if lorentzian_reg is None:
+        lorentzian_reg = 2.0 / lda.sw_reg
+    reg_loss = x.pow(2).sum().div(x.size(0))
+    reg_loss = - lorentzian_reg / (1 + (reg_loss - 1).pow(2))
+
+    return loss + reg_loss
