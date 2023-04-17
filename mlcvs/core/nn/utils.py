@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 import math
 
+
 class Shifted_Softplus(torch.nn.Softplus):
     """Element-wise softplus function shifted as to pass from the origin."""
     
@@ -11,6 +12,7 @@ class Shifted_Softplus(torch.nn.Softplus):
     def forward(self, input):
         sp0 = F.softplus(torch.zeros(1), self.beta, self.threshold).item()
         return F.softplus(input, self.beta, self.threshold) - sp0
+
 
 def get_activation(activation : str):
     """ Return activation module given string. """
@@ -35,17 +37,25 @@ def get_activation(activation : str):
         )
     return activ
 
-def parse_nn_options( options : str, n_layers : int ):
-    """Parse args per layer of the NN. If a single value is given, repeat options to all layers but for the output one"""
+
+def parse_nn_options(options: str, n_layers: int, last_layer_activation: bool):
+    """Parse args per layer of the NN.
+
+    If a single value is given, repeat options to all layers but for the output one,
+    unless ``last_layer_activation is True``, in which case the option is repeated
+    also for the output layer.
+    """
     # If an iterable is given cheeck that its length matches the number of NN layers
     if hasattr(options, '__iter__') and not isinstance(options, str):
         if len(options) != n_layers:
             raise ValueError(f'Length of options: {options} ({len(options)} should be equal to number of layers ({n_layers})).')
         options_list = options
     # if a single value is given, repeat options to all layers but for the output one
-    else: 
-        options_list = [ options for _ in range(n_layers-1) ]
-        options_list.append(None)
+    else:
+        if last_layer_activation:
+            options_list = [options for _ in range(n_layers)]
+        else:
+            options_list = [options for _ in range(n_layers-1)]
+            options_list.append(None)
     
     return options_list
-

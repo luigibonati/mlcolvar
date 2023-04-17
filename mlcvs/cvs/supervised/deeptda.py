@@ -94,7 +94,7 @@ class DeepTDA(BaseCV, pl.LightningModule):
         # =================forward====================
         z = self.forward_cv(x)
         # ===================loss=====================
-        loss, loss_centers, loss_sigmas = self.loss_fn(z, labels)
+        loss, loss_centers, loss_sigmas = self.loss_fn(z, labels, return_loss_terms=True)
         # ====================log=====================+
         name = 'train' if self.training else 'valid'
         self.log(f'{name}_loss', loss.to(float), on_epoch=True)

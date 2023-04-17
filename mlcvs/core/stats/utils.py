@@ -127,11 +127,9 @@ def cholesky_eigh(A, B, reg_B = 1e-6, n_eig = None ):
     eigvecs = torch.matmul(L_ti, eigvecs)
 
     # (5) normalize them
-    for i in range(eigvecs.shape[1]): 
-        norm = eigvecs[:, i].pow(2).sum().sqrt()
-        eigvecs[:, i].div_(norm)
+    eigvecs = torch.nn.functional.normalize(eigvecs, dim=0)
     # set the first component positive
-    eigvecs.mul_(torch.sign(eigvecs[0, :]).unsqueeze(0).expand_as(eigvecs))
+    eigvecs = eigvecs.mul(torch.sign(eigvecs[0, :]).unsqueeze(0).expand_as(eigvecs))
 
     # (6) keep only first n_eig eigvals and eigvecs
     if n_eig is not None:
