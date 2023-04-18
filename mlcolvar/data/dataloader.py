@@ -8,7 +8,7 @@
 PyTorch Lightning DataModule object for DictDatasets.
 """
 
-__all__ = ["FastDictionaryLoader"]
+__all__ = ["DictLoader"]
 
 
 # =============================================================================
@@ -26,7 +26,7 @@ from mlcolvar.core.transform.utils import Statistics
 # FAST DICTIONARY LOADER CLASS
 # =============================================================================
 
-class FastDictionaryLoader:
+class DictLoader:
     """PyTorch DataLoader for :class:`~mlcolvar.data.dataset.DictDataset`s.
     
     It is much faster than ``TensorDataset`` + ``DataLoader`` because ``DataLoader``
@@ -46,12 +46,12 @@ class FastDictionaryLoader:
 
     >>> x = torch.arange(1,11)
 
-    A ``FastDictionaryLoader`` can be initialize from a ``dict``, a :class:`~mlcolvar.data.dataset.DictDataset`,
+    A ``DictLoader`` can be initialize from a ``dict``, a :class:`~mlcolvar.data.dataset.DictDataset`,
     or a ``Subset`` wrapping a :class:`~mlcolvar.data.dataset.DictDataset`.
 
     >>> # Initialize from a dictionary.
     >>> d = {'data': x.unsqueeze(1), 'labels': x**2}
-    >>> dataloader = FastDictionaryLoader(d, batch_size=1, shuffle=False)
+    >>> dataloader = DictLoader(d, batch_size=1, shuffle=False)
     >>> dataloader.dataset_len  # number of samples
     10
     >>> # Print first batch.
@@ -62,18 +62,18 @@ class FastDictionaryLoader:
 
     >>> # Initialize from a DictDataset.
     >>> dict_dataset = DictDataset(d)
-    >>> dataloader = FastDictionaryLoader(dict_dataset, batch_size=2, shuffle=False)
+    >>> dataloader = DictLoader(dict_dataset, batch_size=2, shuffle=False)
     >>> len(dataloader)  # Number of batches
     5
 
     >>> # Initialize from a PyTorch Subset object.
     >>> train, _ = torch.utils.data.random_split(dict_dataset, [0.5, 0.5])
-    >>> dataloader = FastDictionaryLoader(train, batch_size=1, shuffle=False)
+    >>> dataloader = DictLoader(train, batch_size=1, shuffle=False)
 
     It is also possible to iterate over multiple dictionary datasets having
     different keys for multi-task learning
 
-    >>> dataloader = FastDictionaryLoader(
+    >>> dataloader = DictLoader(
     ...     dataset=[dict_dataset, {'some_unlabeled_data': torch.arange(10)+11}],
     ...     batch_size=1, shuffle=False,
     ... )
@@ -94,7 +94,7 @@ class FastDictionaryLoader:
             batch_size: int = 0,
             shuffle: bool = True,
     ):
-        """Initialize a ``FastDictionaryLoader``.
+        """Initialize a ``DictLoader``.
 
         Parameters
         ----------
@@ -187,7 +187,7 @@ class FastDictionaryLoader:
         return (self.dataset_len + self.batch_size - 1) // self.batch_size
     
     def __repr__(self) -> str:
-        string = f'FastDictionaryLoader(length={self.dataset_len}, batch_size={self.batch_size}, shuffle={self.shuffle})'
+        string = f'DictLoader(length={self.dataset_len}, batch_size={self.batch_size}, shuffle={self.shuffle})'
         return string
 
     def get_stats(self, dataset_idx: Optional[int] = None):

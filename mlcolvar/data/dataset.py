@@ -111,8 +111,8 @@ def test_DictDataset():
     print(batch['data'])
 
     # test with fastdataloader
-    from .dataloader import FastDictionaryLoader
-    loader = FastDictionaryLoader(dataset,batch_size=1)
+    from .dataloader import DictLoader
+    loader = DictLoader(dataset,batch_size=1)
     batch=next(iter(loader))
     print(batch)
 

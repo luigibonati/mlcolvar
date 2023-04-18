@@ -25,7 +25,7 @@ import lightning
 from torch.utils.data import random_split, Subset
 from torch._utils import _accumulate
 
-from mlcolvar.data import FastDictionaryLoader, DictDataset
+from mlcolvar.data import DictLoader, DictDataset
 
 
 # =============================================================================
@@ -114,7 +114,7 @@ class DictionaryDataModule(lightning.LightningDataModule):
 
         See Also
         --------
-        :class:`~mlcolvar.data.dataloader.FastDictionaryLoader`
+        :class:`~mlcolvar.data.dataloader.DictLoader`
             The PyTorch loader built by the data module.
 
         """
@@ -158,14 +158,14 @@ class DictionaryDataModule(lightning.LightningDataModule):
         """Return training dataloader."""
         self._check_setup()
         if self.train_loader is None:
-            self.train_loader = FastDictionaryLoader(self._dataset_split[0], batch_size=self.batch_size[0], shuffle=self.shuffle[0])
+            self.train_loader = DictLoader(self._dataset_split[0], batch_size=self.batch_size[0], shuffle=self.shuffle[0])
         return self.train_loader
 
     def val_dataloader(self):
         """Return validation dataloader."""
         self._check_setup()
         if self.valid_loader is None:
-            self.valid_loader = FastDictionaryLoader(self._dataset_split[1], batch_size=self.batch_size[1], shuffle=self.shuffle[1])
+            self.valid_loader = DictLoader(self._dataset_split[1], batch_size=self.batch_size[1], shuffle=self.shuffle[1])
         return self.valid_loader
 
     def test_dataloader(self):
@@ -174,7 +174,7 @@ class DictionaryDataModule(lightning.LightningDataModule):
         if len(self.lengths) < 3:
             raise ValueError('Test dataset not available, you need to pass three lengths to datamodule.')
         if self.test_loader is None:
-            self.test_loader = FastDictionaryLoader(self._dataset_split[2], batch_size=self.batch_size[2], shuffle=self.shuffle[2])
+            self.test_loader = DictLoader(self._dataset_split[2], batch_size=self.batch_size[2], shuffle=self.shuffle[2])
         return self.test_loader
 
     def predict_dataloader(self):
@@ -185,10 +185,10 @@ class DictionaryDataModule(lightning.LightningDataModule):
 
     def __repr__(self) -> str:
         string = f'DictionaryDataModule(dataset -> {self.dataset.__repr__()}'
-        string+=f',\n\t\t     train_loader -> FastDictionaryLoader(length={self.lengths[0]}, batch_size={self.batch_size[0]}, shuffle={self.shuffle[0]})'
-        string+=f',\n\t\t     valid_loader -> FastDictionaryLoader(length={self.lengths[1]}, batch_size={self.batch_size[1]}, shuffle={self.shuffle[1]})'
+        string+=f',\n\t\t     train_loader -> DictLoader(length={self.lengths[0]}, batch_size={self.batch_size[0]}, shuffle={self.shuffle[0]})'
+        string+=f',\n\t\t     valid_loader -> DictLoader(length={self.lengths[1]}, batch_size={self.batch_size[1]}, shuffle={self.shuffle[1]})'
         if len(self.lengths) >= 3:
-            string+=f',\n\t\t\ttest_loader =FastDictionaryLoader(length={self.lengths[2]}, batch_size={self.batch_size[2]}, shuffle={self.shuffle[2]})'
+            string+=f',\n\t\t\ttest_loader =DictLoader(length={self.lengths[2]}, batch_size={self.batch_size[2]}, shuffle={self.shuffle[2]})'
         string+=f')'
         return string
 

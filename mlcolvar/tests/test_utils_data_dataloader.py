@@ -18,7 +18,7 @@ import torch
 from torch.utils.data import Subset
 
 from mlcolvar.data.dataset import DictDataset
-from mlcolvar.data.dataloader import FastDictionaryLoader
+from mlcolvar.data.dataloader import DictLoader
 
 
 # =============================================================================
@@ -42,7 +42,7 @@ def random_datasets():
 # =============================================================================
 
 def test_fast_dictionary_loader_init():
-    """FastDictionaryLoader can be initialized from dict, DictDataset, and Subsets."""
+    """DictLoader can be initialized from dict, DictDataset, and Subsets."""
     x = torch.arange(1, 11)
     y = x**2
     x = x.unsqueeze(1)
@@ -65,32 +65,32 @@ def test_fast_dictionary_loader_init():
 
     # Start from dictionary
     d = {'data': x, 'labels': y}
-    dataloader = FastDictionaryLoader(d, batch_size=batch_size, shuffle=False)
+    dataloader = DictLoader(d, batch_size=batch_size, shuffle=False)
     _check_dataloader(dataloader)
 
     # or from DictDataset
     dict_dataset = DictDataset(d)
-    dataloader = FastDictionaryLoader(dict_dataset, batch_size=batch_size, shuffle=False)
+    dataloader = DictLoader(dict_dataset, batch_size=batch_size, shuffle=False)
     _check_dataloader(dataloader)
 
     # or from subset
     train, _ = torch.utils.data.random_split(dict_dataset, [0.5, 0.5])
-    dataloader = FastDictionaryLoader(train, batch_size=batch_size, shuffle=False)
+    dataloader = DictLoader(train, batch_size=batch_size, shuffle=False)
     _check_dataloader(dataloader, n_samples=5, n_batches=3, shuffled=True)
 
     # an error is raised if initialized from anything else.
     dataset = torch.utils.data.TensorDataset(x)
     with pytest.raises(ValueError, match='must be of type'):
-        FastDictionaryLoader(dataset)
+        DictLoader(dataset)
 
 
 def test_fast_dictionary_loader_multidataset_batch(random_datasets):
-    """FastDictionaryLoader combines multiple datasets into a single batch."""
+    """DictLoader combines multiple datasets into a single batch."""
     n_samples = len(random_datasets[0])
 
     # Create the dataloader.
     batch_size = 2
-    dataloader = FastDictionaryLoader(random_datasets, batch_size=batch_size)
+    dataloader = DictLoader(random_datasets, batch_size=batch_size)
 
     # Check that dataset_len and number of batches are computed correctly.
     assert dataloader.dataset_len == n_samples
@@ -114,19 +114,19 @@ def test_fast_dictionary_loader_multidataset_batch(random_datasets):
 
 
 def test_fast_dictionary_loader_multidataset_different_lengths(random_datasets):
-    """FastDictionaryLoader complains if multiple datasets of different dimensions are passed."""
+    """DictLoader complains if multiple datasets of different dimensions are passed."""
     n_samples = len(random_datasets[0])
     random_datasets.append(DictDataset({
         'data': torch.randn(n_samples+1, 2),
         'labels': torch.randn(n_samples+1),
     }))
     with pytest.raises(ValueError, match='must have the same number of samples'):
-        FastDictionaryLoader(random_datasets)
+        DictLoader(random_datasets)
 
 
 def test_fast_dictionary_loader_multidataset_get_stats(random_datasets):
-    """FastDictionaryLoader compute stats for all or a subset of datasets."""
-    dataloader = FastDictionaryLoader(random_datasets)
+    """DictLoader compute stats for all or a subset of datasets."""
+    dataloader = DictLoader(random_datasets)
 
     # Stats for all datasets.
     stats_all = dataloader.get_stats()
