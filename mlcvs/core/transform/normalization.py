@@ -126,7 +126,13 @@ class Normalization(Transform):
     def setup_from_datamodule(self,datamodule):
         if not self.is_initialized:
             # obtain statistics from the dataloader
-            stats = datamodule.train_dataloader().get_stats()['data']
+            try:
+                stats = datamodule.train_dataloader().get_stats()['data']
+            except KeyError:
+                raise ValueError(f'Impossible to initialize {self.__class__.__name__} '
+                                 'because the training dataloader does not have a "data" key '
+                                 '(are you using multiple datasets?). A manual initialization '
+                                 'of "mean" and "range" is necessary.')
             self.set_from_stats(stats,self.mode)
 
     def forward(self, x: torch.Tensor) -> (torch.Tensor):

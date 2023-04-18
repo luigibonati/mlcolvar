@@ -15,7 +15,7 @@ __all__ = ["FastDictionaryLoader"]
 # GLOBAL IMPORTS
 # =============================================================================
 
-from typing import Union, Sequence
+from typing import Optional, Union, Sequence
 import torch
 from torch.utils.data import Subset
 from mlcvs.data import DictionaryDataset
@@ -133,10 +133,10 @@ class FastDictionaryLoader:
     @property
     def dataset_len(self):
         """int: Number of samples in the dataset(s)."""
-        if isinstance(self._dataset, DictionaryDataset):
-            return len(self.dataset)
-        # List of datasets.
-        return len(self.dataset[0])
+        if self.has_multiple_datasets:
+            # List of datasets.
+            return len(self.dataset[0])
+        return len(self.dataset)
 
     @property
     def batch_size(self):
@@ -146,6 +146,17 @@ class FastDictionaryLoader:
     @batch_size.setter
     def batch_size(self, batch_size):
         self._batch_size = batch_size
+
+    @property
+    def keys(self):
+        """tuple[str] or tuple[tuple[str]]: The keys of all the datasets in this loader."""
+        if self.has_multiple_datasets:
+            return tuple(d.keys for d in self.dataset)
+        return self.dataset.keys
+
+    @property
+    def has_multiple_datasets(self):
+        return not isinstance(self.dataset, DictionaryDataset)
 
     def __iter__(self):
         # Even with multiple datasets (of the same length), we generate a single
@@ -161,12 +172,12 @@ class FastDictionaryLoader:
         if self.i >= self.dataset_len:
             raise StopIteration
 
-        if isinstance(self.dataset, DictionaryDataset):
-            batch = self._get_batch(self.dataset)
-        else:  # List of dict datasets.
+        if self.has_multiple_datasets:
             batch = {}
             for dataset_idx, dataset in enumerate(self.dataset):
                 batch[f'dataset{dataset_idx}'] = self._get_batch(dataset)
+        else:
+            batch = self._get_batch(self.dataset)
 
         self.i += self.batch_size
         return batch
@@ -174,37 +185,48 @@ class FastDictionaryLoader:
     def __len__(self):
         # Number of batches.
         return (self.dataset_len + self.batch_size - 1) // self.batch_size
-
-    @property
-    def keys(self):
-        return self.dataset.keys
     
     def __repr__(self) -> str:
         string = f'FastDictionaryLoader(length={self.dataset_len}, batch_size={self.batch_size}, shuffle={self.shuffle})'
         return string
 
-    def get_stats(self):
+    def get_stats(self, dataset_idx: Optional[int] = None):
         """Compute statistics ``('mean','std','min','max')`` of the dataloader.
+
+        Parameters
+        ----------
+        dataset_idx : int, optional
+            If given and the loader has multiple datasets, only the statistics
+            of the ``dataset_idx``-th dataset will be returned.
 
         Returns
         -------
-        stats 
-            dictionary of dictionaries with statistics
+        stats : Dict[Dict] or List[Dict[Dict]]
+            A dictionary mapping the datasets' keys (e.g., ``'data'``, ``'weights'``)
+            to their statistics. If the loader has multiple datasets, ``stats[i]``
+            is the dictionary for the ``i``-th dataset.
+
         """
-        stats = {}
-        for batch in iter(self):
-            for k in self.keys:
-                #initialize
-                if k not in stats:
-                    stats[k] = Statistics(batch[k])
-                # or accumulate
-                else:
-                    stats[k].update(batch[k])
+        # Check whether this loader has multiple datasets.
+        if self.has_multiple_datasets:
+            datasets = self.dataset
+        else:
+            datasets = [self.dataset]
 
-        # convert to dictionaries
-        for k in stats.keys():
-            stats[k] = stats[k].to_dict()
+        # Select requested dataset.
+        is_selected_dataset = dataset_idx is not None
+        if is_selected_dataset:
+            datasets = [datasets[dataset_idx]]
 
+        # Compute stats.
+        stats = {f'dataset{i}': {} for i in range(len(datasets))}
+        for dataset_idx, dataset in enumerate(datasets):
+            for k in dataset.keys:
+                stats[f'dataset{dataset_idx}'][k] = Statistics(dataset[k]).to_dict()
+
+        # Return only a single dictionary if there are no multiple datasets.
+        if is_selected_dataset or not self.has_multiple_datasets:
+            return stats['dataset0']
         return stats
 
     def _get_batch(self, dataset):

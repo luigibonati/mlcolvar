@@ -44,12 +44,14 @@ class VariationalAutoEncoderCV(BaseCV, pl.LightningModule):
     
     BLOCKS = ['norm_in', 'encoder', 'decoder']
     
-    def __init__(self,
-                 n_cvs : int,
-                 encoder_layers : list,
-                 decoder_layers : Optional[list] = None,
-                 options : Optional[dict] = None,
-                 **kwargs):
+    def __init__(
+            self,
+            n_cvs: int,
+            encoder_layers: list,
+            decoder_layers: Optional[list] = None,
+            options: Optional[dict] = None,
+            **kwargs
+    ):
         """
         Variational autoencoder constructor.
 
@@ -81,6 +83,17 @@ class VariationalAutoEncoderCV(BaseCV, pl.LightningModule):
         # parse and sanitize
         options = self.parse_options(options)
 
+        # The FeedForward implementing the encoder by default needs to have also
+        # the nonlinearity (and eventually dropout/batchnorm) also for the output
+        # layer since we'll have two separate linear layers for the mean and variance.
+        try:
+            encoder_opts = options['encoder']
+        except KeyError:
+            encoder_opts['encoder'] = {'last_layer_activation': True}
+        else:  # Make sure we don't overwrite an existing option.
+            if 'last_layer_activation' not in encoder_opts:
+                encoder_opts['last_layer_activation'] = True
+
         # if decoder is not given reverse the encoder
         if decoder_layers is None:
             decoder_layers = encoder_layers[::-1]
@@ -89,22 +102,19 @@ class VariationalAutoEncoderCV(BaseCV, pl.LightningModule):
 
         # initialize norm_in
         o = 'norm_in'
-        if ( options[o] is not False ) and (options[o] is not None):
+        if (options[o] is not False) and (options[o] is not None):
             self.norm_in = Normalization(self.in_features, **options[o])
 
         # initialize encoder
-        # The encoder outputs two values for each CV representig mean and std.
+        # The encoder outputs two values for each CV representing mean and std.
         o = 'encoder'
-        self.encoder = FeedForward(encoder_layers + [n_cvs*2], **options[o])
+        self.encoder = FeedForward(encoder_layers, **options[o])
+        self.mean_nn = torch.nn.Linear(in_features=encoder_layers[-1], out_features=n_cvs)
+        self.log_var_nn = torch.nn.Linear(in_features=encoder_layers[-1], out_features=n_cvs)
 
         # initialize encoder
         o = 'decoder'
         self.decoder = FeedForward([n_cvs] + decoder_layers, **options[o])
-
-    @property # TODO: shall we remove it as it is equal to the one in baseCV?
-    def n_cvs(self):
-        """Number of CVs."""
-        return self.decoder.in_features
 
     def forward_cv(self, x: torch.Tensor) -> torch.Tensor:
         """Compute the value of the CV from preprocessed input.
@@ -129,7 +139,7 @@ class VariationalAutoEncoderCV(BaseCV, pl.LightningModule):
         x = self.encoder(x)
 
         # Take only the means and ignore the log variances.
-        return x[..., :self.n_cvs]
+        return self.mean_nn(x)
 
     def encode_decode(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Run a pass of encoding + decoding.
@@ -162,7 +172,7 @@ class VariationalAutoEncoderCV(BaseCV, pl.LightningModule):
 
         # Encode input into a Gaussian distribution.
         x = self.encoder(x)
-        mean, log_variance = x[..., :self.n_cvs], x[..., self.n_cvs:]
+        mean, log_variance = self.mean_nn(x), self.log_var_nn(x)
 
         # Sample from the Gaussian distribution in latent space.
         std = torch.exp(log_variance / 2)
@@ -171,7 +181,7 @@ class VariationalAutoEncoderCV(BaseCV, pl.LightningModule):
         # Decode sample.
         x_hat = self.decoder(z)
         if self.norm_in is not None:
-            x_hat = self.norm_in.inverse(x)
+            x_hat = self.norm_in.inverse(x_hat)
 
         return mean, log_variance, x_hat
 

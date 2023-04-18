@@ -63,6 +63,7 @@ class TDALoss(torch.nn.Module):
             self,
             H: torch.Tensor,
             labels: torch.Tensor,
+            return_loss_terms: bool = False
     ) -> torch.Tensor:
         """Compute the value of the loss function.
 
@@ -72,13 +73,24 @@ class TDALoss(torch.nn.Module):
             Shape ``(n_batches, n_features)``. Output of the NN.
         labels : torch.Tensor
             Shape ``(n_batches,)``. Labels of the dataset.
+        return_loss_terms : bool, optional
+            If ``True``, the loss terms associated to the center and standard
+            deviations of the target Gaussians are returned as well. Default
+            is ``False``.
 
         Returns
         -------
         loss : torch.Tensor
             Loss value.
+        loss_centers : torch.Tensor, optional
+            Only returned if ``return_loss_terms is True``. The value of the
+            loss term associated to the centers of the target Gaussians.
+        loss_sigmas : torch.Tensor, optional
+            Only returned if ``return_loss_terms is True``. The value of the
+            loss term associated to the standard deviations of the target Gaussians.
         """
-        return tda_loss(H, labels, self.n_states, self.target_centers, self.target_sigmas, self.alpha, self.beta)
+        return tda_loss(H, labels, self.n_states, self.target_centers, self.target_sigmas,
+                        self.alpha, self.beta, return_loss_terms)
 
 
 def tda_loss(
@@ -89,6 +101,7 @@ def tda_loss(
         target_sigmas: Union[list, torch.Tensor],
         alpha: float = 1,
         beta: float = 100,
+        return_loss_terms: bool = False
 ) -> torch.Tensor:
     """
     Compute a loss function as the distance from a simple Gaussian target distribution.
@@ -109,11 +122,20 @@ def tda_loss(
         Centers_loss component prefactor, by default 1.
     beta : float, optional
         Sigmas loss compontent prefactor, by default 100.
+    return_loss_terms : bool, optional
+        If ``True``, the loss terms associated to the center and standard deviations
+        of the target Gaussians are returned as well. Default is ``False``.
 
     Returns
     -------
-    torch.Tensor
-        Total loss, centers loss, and sigmas loss.
+    loss : torch.Tensor
+        Loss value.
+    loss_centers : torch.Tensor, optional
+        Only returned if ``return_loss_terms is True``. The value of the loss
+        term associated to the centers of the target Gaussians.
+    loss_sigmas : torch.Tensor, optional
+        Only returned if ``return_loss_terms is True``. The value of the loss
+        term associated to the standard deviations of the target Gaussians.
     """
     if not isinstance(target_centers, torch.Tensor):
         target_centers = torch.Tensor(target_centers)
@@ -146,4 +168,6 @@ def tda_loss(
     loss_sigmas = torch.sum(loss_sigmas) 
     loss = loss_centers + loss_sigmas  
 
-    return loss, loss_centers, loss_sigmas
+    if return_loss_terms:
+        return loss, loss_centers, loss_sigmas
+    return loss
