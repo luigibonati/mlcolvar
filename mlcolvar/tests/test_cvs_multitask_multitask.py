@@ -16,9 +16,8 @@ Test objects and functions in mlcolvar.cvs.multitask.multitask.
 
 import os
 import tempfile
-
 import pytest
-
+import lightning
 import torch
 
 from mlcolvar.core.loss import TDALoss, FisherDiscriminantLoss, AutocorrelationLoss

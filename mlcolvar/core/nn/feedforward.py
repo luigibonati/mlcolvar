@@ -16,7 +16,7 @@ __all__ = ["FeedForward"]
 # =============================================================================
 
 from typing import Optional, Union
-
+import lightning
 import torch
 
 from mlcolvar.core.nn.utils import get_activation, parse_nn_options
@@ -25,7 +25,6 @@ from mlcolvar.core.nn.utils import get_activation, parse_nn_options
 # =============================================================================
 # STANDARD FEED FORWARD
 # =============================================================================
-
 class FeedForward(lightning.LightningModule):
     """Define a feedforward neural network given the list of layers.
 

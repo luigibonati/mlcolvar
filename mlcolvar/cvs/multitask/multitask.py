@@ -16,7 +16,7 @@ __all__ = ["MultiTaskCV"]
 
 from typing import Optional, Sequence
 import torch
-
+import lightning
 from mlcolvar.cvs.cv import BaseCV
 
 
