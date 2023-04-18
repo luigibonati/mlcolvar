@@ -6,8 +6,9 @@
 from matplotlib.colors import LinearSegmentedColormap, ColorConverter
 from matplotlib.cm import register_cmap
 
-__all__ = ["paletteFessa"]
+__all__ = ["paletteFessa", "paletteCortina"]
 
+# Fessa colormap
 paletteFessa = [
     '#1F3B73', # dark-blue
     '#2F9294', # green-blue
@@ -34,6 +35,20 @@ for i in range(len(paletteFessa)):
 # plt.contourf(X, Y, Z, cmap='fessa')
 ### For standard plots
 # plt.plot(x, y, color='fessa0')
+
+
+# Cortina1980 colormap
+paletteCortina = [[0.0                , 0.0                   , 0.803921568627451     , 1],  #mediumblue
+                 [0.4823529411764706 , 0.40784313725490196   , 0.9333333333333333    , 1], #mediumslateblue
+                 [0.0                , 0.9803921568627451    , 0.6039215686274509    , 1], #mediumspringgreen
+                 [0.23529411764705882, 0.7019607843137254    , 0.44313725490196076   , 1], #mediumseagreen
+                 [0.8588235294117647 , 0.4392156862745098    , 0.5764705882352941    , 1], #palevioletred
+                 [0.7803921568627451 , 0.08235294117647059   , 0.5215686274509804    , 1] #mediumvioletred
+                 ]
+
+cm_cortina = LinearSegmentedColormap.from_list("cortina80", paletteCortina)
+register_cmap(cmap=cm_cortina)
+register_cmap(cmap=cm_cortina.reversed())
 
 ##########################################################################
 ## HELPER FUNCTIONS FOR 2D SYSTEMS
