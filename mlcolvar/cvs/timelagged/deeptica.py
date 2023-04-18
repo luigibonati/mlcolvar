@@ -7,7 +7,7 @@ from mlcolvar.core.loss import ReduceEigenvaluesLoss
 
 __all__ = ["DeepTICA"] 
 
-class DeepTICA(BaseCV, pl.LightningModule):
+class DeepTICA(BaseCV, lightning.LightningModule):
     """Time-lagged independent component analysis-based CV."""
     
     BLOCKS = ['norm_in','nn','tica'] 
@@ -119,7 +119,7 @@ def test_deep_tica():
     model.loss_fn.mode = 'sum2'
 
     # create trainer and fit
-    trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2, logger=None, enable_checkpointing=False)
+    trainer = lightning.Trainer(max_epochs=1, log_every_n_steps=2, logger=None, enable_checkpointing=False)
     trainer.fit( model, datamodule )
 
     model.eval()

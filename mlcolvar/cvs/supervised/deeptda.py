@@ -7,7 +7,7 @@ from mlcolvar.data import DictionaryDataModule
 
 __all__ = ["DeepTDA"]
 
-class DeepTDA(BaseCV, pl.LightningModule):
+class DeepTDA(BaseCV, lightning.LightningModule):
     """
     Define Deep Targeted Discriminant Analysis (Deep-TDA) CV.
     Combine the inputs with a neural-network and optimize it in a way such that the data are distributed accordingly to a target distribution.
@@ -137,7 +137,7 @@ def test_deeptda_cv():
         dataset = DictionaryDataset({'data': X, 'labels' : y})
         datamodule = DictionaryDataModule(dataset,lengths=[0.75,0.2,0.05], batch_size=samples)        
         # train model
-        trainer = pl.Trainer(accelerator='cpu', max_epochs=2, logger=None, enable_checkpointing=False)
+        trainer = lightning.Trainer(accelerator='cpu', max_epochs=2, logger=None, enable_checkpointing=False)
         trainer.fit( model, datamodule )
 
         # trace model

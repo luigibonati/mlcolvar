@@ -32,7 +32,7 @@ from mlcolvar.data import FastDictionaryLoader, DictionaryDataset
 # DICTIONARY DATAMODULE CLASS
 # =============================================================================
 
-class DictionaryDataModule(pl.LightningDataModule):
+class DictionaryDataModule(lightning.LightningDataModule):
     """Lightning DataModule constructed for :class:`~mlcolvar.data.dataset.DictionaryDataset`(s).
 
     The DataModule automatically splits the :class:`~mlcolvar.data.dataset.DictionaryDataset`s
