@@ -18,7 +18,7 @@ import os
 import tempfile
 
 import pytest
-import lightning as pl
+import lightning
 import torch
 
 from mlcolvar.core.loss import TDALoss, FisherDiscriminantLoss, AutocorrelationLoss

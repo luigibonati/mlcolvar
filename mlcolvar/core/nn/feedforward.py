@@ -18,7 +18,7 @@ __all__ = ["FeedForward"]
 from typing import Optional, Union
 
 import torch
-import lightning as pl
+import lightning
 from mlcolvar.core.nn.utils import get_activation, parse_nn_options
 
 

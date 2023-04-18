@@ -69,7 +69,7 @@ class MultiTaskCV:
     >>> datamodule = DictionaryDataModule(dataset=[unsupervised_dataset, supervised_dataset])
 
     # Create a PyTorch Lightning trainer.
-    >>> import lightning as pl
+    >>> import lightning
     >>> trainer = pl.Trainer(max_epochs=1, log_every_n_steps=5, logger=None, enable_checkpointing=False)
 
     """
