@@ -1,7 +1,7 @@
-﻿mlcvs.cvs.RegressionCV
+﻿mlcolvar.cvs.RegressionCV
 ======================
 
-.. currentmodule:: mlcvs.cvs
+.. currentmodule:: mlcolvar.cvs
 
 .. autoclass:: RegressionCV
    :members:                                   

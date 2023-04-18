@@ -1,4 +1,4 @@
-# Compiling mlcvs's Documentation
+# Compiling mlcolvar's Documentation
 
 The docs for this project are built with [Sphinx](http://www.sphinx-doc.org/en/master/).
 To compile the docs, first ensure that Sphinx and the ReadTheDocs theme are installed.

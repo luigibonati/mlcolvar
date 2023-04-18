@@ -1,7 +1,7 @@
-﻿mlcvs.core.stats.LDA
+﻿mlcolvar.core.stats.LDA
 ====================
 
-.. currentmodule:: mlcvs.core.stats
+.. currentmodule:: mlcolvar.core.stats
 
 .. autoclass:: LDA
    :members:                                   

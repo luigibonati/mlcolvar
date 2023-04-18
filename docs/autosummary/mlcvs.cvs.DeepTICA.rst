@@ -1,7 +1,7 @@
-﻿mlcvs.cvs.DeepTICA
+﻿mlcolvar.cvs.DeepTICA
 ==================
 
-.. currentmodule:: mlcvs.cvs
+.. currentmodule:: mlcolvar.cvs
 
 .. autoclass:: DeepTICA
    :members:                                   

@@ -1,7 +1,7 @@
-﻿mlcvs.core.transform.Transform
+﻿mlcolvar.core.transform.Transform
 ==============================
 
-.. currentmodule:: mlcvs.core.transform
+.. currentmodule:: mlcolvar.core.transform
 
 .. autoclass:: Transform
    :members:                                   

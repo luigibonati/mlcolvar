@@ -1,7 +1,7 @@
-﻿mlcvs.core.loss.tda\_loss
+﻿mlcolvar.core.loss.tda\_loss
 =========================
 
-.. currentmodule:: mlcvs.core.loss
+.. currentmodule:: mlcolvar.core.loss
 
 .. autoclass:: tda_loss
    :members:                                   

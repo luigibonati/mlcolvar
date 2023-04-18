@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 # Self-descriptive entries which should always be present
 # https://packaging.python.org/en/latest/specifications/declaring-project-metadata/
 [project]
-name = "mlcvs"
+name = "mlcolvar"
 description = "Machine learning collective variables for enhanced sampling"
 dynamic = ["version"]
 readme = "README.md"
@@ -26,8 +26,8 @@ requires-python = ">=3.7"
 
 # Update the urls once the hosting is set up.
 [project.urls]
-"Source" = "https://github.com/luigibonati/mlcvs/"
-"Documentation" = "https://mlcvs.readthedocs.io/"
+"Source" = "https://github.com/luigibonati/mlcolvar/"
+"Documentation" = "https://mlcolvar.readthedocs.io/"
 
 [project.optional-dependencies]
 test = [
@@ -62,7 +62,7 @@ where = ["."]
 
 # Ref https://setuptools.pypa.io/en/latest/userguide/datafiles.html#package-data
 [tool.setuptools.package-data]
-mlcvs = [
+mlcolvar = [
     "py.typed"
 ]
 
@@ -82,4 +82,4 @@ match = ["*"]
 default-tag = "1.0.0"
 
 [tool.versioningit.write]
-file = "mlcvs/_version.py"
+file = "mlcolvar/_version.py"

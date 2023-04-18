@@ -1,11 +1,11 @@
 Getting Started
 ===============
 
-This page details how to get started with the package `mlcvs`. 
+This page details how to get started with the package `mlcolvar`. 
 
 Installation
 ------------
-To install `mlcvs`, you will need an environment with the following packages:
+To install `mlcolvar`, you will need an environment with the following packages:
 
 * ``python > 3.7``
 * ``numpy``
@@ -18,16 +18,16 @@ The following packages are optional, but they are recommended as they allow to u
 * ``KDEpy`` or ``scikit-learn`` (compute free energy profiles via KDE)
 * ``tqdm`` (monitor progress)
 
-Once you have installed the requirements, you can install mlcvs by cloning the repository:
+Once you have installed the requirements, you can install mlcolvar by cloning the repository:
 ::
 
-    git clone https://github.com/luigibonati/mlcvs.git 
+    git clone https://github.com/luigibonati/mlcolvar.git 
 
 and then installing it:
 
 ::
 
-    cd mlcvs/
+    cd mlcolvar/
     pip install .
 
 To install it in development (editable) mode:

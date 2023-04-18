@@ -1,7 +1,7 @@
-﻿mlcvs.core.stats.TICA
+﻿mlcolvar.core.stats.TICA
 =====================
 
-.. currentmodule:: mlcvs.core.stats
+.. currentmodule:: mlcolvar.core.stats
 
 .. autoclass:: TICA
    :members:                                   
