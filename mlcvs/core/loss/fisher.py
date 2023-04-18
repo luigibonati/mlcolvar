@@ -106,6 +106,7 @@ def fisher_discriminant_loss(
         n_states: int,
         lda_mode: str = 'standard',
         reduce_mode: str = 'sum',
+        sw_reg: Optional[float] = 0.05,
         lorentzian_reg: Optional[float] = None,
         invert_sign: bool = True,
 ) -> torch.Tensor:
@@ -131,9 +132,12 @@ def fisher_discriminant_loss(
         This determines how the eigenvalues are reduced, e.g., ``sum``, ``sum2``
         (see also :class:`~mlcvs.core.loss.eigvals.ReduceEigenvaluesLoss`). The
         default is ``'sum'``.
+    sw_reg: float, optional
+        The magnitude of the regularization for the within-scatter matrix, by default
+        equal to 0.05.
     lorentzian_reg: float, optional
         The magnitude of the regularization for Lorentzian regularization. If not
-        provided, this is automatically set.
+        provided, this is automatically set according to sw_reg.
     invert_sign: bool, optional
         Whether to return the negative Fisher's discriminant ratio in order to be
         minimized with gradient descent methods. Default is ``True``.
@@ -143,14 +147,22 @@ def fisher_discriminant_loss(
     loss: torch.Tensor
         Loss value.
     """
+    # define lda object
     lda = LDA(in_features=x.shape[-1], n_states=n_states, mode=lda_mode)
+
+    # regularize s_w
+    lda.sw_reg = sw_reg
+
+    # compute LDA eigvals
     eigvals, _ = lda.compute(x, labels)
     loss = reduce_eigenvalues_loss(eigvals, mode=reduce_mode, invert_sign=invert_sign)
 
-    # Regularization. The heuristic is the same used by DeepLDA.
+    # Add lorentzian regularization. The heuristic is the same used by DeepLDA.
     # TODO: ENCAPSULATE THIS IN A UTILITY FUNCTION USED BY BOTH THIS AND DEEPLDA?
     if lorentzian_reg is None:
-        lorentzian_reg = 2.0 / lda.sw_reg
+        if sw_reg == 0 or sw_reg is None:
+            raise ValueError(f'Unable to calculate `lorentzian_reg` from `sw_reg` ({sw_reg}), please specify the value.')
+        lorentzian_reg = 2.0 / sw_reg
     reg_loss = x.pow(2).sum().div(x.size(0))
     reg_loss = - lorentzian_reg / (1 + (reg_loss - 1).pow(2))
 

@@ -106,7 +106,8 @@ def cholesky_eigh(A, B, reg_B = 1e-6, n_eig = None ):
         raise ValueError('The matrices need to be symmetric to solve the generalized eigenvalue problem via cholesky decomposition. A >> ', B )
 
     # (0) regularize B matrix before cholesky
-    B = B + reg_B*torch.eye(B.shape[0]).to(B.device)
+    if reg_B is not None:
+        B = B + reg_B*torch.eye(B.shape[0]).to(B.device)
 
     # (1) use cholesky decomposition for B
     L = torch.linalg.cholesky(B, upper=False)
