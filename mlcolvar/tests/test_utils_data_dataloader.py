@@ -17,7 +17,7 @@ import pytest
 import torch
 from torch.utils.data import Subset
 
-from mlcolvar.data.dataset import DictionaryDataset
+from mlcolvar.data.dataset import DictDataset
 from mlcolvar.data.dataloader import FastDictionaryLoader
 
 
@@ -30,8 +30,8 @@ def random_datasets():
     """A list of datasets with different keys."""
     n_samples = 10
     datasets = [
-        Subset(DictionaryDataset({'data': torch.randn(n_samples+2, 2)}), indices=list(range(1, 11))),
-        DictionaryDataset({'data': torch.randn(n_samples, 2), 'labels': torch.randn(n_samples)}),
+        Subset(DictDataset({'data': torch.randn(n_samples+2, 2)}), indices=list(range(1, 11))),
+        DictDataset({'data': torch.randn(n_samples, 2), 'labels': torch.randn(n_samples)}),
         {'data': torch.randn(n_samples, 2), 'labels': torch.randn(n_samples), 'weights': torch.randn(n_samples)},
     ]
     return datasets
@@ -42,7 +42,7 @@ def random_datasets():
 # =============================================================================
 
 def test_fast_dictionary_loader_init():
-    """FastDictionaryLoader can be initialized from dict, DictionaryDataset, and Subsets."""
+    """FastDictionaryLoader can be initialized from dict, DictDataset, and Subsets."""
     x = torch.arange(1, 11)
     y = x**2
     x = x.unsqueeze(1)
@@ -53,8 +53,8 @@ def test_fast_dictionary_loader_init():
         assert dl.dataset_len == n_samples
         assert len(dl) == n_batches
 
-        # The detaset is converted to a DictionaryDataset.
-        assert isinstance(dl.dataset, DictionaryDataset)
+        # The detaset is converted to a DictDataset.
+        assert isinstance(dl.dataset, DictDataset)
 
         # Check the batch.
         batch = next(iter(dl))
@@ -68,8 +68,8 @@ def test_fast_dictionary_loader_init():
     dataloader = FastDictionaryLoader(d, batch_size=batch_size, shuffle=False)
     _check_dataloader(dataloader)
 
-    # or from DictionaryDataset
-    dict_dataset = DictionaryDataset(d)
+    # or from DictDataset
+    dict_dataset = DictDataset(d)
     dataloader = FastDictionaryLoader(dict_dataset, batch_size=batch_size, shuffle=False)
     _check_dataloader(dataloader)
 
@@ -116,7 +116,7 @@ def test_fast_dictionary_loader_multidataset_batch(random_datasets):
 def test_fast_dictionary_loader_multidataset_different_lengths(random_datasets):
     """FastDictionaryLoader complains if multiple datasets of different dimensions are passed."""
     n_samples = len(random_datasets[0])
-    random_datasets.append(DictionaryDataset({
+    random_datasets.append(DictDataset({
         'data': torch.randn(n_samples+1, 2),
         'labels': torch.randn(n_samples+1),
     }))

@@ -3,9 +3,9 @@ import numpy as np
 from mlcolvar.core.transform.utils import Statistics
 from torch.utils.data import Dataset
 
-__all__ = ["DictionaryDataset"]
+__all__ = ["DictDataset"]
 
-class DictionaryDataset(Dataset):
+class DictDataset(Dataset):
     """Define a torch dataset from a dictionary of lists/array/tensors and names.
     E.g. { 'data' : torch.Tensor([1,2,3,4]), 
            'labels' : [0,0,1,1],
@@ -22,7 +22,7 @@ class DictionaryDataset(Dataset):
         """
         # assert type dict 
         if (dictionary is not None) and (not isinstance(dictionary,dict)):
-            raise TypeError(f'DictionaryDataset requires a dictionary , not {type(dictionary)}.')
+            raise TypeError(f'DictDataset requires a dictionary , not {type(dictionary)}.')
 
         # Add kwargs to dict
         if dictionary is None:
@@ -82,7 +82,7 @@ class DictionaryDataset(Dataset):
         return stats
     
     def __repr__(self) -> str:
-        string = 'DictionaryDataset('
+        string = 'DictDataset('
         for key,val in self._dictionary.items():
             string += f' "{key}": {list(val.shape)},'
         string = string[:-1]+' )'
@@ -92,13 +92,13 @@ class DictionaryDataset(Dataset):
     def keys(self):
         return tuple(self._dictionary.keys())
 
-def test_DictionaryDataset():
+def test_DictDataset():
     # from list
     dataset_dict = { 'data' : torch.Tensor([[1.],[2.],[.3],[.4]]), 
                      'labels' : [0,0,1,1],
                      'weights' : np.asarray([0.5,1.5,1.5,0.5]) }
 
-    dataset = DictionaryDataset(dataset_dict)
+    dataset = DictDataset(dataset_dict)
     print(len(dataset))
     print(dataset[0])
     print(dataset[0:2]['data'])
@@ -117,4 +117,4 @@ def test_DictionaryDataset():
     print(batch)
 
 if __name__ == "__main__":
-    test_DictionaryDataset()
+    test_DictDataset()

@@ -16,7 +16,7 @@ Tests for the members of the mlcolvar.data.datamodule module.
 import pytest
 import torch
 
-from mlcolvar.data.dataset import DictionaryDataset
+from mlcolvar.data.dataset import DictDataset
 from mlcolvar.data.datamodule import DictionaryDataModule
 
 
@@ -32,13 +32,13 @@ def test_dictionary_data_module_split(lengths, fields, random_split):
 
     Tests that:
     * The sub-datasets have the correct lengths.
-    * The dataloader returns all the fields in the DictionaryDataset.
+    * The dataloader returns all the fields in the DictDataset.
     """
     # Create a dataset.
     n_samples = 50
     dataset = {'data': torch.randn((n_samples, 2))}
     dataset.update({k: torch.randn((n_samples, 1)) for k in fields})
-    dataset = DictionaryDataset(dataset)
+    dataset = DictDataset(dataset)
 
     # Splits the dataset.
     batch_size = 5
@@ -83,7 +83,7 @@ def test_dictionary_data_module_multidataset(random_split):
     # Create the datasets.
     datasets = []
     for dataset_idx in range(n_datasets):
-        dataset = DictionaryDataset({
+        dataset = DictDataset({
             f'data{dataset_idx}': torch.randn(n_samples, 2),
             f'labels{dataset_idx}': torch.randn(n_samples),
         })
@@ -104,7 +104,7 @@ def test_dictionary_data_module_multidataset(random_split):
             assert batch_dataset[f'labels{dataset_idx}'].shape == (batch_size,)
 
     # If datasets are not of the same dimension, the dataloader should explode on init.
-    datasets.append(DictionaryDataset({
+    datasets.append(DictDataset({
         f'data': torch.randn(n_samples+3, 2),
         f'labels': torch.randn(n_samples+3),
     }))

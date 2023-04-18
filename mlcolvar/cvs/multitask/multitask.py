@@ -39,7 +39,7 @@ class MultiTaskCV:
 
     >>> from mlcolvar.cvs import AutoEncoderCV
     >>> from mlcolvar.core.loss import FisherDiscriminantLoss
-    >>> from mlcolvar.data import DictionaryDataset, DictionaryDataModule
+    >>> from mlcolvar.data import DictDataset, DictionaryDataModule
 
     >>> n_descriptors = 5
     >>> n_labels = 2  # Number of states
@@ -59,10 +59,10 @@ class MultiTaskCV:
     Create a multi-dataset datamodule for this CV.
 
     >>> n_samples = 100
-    >>> unsupervised_dataset = DictionaryDataset({
+    >>> unsupervised_dataset = DictDataset({
     ...     'data': torch.rand(n_samples, n_descriptors),
     ... })
-    >>> supervised_dataset = DictionaryDataset({
+    >>> supervised_dataset = DictDataset({
     ...     'data': torch.rand(n_samples, n_descriptors),
     ...     'labels': torch.tensor([0., 1]).repeat(n_samples//2)
     ... })

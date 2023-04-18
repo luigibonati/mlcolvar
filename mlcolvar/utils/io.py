@@ -12,7 +12,7 @@ import os
 import urllib.request
 from typing import Union
 
-from mlcolvar.data import DictionaryDataset
+from mlcolvar.data import DictDataset
 
 __all__ = ["load_dataframe", "plumed_to_pandas", "create_dataset_from_files"]
 
@@ -236,11 +236,11 @@ def create_dataset_from_files(
     if modifier_function is not None:
         df_data = df_data.apply(modifier_function)
 
-    # create DictionaryDataset
+    # create DictDataset
     dictionary = {'data' : torch.Tensor(df_data.values) } 
     if create_labels: 
         dictionary['labels'] = torch.Tensor(df['labels'].values)
-    dataset = DictionaryDataset(dictionary)
+    dataset = DictDataset(dictionary)
     
     if return_dataframe:
         return dataset, df

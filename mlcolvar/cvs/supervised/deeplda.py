@@ -11,7 +11,7 @@ __all__ = ["DeepLDA"]
 class DeepLDA(BaseCV, lightning.LightningModule):
     """Neural network-based discriminant collective variables.
     
-    For the training it requires a DictionaryDataset with the keys 'data' and 'labels'.
+    For the training it requires a DictDataset with the keys 'data' and 'labels'.
     """
 
     BLOCKS = ['norm_in', 'nn', 'lda']
@@ -139,7 +139,7 @@ class DeepLDA(BaseCV, lightning.LightningModule):
 
 
 def test_deeplda(n_states=2):
-    from mlcolvar.data import DictionaryDataset
+    from mlcolvar.data import DictDataset
 
     in_features, out_features = 2, n_states-1
     layers = [in_features, 50, 50, out_features]
@@ -154,7 +154,7 @@ def test_deeplda(n_states=2):
     X = torch.cat(X,dim=0)
     y = torch.cat(y,dim=0)
     
-    dataset = DictionaryDataset({'data':X, 'labels':y})
+    dataset = DictDataset({'data':X, 'labels':y})
     datamodule = DictionaryDataModule(dataset, lengths = [0.8,0.2], batch_size=n_states*n_points)
 
     # initialize CV

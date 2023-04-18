@@ -5,7 +5,7 @@
 # =============================================================================
 
 """
-PyTorch Lightning DataModule object for DictionaryDatasets.
+PyTorch Lightning DataModule object for DictDatasets.
 """
 
 __all__ = ['DictionaryDataModule']
@@ -25,7 +25,7 @@ import lightning
 from torch.utils.data import random_split, Subset
 from torch._utils import _accumulate
 
-from mlcolvar.data import FastDictionaryLoader, DictionaryDataset
+from mlcolvar.data import FastDictionaryLoader, DictDataset
 
 
 # =============================================================================
@@ -33,13 +33,13 @@ from mlcolvar.data import FastDictionaryLoader, DictionaryDataset
 # =============================================================================
 
 class DictionaryDataModule(lightning.LightningDataModule):
-    """Lightning DataModule constructed for :class:`~mlcolvar.data.dataset.DictionaryDataset`(s).
+    """Lightning DataModule constructed for :class:`~mlcolvar.data.dataset.DictDataset`(s).
 
-    The DataModule automatically splits the :class:`~mlcolvar.data.dataset.DictionaryDataset`s
+    The DataModule automatically splits the :class:`~mlcolvar.data.dataset.DictDataset`s
     (using either random or sequential splitting) into training, validation, and (optionally)
     test sets.
 
-    The class can also merge multiple :class:`~mlcolvar.data.dataset.DictionaryDataset`s
+    The class can also merge multiple :class:`~mlcolvar.data.dataset.DictDataset`s
     that have different keys (see example below). The datasets must all have the
     same number of samples.
 
@@ -47,7 +47,7 @@ class DictionaryDataModule(lightning.LightningDataModule):
     --------
 
     >>> x = torch.randn((50, 2))
-    >>> dataset = DictionaryDataset({'data': x, 'labels': x.square().sum(dim=1)})
+    >>> dataset = DictDataset({'data': x, 'labels': x.square().sum(dim=1)})
     >>> datamodule = DictionaryDataModule(dataset, lengths=[0.75,0.2,0.05], batch_size=25)
 
     >>> # This is usually called by PyTorch Lightning.
@@ -66,7 +66,7 @@ class DictionaryDataModule(lightning.LightningDataModule):
     You can also iterate over multiple datasets. These can have different keys,
     but they must be of the same length.
 
-    >>> dataset2 = DictionaryDataset({'data2': torch.randn(50, 1), 'weights': torch.arange(50)})
+    >>> dataset2 = DictDataset({'data2': torch.randn(50, 1), 'weights': torch.arange(50)})
     >>> datamodule = DictionaryDataModule([dataset, dataset2], lengths=[0.8, 0.2], batch_size=5)
     >>> datamodule.setup()
     >>> train_loader = datamodule.train_dataloader()
@@ -82,21 +82,21 @@ class DictionaryDataModule(lightning.LightningDataModule):
     """
     def __init__(
             self,
-            dataset: DictionaryDataset,
+            dataset: DictDataset,
             lengths: Sequence = (0.8, 0.2),
             batch_size: Union[int, Sequence] = 0,
             random_split: bool = True,
             shuffle: Union[bool, Sequence] = True,
             generator: Optional[torch.Generator] = None
     ):
-        """Create a ``DataModule`` wrapping a :class:`~mlcolvar.data.dataset.DictionaryDataset`.
+        """Create a ``DataModule`` wrapping a :class:`~mlcolvar.data.dataset.DictDataset`.
 
         For the ``batch_size`` and ``shuffle`` parameters, either a single value
         or a list-type of values (with same size as ``lengths``) can be provided.
 
         Parameters
         ----------
-        dataset : DictionaryDataset or Sequence[DictionaryDataset]
+        dataset : DictDataset or Sequence[DictDataset]
             The dataset or a list of datasets. If a list, the datasets can have
             different keys but they must all have the same number of samples.
         lengths : list-like, optional
@@ -147,7 +147,7 @@ class DictionaryDataModule(lightning.LightningDataModule):
 
     def setup(self, stage: Optional[str] = None):
         if self._dataset_split is None:
-            if isinstance(self.dataset, DictionaryDataset):
+            if isinstance(self.dataset, DictDataset):
                 self._dataset_split = self._split(self.dataset)
             else:  # List of datasets.
                 dataset_split = [self._split(d) for d in self.dataset]
@@ -195,7 +195,7 @@ class DictionaryDataModule(lightning.LightningDataModule):
     def _split(self, dataset):
         """Perform the random or sequential spliting of a single dataset.
 
-        Returns a list of Subset[DictionaryDataset] objects.
+        Returns a list of Subset[DictDataset] objects.
         """
         if self._random_split:
             dataset_split = random_split(dataset, self.lengths, generator=self.generator)

@@ -26,7 +26,7 @@ from mlcolvar.cvs.cv import BaseCV
 from mlcolvar.cvs.multitask.multitask import MultiTaskCV
 from mlcolvar.cvs.timelagged import DeepTICA
 from mlcolvar.cvs.unsupervised import AutoEncoderCV, VariationalAutoEncoderCV
-from mlcolvar.data import DictionaryDataset, DictionaryDataModule
+from mlcolvar.data import DictDataset, DictionaryDataModule
 
 
 # =============================================================================
@@ -112,7 +112,7 @@ def create_dataset(
         if weights:
             data['weights_lag'] = torch.rand(n_samples)
 
-    return DictionaryDataset(data)
+    return DictDataset(data)
 
 
 def create_cv(cv_name, n_descriptors=N_DESCRIPTORS, n_cvs=N_CVS):
