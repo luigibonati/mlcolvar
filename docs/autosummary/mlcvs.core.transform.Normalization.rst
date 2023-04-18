@@ -1,7 +1,7 @@
-﻿mlcvs.core.transform.Normalization
+﻿mlcolvar.core.transform.Normalization
 ==================================
 
-.. currentmodule:: mlcvs.core.transform
+.. currentmodule:: mlcolvar.core.transform
 
 .. autoclass:: Normalization
    :members:                                   

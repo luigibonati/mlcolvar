@@ -1,7 +1,7 @@
-﻿mlcvs.core.nn.FeedForward
+﻿mlcolvar.core.nn.FeedForward
 =========================
 
-.. currentmodule:: mlcvs.core.nn
+.. currentmodule:: mlcolvar.core.nn
 
 .. autoclass:: FeedForward
    :members:                                   

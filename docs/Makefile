@@ -4,7 +4,7 @@
 # You can set these variables from the command line.
 SPHINXOPTS    =
 SPHINXBUILD   = sphinx-build
-SPHINXPROJ    = mlcvs
+SPHINXPROJ    = mlcolvar
 SOURCEDIR     = .
 BUILDDIR      = _build
 
