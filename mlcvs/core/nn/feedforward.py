@@ -19,7 +19,7 @@ from typing import Optional, Union
 
 import torch
 import pytorch_lightning as pl
-from mlcvs.core.nn.utils import get_activation, parse_nn_options
+from mlcolvar.core.nn.utils import get_activation, parse_nn_options
 
 
 # =============================================================================

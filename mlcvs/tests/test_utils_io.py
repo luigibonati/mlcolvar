@@ -1,11 +1,11 @@
 import pytest
 import urllib
-from mlcvs.utils.io import load_dataframe
-from mlcvs.utils.io import test_datasetFromFile
+from mlcolvar.utils.io import load_dataframe
+from mlcolvar.utils.io import test_datasetFromFile
 
-example_files = {'str': 'mlcvs/tests/data/state_A.dat',
-                 'list': ['mlcvs/tests/data/state_A.dat','mlcvs/tests/data/state_B.dat'], 
-                 'url': 'https://raw.githubusercontent.com/luigibonati/mlcvs/main/mlcvs/tests/data/2d_model/COLVAR_stateA'}
+example_files = {'str': 'mlcolvar/tests/data/state_A.dat',
+                 'list': ['mlcolvar/tests/data/state_A.dat','mlcolvar/tests/data/state_B.dat'], 
+                 'url': 'https://raw.githubusercontent.com/luigibonati/mlcolvar/main/mlcolvar/tests/data/2d_model/COLVAR_stateA'}
 
 @pytest.mark.parametrize("file_type", ['str','list','url'])
 def test_loadDataframe(file_type):

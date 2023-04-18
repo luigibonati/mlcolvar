@@ -1,8 +1,8 @@
 import torch
 import pytorch_lightning as pl
-from mlcvs.cvs import BaseCV
-from mlcvs.core import FeedForward, Normalization
-from mlcvs.core.loss import MSELoss
+from mlcolvar.cvs import BaseCV
+from mlcolvar.core import FeedForward, Normalization
+from mlcolvar.core.loss import MSELoss
 
 __all__ = ["RegressionCV"]
 
@@ -71,7 +71,7 @@ def test_regression_cv():
     """
     Create a synthetic dataset and test functionality of the RegressionCV class
     """
-    from mlcvs.data import DictionaryDataset, DictionaryDataModule
+    from mlcolvar.data import DictionaryDataset, DictionaryDataModule
 
     in_features, out_features = 2,1 
     layers = [in_features, 5, 10, out_features]

@@ -3,7 +3,7 @@
 try:
     import pandas as pd
 except ImportError as e:
-    raise ImportError('pandas is required to use the i/o utils (mlcvs.utils.io)\n',e)
+    raise ImportError('pandas is required to use the i/o utils (mlcolvar.utils.io)\n',e)
 
 import pandas as pd
 import numpy as np
@@ -12,7 +12,7 @@ import os
 import urllib.request
 from typing import Union
 
-from mlcvs.data import DictionaryDataset
+from mlcolvar.data import DictionaryDataset
 
 __all__ = ["load_dataframe", "plumed_to_pandas", "create_dataset_from_files"]
 
@@ -175,7 +175,7 @@ def create_dataset_from_files(
     verbose : bool, optional
         Print info on the datasets, by default True
     kwargs : optional
-        args passed to mlcvs.utils.io.load_dataframe
+        args passed to mlcolvar.utils.io.load_dataframe
 
     Returns
     -------
@@ -186,7 +186,7 @@ def create_dataset_from_files(
 
     See also
     --------
-    mlcvs.utils.io.load_dataframe
+    mlcolvar.utils.io.load_dataframe
         Function that is used to load the files
 
     """
@@ -251,7 +251,7 @@ def create_dataset_from_files(
 def test_datasetFromFile():
     # Test with unlabeled dataset
     torch_dataset, pd_dataframe = create_dataset_from_files(file_names = ['state_A.dat','state_B.dat','state_C.dat'],
-                                                            folder = 'mlcvs/tests/data',
+                                                            folder = 'mlcolvar/tests/data',
                                                             create_labels=False,
                                                             load_args=None,
                                                             filter_args=None,
@@ -263,7 +263,7 @@ def test_datasetFromFile():
 
     # Test no regex on two states
     torch_dataset, pd_dataframe = create_dataset_from_files(file_names = ['state_A.dat', 'state_B.dat'],
-                                                            folder = 'mlcvs/tests/data',
+                                                            folder = 'mlcolvar/tests/data',
                                                             create_labels = True,
                                                             load_args=None,
                                                             filter_args=None,
@@ -275,7 +275,7 @@ def test_datasetFromFile():
                                                             
     # Test with filter regex on two states
     torch_dataset = create_dataset_from_files(file_names = ['state_A.dat', 'state_B.dat'],
-                                                            folder = 'mlcvs/tests/data',
+                                                            folder = 'mlcolvar/tests/data',
                                                             create_labels = True,
                                                             load_args=None,
                                                             filter_args={'regex':'n|o'},
@@ -290,7 +290,7 @@ def test_datasetFromFile():
 
     # Test with filter regex on two states with modifier
     torch_dataset, pd_dataframe = create_dataset_from_files(file_names = ['state_A.dat', 'state_B.dat'],
-                                                            folder = 'mlcvs/tests/data',
+                                                            folder = 'mlcolvar/tests/data',
                                                             create_labels = True,
                                                             load_args=None,
                                                             filter_args={'regex':'n|o'},

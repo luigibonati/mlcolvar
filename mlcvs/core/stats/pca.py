@@ -2,7 +2,7 @@
 
 import torch
 
-from mlcvs.core.stats import Stats
+from mlcolvar.core.stats import Stats
 
 __all__ = ['PCA']
 

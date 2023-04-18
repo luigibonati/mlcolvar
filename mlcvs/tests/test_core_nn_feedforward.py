@@ -6,7 +6,7 @@
 # =============================================================================
 
 """
-Test objects and function in mlcvs.core.nn.feedforward.
+Test objects and function in mlcolvar.core.nn.feedforward.
 """
 
 
@@ -17,7 +17,7 @@ Test objects and function in mlcvs.core.nn.feedforward.
 import pytest
 import torch
 
-from mlcvs.core.nn.feedforward import FeedForward
+from mlcolvar.core.nn.feedforward import FeedForward
 
 
 # =============================================================================

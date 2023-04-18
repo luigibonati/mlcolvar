@@ -1,9 +1,9 @@
 import torch 
 import pytorch_lightning as pl
-from mlcvs.cvs import BaseCV
-from mlcvs.core import FeedForward, Normalization
-from mlcvs.core.loss import TDALoss
-from mlcvs.data import DictionaryDataModule
+from mlcolvar.cvs import BaseCV
+from mlcolvar.core import FeedForward, Normalization
+from mlcolvar.core.loss import TDALoss
+from mlcolvar.data import DictionaryDataModule
 
 __all__ = ["DeepTDA"]
 
@@ -105,7 +105,7 @@ class DeepTDA(BaseCV, pl.LightningModule):
 # TODO signature of tests?
 import numpy as np
 def test_deeptda_cv():
-    from mlcvs.data import DictionaryDataset
+    from mlcolvar.data import DictionaryDataset
 
     for states_and_cvs in [  [2, 1], [3, 1], [3, 2], [5, 4] ]:
         # get the number of states and cvs for the test run

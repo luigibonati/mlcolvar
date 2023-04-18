@@ -1,7 +1,7 @@
-﻿mlcvs.core.loss.elbo\_gaussians\_loss
+﻿mlcolvar.core.loss.elbo\_gaussians\_loss
 =====================================
 
-.. currentmodule:: mlcvs.core.loss
+.. currentmodule:: mlcolvar.core.loss
 
 .. autoclass:: elbo_gaussians_loss
    :members:                                   

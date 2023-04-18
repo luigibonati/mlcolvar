@@ -1,5 +1,5 @@
 import torch
-from mlcvs.core.transform import Transform
+from mlcolvar.core.transform import Transform
 
 class BaseCV:
     """

@@ -6,7 +6,7 @@
 # =============================================================================
 
 """
-Test objects and functions in mlcvs.cvs.multitask.multitask.
+Test objects and functions in mlcolvar.cvs.multitask.multitask.
 """
 
 
@@ -21,12 +21,12 @@ import pytest
 import pytorch_lightning as pl
 import torch
 
-from mlcvs.core.loss import TDALoss, FisherDiscriminantLoss, AutocorrelationLoss
-from mlcvs.cvs.cv import BaseCV
-from mlcvs.cvs.multitask.multitask import MultiTaskCV
-from mlcvs.cvs.timelagged import DeepTICA
-from mlcvs.cvs.unsupervised import AutoEncoderCV, VariationalAutoEncoderCV
-from mlcvs.data import DictionaryDataset, DictionaryDataModule
+from mlcolvar.core.loss import TDALoss, FisherDiscriminantLoss, AutocorrelationLoss
+from mlcolvar.cvs.cv import BaseCV
+from mlcolvar.cvs.multitask.multitask import MultiTaskCV
+from mlcolvar.cvs.timelagged import DeepTICA
+from mlcolvar.cvs.unsupervised import AutoEncoderCV, VariationalAutoEncoderCV
+from mlcolvar.data import DictionaryDataset, DictionaryDataModule
 
 
 # =============================================================================

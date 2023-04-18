@@ -25,7 +25,7 @@ import pytorch_lightning as pl
 from torch.utils.data import random_split, Subset
 from torch._utils import _accumulate
 
-from mlcvs.data import FastDictionaryLoader, DictionaryDataset
+from mlcolvar.data import FastDictionaryLoader, DictionaryDataset
 
 
 # =============================================================================
@@ -33,13 +33,13 @@ from mlcvs.data import FastDictionaryLoader, DictionaryDataset
 # =============================================================================
 
 class DictionaryDataModule(pl.LightningDataModule):
-    """Lightning DataModule constructed for :class:`~mlcvs.data.dataset.DictionaryDataset`(s).
+    """Lightning DataModule constructed for :class:`~mlcolvar.data.dataset.DictionaryDataset`(s).
 
-    The DataModule automatically splits the :class:`~mlcvs.data.dataset.DictionaryDataset`s
+    The DataModule automatically splits the :class:`~mlcolvar.data.dataset.DictionaryDataset`s
     (using either random or sequential splitting) into training, validation, and (optionally)
     test sets.
 
-    The class can also merge multiple :class:`~mlcvs.data.dataset.DictionaryDataset`s
+    The class can also merge multiple :class:`~mlcolvar.data.dataset.DictionaryDataset`s
     that have different keys (see example below). The datasets must all have the
     same number of samples.
 
@@ -89,7 +89,7 @@ class DictionaryDataModule(pl.LightningDataModule):
             shuffle: Union[bool, Sequence] = True,
             generator: Optional[torch.Generator] = None
     ):
-        """Create a ``DataModule`` wrapping a :class:`~mlcvs.data.dataset.DictionaryDataset`.
+        """Create a ``DataModule`` wrapping a :class:`~mlcolvar.data.dataset.DictionaryDataset`.
 
         For the ``batch_size`` and ``shuffle`` parameters, either a single value
         or a list-type of values (with same size as ``lengths``) can be provided.
@@ -114,7 +114,7 @@ class DictionaryDataModule(pl.LightningDataModule):
 
         See Also
         --------
-        :class:`~mlcvs.data.dataloader.FastDictionaryLoader`
+        :class:`~mlcolvar.data.dataloader.FastDictionaryLoader`
             The PyTorch loader built by the data module.
 
         """

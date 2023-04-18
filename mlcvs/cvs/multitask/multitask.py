@@ -18,7 +18,7 @@ from typing import Optional, Sequence
 
 import torch
 
-from mlcvs.cvs.cv import BaseCV
+from mlcolvar.cvs.cv import BaseCV
 
 
 # =============================================================================
@@ -37,9 +37,9 @@ class MultiTaskCV:
 
     A semi-supervised autoencoder mixing ELBO and the Fisher's discriminant loss.
 
-    >>> from mlcvs.cvs import AutoEncoderCV
-    >>> from mlcvs.core.loss import FisherDiscriminantLoss
-    >>> from mlcvs.data import DictionaryDataset, DictionaryDataModule
+    >>> from mlcolvar.cvs import AutoEncoderCV
+    >>> from mlcolvar.core.loss import FisherDiscriminantLoss
+    >>> from mlcolvar.data import DictionaryDataset, DictionaryDataModule
 
     >>> n_descriptors = 5
     >>> n_labels = 2  # Number of states

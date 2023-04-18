@@ -77,7 +77,7 @@ TODO
 [X] Change names to data utils ==> "DictionaryDataset","DictionaryDataModule","FastDictionaryLoader"
 [X] Refactor FastDictionaryLoader
 [X] add get_stats to datamodule ?
-[X] mv from mlcvs.data to mlcvs.data
+[X] mv from mlcolvar.data to mlcolvar.data
 [X] fix return of dataloaders in 
 [ ] Mixed dataset?
 

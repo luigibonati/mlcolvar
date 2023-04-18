@@ -1,7 +1,7 @@
-﻿mlcvs.cvs.AutoEncoderCV
+﻿mlcolvar.cvs.AutoEncoderCV
 =======================
 
-.. currentmodule:: mlcvs.cvs
+.. currentmodule:: mlcolvar.cvs
 
 .. autoclass:: AutoEncoderCV
    :members:                                   

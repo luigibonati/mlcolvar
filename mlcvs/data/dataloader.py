@@ -18,8 +18,8 @@ __all__ = ["FastDictionaryLoader"]
 from typing import Optional, Union, Sequence
 import torch
 from torch.utils.data import Subset
-from mlcvs.data import DictionaryDataset
-from mlcvs.core.transform.utils import Statistics
+from mlcolvar.data import DictionaryDataset
+from mlcolvar.core.transform.utils import Statistics
 
 
 # =============================================================================
@@ -27,12 +27,12 @@ from mlcvs.core.transform.utils import Statistics
 # =============================================================================
 
 class FastDictionaryLoader:
-    """PyTorch DataLoader for :class:`~mlcvs.data.dataset.DictionaryDataset`s.
+    """PyTorch DataLoader for :class:`~mlcolvar.data.dataset.DictionaryDataset`s.
     
     It is much faster than ``TensorDataset`` + ``DataLoader`` because ``DataLoader``
     grabs individual indices of the dataset and calls cat (slow).
 
-    The class can also merge multiple :class:`~mlcvs.data.dataset.DictionaryDataset`s
+    The class can also merge multiple :class:`~mlcolvar.data.dataset.DictionaryDataset`s
     that have different keys (see example below). The datasets must all have the
     same number of samples.
 
@@ -46,8 +46,8 @@ class FastDictionaryLoader:
 
     >>> x = torch.arange(1,11)
 
-    A ``FastDictionaryLoader`` can be initialize from a ``dict``, a :class:`~mlcvs.data.dataset.DictionaryDataset`,
-    or a ``Subset`` wrapping a :class:`~mlcvs.data.dataset.DictionaryDataset`.
+    A ``FastDictionaryLoader`` can be initialize from a ``dict``, a :class:`~mlcolvar.data.dataset.DictionaryDataset`,
+    or a ``Subset`` wrapping a :class:`~mlcolvar.data.dataset.DictionaryDataset`.
 
     >>> # Initialize from a dictionary.
     >>> d = {'data': x.unsqueeze(1), 'labels': x**2}

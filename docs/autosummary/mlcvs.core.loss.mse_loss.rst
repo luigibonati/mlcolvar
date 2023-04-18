@@ -1,7 +1,7 @@
-﻿mlcvs.core.loss.mse\_loss
+﻿mlcolvar.core.loss.mse\_loss
 =========================
 
-.. currentmodule:: mlcvs.core.loss
+.. currentmodule:: mlcolvar.core.loss
 
 .. autoclass:: mse_loss
    :members:                                   

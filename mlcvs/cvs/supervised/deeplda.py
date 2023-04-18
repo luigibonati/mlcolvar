@@ -1,10 +1,10 @@
 import torch
 import pytorch_lightning as pl
-from mlcvs.cvs import BaseCV
-from mlcvs.core import FeedForward, Normalization
-from mlcvs.data import DictionaryDataModule
-from mlcvs.core.stats import LDA
-from mlcvs.core.loss import ReduceEigenvaluesLoss
+from mlcolvar.cvs import BaseCV
+from mlcolvar.core import FeedForward, Normalization
+from mlcolvar.data import DictionaryDataModule
+from mlcolvar.core.stats import LDA
+from mlcolvar.core.loss import ReduceEigenvaluesLoss
 
 __all__ = ["DeepLDA"]
 
@@ -139,7 +139,7 @@ class DeepLDA(BaseCV, pl.LightningModule):
 
 
 def test_deeplda(n_states=2):
-    from mlcvs.data import DictionaryDataset
+    from mlcolvar.data import DictionaryDataset
 
     in_features, out_features = 2, n_states-1
     layers = [in_features, 50, 50, out_features]

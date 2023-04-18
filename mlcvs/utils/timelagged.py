@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from bisect import bisect_left
-from mlcvs.data import DictionaryDataset
+from mlcolvar.data import DictionaryDataset
 import warnings
 
 # optional packages

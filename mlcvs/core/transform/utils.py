@@ -371,7 +371,7 @@ def test_statistics():
     stats.to_dict()
 
     # create dataloader
-    from mlcvs.data import FastDictionaryLoader
+    from mlcolvar.data import FastDictionaryLoader
     loader = FastDictionaryLoader({'data':X,'target':y},batch_size=20)
 
     # compute statistics of a single key of loader
@@ -398,7 +398,7 @@ def test_statistics():
         print(key,stats[key])
 
 def test_applycutoff():
-    from mlcvs.core.transform.switching_functions import SwitchingFunctions
+    from mlcolvar.core.transform.switching_functions import SwitchingFunctions
     
     n_atoms=2
     pos = torch.Tensor([ [ [0., 0., 0.],
@@ -438,7 +438,7 @@ def test_applycutoff():
     out2 = apply_cutoff(out, cutoff, mode='discontinuous')
 
 def test_adjacency_matrix():
-    from mlcvs.core.transform.switching_functions import SwitchingFunctions
+    from mlcolvar.core.transform.switching_functions import SwitchingFunctions
     
     n_atoms=2
     pos = torch.Tensor([ [ [0., 0., 0.],

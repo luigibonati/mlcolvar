@@ -17,7 +17,7 @@ __all__ = ['ELBOGaussiansLoss', 'elbo_gaussians_loss']
 
 from typing import Optional
 import torch
-from mlcvs.core.loss.mse import mse_loss
+from mlcolvar.core.loss.mse import mse_loss
 
 
 # =============================================================================

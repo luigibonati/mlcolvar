@@ -17,9 +17,9 @@ __all__ = ["VariationalAutoEncoderCV"]
 from typing import Any, Optional, Tuple
 import torch
 import pytorch_lightning as pl
-from mlcvs.cvs import BaseCV
-from mlcvs.core import FeedForward, Normalization
-from mlcvs.core.loss import ELBOGaussiansLoss
+from mlcolvar.cvs import BaseCV
+from mlcolvar.core import FeedForward, Normalization
+from mlcolvar.core.loss import ELBOGaussiansLoss
 
 
 # =============================================================================

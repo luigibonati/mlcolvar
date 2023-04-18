@@ -3,9 +3,9 @@
 __all__ = ["TICA"]
 
 import torch
-from mlcvs.core.stats import Stats
-from mlcvs.core.stats.utils import correlation_matrix, cholesky_eigh, compute_average, reduced_rank_eig
-from mlcvs.core.transform.utils import batch_reshape
+from mlcolvar.core.stats import Stats
+from mlcolvar.core.stats.utils import correlation_matrix, cholesky_eigh, compute_average, reduced_rank_eig
+from mlcolvar.core.transform.utils import batch_reshape
 import warnings
 
 class TICA(Stats):

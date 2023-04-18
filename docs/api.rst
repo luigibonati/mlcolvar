@@ -6,7 +6,7 @@ Collective variables
 
 .. rubric:: Unsupervised learning 
 
-.. currentmodule:: mlcvs.cvs
+.. currentmodule:: mlcolvar.cvs
 
 .. autosummary::
    :toctree: autosummary
@@ -17,7 +17,7 @@ Collective variables
 
 .. rubric:: Supervised learning 
 
-.. currentmodule:: mlcvs.cvs
+.. currentmodule:: mlcolvar.cvs
 
 .. autosummary::
    :toctree: autosummary
@@ -29,7 +29,7 @@ Collective variables
 
 .. rubric:: Time lagged CVs
 
-.. currentmodule:: mlcvs.cvs
+.. currentmodule:: mlcolvar.cvs
 
 .. autosummary::
    :toctree: autosummary
@@ -45,7 +45,7 @@ These are the building blocks which are used to construct the CVs.
 
 .. rubric:: NN
 
-.. currentmodule:: mlcvs.core.nn
+.. currentmodule:: mlcolvar.core.nn
 
 .. autosummary::
    :toctree: autosummary
@@ -55,7 +55,7 @@ These are the building blocks which are used to construct the CVs.
 
 .. rubric:: Loss
 
-.. currentmodule:: mlcvs.core.loss
+.. currentmodule:: mlcolvar.core.loss
 
 .. autosummary::
    :toctree: autosummary
@@ -68,7 +68,7 @@ These are the building blocks which are used to construct the CVs.
 
 .. rubric:: Stats 
 
-.. currentmodule:: mlcvs.core.stats
+.. currentmodule:: mlcolvar.core.stats
 
 .. autosummary::
    :toctree: autosummary
@@ -80,7 +80,7 @@ These are the building blocks which are used to construct the CVs.
 
 .. rubric:: Transform
 
-.. currentmodule:: mlcvs.core.transform
+.. currentmodule:: mlcolvar.core.transform
 
 .. autosummary::
    :toctree: autosummary

@@ -6,7 +6,7 @@
 # =============================================================================
 
 """
-Test objects and function in mlcvs.cvs.unsupervised.vae.
+Test objects and function in mlcolvar.cvs.unsupervised.vae.
 """
 
 
@@ -21,8 +21,8 @@ import pytest
 import pytorch_lightning as pl
 import torch
 
-from mlcvs.cvs.unsupervised.vae import VariationalAutoEncoderCV
-from mlcvs.data import DictionaryDataset, DictionaryDataModule
+from mlcolvar.cvs.unsupervised.vae import VariationalAutoEncoderCV
+from mlcolvar.data import DictionaryDataset, DictionaryDataModule
 
 
 # =============================================================================

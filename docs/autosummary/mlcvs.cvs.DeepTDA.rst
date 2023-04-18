@@ -1,7 +1,7 @@
-﻿mlcvs.cvs.DeepTDA
+﻿mlcolvar.cvs.DeepTDA
 =================
 
-.. currentmodule:: mlcvs.cvs
+.. currentmodule:: mlcolvar.cvs
 
 .. autoclass:: DeepTDA
    :members:                                   

@@ -1,6 +1,6 @@
 import torch
 
-from mlcvs.core.transform import Transform
+from mlcolvar.core.transform import Transform
 
 
 __all__ = ["SwitchingFunctions"]

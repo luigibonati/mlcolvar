@@ -5,7 +5,7 @@
 # =============================================================================
 
 """
-Tests for the members of the mlcvs.data.dataloader module.
+Tests for the members of the mlcolvar.data.dataloader module.
 """
 
 
@@ -17,8 +17,8 @@ import pytest
 import torch
 from torch.utils.data import Subset
 
-from mlcvs.data.dataset import DictionaryDataset
-from mlcvs.data.dataloader import FastDictionaryLoader
+from mlcolvar.data.dataset import DictionaryDataset
+from mlcolvar.data.dataloader import FastDictionaryLoader
 
 
 # =============================================================================

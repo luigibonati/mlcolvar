@@ -1,7 +1,7 @@
-﻿mlcvs.core.stats.Stats
+﻿mlcolvar.core.stats.Stats
 ======================
 
-.. currentmodule:: mlcvs.core.stats
+.. currentmodule:: mlcolvar.core.stats
 
 .. autoclass:: Stats
    :members:                                   

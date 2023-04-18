@@ -1,9 +1,9 @@
 import torch
 import pytorch_lightning as pl
-from mlcvs.cvs import BaseCV
-from mlcvs.core import FeedForward,Normalization
-from mlcvs.core.stats import TICA
-from mlcvs.core.loss import ReduceEigenvaluesLoss
+from mlcolvar.cvs import BaseCV
+from mlcolvar.core import FeedForward,Normalization
+from mlcolvar.core.stats import TICA
+from mlcolvar.core.loss import ReduceEigenvaluesLoss
 
 __all__ = ["DeepTICA"] 
 
@@ -102,11 +102,11 @@ class DeepTICA(BaseCV, pl.LightningModule):
 def test_deep_tica():
     # tests
     import numpy as np
-    from mlcvs.data import DictionaryDataModule
-    from mlcvs.utils.timelagged import create_timelagged_dataset
+    from mlcolvar.data import DictionaryDataModule
+    from mlcolvar.utils.timelagged import create_timelagged_dataset
 
     # create dataset
-    X = np.loadtxt('mlcvs/tests/data/mb-mcmc.dat')
+    X = np.loadtxt('mlcolvar/tests/data/mb-mcmc.dat')
     X = torch.Tensor(X)
     dataset = create_timelagged_dataset(X,lag_time=1)
     datamodule = DictionaryDataModule(dataset, batch_size = 10000)

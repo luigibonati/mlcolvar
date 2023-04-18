@@ -56,7 +56,7 @@ jobs:
         # conda setup requires this special shell
         shell: bash -l {0}
         run: |
-          pytest -v --cov=mlcvs --cov-report=xml --color=yes mlcvs/tests/
+          pytest -v --cov=mlcolvar --cov-report=xml --color=yes mlcolvar/tests/
           pytest --nbmake docs/notebooks/ --ignore=docs/notebooks/data/
 
       - name: CodeCov

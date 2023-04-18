@@ -5,7 +5,7 @@
 # =============================================================================
 
 """
-Tests for the members of the mlcvs.data.datamodule module.
+Tests for the members of the mlcolvar.data.datamodule module.
 """
 
 
@@ -16,8 +16,8 @@ Tests for the members of the mlcvs.data.datamodule module.
 import pytest
 import torch
 
-from mlcvs.data.dataset import DictionaryDataset
-from mlcvs.data.datamodule import DictionaryDataModule
+from mlcolvar.data.dataset import DictionaryDataset
+from mlcolvar.data.datamodule import DictionaryDataModule
 
 
 # =============================================================================

@@ -19,8 +19,8 @@ from typing import Optional
 
 import torch
 
-from mlcvs.core.stats.tica import TICA
-from mlcvs.core.loss.eigvals import reduce_eigenvalues_loss
+from mlcolvar.core.stats.tica import TICA
+from mlcolvar.core.loss.eigvals import reduce_eigenvalues_loss
 
 
 # =============================================================================
@@ -32,7 +32,7 @@ class AutocorrelationLoss(torch.nn.Module):
 
     Computes the sum (or another reducing functions) of the eigenvalues of the
     autocorrelation matrix. This is the same loss function used in
-    :class:`~mlcvs.cvs.timelagged.deeptica.DeepTICA`.
+    :class:`~mlcolvar.cvs.timelagged.deeptica.DeepTICA`.
 
     """
 
@@ -43,7 +43,7 @@ class AutocorrelationLoss(torch.nn.Module):
         ----------
         reduce_mode : str
             This determines how the eigenvalues are reduced, e.g., ``sum``, ``sum2``
-            (see also :class:`~mlcvs.core.loss.eigvals.ReduceEigenvaluesLoss`). The
+            (see also :class:`~mlcolvar.core.loss.eigvals.ReduceEigenvaluesLoss`). The
             default is ``'sum2'``.
         invert_sign: bool, optional
             Whether to return the negative autocorrelation in order to be minimized
@@ -103,7 +103,7 @@ def autocorrelation_loss(
 
     Computes the sum (or another reducing functions) of the eigenvalues of the
     autocorrelation matrix. This is the same loss function used in
-    :class:`~mlcvs.cvs.timelagged.deeptica.DeepTICA`.
+    :class:`~mlcolvar.cvs.timelagged.deeptica.DeepTICA`.
     
     Parameters
     ----------
@@ -121,7 +121,7 @@ def autocorrelation_loss(
         to ``x`` at time ``t + lag``. Default is ``None``.
     reduce_mode : str
         This determines how the eigenvalues are reduced, e.g., ``sum``, ``sum2``
-        (see also :class:`~mlcvs.core.loss.eigvals.ReduceEigenvaluesLoss`). The
+        (see also :class:`~mlcolvar.core.loss.eigvals.ReduceEigenvaluesLoss`). The
         default is ``'sum2'``.
     invert_sign: bool, optional
         Whether to return the negative autocorrelation in order to be minimized

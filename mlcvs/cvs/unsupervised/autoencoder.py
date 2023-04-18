@@ -1,9 +1,9 @@
 from typing import Any
 import torch
 import pytorch_lightning as pl
-from mlcvs.cvs import BaseCV
-from mlcvs.core import FeedForward, Normalization
-from mlcvs.core.loss import MSELoss
+from mlcolvar.cvs import BaseCV
+from mlcolvar.core import FeedForward, Normalization
+from mlcolvar.core.loss import MSELoss
 
 __all__ = ["AutoEncoderCV"]
 
@@ -107,7 +107,7 @@ class AutoEncoderCV(BaseCV, pl.LightningModule):
         return loss
 
 def test_autoencodercv():
-    from mlcvs.data import DictionaryDataset, DictionaryDataModule
+    from mlcolvar.data import DictionaryDataset, DictionaryDataModule
     import numpy as np
 
     in_features, out_features = 8,2

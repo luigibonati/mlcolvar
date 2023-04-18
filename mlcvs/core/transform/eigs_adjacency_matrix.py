@@ -1,7 +1,7 @@
 import torch
 
-from mlcvs.core.transform import Transform
-from mlcvs.core.transform.utils import compute_adjacency_matrix
+from mlcolvar.core.transform import Transform
+from mlcolvar.core.transform.utils import compute_adjacency_matrix
 
 from typing import Union
 
@@ -78,7 +78,7 @@ class EigsAdjMat(Transform):
         return eigs
 
 def test_eigs_of_adj_matrix():
-    from mlcvs.core.transform.switching_functions import SwitchingFunctions
+    from mlcolvar.core.transform.switching_functions import SwitchingFunctions
     
     n_atoms=2
     pos = torch.Tensor([ [ [0., 0., 0.],

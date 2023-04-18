@@ -19,8 +19,8 @@ from typing import Optional
 
 import torch
 
-from mlcvs.core.stats import LDA
-from mlcvs.core.loss import reduce_eigenvalues_loss
+from mlcolvar.core.stats import LDA
+from mlcolvar.core.loss import reduce_eigenvalues_loss
 
 
 # =============================================================================
@@ -32,7 +32,7 @@ class FisherDiscriminantLoss(torch.nn.Module):
 
     Computes the sum (or another reducing functions) of the eigenvalues of the
     ratio between the Fisher's scatter matrices. This is the same loss function
-    used in :class:`~mlcvs.cvs.supervised.deeplda.DeepLDA`.
+    used in :class:`~mlcolvar.cvs.supervised.deeplda.DeepLDA`.
     """
 
     def __init__(
@@ -51,11 +51,11 @@ class FisherDiscriminantLoss(torch.nn.Module):
             The number of states. Labels are in the range ``[0, n_states-1]``.
         lda_mode : str
             Either ``'standard'`` or ``'harmonic'``. This determines how the scatter
-            matrices are computed (see also :class:`~mlcvs.core.stats.lda.LDA`). The
+            matrices are computed (see also :class:`~mlcolvar.core.stats.lda.LDA`). The
             default is ``'standard'``.
         reduce_mode : str
             This determines how the eigenvalues are reduced, e.g., ``sum``, ``sum2``
-            (see also :class:`~mlcvs.core.loss.eigvals.ReduceEigenvaluesLoss`). The
+            (see also :class:`~mlcolvar.core.loss.eigvals.ReduceEigenvaluesLoss`). The
             default is ``'sum'``.
         lorentzian_reg: float, optional
             The magnitude of the regularization for Lorentzian regularization.
@@ -114,7 +114,7 @@ def fisher_discriminant_loss(
 
     Computes the sum (or another reducing functions) of the eigenvalues of the
     ratio between the Fisher's scatter matrices with a Lorentzian regularization.
-    This is the same loss function used in :class:`~mlcvs.cvs.supervised.deeplda.DeepLDA`.
+    This is the same loss function used in :class:`~mlcolvar.cvs.supervised.deeplda.DeepLDA`.
     
     Parameters
     ----------
@@ -126,11 +126,11 @@ def fisher_discriminant_loss(
         The number of states. Labels are in the range ``[0, n_states-1]``.
     lda_mode : str, optional
         Either ``'standard'`` or ``'harmonic'``. This determines how the scatter
-        matrices are computed (see also :class:`~mlcvs.core.stats.lda.LDA`). The
+        matrices are computed (see also :class:`~mlcolvar.core.stats.lda.LDA`). The
         default is ``'standard'``.
     reduce_mode : str, optional
         This determines how the eigenvalues are reduced, e.g., ``sum``, ``sum2``
-        (see also :class:`~mlcvs.core.loss.eigvals.ReduceEigenvaluesLoss`). The
+        (see also :class:`~mlcolvar.core.loss.eigvals.ReduceEigenvaluesLoss`). The
         default is ``'sum'``.
     sw_reg: float, optional
         The magnitude of the regularization for the within-scatter matrix, by default
