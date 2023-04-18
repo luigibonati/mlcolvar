@@ -71,7 +71,7 @@ def test_regression_cv():
     """
     Create a synthetic dataset and test functionality of the RegressionCV class
     """
-    from mlcolvar.data import DictDataset, DictionaryDataModule
+    from mlcolvar.data import DictDataset, DictModule
 
     in_features, out_features = 2,1 
     layers = [in_features, 5, 10, out_features]
@@ -88,7 +88,7 @@ def test_regression_cv():
     X = torch.randn((100,2))
     y = X.square().sum(1)
     dataset = DictDataset({'data':X,'target':y})
-    datamodule = DictionaryDataModule(dataset,lengths=[0.75,0.2,0.05], batch_size=25)
+    datamodule = DictModule(dataset,lengths=[0.75,0.2,0.05], batch_size=25)
     # train model
     model.optimizer_name ='SGD'
     model.optimizer_kwargs.update(dict(lr=1e-2))
@@ -103,7 +103,7 @@ def test_regression_cv():
     print('weighted loss') 
     w = torch.randn((100))
     dataset_weights = DictDataset({'data':X, 'target':y, 'weights':w})
-    datamodule_weights = DictionaryDataModule(dataset_weights, lengths=[0.75,0.2,0.05], batch_size=25)
+    datamodule_weights = DictModule(dataset_weights, lengths=[0.75,0.2,0.05], batch_size=25)
     trainer.fit(model, datamodule_weights)
         
     # use custom loss

@@ -102,14 +102,14 @@ class DeepTICA(BaseCV, lightning.LightningModule):
 def test_deep_tica():
     # tests
     import numpy as np
-    from mlcolvar.data import DictionaryDataModule
+    from mlcolvar.data import DictModule
     from mlcolvar.utils.timelagged import create_timelagged_dataset
 
     # create dataset
     X = np.loadtxt('mlcolvar/tests/data/mb-mcmc.dat')
     X = torch.Tensor(X)
     dataset = create_timelagged_dataset(X,lag_time=1)
-    datamodule = DictionaryDataModule(dataset, batch_size = 10000)
+    datamodule = DictModule(dataset, batch_size = 10000)
 
     # create cv
     layers = [2,10,10,2]

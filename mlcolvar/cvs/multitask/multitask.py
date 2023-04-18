@@ -39,7 +39,7 @@ class MultiTaskCV:
 
     >>> from mlcolvar.cvs import AutoEncoderCV
     >>> from mlcolvar.core.loss import FisherDiscriminantLoss
-    >>> from mlcolvar.data import DictDataset, DictionaryDataModule
+    >>> from mlcolvar.data import DictDataset, DictModule
 
     >>> n_descriptors = 5
     >>> n_labels = 2  # Number of states
@@ -66,7 +66,7 @@ class MultiTaskCV:
     ...     'data': torch.rand(n_samples, n_descriptors),
     ...     'labels': torch.tensor([0., 1]).repeat(n_samples//2)
     ... })
-    >>> datamodule = DictionaryDataModule(dataset=[unsupervised_dataset, supervised_dataset])
+    >>> datamodule = DictModule(dataset=[unsupervised_dataset, supervised_dataset])
 
     # Create a PyTorch Lightning trainer.
     >>> import lightning

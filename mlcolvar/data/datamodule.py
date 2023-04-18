@@ -8,7 +8,7 @@
 PyTorch Lightning DataModule object for DictDatasets.
 """
 
-__all__ = ['DictionaryDataModule']
+__all__ = ['DictModule']
 
 
 # =============================================================================
@@ -32,7 +32,7 @@ from mlcolvar.data import DictLoader, DictDataset
 # DICTIONARY DATAMODULE CLASS
 # =============================================================================
 
-class DictionaryDataModule(lightning.LightningDataModule):
+class DictModule(lightning.LightningDataModule):
     """Lightning DataModule constructed for :class:`~mlcolvar.data.dataset.DictDataset`(s).
 
     The DataModule automatically splits the :class:`~mlcolvar.data.dataset.DictDataset`s
@@ -48,7 +48,7 @@ class DictionaryDataModule(lightning.LightningDataModule):
 
     >>> x = torch.randn((50, 2))
     >>> dataset = DictDataset({'data': x, 'labels': x.square().sum(dim=1)})
-    >>> datamodule = DictionaryDataModule(dataset, lengths=[0.75,0.2,0.05], batch_size=25)
+    >>> datamodule = DictModule(dataset, lengths=[0.75,0.2,0.05], batch_size=25)
 
     >>> # This is usually called by PyTorch Lightning.
     >>> datamodule.setup()
@@ -67,7 +67,7 @@ class DictionaryDataModule(lightning.LightningDataModule):
     but they must be of the same length.
 
     >>> dataset2 = DictDataset({'data2': torch.randn(50, 1), 'weights': torch.arange(50)})
-    >>> datamodule = DictionaryDataModule([dataset, dataset2], lengths=[0.8, 0.2], batch_size=5)
+    >>> datamodule = DictModule([dataset, dataset2], lengths=[0.8, 0.2], batch_size=5)
     >>> datamodule.setup()
     >>> train_loader = datamodule.train_dataloader()
 
@@ -184,7 +184,7 @@ class DictionaryDataModule(lightning.LightningDataModule):
         pass
 
     def __repr__(self) -> str:
-        string = f'DictionaryDataModule(dataset -> {self.dataset.__repr__()}'
+        string = f'DictModule(dataset -> {self.dataset.__repr__()}'
         string+=f',\n\t\t     train_loader -> DictLoader(length={self.lengths[0]}, batch_size={self.batch_size[0]}, shuffle={self.shuffle[0]})'
         string+=f',\n\t\t     valid_loader -> DictLoader(length={self.lengths[1]}, batch_size={self.batch_size[1]}, shuffle={self.shuffle[1]})'
         if len(self.lengths) >= 3:

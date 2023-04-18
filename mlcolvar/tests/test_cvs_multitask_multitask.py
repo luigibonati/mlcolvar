@@ -26,7 +26,7 @@ from mlcolvar.cvs.cv import BaseCV
 from mlcolvar.cvs.multitask.multitask import MultiTaskCV
 from mlcolvar.cvs.timelagged import DeepTICA
 from mlcolvar.cvs.unsupervised import AutoEncoderCV, VariationalAutoEncoderCV
-from mlcolvar.data import DictDataset, DictionaryDataModule
+from mlcolvar.data import DictDataset, DictModule
 
 
 # =============================================================================
@@ -204,7 +204,7 @@ def test_multitask_loss(dataset_types, weights, loss_coefficients):
     multi_cv = MultiTaskCV(main_cv, aux_loss_fns, loss_coefficients)
 
     # Do two steps of training.
-    datamodule = DictionaryDataModule(datasets, shuffle=False, random_split=False)
+    datamodule = DictModule(datasets, shuffle=False, random_split=False)
     trainer = lightning.Trainer(max_epochs=1, log_every_n_steps=5, logger=None, enable_checkpointing=False)
 
     # This will explode during backpropagation because the MockAuxLoss do not depend
@@ -273,7 +273,7 @@ def test_multitask_training(main_cv_name, weights, auxiliary_loss_names, loss_co
         main_cv_name, weights, auxiliary_loss_names, loss_coefficients)
 
     # Train.
-    datamodule = DictionaryDataModule(datasets, shuffle=False, random_split=False)
+    datamodule = DictModule(datasets, shuffle=False, random_split=False)
     trainer = lightning.Trainer(max_epochs=1, log_every_n_steps=2, logger=None, enable_checkpointing=False)
     trainer.fit(multi_cv, datamodule)
 

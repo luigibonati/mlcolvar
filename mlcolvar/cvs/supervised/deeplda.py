@@ -2,7 +2,7 @@ import torch
 import lightning
 from mlcolvar.cvs import BaseCV
 from mlcolvar.core import FeedForward, Normalization
-from mlcolvar.data import DictionaryDataModule
+from mlcolvar.data import DictModule
 from mlcolvar.core.stats import LDA
 from mlcolvar.core.loss import ReduceEigenvaluesLoss
 
@@ -155,7 +155,7 @@ def test_deeplda(n_states=2):
     y = torch.cat(y,dim=0)
     
     dataset = DictDataset({'data':X, 'labels':y})
-    datamodule = DictionaryDataModule(dataset, lengths = [0.8,0.2], batch_size=n_states*n_points)
+    datamodule = DictModule(dataset, lengths = [0.8,0.2], batch_size=n_states*n_points)
 
     # initialize CV
     opts = { 'norm_in'  : { 'mode'   : 'mean_std' } ,

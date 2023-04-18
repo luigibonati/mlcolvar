@@ -3,7 +3,7 @@ import lightning
 from mlcolvar.cvs import BaseCV
 from mlcolvar.core import FeedForward, Normalization
 from mlcolvar.core.loss import TDALoss
-from mlcolvar.data import DictionaryDataModule
+from mlcolvar.data import DictModule
 
 __all__ = ["DeepTDA"]
 
@@ -135,7 +135,7 @@ def test_deeptda_cv():
             y[samples*i:] += 1
         
         dataset = DictDataset({'data': X, 'labels' : y})
-        datamodule = DictionaryDataModule(dataset,lengths=[0.75,0.2,0.05], batch_size=samples)        
+        datamodule = DictModule(dataset,lengths=[0.75,0.2,0.05], batch_size=samples)        
         # train model
         trainer = lightning.Trainer(accelerator='cpu', max_epochs=2, logger=None, enable_checkpointing=False)
         trainer.fit( model, datamodule )
