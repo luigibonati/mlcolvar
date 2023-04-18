@@ -1,12 +1,12 @@
 import torch
-import pytorch_lightning as pl
+
 from mlcolvar.cvs import BaseCV
 from mlcolvar.core import FeedForward, Normalization
 from mlcolvar.core.loss import MSELoss
 
 __all__ = ["RegressionCV"]
 
-class RegressionCV(BaseCV, pl.LightningModule):
+class RegressionCV(BaseCV, lightning.LightningModule):
     """
     Example of collective variable obtained with a regression task.
     Combine the inputs with a neural-network and optimize it to match a target function.
@@ -92,7 +92,7 @@ def test_regression_cv():
     # train model
     model.optimizer_name ='SGD'
     model.optimizer_kwargs.update(dict(lr=1e-2))
-    trainer = pl.Trainer(accelerator='cpu',max_epochs=1,logger=None, enable_checkpointing=False)
+    trainer = lightning.Trainer(accelerator='cpu',max_epochs=1,logger=None, enable_checkpointing=False)
     trainer.fit( model, datamodule )
     model.eval()
     # trace model
@@ -108,7 +108,7 @@ def test_regression_cv():
         
     # use custom loss
     print('custom loss')
-    trainer = pl.Trainer(accelerator='cpu',max_epochs=1,logger=None, enable_checkpointing=False)
+    trainer = lightning.Trainer(accelerator='cpu',max_epochs=1,logger=None, enable_checkpointing=False)
 
     model = RegressionCV( layers = [2,10,10,1])
     model.loss_fn = lambda y,y_ref: (y-y_ref).abs().mean() 

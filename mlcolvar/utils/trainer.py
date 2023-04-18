@@ -1,4 +1,4 @@
-from pytorch_lightning import Callback
+from lightning import Callback
 import copy
 
 class SimpleMetricsCallback(Callback):

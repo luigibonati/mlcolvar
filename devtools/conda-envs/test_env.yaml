@@ -19,7 +19,7 @@ dependencies:
   - numpy
   - pandas
   - pytorch
-  - pytorch-lightning
+  - lightning
   - matplotlib
 
     # Pip-only installs

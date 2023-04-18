@@ -21,7 +21,7 @@ import warnings
 
 import torch
 import numpy as np
-import pytorch_lightning as pl
+
 from torch.utils.data import random_split, Subset
 from torch._utils import _accumulate
 
@@ -32,7 +32,7 @@ from mlcolvar.data import FastDictionaryLoader, DictionaryDataset
 # DICTIONARY DATAMODULE CLASS
 # =============================================================================
 
-class DictionaryDataModule(pl.LightningDataModule):
+class DictionaryDataModule(lightning.LightningDataModule):
     """Lightning DataModule constructed for :class:`~mlcolvar.data.dataset.DictionaryDataset`(s).
 
     The DataModule automatically splits the :class:`~mlcolvar.data.dataset.DictionaryDataset`s

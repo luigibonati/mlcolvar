@@ -18,7 +18,7 @@ import os
 import tempfile
 
 import pytest
-import pytorch_lightning as pl
+
 import torch
 
 from mlcolvar.cvs.unsupervised.vae import VariationalAutoEncoderCV
@@ -55,7 +55,7 @@ def test_vae_cv_training(weights):
 
     # Train.
     datamodule = DictionaryDataModule(DictionaryDataset(data))
-    trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2, logger=None, enable_checkpointing=False)
+    trainer = lightning.Trainer(max_epochs=1, log_every_n_steps=2, logger=None, enable_checkpointing=False)
     trainer.fit(model, datamodule)
 
     # Eval.

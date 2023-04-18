@@ -1,5 +1,5 @@
 import torch
-import pytorch_lightning as pl
+
 from mlcolvar.cvs import BaseCV
 from mlcolvar.core import FeedForward, Normalization
 from mlcolvar.data import DictionaryDataModule
@@ -8,7 +8,7 @@ from mlcolvar.core.loss import ReduceEigenvaluesLoss
 
 __all__ = ["DeepLDA"]
 
-class DeepLDA(BaseCV, pl.LightningModule):
+class DeepLDA(BaseCV, lightning.LightningModule):
     """Neural network-based discriminant collective variables.
     
     For the training it requires a DictionaryDataset with the keys 'data' and 'labels'.
@@ -165,7 +165,7 @@ def test_deeplda(n_states=2):
     model = DeepLDA( layers, n_states, options=opts )
 
     # create trainer and fit
-    trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)
+    trainer = lightning.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)
     trainer.fit( model, datamodule )
 
     # eval

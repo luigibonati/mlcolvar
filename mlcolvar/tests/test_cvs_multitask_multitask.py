@@ -18,7 +18,7 @@ import os
 import tempfile
 
 import pytest
-import pytorch_lightning as pl
+
 import torch
 
 from mlcolvar.core.loss import TDALoss, FisherDiscriminantLoss, AutocorrelationLoss
@@ -57,7 +57,7 @@ class MockAuxLoss(torch.nn.Module):
         return torch.tensor(1.)
 
 
-class MockCV(BaseCV, pl.LightningModule):
+class MockCV(BaseCV, lightning.LightningModule):
     """Mock CV for mock testing."""
 
     BLOCKS = []
@@ -205,7 +205,7 @@ def test_multitask_loss(dataset_types, weights, loss_coefficients):
 
     # Do two steps of training.
     datamodule = DictionaryDataModule(datasets, shuffle=False, random_split=False)
-    trainer = pl.Trainer(max_epochs=1, log_every_n_steps=5, logger=None, enable_checkpointing=False)
+    trainer = lightning.Trainer(max_epochs=1, log_every_n_steps=5, logger=None, enable_checkpointing=False)
 
     # This will explode during backpropagation because the MockAuxLoss do not depend
     # on the input. We don't care as long as MockAuxLoss.forward() is called.
@@ -274,7 +274,7 @@ def test_multitask_training(main_cv_name, weights, auxiliary_loss_names, loss_co
 
     # Train.
     datamodule = DictionaryDataModule(datasets, shuffle=False, random_split=False)
-    trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2, logger=None, enable_checkpointing=False)
+    trainer = lightning.Trainer(max_epochs=1, log_every_n_steps=2, logger=None, enable_checkpointing=False)
     trainer.fit(multi_cv, datamodule)
 
     # Eval.

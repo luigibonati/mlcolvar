@@ -1,13 +1,13 @@
 from typing import Any
 import torch
-import pytorch_lightning as pl
+
 from mlcolvar.cvs import BaseCV
 from mlcolvar.core import FeedForward, Normalization
 from mlcolvar.core.loss import MSELoss
 
 __all__ = ["AutoEncoderCV"]
 
-class AutoEncoderCV(BaseCV, pl.LightningModule):
+class AutoEncoderCV(BaseCV, lightning.LightningModule):
     """AutoEncoding Collective Variable. It is composed by a first neural network (encoder) which projects 
     the input data into a latent space (the CVs). Then a second network (decoder) takes 
     the CVs and tries to reconstruct the input data based on them. It is an unsupervised learning approach, 
@@ -125,7 +125,7 @@ def test_autoencodercv():
     X = torch.randn(100,in_features) 
     dataset = DictionaryDataset({'data': X})
     datamodule = DictionaryDataModule(dataset)
-    trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)
+    trainer = lightning.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)
     trainer.fit( model, datamodule )
     model.eval()
     X_hat = model(X)
@@ -134,14 +134,14 @@ def test_autoencodercv():
     print('train 2 - weights')
     dataset = DictionaryDataset({'data': torch.randn(100,in_features), 'weights' : np.arange(100) })
     datamodule = DictionaryDataModule(dataset)
-    trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)
+    trainer = lightning.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)
     trainer.fit( model, datamodule )
     
     # train with different input and ouput 
     print('train 3 - timelagged')
     dataset = DictionaryDataset({'data': torch.randn(100,in_features), 'target' : torch.randn(100,in_features) })
     datamodule = DictionaryDataModule(dataset)
-    trainer = pl.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)
+    trainer = lightning.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)
     trainer.fit( model, datamodule )
 
 if __name__ == "__main__":

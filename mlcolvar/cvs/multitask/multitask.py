@@ -15,7 +15,6 @@ __all__ = ["MultiTaskCV"]
 # =============================================================================
 
 from typing import Optional, Sequence
-
 import torch
 
 from mlcolvar.cvs.cv import BaseCV
@@ -69,8 +68,8 @@ class MultiTaskCV:
     >>> datamodule = DictionaryDataModule(dataset=[unsupervised_dataset, supervised_dataset])
 
     # Create a PyTorch Lightning trainer.
-    >>> import pytorch_lightning as pl
-    >>> trainer = pl.Trainer(max_epochs=1, log_every_n_steps=5, logger=None, enable_checkpointing=False)
+    >>> 
+    >>> trainer = lightning.Trainer(max_epochs=1, log_every_n_steps=5, logger=None, enable_checkpointing=False)
 
     """
     
