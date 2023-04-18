@@ -10,6 +10,7 @@ import numpy as np
 import torch
 import os
 import urllib.request
+from typing import Union
 
 from mlcvs.data import DictionaryDataset
 
@@ -142,7 +143,7 @@ def load_dataframe(file_names, start = 0, stop = None, stride = 1, delete_downlo
     return df
 
 def create_dataset_from_files(
-                    file_names : list,
+                    file_names : Union[list,str],
                     folder : str = None,
                     create_labels : bool = None, 
                     load_args : list = None,
@@ -172,7 +173,7 @@ def create_dataset_from_files(
     modifier_function : function, optional
         Function to be applied to the input data, by default None.
     verbose : bool, optional
-        Print info on the datasets, by default False
+        Print info on the datasets, by default True
     kwargs : optional
         args passed to mlcvs.utils.io.load_dataframe
 
@@ -189,6 +190,9 @@ def create_dataset_from_files(
         Function that is used to load the files
 
     """
+    if isinstance(file_names, str):
+        file_names = [file_names]
+
     num_files = len(file_names)
     
     # set file paths
