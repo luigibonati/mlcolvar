@@ -111,3 +111,4 @@ ENV/
 old_code/
 .vscode/
 test_notebooks/
+lightning_logs/

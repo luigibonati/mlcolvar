@@ -174,6 +174,7 @@ def correlation_matrix(x,y,w=None,symmetrize=True):
 
     if w is None: #TODO simplify it in the unbiased case?
         w = torch.ones(x.shape[0])
+        w = w.to(x.device)
     
     #compute correlation matrix
     corr = torch.einsum('ij, ik, i -> jk', x, y, w )

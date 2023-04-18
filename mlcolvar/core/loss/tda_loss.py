@@ -137,13 +137,17 @@ def tda_loss(
         Only returned if ``return_loss_terms is True``. The value of the loss
         term associated to the standard deviations of the target Gaussians.
     """
-    if not isinstance(target_centers, torch.Tensor):
-        target_centers = torch.Tensor(target_centers)
-    if not isinstance(target_sigmas, torch.Tensor):
-        target_sigmas = torch.Tensor(target_sigmas)
-    
-    loss_centers = torch.zeros_like(target_centers)
-    loss_sigmas = torch.zeros_like(target_sigmas)
+    if not isinstance(target_centers, torch.Tensor): 
+        target_centers = torch.Tensor(target_centers) 
+    if not isinstance(target_sigmas, torch.Tensor): 
+        target_sigmas = torch.Tensor(target_sigmas) 
+        
+    device = H.device 
+    target_centers = target_centers.to(device) 
+    target_sigmas = target_sigmas.to(device) 
+    loss_centers = torch.zeros_like(target_centers, device=device) 
+    loss_sigmas = torch.zeros_like(target_sigmas, device=device)
+
     for i in range(n_states):
         # check which elements belong to class i
         if not torch.nonzero(labels == i).any():
