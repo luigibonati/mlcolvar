@@ -21,7 +21,7 @@ import warnings
 
 import torch
 import numpy as np
-import pytorch_lightning as pl
+import lightning as pl
 from torch.utils.data import random_split, Subset
 from torch._utils import _accumulate
 
