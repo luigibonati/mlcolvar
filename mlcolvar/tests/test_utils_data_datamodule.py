@@ -16,8 +16,8 @@ Tests for the members of the mlcolvar.data.datamodule module.
 import pytest
 import torch
 
-from mlcolvar.data.dataset import DictionaryDataset
-from mlcolvar.data.datamodule import DictionaryDataModule
+from mlcolvar.data.dataset import DictDataset
+from mlcolvar.data.datamodule import DictModule
 
 
 # =============================================================================
@@ -32,17 +32,17 @@ def test_dictionary_data_module_split(lengths, fields, random_split):
 
     Tests that:
     * The sub-datasets have the correct lengths.
-    * The dataloader returns all the fields in the DictionaryDataset.
+    * The dataloader returns all the fields in the DictDataset.
     """
     # Create a dataset.
     n_samples = 50
     dataset = {'data': torch.randn((n_samples, 2))}
     dataset.update({k: torch.randn((n_samples, 1)) for k in fields})
-    dataset = DictionaryDataset(dataset)
+    dataset = DictDataset(dataset)
 
     # Splits the dataset.
     batch_size = 5
-    datamodule = DictionaryDataModule(dataset, lengths=lengths, batch_size=batch_size, random_split=random_split)
+    datamodule = DictModule(dataset, lengths=lengths, batch_size=batch_size, random_split=random_split)
     datamodule.setup('fit')
 
     # The length of the datasets is correct.
@@ -83,14 +83,14 @@ def test_dictionary_data_module_multidataset(random_split):
     # Create the datasets.
     datasets = []
     for dataset_idx in range(n_datasets):
-        dataset = DictionaryDataset({
+        dataset = DictDataset({
             f'data{dataset_idx}': torch.randn(n_samples, 2),
             f'labels{dataset_idx}': torch.randn(n_samples),
         })
         datasets.append(dataset)
 
     # Create the dataloader.
-    datamodule = DictionaryDataModule(datasets, batch_size=batch_size, lengths=lengths, random_split=random_split)
+    datamodule = DictModule(datasets, batch_size=batch_size, lengths=lengths, random_split=random_split)
     datamodule.setup()
     dataloader = datamodule.train_dataloader()
     assert dataloader.dataset_len == int(lengths[0]*n_samples)
@@ -104,11 +104,11 @@ def test_dictionary_data_module_multidataset(random_split):
             assert batch_dataset[f'labels{dataset_idx}'].shape == (batch_size,)
 
     # If datasets are not of the same dimension, the dataloader should explode on init.
-    datasets.append(DictionaryDataset({
+    datasets.append(DictDataset({
         f'data': torch.randn(n_samples+3, 2),
         f'labels': torch.randn(n_samples+3),
     }))
-    datamodule = DictionaryDataModule(datasets)
+    datamodule = DictModule(datasets)
     datamodule.setup()
     with pytest.raises(ValueError, match='must have the same number of samples'):
         datamodule.train_dataloader()

@@ -371,8 +371,8 @@ def test_statistics():
     stats.to_dict()
 
     # create dataloader
-    from mlcolvar.data import FastDictionaryLoader
-    loader = FastDictionaryLoader({'data':X,'target':y},batch_size=20)
+    from mlcolvar.data import DictLoader
+    loader = DictLoader({'data':X,'target':y},batch_size=20)
 
     # compute statistics of a single key of loader
     key = 'data'

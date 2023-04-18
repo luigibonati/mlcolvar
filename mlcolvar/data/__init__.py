@@ -1,4 +1,4 @@
-__all__ = ["DictionaryDataset","DictionaryDataModule","FastDictionaryLoader"]
+__all__ = ["DictDataset","DictModule","DictLoader"]
 
 from .dataset import *
 from .dataloader import *

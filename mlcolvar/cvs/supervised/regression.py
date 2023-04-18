@@ -11,7 +11,7 @@ class RegressionCV(BaseCV, lightning.LightningModule):
     Example of collective variable obtained with a regression task.
     Combine the inputs with a neural-network and optimize it to match a target function.
 
-    For the training it requires a DictionaryDataset with the keys 'data' and 'target' and optionally 'weights'.
+    For the training it requires a DictDataset with the keys 'data' and 'target' and optionally 'weights'.
     MSE Loss is used to optimize it.
     """
 
@@ -71,7 +71,7 @@ def test_regression_cv():
     """
     Create a synthetic dataset and test functionality of the RegressionCV class
     """
-    from mlcolvar.data import DictionaryDataset, DictionaryDataModule
+    from mlcolvar.data import DictDataset, DictModule
 
     in_features, out_features = 2,1 
     layers = [in_features, 5, 10, out_features]
@@ -87,8 +87,8 @@ def test_regression_cv():
     # create dataset
     X = torch.randn((100,2))
     y = X.square().sum(1)
-    dataset = DictionaryDataset({'data':X,'target':y})
-    datamodule = DictionaryDataModule(dataset,lengths=[0.75,0.2,0.05], batch_size=25)
+    dataset = DictDataset({'data':X,'target':y})
+    datamodule = DictModule(dataset,lengths=[0.75,0.2,0.05], batch_size=25)
     # train model
     model.optimizer_name ='SGD'
     model.optimizer_kwargs.update(dict(lr=1e-2))
@@ -102,8 +102,8 @@ def test_regression_cv():
     # weighted loss
     print('weighted loss') 
     w = torch.randn((100))
-    dataset_weights = DictionaryDataset({'data':X, 'target':y, 'weights':w})
-    datamodule_weights = DictionaryDataModule(dataset_weights, lengths=[0.75,0.2,0.05], batch_size=25)
+    dataset_weights = DictDataset({'data':X, 'target':y, 'weights':w})
+    datamodule_weights = DictModule(dataset_weights, lengths=[0.75,0.2,0.05], batch_size=25)
     trainer.fit(model, datamodule_weights)
         
     # use custom loss

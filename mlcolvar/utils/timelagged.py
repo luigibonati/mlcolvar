@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from bisect import bisect_left
-from mlcolvar.data import DictionaryDataset
+from mlcolvar.data import DictDataset
 import warnings
 
 # optional packages
@@ -174,7 +174,7 @@ def find_timelagged_configurations(x : torch.Tensor, t : torch.Tensor, lag_time 
 
 def create_timelagged_dataset(X : torch.Tensor, t : torch.Tensor = None, lag_time : float = 1, reweight_mode : str = None, logweights : torch.Tensor = None, tprime : torch.Tensor= None, interval : list = None, progress_bar : bool = False):
     """
-    Create a DictionaryDataset of time-lagged configurations. 
+    Create a DictDataset of time-lagged configurations. 
     
     In case of biased simulations the reweigth can be performed in two different ways (`reweight_mode`):
     1) `rescale_time` : the search for time-lagged pairs is performed in the accelerated time (dt' = dt*exp(logweights)), see Yang and Parrinello (2018)
@@ -203,7 +203,7 @@ def create_timelagged_dataset(X : torch.Tensor, t : torch.Tensor = None, lag_tim
 
     Returns
     -------
-    dataset: DictionaryDataset
+    dataset: DictDataset
         Dataset with keys 'data', 'data_lag' (data at time t and t+lag), 'weights', 'weights_lag' (weights at time t and t+lag). 
 
     """
@@ -258,7 +258,7 @@ def create_timelagged_dataset(X : torch.Tensor, t : torch.Tensor = None, lag_tim
         for i in range(len(data)):
             data[i] = data[i][interval[0]:interval[1]]
 
-    dataset = DictionaryDataset({'data':x_t, 'data_lag':x_lag, 'weights':w_t, 'weights_lag':w_lag})
+    dataset = DictDataset({'data':x_t, 'data_lag':x_lag, 'weights':w_t, 'weights_lag':w_lag})
 
     return dataset 
 

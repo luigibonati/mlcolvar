@@ -38,7 +38,7 @@ class VariationalAutoEncoderCV(BaseCV, lightning.LightningModule):
     At evaluation time, the encoder's output mean is used as the CV, while the
     variance output and the decoder are ignored.
 
-    For training, it requires a DictionaryDataset with the key ``'data'`` and
+    For training, it requires a DictDataset with the key ``'data'`` and
     optionally ``'weights'``.
     """
     

@@ -5,10 +5,10 @@
 # =============================================================================
 
 """
-PyTorch Lightning DataModule object for DictionaryDatasets.
+PyTorch Lightning DataModule object for DictDatasets.
 """
 
-__all__ = ["FastDictionaryLoader"]
+__all__ = ["DictLoader"]
 
 
 # =============================================================================
@@ -18,7 +18,7 @@ __all__ = ["FastDictionaryLoader"]
 from typing import Optional, Union, Sequence
 import torch
 from torch.utils.data import Subset
-from mlcolvar.data import DictionaryDataset
+from mlcolvar.data import DictDataset
 from mlcolvar.core.transform.utils import Statistics
 
 
@@ -26,13 +26,13 @@ from mlcolvar.core.transform.utils import Statistics
 # FAST DICTIONARY LOADER CLASS
 # =============================================================================
 
-class FastDictionaryLoader:
-    """PyTorch DataLoader for :class:`~mlcolvar.data.dataset.DictionaryDataset`s.
+class DictLoader:
+    """PyTorch DataLoader for :class:`~mlcolvar.data.dataset.DictDataset`s.
     
     It is much faster than ``TensorDataset`` + ``DataLoader`` because ``DataLoader``
     grabs individual indices of the dataset and calls cat (slow).
 
-    The class can also merge multiple :class:`~mlcolvar.data.dataset.DictionaryDataset`s
+    The class can also merge multiple :class:`~mlcolvar.data.dataset.DictDataset`s
     that have different keys (see example below). The datasets must all have the
     same number of samples.
 
@@ -46,12 +46,12 @@ class FastDictionaryLoader:
 
     >>> x = torch.arange(1,11)
 
-    A ``FastDictionaryLoader`` can be initialize from a ``dict``, a :class:`~mlcolvar.data.dataset.DictionaryDataset`,
-    or a ``Subset`` wrapping a :class:`~mlcolvar.data.dataset.DictionaryDataset`.
+    A ``DictLoader`` can be initialize from a ``dict``, a :class:`~mlcolvar.data.dataset.DictDataset`,
+    or a ``Subset`` wrapping a :class:`~mlcolvar.data.dataset.DictDataset`.
 
     >>> # Initialize from a dictionary.
     >>> d = {'data': x.unsqueeze(1), 'labels': x**2}
-    >>> dataloader = FastDictionaryLoader(d, batch_size=1, shuffle=False)
+    >>> dataloader = DictLoader(d, batch_size=1, shuffle=False)
     >>> dataloader.dataset_len  # number of samples
     10
     >>> # Print first batch.
@@ -60,20 +60,20 @@ class FastDictionaryLoader:
     ...     break
     {'data': tensor([[1]]), 'labels': tensor([1])}
 
-    >>> # Initialize from a DictionaryDataset.
-    >>> dict_dataset = DictionaryDataset(d)
-    >>> dataloader = FastDictionaryLoader(dict_dataset, batch_size=2, shuffle=False)
+    >>> # Initialize from a DictDataset.
+    >>> dict_dataset = DictDataset(d)
+    >>> dataloader = DictLoader(dict_dataset, batch_size=2, shuffle=False)
     >>> len(dataloader)  # Number of batches
     5
 
     >>> # Initialize from a PyTorch Subset object.
     >>> train, _ = torch.utils.data.random_split(dict_dataset, [0.5, 0.5])
-    >>> dataloader = FastDictionaryLoader(train, batch_size=1, shuffle=False)
+    >>> dataloader = DictLoader(train, batch_size=1, shuffle=False)
 
     It is also possible to iterate over multiple dictionary datasets having
     different keys for multi-task learning
 
-    >>> dataloader = FastDictionaryLoader(
+    >>> dataloader = DictLoader(
     ...     dataset=[dict_dataset, {'some_unlabeled_data': torch.arange(10)+11}],
     ...     batch_size=1, shuffle=False,
     ... )
@@ -90,15 +90,15 @@ class FastDictionaryLoader:
     """
     def __init__(
             self,
-            dataset: Union[dict, DictionaryDataset, Subset, Sequence],
+            dataset: Union[dict, DictDataset, Subset, Sequence],
             batch_size: int = 0,
             shuffle: bool = True,
     ):
-        """Initialize a ``FastDictionaryLoader``.
+        """Initialize a ``DictLoader``.
 
         Parameters
         ----------
-        dataset : dict or DictionaryDataset or Subset of DictionaryDataset or list-like.
+        dataset : dict or DictDataset or Subset of DictDataset or list-like.
             The dataset or a list of datasets. If a list, the datasets can have
             different keys but they must all have the same number of samples.
         batch_size : int, optional
@@ -113,7 +113,7 @@ class FastDictionaryLoader:
 
     @property
     def dataset(self):
-        """DictionaryDataset or list[DictionaryDataset]: The dictionary dataset(s)."""
+        """DictDataset or list[DictDataset]: The dictionary dataset(s)."""
         return self._dataset
 
     @dataset.setter
@@ -156,7 +156,7 @@ class FastDictionaryLoader:
 
     @property
     def has_multiple_datasets(self):
-        return not isinstance(self.dataset, DictionaryDataset)
+        return not isinstance(self.dataset, DictDataset)
 
     def __iter__(self):
         # Even with multiple datasets (of the same length), we generate a single
@@ -187,7 +187,7 @@ class FastDictionaryLoader:
         return (self.dataset_len + self.batch_size - 1) // self.batch_size
     
     def __repr__(self) -> str:
-        string = f'FastDictionaryLoader(length={self.dataset_len}, batch_size={self.batch_size}, shuffle={self.shuffle})'
+        string = f'DictLoader(length={self.dataset_len}, batch_size={self.batch_size}, shuffle={self.shuffle})'
         return string
 
     def get_stats(self, dataset_idx: Optional[int] = None):
@@ -240,19 +240,19 @@ class FastDictionaryLoader:
 
 
 def _to_dict_dataset(d):
-    """Convert Dict[Tensor] and Subset[DictionaryDataset] to DictionaryDataset.
+    """Convert Dict[Tensor] and Subset[DictDataset] to DictDataset.
 
     An error is raised if ``d`` cannot is of any other type.
     """
-    # Convert to DictionaryDataset if a dict is given.
+    # Convert to DictDataset if a dict is given.
     if isinstance(d, dict):
-        d = DictionaryDataset(d)
-    elif isinstance(d, Subset) and isinstance(d.dataset, DictionaryDataset):
+        d = DictDataset(d)
+    elif isinstance(d, Subset) and isinstance(d.dataset, DictDataset):
         # TODO: This might not not safe for classes that inherit from Subset or DictionaryDatset.
         # Retrieve selection if it a subset.
         d = d.dataset.__class__(d.dataset[d.indices])
-    elif not isinstance(d, DictionaryDataset):
-        raise ValueError('The data must be of type dict, DictionaryDataset or Subset[DictionaryDataset].')
+    elif not isinstance(d, DictDataset):
+        raise ValueError('The data must be of type dict, DictDataset or Subset[DictDataset].')
     return d
 
 

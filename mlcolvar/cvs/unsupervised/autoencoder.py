@@ -15,7 +15,7 @@ class AutoEncoderCV(BaseCV, lightning.LightningModule):
     Furthermore, it can also be used lo learn a representation which can be used not to reconstruct the data but 
     to predict, e.g. future configurations. 
 
-    For training it requires a DictionaryDataset with the key 'data' and optionally 'weights'. If a 'target' 
+    For training it requires a DictDataset with the key 'data' and optionally 'weights'. If a 'target' 
     key is present this will be used as reference for the output of the decoder, otherway this will be compared
     with the input 'data'.
     """
@@ -107,7 +107,7 @@ class AutoEncoderCV(BaseCV, lightning.LightningModule):
         return loss
 
 def test_autoencodercv():
-    from mlcolvar.data import DictionaryDataset, DictionaryDataModule
+    from mlcolvar.data import DictDataset, DictModule
     import numpy as np
 
     in_features, out_features = 8,2
@@ -123,8 +123,8 @@ def test_autoencodercv():
     # train
     print('train 1 - no weights')
     X = torch.randn(100,in_features) 
-    dataset = DictionaryDataset({'data': X})
-    datamodule = DictionaryDataModule(dataset)
+    dataset = DictDataset({'data': X})
+    datamodule = DictModule(dataset)
     trainer = lightning.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)
     trainer.fit( model, datamodule )
     model.eval()
@@ -132,15 +132,15 @@ def test_autoencodercv():
 
     # train with weights
     print('train 2 - weights')
-    dataset = DictionaryDataset({'data': torch.randn(100,in_features), 'weights' : np.arange(100) })
-    datamodule = DictionaryDataModule(dataset)
+    dataset = DictDataset({'data': torch.randn(100,in_features), 'weights' : np.arange(100) })
+    datamodule = DictModule(dataset)
     trainer = lightning.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)
     trainer.fit( model, datamodule )
     
     # train with different input and ouput 
     print('train 3 - timelagged')
-    dataset = DictionaryDataset({'data': torch.randn(100,in_features), 'target' : torch.randn(100,in_features) })
-    datamodule = DictionaryDataModule(dataset)
+    dataset = DictDataset({'data': torch.randn(100,in_features), 'target' : torch.randn(100,in_features) })
+    datamodule = DictModule(dataset)
     trainer = lightning.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)
     trainer.fit( model, datamodule )
 
