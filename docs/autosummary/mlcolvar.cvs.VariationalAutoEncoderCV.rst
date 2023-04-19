@@ -1,5 +1,5 @@
 ﻿mlcolvar.cvs.VariationalAutoEncoderCV
-==================================
+=====================================
 
 .. currentmodule:: mlcolvar.cvs
 
@@ -37,11 +37,13 @@
       ~VariationalAutoEncoderCV.CHECKPOINT_HYPER_PARAMS_TYPE
       ~VariationalAutoEncoderCV.T_destination
       ~VariationalAutoEncoderCV.automatic_optimization
+      ~VariationalAutoEncoderCV.call_super_init
       ~VariationalAutoEncoderCV.current_epoch
       ~VariationalAutoEncoderCV.device
       ~VariationalAutoEncoderCV.dtype
       ~VariationalAutoEncoderCV.dump_patches
       ~VariationalAutoEncoderCV.example_input_array
+      ~VariationalAutoEncoderCV.fabric
       ~VariationalAutoEncoderCV.global_rank
       ~VariationalAutoEncoderCV.global_step
       ~VariationalAutoEncoderCV.hparams
@@ -53,8 +55,6 @@
       ~VariationalAutoEncoderCV.on_gpu
       ~VariationalAutoEncoderCV.optimizer_name
       ~VariationalAutoEncoderCV.trainer
-      ~VariationalAutoEncoderCV.truncated_bptt_steps
-      ~VariationalAutoEncoderCV.use_amp
       ~VariationalAutoEncoderCV.training
    
    

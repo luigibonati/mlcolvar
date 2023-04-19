@@ -1,92 +1,34 @@
 Documentation
-=================
+=============
 
-Collective variables
---------------------
+.. rubric:: Collective variables
 
-.. rubric:: Unsupervised learning 
+.. toctree::
+   :maxdepth: 1
+   :caption: API:
 
-.. currentmodule:: mlcolvar.cvs
+   api_cvs
+ 
+.. rubric:: Core modules
 
-.. autosummary::
-   :toctree: autosummary
-   :template: custom-class-template.rst
+.. toctree::
+   :maxdepth: 1
+   :caption: API:
 
-   AutoEncoderCV
-   VariationalAutoEncoderCV
+   api_core
+ 
+.. rubric:: Datasets
 
-.. rubric:: Supervised learning 
+.. toctree::
+   :maxdepth: 1
+   :caption: API:
 
-.. currentmodule:: mlcolvar.cvs
+   api_data
+ 
+.. rubric:: Utils
 
-.. autosummary::
-   :toctree: autosummary
-   :template: custom-class-template.rst
+.. toctree::
+   :maxdepth: 1
+   :caption: API:
 
-   RegressionCV
-   DeepLDA
-   DeepTDA
-
-.. rubric:: Time lagged CVs
-
-.. currentmodule:: mlcolvar.cvs
-
-.. autosummary::
-   :toctree: autosummary
-   :template: custom-class-template.rst
-
-   DeepTICA
-
-
-Core modules
-------------
-
-These are the building blocks which are used to construct the CVs.
-
-.. rubric:: NN
-
-.. currentmodule:: mlcolvar.core.nn
-
-.. autosummary::
-   :toctree: autosummary
-   :template: custom-class-template.rst
-
-   FeedForward
-
-.. rubric:: Loss
-
-.. currentmodule:: mlcolvar.core.loss
-
-.. autosummary::
-   :toctree: autosummary
-   :template: custom-class-template.rst
-
-   mse_loss
-   tda_loss
-   reduce_eigenvalues_loss
-   elbo_gaussians_loss
-
-.. rubric:: Stats 
-
-.. currentmodule:: mlcolvar.core.stats
-
-.. autosummary::
-   :toctree: autosummary
-   :template: custom-class-template.rst
-
-   Stats
-   LDA 
-   TICA
-
-.. rubric:: Transform
-
-.. currentmodule:: mlcolvar.core.transform
-
-.. autosummary::
-   :toctree: autosummary
-   :template: custom-class-template.rst
-
-   Transform
-   Normalization
-
-
+   api_utils

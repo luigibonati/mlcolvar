@@ -1,5 +1,5 @@
 ﻿mlcolvar.core.transform.Normalization
-==================================
+=====================================
 
 .. currentmodule:: mlcolvar.core.transform
 
@@ -35,6 +35,7 @@
    .. autosummary::
    
       ~Normalization.T_destination
+      ~Normalization.call_super_init
       ~Normalization.dump_patches
       ~Normalization.training
    

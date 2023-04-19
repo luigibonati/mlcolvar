@@ -6,44 +6,19 @@ Tutorials
 .. toctree::
    :maxdepth: 1
 
-   notebooks/intro_0_overview.ipynb
-   notebooks/intro_1_training.ipynb
-   notebooks/intro_2_data.ipynb
-   notebooks/intro_3_loss_optim.ipynb
-
-.. rubric:: Neural-network based CVs
-
-.. toctree::
-   :caption: Unsupervised CVs
-   :maxdepth: 1
-
-   notebooks/cvs_Autoencoder.ipynb
-
-.. toctree::
-   :caption: Supervised CVs
-   :maxdepth: 1
-
-   notebooks/cvs_DeepLDA.ipynb
-   notebooks/cvs_DeepTDA.ipynb
-
-.. toctree::
-   :caption: Time-lagged CVs
-   :maxdepth: 1
-
-   notebooks/cvs_DeepTICA.ipynb
-   
-.. rubric:: Linear models
+   tutorials_overview
+ 
+.. rubric:: Collective variables
 
 .. toctree::
    :maxdepth: 1
 
-   notebooks/linear_LDA.ipynb
-   notebooks/linear_TICA.ipynb
-
+   tutorials_cvs
+ 
 .. rubric:: Advanced
 
 .. toctree::
    :maxdepth: 1
 
-   notebooks/adv_newcv.ipynb
-   notebooks/adv_preprocessing.ipynb
+   tutorials_advanced
+ 

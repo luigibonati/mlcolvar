@@ -1,9 +1,9 @@
-﻿mlcolvar.core.stats.TICA
-=====================
+﻿mlcolvar.core.loss.MSELoss
+==========================
 
-.. currentmodule:: mlcolvar.core.stats
+.. currentmodule:: mlcolvar.core.loss
 
-.. autoclass:: TICA
+.. autoclass:: MSELoss
    :members:                                   
    :show-inheritance:                           
    :inherited-members: Module,LightningModule                       
@@ -16,11 +16,7 @@
 
    .. autosummary::
    
-      ~TICA.__init__
-      ~TICA.compute
-      ~TICA.extra_repr
-      ~TICA.forward
-      ~TICA.timescales
+      ~MSELoss.forward
    
    
 
@@ -32,9 +28,10 @@
 
    .. autosummary::
    
-      ~TICA.T_destination
-      ~TICA.dump_patches
-      ~TICA.training
+      ~MSELoss.T_destination
+      ~MSELoss.call_super_init
+      ~MSELoss.dump_patches
+      ~MSELoss.training
    
    
 

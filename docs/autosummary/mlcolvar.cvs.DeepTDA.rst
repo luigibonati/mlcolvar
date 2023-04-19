@@ -1,5 +1,5 @@
 ﻿mlcolvar.cvs.DeepTDA
-=================
+====================
 
 .. currentmodule:: mlcolvar.cvs
 
@@ -35,11 +35,13 @@
       ~DeepTDA.CHECKPOINT_HYPER_PARAMS_TYPE
       ~DeepTDA.T_destination
       ~DeepTDA.automatic_optimization
+      ~DeepTDA.call_super_init
       ~DeepTDA.current_epoch
       ~DeepTDA.device
       ~DeepTDA.dtype
       ~DeepTDA.dump_patches
       ~DeepTDA.example_input_array
+      ~DeepTDA.fabric
       ~DeepTDA.global_rank
       ~DeepTDA.global_step
       ~DeepTDA.hparams
@@ -51,8 +53,6 @@
       ~DeepTDA.on_gpu
       ~DeepTDA.optimizer_name
       ~DeepTDA.trainer
-      ~DeepTDA.truncated_bptt_steps
-      ~DeepTDA.use_amp
       ~DeepTDA.training
    
    

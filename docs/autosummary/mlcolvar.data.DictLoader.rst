@@ -1,9 +1,9 @@
-﻿mlcolvar.core.stats.LDA
-====================
+﻿mlcolvar.data.DictLoader
+========================
 
-.. currentmodule:: mlcolvar.core.stats
+.. currentmodule:: mlcolvar.data
 
-.. autoclass:: LDA
+.. autoclass:: DictLoader
    :members:                                   
    :show-inheritance:                           
    :inherited-members: Module,LightningModule                       
@@ -16,11 +16,8 @@
 
    .. autosummary::
    
-      ~LDA.__init__
-      ~LDA.compute
-      ~LDA.compute_scatter_matrices
-      ~LDA.extra_repr
-      ~LDA.forward
+      ~DictLoader.__init__
+      ~DictLoader.get_stats
    
    
 
@@ -32,9 +29,11 @@
 
    .. autosummary::
    
-      ~LDA.T_destination
-      ~LDA.dump_patches
-      ~LDA.training
+      ~DictLoader.batch_size
+      ~DictLoader.dataset
+      ~DictLoader.dataset_len
+      ~DictLoader.has_multiple_datasets
+      ~DictLoader.keys
    
    
 

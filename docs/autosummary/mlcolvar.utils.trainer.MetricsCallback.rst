@@ -1,9 +1,9 @@
-﻿mlcolvar.core.stats.Stats
-======================
+﻿mlcolvar.utils.trainer.MetricsCallback
+======================================
 
-.. currentmodule:: mlcolvar.core.stats
+.. currentmodule:: mlcolvar.utils.trainer
 
-.. autoclass:: Stats
+.. autoclass:: MetricsCallback
    :members:                                   
    :show-inheritance:                           
    :inherited-members: Module,LightningModule                       
@@ -16,9 +16,8 @@
 
    .. autosummary::
    
-      ~Stats.compute
-      ~Stats.forward
-      ~Stats.teardown
+      ~MetricsCallback.__init__
+      ~MetricsCallback.on_validation_epoch_end
    
    
 
@@ -30,9 +29,7 @@
 
    .. autosummary::
    
-      ~Stats.T_destination
-      ~Stats.dump_patches
-      ~Stats.training
+      ~MetricsCallback.state_key
    
    
 

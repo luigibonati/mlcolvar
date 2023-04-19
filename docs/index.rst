@@ -4,7 +4,7 @@
    contain the root `toctree` directive.
 
 mlcolvar: Machine Learning Collective Variables
-============================================
+===============================================
 
 `mlcolvar` is a Python package for building data-driven collective variables for enhanced sampling simulations.
 
@@ -12,10 +12,10 @@ mlcolvar: Machine Learning Collective Variables
 Please note that this project is in development. Please open an issue on Github if you find bugs or you would like to ask for new features.
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
    :caption: Contents:
 
-   getting_started
+   installation
    api
    tutorials
    plumed

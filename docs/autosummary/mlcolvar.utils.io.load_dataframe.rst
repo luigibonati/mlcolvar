@@ -1,9 +1,9 @@
-﻿mlcolvar.core.loss.reduce\_eigenvalues\_loss
-=========================================
+﻿mlcolvar.utils.io.load\_dataframe
+=================================
 
-.. currentmodule:: mlcolvar.core.loss
+.. currentmodule:: mlcolvar.utils.io
 
-.. autoclass:: reduce_eigenvalues_loss
+.. autoclass:: load_dataframe
    :members:                                   
    :show-inheritance:                           
    :inherited-members: Module,LightningModule                       

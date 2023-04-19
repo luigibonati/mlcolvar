@@ -1,9 +1,9 @@
-﻿mlcolvar.core.loss.mse\_loss
-=========================
+﻿mlcolvar.utils.fes.compute\_fes
+===============================
 
-.. currentmodule:: mlcolvar.core.loss
+.. currentmodule:: mlcolvar.utils.fes
 
-.. autoclass:: mse_loss
+.. autoclass:: compute_fes
    :members:                                   
    :show-inheritance:                           
    :inherited-members: Module,LightningModule                       

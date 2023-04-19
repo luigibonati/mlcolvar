@@ -1,9 +1,9 @@
-﻿mlcolvar.core.loss.tda\_loss
-=========================
+﻿mlcolvar.utils.timelagged.create\_timelagged\_dataset
+=====================================================
 
-.. currentmodule:: mlcolvar.core.loss
+.. currentmodule:: mlcolvar.utils.timelagged
 
-.. autoclass:: tda_loss
+.. autoclass:: create_timelagged_dataset
    :members:                                   
    :show-inheritance:                           
    :inherited-members: Module,LightningModule                       

@@ -1,9 +1,9 @@
-﻿mlcolvar.core.loss.elbo\_gaussians\_loss
-=====================================
+﻿mlcolvar.utils.io.create\_dataset\_from\_files
+==============================================
 
-.. currentmodule:: mlcolvar.core.loss
+.. currentmodule:: mlcolvar.utils.io
 
-.. autoclass:: elbo_gaussians_loss
+.. autoclass:: create_dataset_from_files
    :members:                                   
    :show-inheritance:                           
    :inherited-members: Module,LightningModule                       

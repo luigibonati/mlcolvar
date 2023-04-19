@@ -1,5 +1,5 @@
 ﻿mlcolvar.cvs.RegressionCV
-======================
+=========================
 
 .. currentmodule:: mlcolvar.cvs
 
@@ -35,11 +35,13 @@
       ~RegressionCV.CHECKPOINT_HYPER_PARAMS_TYPE
       ~RegressionCV.T_destination
       ~RegressionCV.automatic_optimization
+      ~RegressionCV.call_super_init
       ~RegressionCV.current_epoch
       ~RegressionCV.device
       ~RegressionCV.dtype
       ~RegressionCV.dump_patches
       ~RegressionCV.example_input_array
+      ~RegressionCV.fabric
       ~RegressionCV.global_rank
       ~RegressionCV.global_step
       ~RegressionCV.hparams
@@ -51,8 +53,6 @@
       ~RegressionCV.on_gpu
       ~RegressionCV.optimizer_name
       ~RegressionCV.trainer
-      ~RegressionCV.truncated_bptt_steps
-      ~RegressionCV.use_amp
       ~RegressionCV.training
    
    

@@ -1,5 +1,5 @@
 ﻿mlcolvar.cvs.AutoEncoderCV
-=======================
+==========================
 
 .. currentmodule:: mlcolvar.cvs
 
@@ -37,11 +37,13 @@
       ~AutoEncoderCV.CHECKPOINT_HYPER_PARAMS_TYPE
       ~AutoEncoderCV.T_destination
       ~AutoEncoderCV.automatic_optimization
+      ~AutoEncoderCV.call_super_init
       ~AutoEncoderCV.current_epoch
       ~AutoEncoderCV.device
       ~AutoEncoderCV.dtype
       ~AutoEncoderCV.dump_patches
       ~AutoEncoderCV.example_input_array
+      ~AutoEncoderCV.fabric
       ~AutoEncoderCV.global_rank
       ~AutoEncoderCV.global_step
       ~AutoEncoderCV.hparams
@@ -53,8 +55,6 @@
       ~AutoEncoderCV.on_gpu
       ~AutoEncoderCV.optimizer_name
       ~AutoEncoderCV.trainer
-      ~AutoEncoderCV.truncated_bptt_steps
-      ~AutoEncoderCV.use_amp
       ~AutoEncoderCV.training
    
    

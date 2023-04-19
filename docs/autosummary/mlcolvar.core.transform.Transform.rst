@@ -1,5 +1,5 @@
 ﻿mlcolvar.core.transform.Transform
-==============================
+=================================
 
 .. currentmodule:: mlcolvar.core.transform
 
@@ -32,6 +32,7 @@
    .. autosummary::
    
       ~Transform.T_destination
+      ~Transform.call_super_init
       ~Transform.dump_patches
       ~Transform.training
    

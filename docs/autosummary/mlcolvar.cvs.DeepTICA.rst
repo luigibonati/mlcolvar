@@ -1,5 +1,5 @@
 ﻿mlcolvar.cvs.DeepTICA
-==================
+=====================
 
 .. currentmodule:: mlcolvar.cvs
 
@@ -37,11 +37,13 @@
       ~DeepTICA.CHECKPOINT_HYPER_PARAMS_TYPE
       ~DeepTICA.T_destination
       ~DeepTICA.automatic_optimization
+      ~DeepTICA.call_super_init
       ~DeepTICA.current_epoch
       ~DeepTICA.device
       ~DeepTICA.dtype
       ~DeepTICA.dump_patches
       ~DeepTICA.example_input_array
+      ~DeepTICA.fabric
       ~DeepTICA.global_rank
       ~DeepTICA.global_step
       ~DeepTICA.hparams
@@ -53,8 +55,6 @@
       ~DeepTICA.on_gpu
       ~DeepTICA.optimizer_name
       ~DeepTICA.trainer
-      ~DeepTICA.truncated_bptt_steps
-      ~DeepTICA.use_amp
       ~DeepTICA.training
    
    
