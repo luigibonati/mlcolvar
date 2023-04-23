@@ -45,16 +45,17 @@ N_STATES = 3
 class MockAuxLoss(torch.nn.Module):
     """Mock auxiliary loss for mock testing."""
 
-    def __init__(self):
+    def __init__(self, in_features=N_DESCRIPTORS, out_features=N_CVS):
         super().__init__()
-        self.n_called = 0
-        self.args = None
+        self.task_specific_nn = torch.nn.Linear(in_features, out_features)
+
+        # Store initial parameters to check that training really happens.
+        self.initial_nn_weight = self.task_specific_nn.weight.detach().clone()
         self.kwargs = None
 
     def forward(self, data, data_lag=None, **kwargs):
         self.kwargs = kwargs
-        self.n_called += 1
-        return torch.tensor(1.)
+        return self.task_specific_nn(data).sum()
 
 
 class MockCV(BaseCV, lightning.LightningModule):
@@ -65,9 +66,7 @@ class MockCV(BaseCV, lightning.LightningModule):
     def __init__(self, in_features=N_DESCRIPTORS, out_features=N_CVS):
         """Constructor."""
         super().__init__(in_features=in_features, out_features=out_features)
-        self.loss_fn = MockAuxLoss()
-        # This module is here to avoid optimizer(model.parameters()) exploding.
-        self.nn = torch.nn.Linear(in_features, out_features)
+        self.loss_fn = MockAuxLoss(in_features, out_features)
 
     def training_step(self, train_batch, batch_idx):
         """Training step."""
@@ -196,27 +195,29 @@ def create_multitask_cv_and_datasets(main_cv_name, weights, auxiliary_loss_names
     (['time-lagged', 'unsupervised', 'supervised'], [True, True, True], [2., 5.]),
 ])
 def test_multitask_loss(dataset_types, weights, loss_coefficients):
-    """Auxiliary loss functions are called correctly."""
+    """Auxiliary loss functions are called correctly.
+
+    Test:
+    * Auxuliary functions are all called during training.
+    * Task specific layers within auxiliary losses are recognized by PyTorch and trained.
+    * All the dataset keywords are passed to the losses.
+    """
     # Create mock MultitaskCV.
     main_cv = MockCV()
     aux_loss_fns = [MockAuxLoss() for _ in range(len(dataset_types)-1)]
     datasets = [create_dataset(dt, weights=w) for dt, w in zip(dataset_types, weights)]
     multi_cv = MultiTaskCV(main_cv, aux_loss_fns, loss_coefficients)
 
-    # Do two steps of training.
+    # Do a few steps of training.
     datamodule = DictModule(datasets, shuffle=False, random_split=False)
-    trainer = lightning.Trainer(max_epochs=1, log_every_n_steps=5, logger=None, enable_checkpointing=False)
+    trainer = lightning.Trainer(max_epochs=2, log_every_n_steps=5, logger=None, enable_checkpointing=False)
+    trainer.fit(multi_cv, datamodule)
 
-    # This will explode during backpropagation because the MockAuxLoss do not depend
-    # on the input. We don't care as long as MockAuxLoss.forward() is called.
-    try:
-        trainer.fit(multi_cv, datamodule)
-    except RuntimeError:
-        pass
-
-    # Check that all mock loss functions have been called twice.
-    all_losses = [multi_cv.loss_fn] + multi_cv.auxiliary_loss_fns
-    assert all([loss.n_called > 0 for loss in all_losses])
+    # Check that all mock loss functions have been called and that
+    # the task-specific layers have been regularly trained.
+    all_losses = [multi_cv.loss_fn] + [l for l in multi_cv.auxiliary_loss_fns]
+    for loss in all_losses:
+        assert not torch.allclose(loss.initial_nn_weight, loss.task_specific_nn.weight)
 
     # Check that all fields were passed.
     for loss, dataset, dataset_type, weighted in zip(all_losses, datasets, dataset_types, weights):
@@ -229,20 +230,6 @@ def test_multitask_loss(dataset_types, weights, loss_coefficients):
             if dataset_type == 'time-lagged':
                 expected_kwargs.add('weights_lag')
         assert set(loss.kwargs.keys()) == expected_kwargs
-
-    # Hack to deactivate logging since calling training_step without a trainer explodes because of it.
-    def _log(name, value, on_epoch):
-        pass
-    multi_cv.log = _log
-
-    # Check value of the expected loss
-    if loss_coefficients is None:
-        expected_loss = float(len(all_losses))
-    else:
-        expected_loss = 1 + sum(loss_coefficients)
-    batch = {f'dataset{i}': datasets[i][:1] for i in range(len(datasets))}
-    loss = multi_cv.training_step(batch, None)
-    assert torch.allclose(loss, torch.tensor(expected_loss))
 
 
 @pytest.mark.parametrize('main_cv_name,weights', [

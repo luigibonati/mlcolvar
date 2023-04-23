@@ -109,7 +109,7 @@ class MultiTaskCV:
         # Copy all members of main_cv into this object.
         self.__dict__ = main_cv.__dict__
 
-        self.auxiliary_loss_fns = auxiliary_loss_fns
+        self.auxiliary_loss_fns = torch.nn.ModuleList(auxiliary_loss_fns)
         self.loss_coefficients = loss_coefficients
 
     def training_step(self, train_batch, batch_idx):
