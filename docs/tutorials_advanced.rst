@@ -1,5 +1,5 @@
-Advanced
-========
+Customizing CVs
+===============
 
 .. toctree::
    :maxdepth: 1

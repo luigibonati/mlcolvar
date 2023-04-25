@@ -3,6 +3,10 @@ Installation
 
 This page details how to get started with the package `mlcolvar`. 
 
+The library is based on the PyTorch machine learning library, and the high-level Lightning package. 
+The latter to simplifies the overall model training workflow and allows us focusing only on the CV design and optimization. 
+Although it can be used as a stand-alone tool (e.g., for analysis of MD simulations), the main purpose is to create variables that can be used in combination with enhanced sampling methods through PLUMED C++ software. Hence we will need to deploy the optimized model in a python-independent format in order to use it during the MD simulations. 
+
 Installation
 ------------
 To install `mlcolvar`, you will need an environment with the following packages:
