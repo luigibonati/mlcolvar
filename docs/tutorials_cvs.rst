@@ -1,21 +1,21 @@
-CVs optimization
-================
+Methods for CVs optimization
+============================
 
 .. toctree::
-   :caption: Unsupervised CVs
+   :caption: Unsupervised setting
    :maxdepth: 1
 
    notebooks/cvs_Autoencoder.ipynb
 
 .. toctree::
-   :caption: Supervised CVs
+   :caption: Supervised setting
    :maxdepth: 1
 
    notebooks/cvs_DeepLDA.ipynb
    notebooks/cvs_DeepTDA.ipynb
 
 .. toctree::
-   :caption: Time-lagged CVs
+   :caption: Time-informed setting
    :maxdepth: 1
 
    notebooks/cvs_DeepTICA.ipynb
