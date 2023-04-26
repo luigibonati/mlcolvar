@@ -81,12 +81,12 @@ class TICA(Stats):
         C_0 = correlation_matrix(x_t,x_t,w_t)
         C_lag = correlation_matrix(x_t,x_lag,w_lag)
 
+        if (algorithm == 'reduced_rank') and (self.out_features >= self.in_features):
+            warnings.warn('out_features is greater or equal than in_features. reduced_rank is equal to least_squares.')
+            algorithm = 'least_squares'
+        
         if algorithm == 'reduced_rank':
-            if self.out_features >= self.in_features:
-                warnings.warn('out_features is greater or equal than in_features. reduced_rank is equal to least_squares.')
-                algorithm = 'least_squares'
-            else:
-                evals, evecs = reduced_rank_eig(C_0, C_lag, self.reg_c0, rank = self.out_features)
+            evals, evecs = reduced_rank_eig(C_0, C_lag, self.reg_C_0, rank = self.out_features)
         elif algorithm != 'least_squares':
             raise ValueError(f'algorithm {algorithm} not recognized. Options are least_squares and reduced_rank.')
         else:
