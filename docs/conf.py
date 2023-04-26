@@ -23,7 +23,7 @@ import mlcolvar
 # -- Project information -----------------------------------------------------
 
 project = 'mlcolvar'
-copyright = ("2022, Luigi Bonati.")
+copyright = ("2023, Luigi Bonati et. al.")
 author = 'Luigi Bonati'
 
 # The short X.Y version
@@ -178,7 +178,7 @@ man_pages = [
 #  dir menu entry, description, category)
 texinfo_documents = [
     (master_doc, 'mlcolvar', 'mlcolvar Documentation',
-     author, 'mlcolvar', 'Machine learning collective variables',
+     author, 'mlcolvar', 'Machine Learning COLlective VARiables',
      'Miscellaneous'),
 ]
 
