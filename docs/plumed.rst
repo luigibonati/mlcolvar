@@ -1,5 +1,5 @@
-PLUMED-PyTorch interface
-========================
+PLUMED module
+=============
 
 **Deploying CVs in PLUMED2**
 

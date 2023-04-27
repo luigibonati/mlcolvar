@@ -3,23 +3,25 @@ channels:
 
   - conda-forge
   - pytorch
-
   - defaults
 
 dependencies:
 
   # Base depends
-  - python
+  - python >=3.8,<=3.10
   - pip
 
-  # Package dependencies
+  # Core dependencies
   - numpy
   - pandas
   - pytorch
+  - lightning
+
+  # utils
   - matplotlib
   - nbsphinx
   - ipython
-  - scikit-learn
+  - ipykernel
 
   # Pip-only installs
   - pip:

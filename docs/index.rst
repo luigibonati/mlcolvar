@@ -1,27 +1,32 @@
-.. mlcvs documentation master file, created by
+.. mlcolvar documentation master file, created by
    sphinx-quickstart on Thu Mar 15 13:55:56 2018.
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-mlcvs: Machine Learning Collective Variables
-============================================
+mlcolvar: Machine Learning Collective Variables
+===============================================
 
-`mlcvs` is a Python package for building data-driven collective variables for enhanced sampling simulations.
+`mlcolvar`, short for Machine Learning COLlective VARiables, is a Python library aimed to help design data-driven CVs for enhanced sampling simulations. 
+The guiding principles of `mlcolvar` are twofold:
 
+1. A unified framework to help test and utilize (some of) the CVs proposed in the literature. 
+2. A modular interface that simplifies the development of new approaches and the contamination between them.
 
-Please note that this project is in development. Please open an issue on Github if you find bugs or you would like to ask for new features.
+.. image:: notebooks/images/graphical_overview_mlcvs.png
+  :width: 800
+  :alt: Example workflow 
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
    :caption: Contents:
 
-   getting_started
+   installation
    api
    tutorials
    plumed
 
 Indices and tables
-==================
+------------------
 
 * :ref:`genindex`
 * :ref:`modindex`

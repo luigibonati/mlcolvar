@@ -19,11 +19,11 @@ dependencies:
   - numpy
   - pandas
   - pytorch
+  - lightning
   - matplotlib
-  - scikit-learn
 
     # Pip-only installs
   - pip:
     - KDEpy
-  #  - codecov
+    - nbmake
 

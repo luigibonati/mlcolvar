@@ -107,3 +107,8 @@ ENV/
 *profraw
 
 */_version.py
+
+old_code/
+.vscode/
+test_notebooks/
+lightning_logs/
