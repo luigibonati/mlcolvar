@@ -3,7 +3,7 @@ Documentation
 
 .. rubric:: Collective variables
 
-The `cvs` module contains ready-to-use CV classes, grouped by the type of data used for their optimization in the following sub-packages: unsupervised, supervided and time-lagged.
+The ``cvs`` module contains ready-to-use CV classes, grouped by the type of data used for their optimization in the following sub-packages: unsupervised, supervided and time-lagged.
 
 .. toctree::
    :maxdepth: 1
@@ -13,7 +13,7 @@ The `cvs` module contains ready-to-use CV classes, grouped by the type of data u
  
 .. rubric:: Core modules
 
-This module contains the building blocks that are used for the construction of the CV classes. We organized them into the following submodules: nn, loss, stats and transform. 
+This module contains the building blocks that are used for the construction of the CV classes. We organized them into the following submodules: ``nn``, ``loss``, ``stats`` and ``transform``. 
 
 .. toctree::
    :maxdepth: 1
