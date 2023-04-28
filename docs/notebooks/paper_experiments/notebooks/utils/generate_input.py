@@ -33,10 +33,11 @@ ENDPLUMED
     file.close()
 
 def gen_plumed_tica(model_name : str,
-                    static_model_path : str,
                     file_path : str,
                     rfile_path : str,
                     potential_formula : str,
+                    static_bias_cv : str = None,
+                    static_model_path : str = None,
                     opes_mode : str = 'OPES_METAD',
                     opes_args : str = 'tica.node-0'):
 
@@ -57,26 +58,41 @@ pot: BIASVALUE ARG=ene
 
 # load deep cv pytorch model
 tica: PYTORCH_MODEL FILE=../{model_name} ARG=p.x,p.y
-cv: PYTORCH_MODEL FILE={static_model_path} ARG=p.x,p.y 
+'''
+    print(input, file=file)
+    if static_model_path is not None:
 
-# apply static bias from previous sim
-static: OPES_METAD ARG=cv.node-0 ...
+        input=f'cv: PYTORCH_MODEL FILE={static_model_path} ARG=p.x,p.y'
+        print(input, file=file)
+
+    if static_bias_cv is not None:
+        input=f'''# apply static bias from previous sim
+static: OPES_METAD ARG={static_bias_cv} ...
     RESTART=YES
     STATE_RFILE={rfile_path}
     BARRIER=16
     PACE=10000000
 ...
+'''
+        print(input, file=file)
 
-# apply bias
+    input=f'''# apply bias
 opes: {opes_mode} ARG={opes_args} PACE=500 BARRIER=16
+'''
+    print(input, file=file)
 
-PRINT FMT=%g STRIDE=100 FILE=COLVAR ARG=p.x,p.y,cv.*,tica.*,opes.*,static.*
+    if static_bias_cv is not None:
+        input=f'''PRINT FMT=%g STRIDE=100 FILE=COLVAR ARG=p.x,p.y,tica.*,opes.*,{static_bias_cv},static.*
 
-ENDPLUMED
+ENDPLUMED'''
+    else:
+        input=f'''PRINT FMT=%g STRIDE=100 FILE=COLVAR ARG=p.x,p.y,tica.*,opes.*
 
-    '''
+ENDPLUMED'''
+
     print(input, file=file)
     file.close()
+
 
 def gen_input_md(inital_position : str,
                 file_path : str,
