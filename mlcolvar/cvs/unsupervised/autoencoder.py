@@ -1,4 +1,3 @@
-from typing import Any
 import torch
 import lightning
 from mlcolvar.cvs import BaseCV

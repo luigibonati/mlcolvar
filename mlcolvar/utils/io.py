@@ -1,11 +1,9 @@
 """Input/output functions."""
-# pandas
 try:
     import pandas as pd
 except ImportError as e:
     raise ImportError('pandas is required to use the i/o utils (mlcolvar.utils.io)\n',e)
 
-import pandas as pd
 import numpy as np
 import torch
 import os
