@@ -196,3 +196,5 @@ def plot_metrics(metrics,
 
     if return_axs:
         return ax
+    else:
+        return None
