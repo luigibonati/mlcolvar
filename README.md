@@ -18,7 +18,7 @@ The library is built upon the [PyTorch](https://pytorch.org/) ML library as well
 
 The workflow for training CVs is illustrated in the figure below. The resulting CVs can be then deployed for enhancing sampling with the [PLUMED](https://www.plumed.org/) package via the [pytorch](https://www.plumed.org/doc-master/user-doc/html/_p_y_t_o_r_c_h__m_o_d_e_l.html>`_) interface. 
 
-<center><img src="docs/notebooks/images/graphical_overview_mlcvs.png" width="800" /></center> 
+<center><img src="docs/notebooks/tutorials/images/graphical_overview_mlcvs.png" width="800" /></center> 
 
 
 Copyright (c) 2023 Luigi Bonati, Enrico Trizio and Andrea Rizzi. Project based on the 
