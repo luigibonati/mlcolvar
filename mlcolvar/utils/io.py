@@ -262,7 +262,7 @@ def test_datasetFromFile():
     )
 
     # Test no regex on two states
-    torch_dataset, pd_dataframe = create_dataset_from_files(file_names = ['state_A.dat', 'state_B.dat'],
+    create_dataset_from_files(file_names = ['state_A.dat', 'state_B.dat'],
                                                             folder = 'mlcolvar/tests/data',
                                                             create_labels = True,
                                                             load_args=None,
@@ -274,7 +274,7 @@ def test_datasetFromFile():
     )
                                                             
     # Test with filter regex on two states
-    torch_dataset = create_dataset_from_files(file_names = ['state_A.dat', 'state_B.dat'],
+    dataset = create_dataset_from_files(file_names = ['state_A.dat', 'state_B.dat'],
                                                             folder = 'mlcolvar/tests/data',
                                                             create_labels = True,
                                                             load_args=None,
@@ -289,7 +289,7 @@ def test_datasetFromFile():
         return x**2
 
     # Test with filter regex on two states with modifier
-    torch_dataset, pd_dataframe = create_dataset_from_files(file_names = ['state_A.dat', 'state_B.dat'],
+    create_dataset_from_files(file_names = ['state_A.dat', 'state_B.dat'],
                                                             folder = 'mlcolvar/tests/data',
                                                             create_labels = True,
                                                             load_args=None,
