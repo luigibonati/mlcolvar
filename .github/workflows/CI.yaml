@@ -57,7 +57,7 @@ jobs:
         shell: bash -l {0}
         run: |
           pytest -v --cov=mlcolvar --cov-report=xml --color=yes mlcolvar/tests/
-          pytest --nbmake docs/notebooks/ --ignore=docs/notebooks/data/
+          pytest --nbmake docs/notebooks/ --ignore=docs/notebooks/tutorials/data/
 
       - name: CodeCov
         uses: codecov/codecov-action@v3
