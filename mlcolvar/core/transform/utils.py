@@ -31,7 +31,6 @@ class Statistics(object):
         
         # get batch size
         ndim = x.ndim
-        batch_size = 1
         if ndim == 0:
             x = x.reshape(1,1)
         elif ndim == 1:

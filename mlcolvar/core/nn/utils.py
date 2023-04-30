@@ -29,7 +29,7 @@ def get_activation(activation : str):
         activ = Shifted_Softplus()
     elif activation == "linear":
         print("WARNING: no activation selected")
-    elif activation == None:
+    elif activation is None:
         pass
     else:
         raise ValueError(

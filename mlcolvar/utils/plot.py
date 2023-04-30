@@ -154,6 +154,8 @@ def plot_isolines_2D(function, component=None,
     
     if return_axs:
         return ax
+    else:
+        return None
 
 def plot_metrics(metrics, 
                 keys = ['train_loss_epoch','valid_loss'],
@@ -196,3 +198,5 @@ def plot_metrics(metrics,
 
     if return_axs:
         return ax
+    else:
+        return None

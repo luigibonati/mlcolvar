@@ -21,7 +21,7 @@ try:
 except ImportError:
     KDEPY_IS_INSTALLED = False
 try:
-    from sklearn.neighbors import KernelDensity
+    import sklearn
     SKLEARN_IS_INSTALLED = True
 except ImportError:
     SKLEARN_IS_INSTALLED = False

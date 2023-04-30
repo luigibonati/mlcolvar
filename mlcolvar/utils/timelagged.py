@@ -130,7 +130,9 @@ def find_timelagged_configurations(x : torch.Tensor, t : torch.Tensor, lag_time 
             return iter
 
     # sanitize logweights if given
+    calculate_weights = True
     if logweights is not None:
+        calculate_weights = False
         if len(logweights) != len(x):
             raise ValueError(f'Length of logweights ({len(logweights)}) is different from length of data ({len(x)}).')
         logweights = torch.Tensor(logweights)
@@ -147,7 +149,7 @@ def find_timelagged_configurations(x : torch.Tensor, t : torch.Tensor, lag_time 
                 x_lag.append(x[j])
                 deltaTau=min(t[i+1]+lag_time,t[j+1]) - max(t[i]+lag_time,t[j])
 
-                if logweights is None: 
+                if calculate_weights: 
                     w_lag.append(deltaTau)
                 else: 
                     w_lag.append(weights[i])
@@ -157,7 +159,7 @@ def find_timelagged_configurations(x : torch.Tensor, t : torch.Tensor, lag_time 
             elif t[j] > stop_condition:
                 break
         for k in range(n_j):
-            if logweights is None:
+            if calculate_weights:
                 w_t.append((t[i+1]-t[i])/float(n_j))
             else: 
                 if n_j>1:
@@ -251,12 +253,13 @@ def create_timelagged_dataset(X : torch.Tensor, t : torch.Tensor = None, lag_tim
     # return only a slice of the data (N. Pedrani)
     if interval is not None:
         # convert to a list
-        data = list(data)
+        data = list(x_t,x_lag,w_t,w_lag)
         # assert dimension of interval
         assert len(interval) == 2
         # modifies the content of data by slicing
         for i in range(len(data)):
             data[i] = data[i][interval[0]:interval[1]]
+        x_t,x_lag,w_t,w_lag = data
 
     dataset = DictDataset({'data':x_t, 'data_lag':x_lag, 'weights':w_t, 'weights_lag':w_lag})
 

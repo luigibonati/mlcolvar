@@ -199,7 +199,7 @@ def test_reduced_rank_tica():
     C_lag = correlation_matrix(x_t,x_lag)
     print(C_0.shape,C_lag.shape)
 
-    evals, evecs = evals, evecs = reduced_rank_eig(C_0, C_lag, 1e-6, rank = 5)
+    evals, evecs = reduced_rank_eig(C_0, C_lag, 1e-6, rank = 5)
     print(evals.shape,evecs.shape)
 
     print('>> batch') 
