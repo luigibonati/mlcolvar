@@ -4,6 +4,6 @@ Getting Started
 .. toctree::
    :maxdepth: 1
 
-   notebooks/intro_1_training.ipynb
-   notebooks/intro_2_data.ipynb
-   notebooks/intro_3_loss_optim.ipynb
+   notebooks/tutorials/intro_1_training.ipynb
+   notebooks/tutorials/intro_2_data.ipynb
+   notebooks/tutorials/intro_3_loss_optim.ipynb

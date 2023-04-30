@@ -5,17 +5,17 @@ Methods for CVs optimization
    :caption: Unsupervised setting
    :maxdepth: 1
 
-   notebooks/cvs_Autoencoder.ipynb
+   notebooks/tutorials/cvs_Autoencoder.ipynb
 
 .. toctree::
    :caption: Supervised setting
    :maxdepth: 1
 
-   notebooks/cvs_DeepLDA.ipynb
-   notebooks/cvs_DeepTDA.ipynb
+   notebooks/tutorials/cvs_DeepLDA.ipynb
+   notebooks/tutorials/cvs_DeepTDA.ipynb
 
 .. toctree::
    :caption: Time-informed setting
    :maxdepth: 1
 
-   notebooks/cvs_DeepTICA.ipynb
+   notebooks/tutorials/cvs_DeepTICA.ipynb
