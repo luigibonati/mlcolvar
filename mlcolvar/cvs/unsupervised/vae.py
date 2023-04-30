@@ -83,17 +83,6 @@ class VariationalAutoEncoderCV(BaseCV, lightning.LightningModule):
         # parse and sanitize
         options = self.parse_options(options)
 
-        # The FeedForward implementing the encoder by default needs to have also
-        # the nonlinearity (and eventually dropout/batchnorm) also for the output
-        # layer since we'll have two separate linear layers for the mean and variance.
-        try:
-            encoder_opts = options['encoder']
-        except KeyError:
-            encoder_opts['encoder'] = {'last_layer_activation': True}
-        else:  # Make sure we don't overwrite an existing option.
-            if 'last_layer_activation' not in encoder_opts:
-                encoder_opts['last_layer_activation'] = True
-
         # if decoder is not given reverse the encoder
         if decoder_layers is None:
             decoder_layers = encoder_layers[::-1]
@@ -108,6 +97,13 @@ class VariationalAutoEncoderCV(BaseCV, lightning.LightningModule):
         # initialize encoder
         # The encoder outputs two values for each CV representing mean and std.
         o = 'encoder'
+
+        # Note: The FeedForward implementing the encoder by default needs to have also
+        # the nonlinearity (and eventually dropout/batchnorm) also for the output
+        # layer since we'll have two separate linear layers for the mean and variance.
+        if 'last_layer_activation' not in options[o]:
+            options[o]['last_layer_activation'] = True
+
         self.encoder = FeedForward(encoder_layers, **options[o])
         self.mean_nn = torch.nn.Linear(in_features=encoder_layers[-1], out_features=n_cvs)
         self.log_var_nn = torch.nn.Linear(in_features=encoder_layers[-1], out_features=n_cvs)
