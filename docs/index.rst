@@ -12,7 +12,7 @@ The guiding principles of `mlcolvar` are twofold:
 1. A unified framework to help test and utilize (some of) the CVs proposed in the literature. 
 2. A modular interface that simplifies the development of new approaches and the contamination between them.
 
-.. image:: notebooks/images/graphical_overview_mlcvs.png
+.. image:: notebooks/tutorials/images/graphical_overview_mlcvs.png
   :width: 800
   :alt: Example workflow 
 
