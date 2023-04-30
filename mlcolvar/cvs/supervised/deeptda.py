@@ -22,7 +22,7 @@ class DeepTDA(BaseCV, lightning.LightningModule):
                 target_centers : list, 
                 target_sigmas : list, 
                 layers : list, 
-                options : dict = {}, 
+                options : dict = None, 
                 **kwargs):
         """
         Define Deep Targeted Discriminant Analysis (Deep-TDA) CV.
