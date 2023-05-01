@@ -1,13 +1,9 @@
 Installation
 ============
 
-This page details how to get started with the package `mlcolvar`. 
+It is recommended to install the package and its dependencies in a virtual environment. 
 
-The library is based on the PyTorch machine learning library, and the high-level Lightning package. 
-The latter to simplifies the overall model training workflow and allows us focusing only on the CV design and optimization. 
-Although it can be used as a stand-alone tool (e.g., for analysis of MD simulations), the main purpose is to create variables that can be used in combination with enhanced sampling methods through PLUMED C++ software. Hence we will need to deploy the optimized model in a python-independent format in order to use it during the MD simulations. 
-
-Installation
+Requirements
 ------------
 To install `mlcolvar`, you will need an environment with the following packages:
 
@@ -23,20 +19,23 @@ The following packages are optional, but they are recommended as they allow to u
 * ``KDEpy`` or ``scikit-learn`` (compute free energy profiles via KDE)
 * ``tqdm`` (monitor progress)
 
-Once you have installed the requirements, you can install mlcolvar by cloning the repository:
+Download
+--------
+
+You can download the 'latest <https://github.com/luigibonati/mlcolvar/releases/latest>'_ release (or a specific one) from the 'releases <https://github.com/luigibonati/mlcolvar/releases>'_ page.
+
+In alternative, you can clone the Github repository:
 ::
 
     git clone https://github.com/luigibonati/mlcolvar.git 
 
-and then installing it:
 
+Install
+-------
+
+Once you have downloaded the package you can install it by entering the directory and executing: 
 ::
 
     cd mlcolvar/
     pip install .
 
-To install it in development (editable) mode:
-
-::
-
-    pip install -e .
