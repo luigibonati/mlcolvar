@@ -58,6 +58,7 @@ jobs:
         run: |
           pytest -v --cov=mlcolvar --cov-report=xml --color=yes mlcolvar/tests/
           pytest --nbmake docs/notebooks/ --ignore=docs/notebooks/tutorials/data/
+          cat ./coverage.xml
 
       - name: CodeCov
         uses: codecov/codecov-action@v3
