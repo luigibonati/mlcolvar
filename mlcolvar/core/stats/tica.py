@@ -41,7 +41,7 @@ class TICA(Stats):
         repr = f"in_features={self.in_features}, out_features={self.out_features}"
         return repr
 
-    def compute(self, data, weights = None, remove_average=True, save_params=False):
+    def compute(self, data, weights = None, remove_average=True, save_params=False, algorithm = 'least_squares'):
         """Perform TICA computation.
 
         Parameters
@@ -54,12 +54,17 @@ class TICA(Stats):
             whether to make the inputs mean free, by default True
         save_params : bool, optional
             Save parameters of estimator, by default False
-
+        algorithm : str, optional
+            Algorithm to use, by default 'least_squares'. Options are 'least_squares' and 'reduced_rank'. Both algorithms are described in [1]_.
         Returns
         -------
-        torch.Tensor,torch.Tensor
-            eigenvalues,eigenvectors
+        torch.Tensor
+            Eigenvalues
         
+        References
+        ----------
+        .. [1] V. Kostic, P. Novelli, A. Maurer, C. Ciliberto, L. Rosasco, and M. Pontil, "Learning Dynamical Systems via Koopman Operator Regression in Reproducing Kernel Hilbert Spaces" (2022).
+
         """
         # parse args
 
@@ -76,7 +81,16 @@ class TICA(Stats):
         C_0 = correlation_matrix(x_t,x_t,w_t)
         C_lag = correlation_matrix(x_t,x_lag,w_lag)
 
-        evals, evecs = cholesky_eigh(C_lag,C_0,self.reg_C_0,n_eig=self.out_features) 
+        if (algorithm == 'reduced_rank') and (self.out_features >= self.in_features):
+            warnings.warn('out_features is greater or equal than in_features. reduced_rank is equal to least_squares.')
+            algorithm = 'least_squares'
+        
+        if algorithm == 'reduced_rank':
+            evals, evecs = reduced_rank_eig(C_0, C_lag, self.reg_C_0, rank = self.out_features)
+        elif algorithm != 'least_squares':
+            raise ValueError(f'algorithm {algorithm} not recognized. Options are least_squares and reduced_rank.')
+        else:
+            evals, evecs = cholesky_eigh(C_lag,C_0,self.reg_C_0,n_eig=self.out_features) 
             
         if save_params:
             self.evals = evals
@@ -138,8 +152,26 @@ def test_tica():
     
     # direct way, compute tica function
     tica = TICA(in_features,out_features=2)
-    print(tica)
+
     tica.compute([x_t,x_lag],[w_t,w_lag], save_params=True)
+    s = tica(X)
+    print(X.shape,'-->',s.shape)
+    print('eigvals',tica.evals)
+    print('timescales', tica.timescales(lag=10))
+
+
+def test_reduced_rank_tica():
+    in_features = 10
+    X = torch.rand(100,in_features)*100
+    x_t = X[:-1]
+    x_lag = X[1:]
+    w_t = torch.rand(len(x_t))
+    w_lag = w_t
+    
+    # direct way, compute tica function
+    tica = TICA(in_features,out_features=5)
+    print(tica)
+    tica.compute([x_t,x_lag],[w_t,w_lag], save_params=True, algorithm='reduced_rank')
     s = tica(X)
     print(X.shape,'-->',s.shape)
     print('eigvals',tica.evals)
@@ -151,7 +183,7 @@ def test_tica():
     C_lag = correlation_matrix(x_t,x_lag)
     print(C_0.shape,C_lag.shape)
 
-    evals, evecs = cholesky_eigh(C_lag,C_0) 
+    evals, evecs = reduced_rank_eig(C_0, C_lag, 1e-6, rank = 5)
     print(evals.shape,evecs.shape)
 
     print('>> batch') 
@@ -164,3 +196,4 @@ def test_tica():
 
 if __name__ == "__main__":
     test_tica()
+    test_reduced_rank_tica()
