@@ -3,7 +3,7 @@ from torch import Tensor
 from typing import Optional
 
 def generalized_eigh(A: Tensor, B: Tensor) -> tuple:
-    """A workaround to solve a real symmetric generalized eigenvalue problem :math:`Av = \lambda Bv` using the eigenvalue decomposition of :math:`B^{-1/2}AB^{-1/2}`. This method is not numerically efficient.
+    r"""A workaround to solve a real symmetric generalized eigenvalue problem :math:`Av = \lambda Bv` using the eigenvalue decomposition of :math:`B^{-1/2}AB^{-1/2}`. This method is not numerically efficient.
 
     Parameters
     ----------

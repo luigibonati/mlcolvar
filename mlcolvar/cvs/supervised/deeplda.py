@@ -70,7 +70,7 @@ class DeepLDA(BaseCV, lightning.LightningModule):
         return x
 
     def set_regularization(self, sw_reg=0.05, lorentzian_reg=None):
-        """
+        r"""
         Set magnitude of regularizations for the training:
         - add identity matrix multiplied by `sw_reg` to within scatter S_w.
         - add lorentzian regularization to NN outputs with magnitude `lorentzian_reg`
