@@ -15,9 +15,13 @@ __all__ = ["DictLoader"]
 # GLOBAL IMPORTS
 # =============================================================================
 
+import collections.abc
+import math
 from typing import Optional, Union, Sequence
+
 import torch
 from torch.utils.data import Subset
+
 from mlcolvar.data import DictDataset
 from mlcolvar.core.transform.utils import Statistics
 
@@ -33,8 +37,9 @@ class DictLoader:
     grabs individual indices of the dataset and calls cat (slow).
 
     The class can also merge multiple :class:`~mlcolvar.data.dataset.DictDataset`s
-    that have different keys (see example below). The datasets must all have the
-    same number of samples.
+    that have different keys (see example below). Different datasets can have
+    different number of samples. In this case, it is necessary to specify the
+    batch sizes so that the number of batches per epoch is the same for all datasets.
 
     Notes
     -----
@@ -74,24 +79,24 @@ class DictLoader:
     different keys for multi-task learning
 
     >>> dataloader = DictLoader(
-    ...     dataset=[dict_dataset, {'some_unlabeled_data': torch.arange(10)+11}],
-    ...     batch_size=1, shuffle=False,
+    ...     dataset=[dict_dataset, {'some_unlabeled_data': torch.arange(20)+11}],
+    ...     batch_size=[1, 2], shuffle=False,
     ... )
-    >>> dataloader.dataset_len  # This is the number of samples in one dataset.
-    10
+    >>> dataloader.dataset_len  # This is the number of samples in the datasets.
+    [10, 20]
     >>>  # Print first batch.
     >>> from pprint import pprint
     >>> for batch in dataloader:
     ...     pprint(batch)
     ...     break
     {'dataset0': {'data': tensor([[1]]), 'labels': tensor([1])},
-     'dataset1': {'some_unlabeled_data': tensor([11])}}
+     'dataset1': {'some_unlabeled_data': tensor([11, 12])}}
 
     """
     def __init__(
             self,
             dataset: Union[dict, DictDataset, Subset, Sequence],
-            batch_size: int = 0,
+            batch_size: Union[int, Sequence[int]] = 0,
             shuffle: bool = True,
     ):
         """Initialize a ``DictLoader``.
@@ -101,15 +106,25 @@ class DictLoader:
         dataset : dict or DictDataset or Subset of DictDataset or list-like.
             The dataset or a list of datasets. If a list, the datasets can have
             different keys but they must all have the same number of samples.
-        batch_size : int, optional
-            Batch size, by default 0 (==single batch).
+        batch_size : int or list-like of int, optional
+            Batch size, by default 0 (==single batch). If multiple datasets are
+            passed, this can be a list specifying the batch size for each dataset.
+            Otherwise, if an ``int``, this uses the same batch size for al
+            datasets. This must be set so that the total number of batches per
+            epoch is the same for all datasets.
         shuffle : bool, optional
             If ``True``, shuffle the data *in-place* whenever an
             iterator is created out of this object, by default ``True``.
         """
-        self.dataset = dataset
-        self.batch_size = batch_size
+        # This checks that dataset and batch_size are consistent.
+        self._dataset = None
+        self._batch_size = None
+        self.set_dataset_and_batch_size(dataset=dataset, batch_size=batch_size)
         self.shuffle = shuffle
+
+        # These are lazily initialized in __iter__().
+        self.indices = None
+        self.current_batch_idx = None
 
     @property
     def dataset(self):
@@ -118,34 +133,29 @@ class DictLoader:
 
     @dataset.setter
     def dataset(self, dataset):
-        try:
-            self._dataset = _to_dict_dataset(dataset)
-        except ValueError:
-            # This is a sequence of datasets.
-            datasets = [_to_dict_dataset(d) for d in dataset]
+        self.set_dataset_and_batch_size(dataset=dataset, batch_size=None)
 
-            # Check that all datasets have the same number of samples.
-            if len(set([len(d) for d in datasets])) != 1:
-                raise ValueError('All the datasets must have the same number of samples.')
-
-            self._dataset = datasets
+    @property
+    def has_multiple_datasets(self):
+        return not isinstance(self.dataset, DictDataset)
 
     @property
     def dataset_len(self):
         """int: Number of samples in the dataset(s)."""
         if self.has_multiple_datasets:
-            # List of datasets.
-            return len(self.dataset[0])
+            return [len(d) for d in self.dataset]
         return len(self.dataset)
 
     @property
     def batch_size(self):
-        """int: Batch size."""
+        """int or List[int]: Batch size or, in case of multiple datasets, a list of batch sizes."""
+        if self.has_multiple_datasets:
+            return [b if b > 0 else l for b, l in zip(self._batch_size, self.dataset_len)]
         return self._batch_size if self._batch_size > 0 else self.dataset_len
 
     @batch_size.setter
     def batch_size(self, batch_size):
-        self._batch_size = batch_size
+        self.set_dataset_and_batch_size(dataset=None, batch_size=batch_size)
 
     @property
     def keys(self):
@@ -154,37 +164,106 @@ class DictLoader:
             return tuple(d.keys for d in self.dataset)
         return self.dataset.keys
 
-    @property
-    def has_multiple_datasets(self):
-        return not isinstance(self.dataset, DictDataset)
+    def set_dataset_and_batch_size(
+            self,
+            dataset: Union[None, dict, DictDataset, Subset, Sequence],
+            batch_size: Union[None, int, Sequence[int]]
+    ):
+        """Set a compatible pair of datasets and batch sizes.
+
+        With multiple datasets, ``dataset`` and ``batch_size`` must be compatible
+        so that each dataset has the same number of batches per epoch so it might
+        not be possible to set the two attributes singularly without leaving the
+        object in an inconsistent state. Instead, this setter can be used safely.
+
+        Parameters
+        ----------
+        dataset: None or dict or DictDataset or Subset of DictDataset or list-like.
+            The dataset or a list of datasets. If a list, the datasets can have
+            different keys but they must all have the same number of samples.
+            If ``None``, only ``batch_size`` is set.
+        batch_size : None or int or list-like of int
+            Batch size, by default 0 (==single batch). If multiple datasets are
+            passed, this can be a list specifying the batch size for each dataset.
+            Otherwise, if an ``int``, this uses the same batch size for al
+            datasets. This must be set so that the total number of batches per
+            epoch is the same for all datasets. If ``None``, only ``dataset``
+            is set.
+        """
+        # Save the previous dataset and batch_size. We'll restore them if we find
+        # an error to leave the object in a consistent state.
+        old_dataset = self._dataset
+        old_batch_size = self._batch_size
+
+        if dataset is not None:
+            # Convert dicts and Subsets to DictDatasets.
+            try:
+                dataset = _to_dict_dataset(dataset)
+            except ValueError:  # Assume this is a sequence of datasets.
+                dataset = [_to_dict_dataset(d) for d in dataset]
+            self._dataset = dataset
+
+        # Set batch size.
+        if batch_size is not None:
+            if self.has_multiple_datasets and not isinstance(batch_size, collections.abc.Sequence):
+                # If an integer is passed, we set the same batch size to all datasets.
+                batch_size = [batch_size] * len(dataset)
+            self._batch_size = batch_size
+
+        # Now check for errors.
+        if self.has_multiple_datasets:
+            # batch_size must have the same length as dataset.
+            if len(self._batch_size) != len(self._dataset):
+                self._dataset = old_dataset
+                self._batch_size = old_batch_size
+                raise ValueError(f'batch_size (length {batch_size_len}) must have length equal to the number of datasets (length {len(self.dataset)}.')
+
+            # The number of batches per epoch must be the same for all datasets.
+            n_batches = [math.ceil(dl / b) for dl, b in zip(self.dataset_len, self.batch_size)]
+            if len(set(n_batches)) > 1:
+                self._dataset = old_dataset
+                self._batch_size = old_batch_size
+                raise ValueError('Multiple datasets must have the same number of batches per epoch. '
+                                 f'With batch_size {self._batch_size} the number of batches are {n_batches}.')
 
     def __iter__(self):
-        # Even with multiple datasets (of the same length), we generate a single
-        # indices permutation since these datasets are normally uncorrelated.
-        if self.shuffle:
-            self.indices = torch.randperm(self.dataset_len)
-        else:
+        # Since multiple datasets might have different length, we need to generate
+        # separate shuffling indices for all of them.
+        if not self.shuffle:
             self.indices = None
-        self.i = 0
+        elif self.has_multiple_datasets:
+            self.indices = [torch.randperm(l) for l in self.dataset_len]
+        else:
+            self.indices = torch.randperm(self.dataset_len)
+
+        # Rewind internal batch counter.
+        self.current_batch_idx = 0
         return self
 
     def __next__(self):
-        if self.i >= self.dataset_len:
+        if self.current_batch_idx >= len(self):
             raise StopIteration
 
         if self.has_multiple_datasets:
             batch = {}
-            for dataset_idx, dataset in enumerate(self.dataset):
-                batch[f'dataset{dataset_idx}'] = self._get_batch(dataset)
+            for dataset_idx in range(len(self.dataset)):
+                batch[f'dataset{dataset_idx}'] = self._get_batch(dataset_idx=dataset_idx)
         else:
-            batch = self._get_batch(self.dataset)
+            batch = self._get_batch()
 
-        self.i += self.batch_size
+        self.current_batch_idx += 1
         return batch
 
     def __len__(self):
-        # Number of batches.
-        return (self.dataset_len + self.batch_size - 1) // self.batch_size
+        """Return the number of batches in the loader."""
+        if self.has_multiple_datasets:
+            # All datasets have the same number of batches per epoch.
+            dataset_len = self.dataset_len[0]
+            batch_size = self.batch_size[0]
+        else:
+            dataset_len = self.dataset_len
+            batch_size = self.batch_size
+        return (dataset_len + batch_size - 1) // batch_size
     
     def __repr__(self) -> str:
         string = f'DictLoader(length={self.dataset_len}, batch_size={self.batch_size}, shuffle={self.shuffle})'
@@ -208,6 +287,7 @@ class DictLoader:
 
         """
         # Check whether this loader has multiple datasets.
+        # Make datasets always a list to simplify the code.
         if self.has_multiple_datasets:
             datasets = self.dataset
         else:
@@ -229,15 +309,36 @@ class DictLoader:
             return stats['dataset0']
         return stats
 
-    def _get_batch(self, dataset):
+    def _get_batch(self, dataset_idx=None):
         """Return the current batch from the dataset."""
-        if self.indices is not None:
-            indices = self.indices[self.i:self.i+self.batch_size]
-            batch = dataset[indices]
+        # Determine dataset and batch size.
+        if dataset_idx is None:  # Only one dataset.
+            dataset = self.dataset
+            batch_size = self.batch_size
         else:
-            batch = dataset[self.i:self.i+self.batch_size]
+            dataset = self.dataset[dataset_idx]
+            batch_size = self.batch_size[dataset_idx]
+
+        # Determine start and end sample indices.
+        start = self.current_batch_idx * batch_size
+        end = start + batch_size
+
+        # Handle shuffling.
+        if self.indices is None:
+            batch = dataset[start:end]
+        else:
+            if dataset_idx is None:
+                indices = self.indices
+            else:
+                indices = self.indices[dataset_idx]
+            batch = dataset[indices[start:end]]
+
         return batch
 
+
+# =============================================================================
+# PRIVATE UTILITY FUNCTIONS
+# =============================================================================
 
 def _to_dict_dataset(d):
     """Convert Dict[Tensor] and Subset[DictDataset] to DictDataset.

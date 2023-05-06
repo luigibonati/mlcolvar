@@ -13,6 +13,8 @@ Tests for the members of the mlcolvar.data.dataloader module.
 # GLOBAL IMPORTS
 # =============================================================================
 
+import math
+
 import pytest
 import torch
 from torch.utils.data import Subset
@@ -22,17 +24,25 @@ from mlcolvar.data.dataloader import DictLoader
 
 
 # =============================================================================
-# FIXTURES
+# UTILITY FUNCTIONS
 # =============================================================================
 
-@pytest.fixture
-def random_datasets():
-    """A list of datasets with different keys."""
-    n_samples = 10
+def create_random_datasets(same_batch_size=True):
+    """A list of datasets with different keys and different number of samples."""
+    # One number of samples for each of the dataset.
+    if same_batch_size:
+        n_samples = [10, 10, 10]
+    else:
+        n_samples = [i*10 for i in (1, 2, 3)]
+
+    # Create datasets.
     datasets = [
-        Subset(DictDataset({'data': torch.randn(n_samples+2, 2)}), indices=list(range(1, 11))),
-        DictDataset({'data': torch.randn(n_samples, 2), 'labels': torch.randn(n_samples)}),
-        {'data': torch.randn(n_samples, 2), 'labels': torch.randn(n_samples), 'weights': torch.randn(n_samples)},
+        # Subset of a DictDataset.
+        Subset(DictDataset({'data': torch.randn(n_samples[0]+2, 2)}), indices=list(range(1, n_samples[0]+1))),
+        # DictDataset.
+        DictDataset({'data': torch.randn(n_samples[1], 2), 'labels': torch.randn(n_samples[1])}),
+        # Standard dictionary.
+        {'data': torch.randn(n_samples[2], 2), 'labels': torch.randn(n_samples[2]), 'weights': torch.randn(n_samples[2])},
     ]
     return datasets
 
@@ -63,6 +73,12 @@ def test_fast_dictionary_loader_init():
             assert torch.all(batch['data'] == torch.tensor([[1.], [2.]]))
             assert torch.all(batch['labels'] == torch.tensor([1., 4.]))
 
+        # Count number of iterated batches.
+        counter = 0
+        for batch in dl:
+            counter += 1
+        assert counter == n_batches
+
     # Start from dictionary
     d = {'data': x, 'labels': y}
     dataloader = DictLoader(d, batch_size=batch_size, shuffle=False)
@@ -84,53 +100,101 @@ def test_fast_dictionary_loader_init():
         DictLoader(dataset)
 
 
-def test_fast_dictionary_loader_multidataset_batch(random_datasets):
+@pytest.mark.parametrize('same_batch_size', [True, False])
+@pytest.mark.parametrize('shuffle', [True, False])
+def test_fast_dictionary_loader_multidataset_batch(same_batch_size, shuffle):
     """DictLoader combines multiple datasets into a single batch."""
-    n_samples = len(random_datasets[0])
+    datasets = create_random_datasets(same_batch_size)
+    n_datasets = len(datasets)
 
     # Create the dataloader.
-    batch_size = 2
-    dataloader = DictLoader(random_datasets, batch_size=batch_size)
+    if same_batch_size:
+        batch_size = 2
+        batch_size_list = [batch_size for _ in range(n_datasets)]
+    else:
+        # The second/third datasets have twice/thrice many samples.
+        batch_size = [2, 4, 6]
+        batch_size_list = batch_size
+    n_batches = math.ceil(len(datasets[0]) / batch_size_list[0])
+    dataloader = DictLoader(datasets, batch_size=batch_size, shuffle=True)
 
-    # Check that dataset_len and number of batches are computed correctly.
-    assert dataloader.dataset_len == n_samples
-    assert len(dataloader) == 5
+    # Check that dataset_len, number of batches, and batch sizes are computed correctly.
+    assert dataloader.dataset_len == [len(d) for d in dataloader.dataset]
+    assert len(dataloader) == n_batches
+    assert dataloader.batch_size == batch_size_list
 
     # Test that the batches are correct.
+    batch_counter = 0
     for batch in dataloader:
-        assert len(batch) == len(random_datasets)
-        # Check shape 'data' (all datasets have it).
-        for i in range(3):
+        batch_counter += 1
+
+        # batch has one key for each dataset.
+        assert len(batch) == n_datasets
+
+        # Check that the batches have the expected number of keys created in create_random_datasets().
+        for i in range(n_datasets):
             n_dataset_keys = len(batch[f'dataset{i}'])
             assert n_dataset_keys == i+1
-            assert batch[f'dataset{i}']['data'].shape == (batch_size, 2)
+
+        # Check shape 'data' (all datasets from create_random_datasets() have this key).
+        for i in range(n_datasets):
+            assert batch[f'dataset{i}']['data'].shape == (batch_size_list[i], 2)
 
         # Check shape 'labels' (only the last two datasets have it).
-        for i in range(1, 3):
-            assert batch[f'dataset{i}']['labels'].shape == (batch_size,)
+        for i in range(1, n_datasets):
+            assert batch[f'dataset{i}']['labels'].shape == (batch_size_list[i],)
 
         # Check shape 'weights' (only the last dataset has it).
-        assert batch[f'dataset{i}']['weights'].shape == (batch_size,)
+        assert batch[f'dataset{i}']['weights'].shape == (batch_size_list[i],)
+
+    # Iterator returns correct number of batches.
+    assert batch_counter == n_batches
 
 
-def test_fast_dictionary_loader_multidataset_different_lengths(random_datasets):
-    """DictLoader complains if multiple datasets of different dimensions are passed."""
-    n_samples = len(random_datasets[0])
-    random_datasets.append(DictDataset({
-        'data': torch.randn(n_samples+1, 2),
-        'labels': torch.randn(n_samples+1),
-    }))
-    with pytest.raises(ValueError, match='must have the same number of samples'):
-        DictLoader(random_datasets)
+def test_fast_dictionary_loader_multidataset_different_n_batches():
+    """DictLoader complains if the number of batches for different datasets is different."""
+    # Two datasets with same or different number of samples.
+    n_samples = 10
+    datasets_same = [
+        {'data': torch.randn(n_samples, 2)},
+        {'data': torch.randn(n_samples, 2)}
+    ]
+    datasets_different = [
+        {'data': torch.randn(n_samples, 2)},
+        {'data': torch.randn(n_samples*2, 2)}
+    ]
+
+    # Test error raising.
+    err_msg = 'must have the same number of batches'
+    with pytest.raises(ValueError, match=err_msg):
+        DictLoader(datasets_different, batch_size=1)
+    with pytest.raises(ValueError, match=err_msg):
+        DictLoader(datasets_different, batch_size=[2, 2])
+
+    # Same number of samples but different batch sizes.
+    with pytest.raises(ValueError, match=err_msg):
+        DictLoader(datasets_same, batch_size=[1, 2])
+
+    # Same error if we try to set separately incompatible datasets or batch_sizes.
+    loader = DictLoader(datasets_same, batch_size=2)
+    with pytest.raises(ValueError, match=err_msg):
+        loader.dataset = datasets_different
+    with pytest.raises(ValueError, match=err_msg):
+        loader.batch_size = [2, 4]
+
+    # While setting them together works.
+    loader.set_dataset_and_batch_size(dataset=datasets_different, batch_size=[2, 4])
+    assert loader.batch_size == [2, 4]
 
 
-def test_fast_dictionary_loader_multidataset_get_stats(random_datasets):
+def test_fast_dictionary_loader_multidataset_get_stats():
     """DictLoader compute stats for all or a subset of datasets."""
-    dataloader = DictLoader(random_datasets)
+    datasets = create_random_datasets()
+    dataloader = DictLoader(datasets)
 
     # Stats for all datasets.
     stats_all = dataloader.get_stats()
-    assert tuple(stats_all.keys()) == tuple(f'dataset{i}' for i in range(len(random_datasets)))
+    assert tuple(stats_all.keys()) == tuple(f'dataset{i}' for i in range(len(datasets)))
 
     # Check that statistics for all the datasets's key have been computed.
     for dataset_idx, dataset_keys in enumerate(dataloader.keys):
