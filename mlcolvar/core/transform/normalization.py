@@ -2,7 +2,7 @@ import torch
 from mlcolvar.core.transform.utils import batch_reshape,Statistics
 from mlcolvar.core.transform import Transform
 
-__all__ = ["Normalization"]
+__all__ = ["Normalization", "NormalizationInverse"]
 
 def sanitize_range( range : torch.Tensor):
     """Sanitize
@@ -176,6 +176,23 @@ class Normalization(Transform):
 
         return x.mul(range).add(mean)
 
+class NormalizationInverse(Normalization):
+        '''Helper class to return the inverse of a Normalization object as a torch.nn.Module'''
+        def __init__(self,
+                     norm : torch.nn.Module,
+                     **args):
+            """Apply the inverse of a Normalization object as an torch.nn.Module.
+
+            Parameters
+            ----------
+            norm : torch.nn.Module
+                Normalization object to be inversed
+            """
+            super().__init__(**args)
+            self.set_custom(mean = norm.mean, range = norm.range)
+
+        def forward(self,x):
+            return self.inverse(x)
 
 def test_normalization():
     # create data
@@ -189,9 +206,19 @@ def test_normalization():
     norm = Normalization(in_features, mean=stats['mean'],range=stats['std'])
 
     y = norm(X)
-    print(X.mean(0),y.mean(0))
-    print(X.std(0),y.std(0))
-    
+    # print(X.mean(0),y.mean(0))
+    # print(X.std(0),y.std(0))
+
+    # test inverse 
+    z = norm.inverse(y)
+    # print(X.mean(0),z.mean(0))
+    # print(X.std(0),z.std(0))
+
+    # test inverse class
+    inverse = NormalizationInverse(norm=norm, in_features=in_features)
+    q = inverse(y)
+    # print(X.mean(0),q.mean(0))
+    # print(X.std(0),q.std(0))
 
 if __name__ == "__main__":
     test_normalization()
