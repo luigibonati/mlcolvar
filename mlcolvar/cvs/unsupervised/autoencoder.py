@@ -1,7 +1,7 @@
 import torch
 import lightning
 from mlcolvar.cvs import BaseCV
-from mlcolvar.core import FeedForward, Normalization
+from mlcolvar.core import FeedForward, Normalization, NormalizationInverse
 from mlcolvar.core.loss import MSELoss
 
 __all__ = ["AutoEncoderCV"]
@@ -104,6 +104,15 @@ class AutoEncoderCV(BaseCV, lightning.LightningModule):
         name = 'train' if self.training else 'valid'       
         self.log(f'{name}_loss', loss, on_epoch=True)
         return loss
+    
+    def return_decoder_model(self):
+        """Return a torch model with the decoder and the normalization inverse"""
+        if self.norm_in is not None:
+            inv_norm = NormalizationInverse(norm=self.norm_in, in_features=self.in_features)
+            decoder_model = torch.nn.Sequential(*[self.decoder, inv_norm])
+        else:
+            decoder_model = self.decoder
+        return decoder_model
 
 def test_autoencodercv():
     from mlcolvar.data import DictDataset, DictModule
@@ -113,7 +122,7 @@ def test_autoencodercv():
     layers = [in_features, 6, 4, out_features]
 
     # initialize via dictionary
-    opts = { 'norm_in'  : None,
+    opts = { #'norm_in'  : None,
              'encoder' : { 'activation' : 'relu' },
            } 
     model = AutoEncoderCV( encoder_layers=layers, options=opts )
@@ -126,8 +135,12 @@ def test_autoencodercv():
     datamodule = DictModule(dataset)
     trainer = lightning.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False)
     trainer.fit( model, datamodule )
-    model.eval()
+    # model.eval()
     X_hat = model(X)
+
+    # test export of decoder_model
+    decoder_model = model.return_decoder_model()
+    # print(model.encode_decode(X) - decoder_model(X_hat))
 
     # train with weights
     print('train 2 - weights')
