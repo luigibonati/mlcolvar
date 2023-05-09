@@ -69,7 +69,7 @@ class AutoEncoderCV(BaseCV, lightning.LightningModule):
         o = 'encoder'
         self.encoder = FeedForward(encoder_layers, **options[o])
 
-        # initialize encoder
+        # initialize decoder
         o = 'decoder'
         self.decoder = FeedForward(decoder_layers, **options[o])
 
