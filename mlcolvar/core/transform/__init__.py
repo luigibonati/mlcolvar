@@ -1,4 +1,4 @@
-__all__ = ["Transform","Normalization","NormalizationInverse","Statistics"]
+__all__ = ["Transform","Normalization","Statistics","Inverse"]
 
 from .transform import *
 from .normalization import *
