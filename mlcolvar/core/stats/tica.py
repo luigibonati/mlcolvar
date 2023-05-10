@@ -87,7 +87,7 @@ class TICA(Stats):
         return evals, evecs
 
     def timescales(self, lag):
-        """Return implied timescales from eigenvalues and lag-time.
+        r"""Return implied timescales from eigenvalues and lag-time.
 
         Parameters
         ----------

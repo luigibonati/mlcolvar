@@ -93,7 +93,7 @@ def test_dictionary_data_module_multidataset(random_split):
     datamodule = DictModule(datasets, batch_size=batch_size, lengths=lengths, random_split=random_split)
     datamodule.setup()
     dataloader = datamodule.train_dataloader()
-    assert dataloader.dataset_len == int(lengths[0]*n_samples)
+    assert dataloader.dataset_len == [int(lengths[0]*n_samples)] * n_datasets
 
     # Test that the batches are correct.
     for batch in dataloader:
@@ -105,10 +105,10 @@ def test_dictionary_data_module_multidataset(random_split):
 
     # If datasets are not of the same dimension, the dataloader should explode on init.
     datasets.append(DictDataset({
-        f'data': torch.randn(n_samples+3, 2),
-        f'labels': torch.randn(n_samples+3),
+        f'data': torch.randn(n_samples+1, 2),
+        f'labels': torch.randn(n_samples+1),
     }))
-    datamodule = DictModule(datasets)
+    datamodule = DictModule(datasets, batch_size=1)
     datamodule.setup()
-    with pytest.raises(ValueError, match='must have the same number of samples'):
+    with pytest.raises(ValueError, match='must have the same number of batches'):
         datamodule.train_dataloader()
