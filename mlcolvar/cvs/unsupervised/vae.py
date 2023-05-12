@@ -207,11 +207,14 @@ class VariationalAutoEncoderCV(BaseCV, lightning.LightningModule):
 
         return loss
     
-    def get_decoder_model(self):
-        """Return a torch model with the decoder and the normalization inverse"""
-        if self.norm_in is not None:
-            inv_norm = Inverse(module=self.norm_in)
-            decoder_model = torch.nn.Sequential(*[self.decoder, inv_norm])
+    def get_decoder(self, return_normalization=False):
+        """Return a torch model with the decoder and optionally the normalization inverse"""
+        if return_normalization:
+            if self.norm_in is not None:
+                inv_norm = Inverse(module=self.norm_in)
+                decoder_model = torch.nn.Sequential(*[self.decoder, inv_norm])
+            else:
+                raise ValueError("return_normalization is set to True but self.norm_in is None")
         else:
             decoder_model = self.decoder
         return decoder_model
