@@ -19,6 +19,7 @@ import torch
 import lightning
 from mlcolvar.cvs import BaseCV
 from mlcolvar.core import FeedForward, Normalization
+from mlcolvar.core.transform.utils import Inverse
 from mlcolvar.core.loss import ELBOGaussiansLoss
 
 
@@ -205,3 +206,15 @@ class VariationalAutoEncoderCV(BaseCV, lightning.LightningModule):
         self.log(f'{name}_loss', loss, on_epoch=True)
 
         return loss
+    
+    def get_decoder(self, return_normalization=False):
+        """Return a torch model with the decoder and optionally the normalization inverse"""
+        if return_normalization:
+            if self.norm_in is not None:
+                inv_norm = Inverse(module=self.norm_in)
+                decoder_model = torch.nn.Sequential(*[self.decoder, inv_norm])
+            else:
+                raise ValueError("return_normalization is set to True but self.norm_in is None")
+        else:
+            decoder_model = self.decoder
+        return decoder_model
