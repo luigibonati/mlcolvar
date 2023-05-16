@@ -29,7 +29,11 @@ class Normalization(Transform):
     Normalizing block, used for computing standardized inputs/outputs.
     """
 
-    def __init__(self, in_features : int, mean : torch.Tensor = None, range : torch.Tensor = None, stats : dict = None, mode : str = 'mean_std'):
+    def __init__(self, in_features : int,
+                 mean : torch.Tensor = None, 
+                 range : torch.Tensor = None, 
+                 stats : dict = None, 
+                 mode : str = 'mean_std'):
         """Initialize a normalization object. Values will be subtracted by self.mean and then divided by self.range.
         The parameters for the standardization can be either given from the user (via mean/range keywords), or they can be calculated from a datamodule. 
         In the former, the mode will be overriden as 'custom'. 'In the latter, the standardization mode can be either 'mean_std' (remove by the mean and divide by the standard deviation) or 'min_max' (scale and shift the range of values such that all inputs are between -1 and 1).
@@ -178,6 +182,7 @@ class Normalization(Transform):
 
 
 def test_normalization():
+    from mlcolvar.core.transform.utils import Inverse
     # create data
     torch.manual_seed(42)
     in_features = 2
@@ -189,9 +194,19 @@ def test_normalization():
     norm = Normalization(in_features, mean=stats['mean'],range=stats['std'])
 
     y = norm(X)
-    print(X.mean(0),y.mean(0))
-    print(X.std(0),y.std(0))
-    
+    # print(X.mean(0),y.mean(0))
+    # print(X.std(0),y.std(0))
+
+    # test inverse 
+    z = norm.inverse(y)
+    # print(X.mean(0),z.mean(0))
+    # print(X.std(0),z.std(0))
+
+    # test inverse class
+    inverse = Inverse(norm)
+    q = inverse(y)
+    # print(X.mean(0),q.mean(0))
+    # print(X.std(0),q.std(0))
 
 if __name__ == "__main__":
     test_normalization()

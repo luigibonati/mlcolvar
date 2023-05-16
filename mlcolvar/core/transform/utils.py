@@ -2,7 +2,7 @@ import torch
 from typing import Union
 from warnings import warn
 
-__all__ = ["Statistics"]
+__all__ = ["Statistics", "Inverse"]
 
 class Statistics(object):
     """
@@ -78,6 +78,29 @@ class Statistics(object):
             repr+= f"{prop}: {getattr(self,prop).numpy()} "
         return repr
   
+class Inverse(torch.nn.Module):
+    "Wrapper to return the inverse method of a module as a torch.nn.Module"
+    def __init__(self,
+                 module : torch.nn.Module):
+        """Return the inverse method of a module as a torch.nn.Module
+
+        Parameters
+        ----------
+        module : torch.nn.Module
+            Module to be inverted
+        """
+        super().__init__()
+        if not hasattr(module, 'inverse'):
+            raise AttributeError("The given module does not have a 'inverse' method!")
+        self.module = module
+
+    def inverse(self, *args, **kwargs):
+        return self.module.inverse( *args, **kwargs)
+    
+    def forward(self, *args, **kwargs):
+        return self.inverse( *args, **kwargs)
+
+    
 
 def batch_reshape(t: torch.Tensor, size : torch.Size) -> (torch.Tensor):
     """Return value reshaped according to size. 
