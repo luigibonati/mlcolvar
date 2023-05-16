@@ -406,6 +406,286 @@ def compute_adjacency_matrix(pos : torch.Tensor,
                                 switching_function = switching_function)
     return adj_matrix                          
 
+
+def sym_func(x, centers, sigma):
+    return torch.exp(- torch.div(torch.pow(x-centers, 2), 2*torch.pow(sigma,2) ))
+
+def easy_KDE(x, n_input, min_max, n, sigma_to_center, normalize=False):
+    if len(x.shape) == 1:
+        x = torch.reshape(x, (1, n_input, 1))
+    if x.shape[-1] != 1:
+        x = x.unsqueeze(-1)
+    if x.shape[0] == n_input:
+        x = x.unsqueeze(0)
+
+    centers = torch.linspace(min_max[0], min_max[1], n, device=x.device)
+    sigma = (centers[1] - centers[0]) * sigma_to_center
+    centers = torch.tile(centers, dims=(n_input,1))
+    out = torch.sum(sym_func(x, centers, sigma), dim=1)
+    if normalize:
+        out = torch.div(out, torch.sum(out, -1, keepdim=True)) * n_input
+    return out
+
+
+def compute_distances_components_matrices(pos : torch.Tensor,
+                                     n_atoms : int,
+                                     PBC : bool,
+                                     real_cell : Union[float, list],
+                                     scaled_coords : bool,
+                                    ) -> torch.Tensor:
+    """Compute the matrices of all the atomic pairwise distances along the cell dimensions from batches of atomic coordinates.
+    The three matrices (xyz) are symmetric, of size (n_atoms,n_atoms) and i,j-th element gives the distance between atoms i and j along that component. 
+
+    Parameters
+    ----------
+    pos : torch.Tensor
+        Positions of the atoms, they can be given with shapes:
+        - Shape: (n_batch (optional), n_atoms * 3), i.e [ [x1,y1,z1, x2,y2,z2, .... xn,yn,zn] ]
+        - Shape: (n_batch (optional), n_atoms, 3),  i.e [ [ [x1,y1,z1], [x2,y2,z2], .... [xn,yn,zn] ] ]
+    n_atoms : int
+        Number of atoms 
+    PBC : bool
+        Switch for Periodic Boundary Conditions use
+    real_cell : Union[float, list]
+        Dimensions of the real cell, orthorombic-like cells only
+    scaled_coords : bool
+        Switch for coordinates scaled on cell's vectors use
+
+    Returns
+    -------
+    torch.Tensor
+        Components of all the atomic pairwise distances along the cell dimensions, index map: (batch_idx, atom_i_idx, atom_j_idx, component_idx)
+    """
+    # ======================= CHECKS =======================
+    # check if we have batch dimension in positions tensor
+    
+    if len(pos.shape)==3:
+        # check that index 0: batch, 1: atom, 2: coords
+        if pos.shape[1] != n_atoms:
+            raise ValueError(f"The given positions tensor has the wrong format, probably the wrong number of atoms. Expected {n_atoms} found {pos.shape[1]}")
+        if pos.shape[2] != 3:
+            raise ValueError(f"The given position tensor has the wrong format, probably the wrong number of spatial coordinates. Expected 3 found {pos.shape[2]}")
+            
+    if len(pos.shape)==2:
+        # check that index 0: atoms, 1: coords
+        # if pos.shape[0]==n_atoms and pos.shape[1] == 3:
+        #     pos = pos.unsqueeze(0) # add batch dimension
+        #     batch_size = pos.shape[0]
+        # # check that is not 0: batch, 1: atom*coords
+        # el
+        if not pos.shape[1] == int(n_atoms * 3):
+            raise ValueError(f"The given positions tensor has the wrong format, found {pos.shape}, expected either {[n_atoms, 3]} or {-1, n_atoms*3}")
+
+    if len(pos.shape)==1:
+        # check that index 0: atoms*coord
+        if len(pos) != n_atoms*3:
+            raise ValueError(f"The given positions tensor has the wrong format. It should be at least of shape {int(n_atoms*3)}, found {pos.shape[0]}")
+        # else:
+        #     pos = pos.unsqueeze(0) # add batch dimension
+    
+    pos = torch.reshape(pos, (-1, n_atoms, 3))
+
+    batch_size = pos.shape[0]
+     
+    # Convert cell to tensor and shape it to have 3 dims
+    if isinstance(real_cell, float) or isinstance(real_cell, int):
+        real_cell = torch.Tensor([real_cell])
+    elif isinstance(real_cell, list):    
+        real_cell = torch.Tensor(real_cell)
+
+    if real_cell.shape[0] != 1 and real_cell.shape[0] != 3:
+        raise ValueError(f"Cell must have either shape (1) or (3). Found {cell.shape} ")
+
+    if isinstance(real_cell, torch.Tensor):
+        # TODO assert size makes sense if you directly pass a tensor
+        if len(real_cell) != 3:
+            real_cell = torch.tile(real_cell, (3,))
+
+    # Set which cell to be used for PBC
+    if scaled_coords:
+        cell = torch.Tensor([1., 1., 1.])
+    else:
+        cell = real_cell
+
+    # ======================= COMPUTE =======================
+    pos = torch.reshape(pos, (batch_size, n_atoms, 3)) # this preserves the order when the pos are passed as a list
+    pos = torch.transpose(pos, 1, 2)
+    pos = pos.reshape((batch_size, 3, n_atoms))
+
+    # expand tiling the coordinates to a tensor of shape (n_batch, 3, n_atoms, n_atoms)
+    pos_expanded = torch.tile(pos,(1, 1, n_atoms)).reshape(batch_size, 3, n_atoms, n_atoms)
+
+    # compute the distances with transpose trick
+    # This works only with orthorombic cells 
+    dist_components = pos_expanded - torch.transpose(pos_expanded, -2, -1)  # transpose over the atom index dimensions
+    # print('DIST COMP: \n', dist_components)
+
+    # get PBC shifts
+    if PBC:
+        shifts = torch.zeros_like(dist_components)
+        # avoid loop if cell is cubic
+        if cell[0]==cell[1] and cell[1]==cell[2]:
+            shifts = torch.div(dist_components, cell[0]/2, rounding_mode='trunc') 
+            shifts = torch.div(shifts + 1*torch.sign(shifts), 2, rounding_mode='trunc' )*cell[0]
+            # print('SHIFTS cubic: \n', shifts)
+
+        else: 
+            # loop over dimensions of the cell
+            for d in range(3):
+                shifts[:, d, :, :] = torch.div(dist_components[:, d, :, :], cell[d]/2, rounding_mode='trunc')
+                shifts[:, d, :, :] = torch.div(shifts[:, d, :, :] + 1*torch.sign(shifts[:, d, :, :]), 2, rounding_mode='trunc' )*cell[d]/2
+                # print('SHIFTS ortho: \n', shifts)
+
+            
+        # apply shifts
+        dist_components = dist_components - shifts
+    return dist_components,real_cell,scaled_coords
+
+
+def compute_distances_matrix(pos : torch.Tensor,
+                             n_atoms : int,
+                             PBC : bool,
+                             real_cell : Union[float, list],
+                             scaled_coords : bool,
+                            ) -> torch.Tensor:
+    """Compute the pairwise distances matrix from batches of atomic coordinates. 
+    The matrix is symmetric, of size (n_atoms,n_atoms) and i,j-th element gives the distance between atoms i and j. 
+
+    Parameters
+    ----------
+    pos : torch.Tensor
+        Positions of the atoms, they can be given with shapes:
+        - Shape: (n_batch (optional), n_atoms * 3), i.e [ [x1,y1,z1, x2,y2,z2, .... xn,yn,zn] ]
+        - Shape: (n_batch (optional), n_atoms, 3),  i.e [ [ [x1,y1,z1], [x2,y2,z2], .... [xn,yn,zn] ] ]
+    n_atoms : int
+        Number of atoms
+    PBC : bool
+        Switch for Periodic Boundary Conditions use
+    real_cell : Union[float, list]
+        Dimensions of the real cell, orthorombic-like cells only
+    scaled_coords : bool
+        Switch for coordinates scaled on cell's vectors use
+
+    Returns
+    -------
+    torch.Tensor
+        Matrix of the pairwise distances along the cell dimensions, index map: (batch_idx, atom_i_idx, atom_j_idx, component_idx)
+    """
+    # compute distances components, keep only first element of the output tuple
+    dist_components = compute_distances_components_matrices(pos=pos, n_atoms=n_atoms, PBC=PBC, real_cell=real_cell, scaled_coords=scaled_coords)[0]
+    
+    # all the checks on the shape are already in the components function
+    batch_size = dist_components.shape[0]
+
+    # mask out diagonal --> to keep the derivatives safe
+    mask_diag = ~torch.eye(n_atoms, dtype=bool)
+    mask_diag = torch.tile(mask_diag, (batch_size, 1, 1))
+    
+    # if we used scaled coords we need to get back to real distances
+    if scaled_coords:
+        dist_components = torch.einsum('bijk,i->bijk', dist_components, real_cell)
+
+    # sum squared components and get final distance
+    dist = torch.sum( torch.pow(dist_components, 2), 1 )
+    dist[mask_diag] = torch.sqrt( dist[mask_diag]) 
+    return dist
+
+
+def apply_cutoff(x : torch.Tensor,
+                 cutoff : float,
+                 mode : str = 'continuous',
+                 switching_function = None) -> torch.Tensor:
+    """Apply a cutoff to a quantity.
+    Returns 1 below the cutoff and 0 above 
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Quantity on which the cutoff has to be applied
+    cutoff : float
+        Value of the cutoff. In case of distances it must be given in the real units
+    mode : str, optional
+        Application mode for the cutoff, either 'continuous'or 'discontinuous', by default 'continuous'
+        This can be either:
+        - 'continuous': applies a switching function and gives stable derivatives accordingly
+        - 'discontinuous': sets to one what is below the cutoff and to zero what is above. The derivatives may be problematic 
+    switching_function : function, optional
+        Switching function to be applied if in continuous mode, by default None.
+        This can be either a user-defined and torch-based function or a method of class SwitchingFuncitons
+
+    Returns
+    -------
+    torch.Tensor
+        Cutoffed quantity
+    """
+    x_clone = torch.clone(x)
+    if mode == 'continuous' and switching_function is None:
+        warn('switching_function is required to use continuous mode! Set This can be either a user-defined and torch-based function or a method of class switching_functions/SwitchingFunctions')
+    
+    batch_size = x.shape[0]
+    mask_diag = ~torch.eye(x.shape[-1], dtype=bool)
+    mask_diag = torch.tile(mask_diag, (batch_size, 1, 1))
+
+    if mode == 'continuous':
+        x_clone[mask_diag] = switching_function( x_clone[mask_diag] )
+
+    if mode == 'discontinuous':  
+        mask_cutoff = torch.ge(x_clone, cutoff)      
+        x_clone[mask_cutoff] = x_clone[mask_cutoff] * 0
+        mask = torch.logical_and(~mask_cutoff, mask_diag)
+        x_clone[mask] = x_clone[mask] ** 0
+    return x_clone
+
+
+def compute_adjacency_matrix(pos : torch.Tensor,
+                             mode : str,
+                             cutoff : float, 
+                             n_atoms : int,
+                             PBC: bool,
+                             real_cell: Union[float, list],
+                             scaled_coords : bool,
+                             switching_function = None) -> torch.Tensor:
+    """Initialize an adjacency matrix object.
+
+    Parameters
+    ----------
+    pos : torch.Tensor
+        Positions of the atoms, they can be given with shapes:
+        - Shape: (n_batch (optional), n_atoms * 3), i.e [ [x1,y1,z1, x2,y2,z2, .... xn,yn,zn] ]
+        - Shape: (n_batch (optional), n_atoms, 3),  i.e [ [ [x1,y1,z1], [x2,y2,z2], .... [xn,yn,zn] ] ]
+    mode : str
+        Mode for cutoff application, either:
+        - 'continuous': applies a switching function to the distances which can be specified with switching_function keyword, has stable derivatives
+        - 'discontinuous': set at zero everything above the cutoff and one below, derivatives may be be incorrect
+    cutoff : float
+        Cutoff for the adjacency criterion 
+    n_atoms : int
+        Number of atoms in the system
+    PBC : bool
+        Switch for Periodic Boundary Conditions use
+    real_cell : Union[float, list]
+        Dimensions of the real cell, orthorombic-like cells only
+    scaled_coords : bool
+        Switch for coordinates scaled on cell's vectors use
+    switching_function : _type_, optional
+        Switching function to be applied for the cutoff, can be either initialized as a switching_functions/SwitchingFunctions class or a simple function, by default None
+
+    Returns
+    -------
+    torch.Tensor
+        Adjacency matrix of all the n_atoms according to cutoff
+    """
+    dist = compute_distances_matrix(pos=pos,
+                                    n_atoms=n_atoms,
+                                    PBC=PBC,
+                                    real_cell=real_cell,
+                                    scaled_coords=scaled_coords)
+    adj_matrix = apply_cutoff(x=dist, 
+                                cutoff=cutoff, 
+                                mode=mode, 
+                                switching_function = switching_function)
+    return adj_matrix                          
+
 # ================================================================================================
 # ======================================== TEST FUNCTIONS ========================================
 # ================================================================================================
@@ -454,6 +734,216 @@ def test_statistics():
     for key in loader.keys:
         print(key, stats[key])
 
+
+def test_applycutoff():
+    from mlcolvar.core.transform.switching_functions import SwitchingFunctions
+    
+    n_atoms=2
+    pos = torch.Tensor([ [ [0., 0., 0.],
+                           [1., 1., 1.] ],
+                         [ [0., 0., 0.],
+                           [1., 1., 1.] ] ]
+                      )
+    real_cell = torch.Tensor([1., 2, 1.])
+    
+    # TEST no scaled coords
+    out = compute_distances_matrix(pos=pos,
+                                   n_atoms=n_atoms,
+                                   PBC=True,
+                                   real_cell=real_cell,
+                                   scaled_coords=False)
+    cutoff = 1.8
+    switching_function=SwitchingFunctions(in_features=n_atoms**2, name='Fermi', cutoff=cutoff, options={'q':0.01})
+    out2 = apply_cutoff(out, cutoff, mode='continuous', switching_function=switching_function)
+    
+    def silly_switch(x):
+        return torch.pow(x, 2)
+    switching_function = silly_switch
+    out2 = apply_cutoff(out, cutoff, mode='continuous', switching_function=switching_function)
+    out2 = apply_cutoff(out, cutoff, mode='discontinuous')
+
+    # TEST scaled coords
+    pos = torch.einsum('bij,j->bij', pos, 1/real_cell)
+    out = compute_distances_matrix(pos=pos,
+                                   n_atoms=2,
+                                   PBC=True,
+                                   real_cell=real_cell,
+                                   scaled_coords=True)
+    cutoff = 1.8
+    switching_function=SwitchingFunctions(in_features=n_atoms**2, name='Fermi', cutoff=cutoff, options={'q':0.01})
+    out2 = apply_cutoff(out, cutoff, mode='continuous', switching_function=switching_function)
+    out2 = apply_cutoff(out, cutoff, mode='discontinuous')
+
+def test_adjacency_matrix():
+    from mlcolvar.core.transform.switching_functions import SwitchingFunctions
+    
+    n_atoms=2
+    pos = torch.Tensor([ [ [0., 0., 0.],
+                           [1., 1., 1.] ],
+                         [ [0., 0., 0.],
+                           [1., 1.1, 1.] ] ]
+                      )
+    
+    real_cell = torch.Tensor([1., 2., 1.])
+    cutoff = 1.8
+    switching_function=SwitchingFunctions(in_features=n_atoms*3, name='Fermi', cutoff=cutoff, options={'q':0.01})
+  
+    out = compute_adjacency_matrix(pos=pos,
+                                   mode = 'continuous',
+                                   cutoff = cutoff, 
+                                   n_atoms = n_atoms,
+                                   PBC = True,
+                                   real_cell = real_cell,
+                                   scaled_coords = False,
+                                   switching_function=switching_function)
+
+def test_debug():
+    from mlcolvar.core.transform.switching_functions import SwitchingFunctions
+    
+    n_atoms=3
+    pos = torch.Tensor( [ [0., 0., 0.],
+                           [1., 1., 1.],
+                           [12., 8., 2.] ]
+                      )
+    
+    print('POS: \n', pos.shape)
+    pos.requires_grad = True
+
+    real_cell = torch.Tensor([10, 10, 10])
+    
+    # TEST no scaled coords
+    out = compute_distances_components_matrices(pos=pos,
+                                   n_atoms=n_atoms,
+                                   PBC=True,
+                                   real_cell=real_cell,
+                                   scaled_coords=False)
+    print('Comp distances: \n', out[0].shape)
+    
+    der = torch.autograd.grad(torch.sum(torch.pow(out[0], 2)), pos)
+    print('DER: \n', der[0])
+
+
+    # TEST no scaled coords
+    out = compute_distances_matrix(pos=pos,
+                                   n_atoms=n_atoms,
+                                   PBC=True,
+                                   real_cell=real_cell,
+                                   scaled_coords=False)
+    print('Distances: \n', out.shape)
+    # der = torch.autograd.grad(torch.sum(torch.pow(out, 2)), pos)
+    # print('DER: \n', der[0])
+
+    cutoff = 1.8
+    switching_function=SwitchingFunctions(in_features=n_atoms**2, name='Fermi', cutoff=cutoff, options={'q':0.05})
+    out = apply_cutoff(out, cutoff, mode='continuous', switching_function=switching_function)
+    print('Cutoffed: \n', out)
+    der = torch.autograd.grad(torch.sum(torch.pow(out, 2)), pos)
+    print('DER: \n', der[0])
+
+def test_applycutoff():
+    from mlcolvar.core.transform.switching_functions import SwitchingFunctions
+    
+    n_atoms=2
+    pos = torch.Tensor([ [ [0., 0., 0.],
+                           [1., 1., 1.] ],
+                         [ [0., 0., 0.],
+                           [1., 1., 1.] ] ]
+                      )
+    real_cell = torch.Tensor([1., 2, 1.])
+    
+    # TEST no scaled coords
+    out = compute_distances_matrix(pos=pos,
+                                   n_atoms=n_atoms,
+                                   PBC=True,
+                                   real_cell=real_cell,
+                                   scaled_coords=False)
+    cutoff = 1.8
+    switching_function=SwitchingFunctions(in_features=n_atoms**2, name='Fermi', cutoff=cutoff, options={'q':0.01})
+    out2 = apply_cutoff(out, cutoff, mode='continuous', switching_function=switching_function)
+    
+    def silly_switch(x):
+        return torch.pow(x, 2)
+    switching_function = silly_switch
+    out2 = apply_cutoff(out, cutoff, mode='continuous', switching_function=switching_function)
+    out2 = apply_cutoff(out, cutoff, mode='discontinuous')
+
+    # TEST scaled coords
+    pos = torch.einsum('bij,j->bij', pos, 1/real_cell)
+    out = compute_distances_matrix(pos=pos,
+                                   n_atoms=2,
+                                   PBC=True,
+                                   real_cell=real_cell,
+                                   scaled_coords=True)
+    cutoff = 1.8
+    switching_function=SwitchingFunctions(in_features=n_atoms**2, name='Fermi', cutoff=cutoff, options={'q':0.01})
+    out2 = apply_cutoff(out, cutoff, mode='continuous', switching_function=switching_function)
+    out2 = apply_cutoff(out, cutoff, mode='discontinuous')
+
+def test_adjacency_matrix():
+    from mlcolvar.core.transform.switching_functions import SwitchingFunctions
+    
+    n_atoms=2
+    pos = torch.Tensor([ [ [0., 0., 0.],
+                           [1., 1., 1.] ],
+                         [ [0., 0., 0.],
+                           [1., 1.1, 1.] ] ]
+                      )
+    
+    real_cell = torch.Tensor([1., 2., 1.])
+    cutoff = 1.8
+    switching_function=SwitchingFunctions(in_features=n_atoms*3, name='Fermi', cutoff=cutoff, options={'q':0.01})
+  
+    out = compute_adjacency_matrix(pos=pos,
+                                   mode = 'continuous',
+                                   cutoff = cutoff, 
+                                   n_atoms = n_atoms,
+                                   PBC = True,
+                                   real_cell = real_cell,
+                                   scaled_coords = False,
+                                   switching_function=switching_function)
+
+def test_debug():
+    from mlcolvar.core.transform.switching_functions import SwitchingFunctions
+    
+    n_atoms=3
+    pos = torch.Tensor( [ [0., 0., 0.],
+                           [1., 1., 1.],
+                           [12., 8., 2.] ]
+                      )
+    
+    print('POS: \n', pos.shape)
+    pos.requires_grad = True
+
+    real_cell = torch.Tensor([10, 10, 10])
+    
+    # TEST no scaled coords
+    out = compute_distances_components_matrices(pos=pos,
+                                   n_atoms=n_atoms,
+                                   PBC=True,
+                                   real_cell=real_cell,
+                                   scaled_coords=False)
+    print('Comp distances: \n', out[0].shape)
+    
+    der = torch.autograd.grad(torch.sum(torch.pow(out[0], 2)), pos)
+    print('DER: \n', der[0])
+
+
+    # TEST no scaled coords
+    out = compute_distances_matrix(pos=pos,
+                                   n_atoms=n_atoms,
+                                   PBC=True,
+                                   real_cell=real_cell,
+                                   scaled_coords=False)
+    print('Distances: \n', out.shape)
+    # der = torch.autograd.grad(torch.sum(torch.pow(out, 2)), pos)
+    # print('DER: \n', der[0])
+
+    cutoff = 1.8
+    switching_function=SwitchingFunctions(in_features=n_atoms**2, name='Fermi', cutoff=cutoff, options={'q':0.05})
+    out = apply_cutoff(out, cutoff, mode='continuous', switching_function=switching_function)
+    print('Cutoffed: \n', out)
+    der = torch.autograd.grad(torch.sum(torch.pow(out, 2)), pos)
+    print('DER: \n', der[0])
 
 def test_applycutoff():
     from mlcolvar.core.transform.switching_functions import SwitchingFunctions
