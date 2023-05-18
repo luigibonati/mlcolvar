@@ -1,4 +1,4 @@
-__all__ = ["Transform","Normalization","Statistics","Inverse","SwitchingFunctions","PairwiseDistances","RadiusGraph","EigsAdjMat","ContHist"]
+__all__ = ["Transform","Normalization","Statistics","SwitchingFunctions","PairwiseDistances","RadiusGraph","EigsAdjMat","ContHist","Inverse"]
 
 from .transform import *
 from .normalization import *
