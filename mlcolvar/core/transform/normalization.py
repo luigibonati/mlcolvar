@@ -207,6 +207,7 @@ def test_normalization():
     q = inverse(y)
     # print(X.mean(0),q.mean(0))
     # print(X.std(0),q.std(0))
+    norm = Normalization(in_features, mean=stats['mean'],range=stats['std'], mode='min_max')
 
 if __name__ == "__main__":
     test_normalization()
