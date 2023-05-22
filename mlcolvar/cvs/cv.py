@@ -46,7 +46,7 @@ class BaseCV:
 
     @property
     def example_input_array(self):
-        return torch.randn(self.in_features if self.preprocessing is None else self.preprocessing.in_features)
+        return torch.randn(self.in_features if self.preprocessing is None or not hasattr(self.preprocessing,'in_features') else self.preprocessing.in_features)
 
     def parse_options(self, options : dict = None):
         """
