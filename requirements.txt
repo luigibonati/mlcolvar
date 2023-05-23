@@ -4,3 +4,4 @@ numpy
 matplotlib
 lightning
 kdepy
+scikit-learn

@@ -21,7 +21,8 @@ dependencies:
   - pytorch
   - lightning
   - matplotlib
-
+  - scikit-learn
+   
     # Pip-only installs
   - pip:
     - KDEpy

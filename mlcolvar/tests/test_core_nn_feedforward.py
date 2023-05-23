@@ -25,7 +25,7 @@ from mlcolvar.core.nn.feedforward import FeedForward
 # =============================================================================
 
 @pytest.mark.parametrize('activation', [
-    'relu',
+    'relu', 'elu', 'softplus', 'shifted_softplus',
     ['relu', 'tanh', None],
     ['relu', 'tanh', 'relu'],
 ])

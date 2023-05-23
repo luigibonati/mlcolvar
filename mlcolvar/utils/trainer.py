@@ -34,3 +34,23 @@ class MetricsCallback(Callback):
                     self.metrics[key].append(val)
                 else:
                     self.metrics[key] = [val]
+
+def test_metrics_callbacks():
+    import torch
+    import lightning
+    from mlcolvar.cvs import AutoEncoderCV
+    from mlcolvar.data import DictDataset,DictModule
+    
+    X = torch.rand((100,2))
+    dataset = DictDataset({'data': X})
+    datamodule = DictModule(dataset)
+
+    model = AutoEncoderCV([2,2,1])
+    metrics = SimpleMetricsCallback()
+    trainer = lightning.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False, callbacks=metrics)
+    trainer.fit( model, datamodule )
+
+    model = AutoEncoderCV([2,2,1])
+    metrics = MetricsCallback()
+    trainer = lightning.Trainer(max_epochs=1, log_every_n_steps=2,logger=None, enable_checkpointing=False, callbacks=metrics)
+    trainer.fit( model, datamodule )
