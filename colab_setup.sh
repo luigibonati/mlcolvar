@@ -7,6 +7,9 @@ git clone --quiet https://github.com/luigibonati/mlcolvar.git mlcolvar
 
 echo - Copying notebooks data..
 cp -r mlcolvar/docs/notebooks/tutorials/data data
+cp -r mlcolvar/docs/notebooks/paper_experiments/input_data input_data
+cp -r mlcolvar/docs/notebooks/paper_experiments/results results
+cp -r mlcolvar/docs/notebooks/paper_experiments/utils utils
 
 echo - Installing mlcolvar requirements..
 cd mlcolvar 
