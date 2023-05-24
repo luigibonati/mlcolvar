@@ -57,7 +57,7 @@ jobs:
         shell: bash -l {0}
         run: |
           pytest -v --cov=mlcolvar --cov-report=xml --color=yes mlcolvar/tests/
-          pytest --nbmake docs/notebooks/ --ignore=docs/notebooks/tutorials/data/ --cov=mlcolvar --cov-append --cov-report=xml --color=yes 
+          pytest -v --nbmake docs/notebooks/ --ignore=docs/notebooks/tutorials/data/ --cov=mlcolvar --cov-append --cov-report=xml --color=yes 
 
           cat ./coverage.xml
 
