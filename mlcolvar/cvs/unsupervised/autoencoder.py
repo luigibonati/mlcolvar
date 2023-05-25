@@ -80,7 +80,7 @@ class AutoEncoderCV(BaseCV, lightning.LightningModule):
         return x
 
     def encode_decode(self, x: torch.Tensor) -> (torch.Tensor):
-        x = self.forward(x)
+        x = self.forward_cv(x)
         x = self.decoder(x)
         if self.norm_in is not None:
             x = self.norm_in.inverse(x)
