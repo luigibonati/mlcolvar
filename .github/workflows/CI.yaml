@@ -66,6 +66,7 @@ jobs:
           pytest -v --nbmake docs/notebooks/ --ignore=docs/notebooks/tutorials/data/ --cov=mlcolvar --cov-append --cov-report=xml --color=yes 
 
       - name: CodeCov
+        if: contains( matrix.os, 'ubuntu' )
         uses: codecov/codecov-action@v3
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
