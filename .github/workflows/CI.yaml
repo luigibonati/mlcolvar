@@ -59,12 +59,17 @@ jobs:
           pytest -v --cov=mlcolvar --cov-report=xml --color=yes mlcolvar/tests/
           pytest -v --nbmake docs/notebooks/ --ignore=docs/notebooks/tutorials/data/ --cov=mlcolvar --cov-append --cov-report=xml --color=yes 
 
-          cat ./coverage.xml
+      - name: Run notebook tests
+        # conda setup requires this special shell
+        shell: bash -l {0}
+        if: contains( matrix.os, 'ubuntu' )
+        run: |
+          pytest -v --nbmake docs/notebooks/ --ignore=docs/notebooks/tutorials/data/ --cov=mlcolvar --cov-append --cov-report=xml --color=yes 
 
       - name: CodeCov
         uses: codecov/codecov-action@v3
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           file: ./coverage.xml
-          flags: unittests
+          flags: codecov
           name: codecov-${{ matrix.os }}-py${{ matrix.python-version }}

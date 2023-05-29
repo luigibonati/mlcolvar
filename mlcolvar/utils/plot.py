@@ -3,6 +3,7 @@
 ##########################################################################
 #  https://github.com/luigibonati/fessa-color-palette/blob/master/fessa.py
 
+import mlcolvar
 from matplotlib.colors import LinearSegmentedColormap, ColorConverter
 from matplotlib.cm import register_cmap
 
@@ -74,6 +75,10 @@ def muller_brown_potential(x,y):
         v += prefactor * A[i]*np.exp( a[i]*(x-x0[i])**2 + b[i]*(x-x0[i])*(y-y0[i]) + c[i]*(y-y0[i])**2 )
     return v
 
+def muller_brown_mfep():
+    mfep= np.loadtxt(mlcolvar.__path__[0]+'/../docs/notebooks/tutorials/data/muller-brown/mfep.txt',usecols=(0,1))
+    return mfep
+
 def muller_brown_potential_three_states(x,y):
     """Muller-Brown analytical potential"""
     prefactor = 0.15
@@ -89,6 +94,10 @@ def muller_brown_potential_three_states(x,y):
     for i in range(4):
         v += prefactor * A[i]*np.exp( a[i]*(x-x0[i])**2 + b[i]*(x-x0[i])*(y-y0[i]) + c[i]*(y-y0[i])**2 )
     return v
+
+def muller_brown_three_states_mfep():
+    mfep= np.loadtxt(mlcolvar.__path__[0]+'/../docs/notebooks/tutorials/data/muller-brown-3states/mfep.txt',usecols=(0,1))
+    return mfep
 
 def plot_isolines_2D(function, component=None, 
                      limits=((-1.8,1.2),(-0.4,2.1)),num_points=(100,100),
