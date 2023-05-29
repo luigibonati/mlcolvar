@@ -33,6 +33,7 @@ Table of contents
    api
    tutorials
    plumed
+   contributing
 
 Indices and tables
 ------------------

@@ -18,6 +18,7 @@
    
       ~DictLoader.__init__
       ~DictLoader.get_stats
+      ~DictLoader.set_dataset_and_batch_size
    
    
 
