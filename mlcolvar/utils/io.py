@@ -224,7 +224,7 @@ def create_dataset_from_files(
     
     # filter inputs
     df_data = df.filter(**filter_args) if filter_args is not None else df.copy()
-    df_data = df_data.filter(regex='^(?!.*labels)^(?!.*time)(?!.*bias)' ) 
+    df_data = df_data.filter(regex='^(?!.*labels)^(?!.*time)^(?!.*bias)^(?!.*walker)' ) 
 
     if verbose: 
         print(f'\n - Loaded dataframe {df.shape}:', list(df.columns)  )
