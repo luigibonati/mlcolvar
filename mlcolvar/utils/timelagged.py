@@ -178,11 +178,21 @@ def create_timelagged_dataset(X : torch.Tensor, t : torch.Tensor = None, lag_tim
     """
     Create a DictDataset of time-lagged configurations. 
     
-    In case of biased simulations the reweigth can be performed in two different ways (`reweight_mode`):
-    1) `rescale_time` : the search for time-lagged pairs is performed in the accelerated time (dt' = dt*exp(logweights)), see Yang and Parrinello (2018)
-    2) `weights_t` : the weight of each pair of configurations (t,t+lag_time) depends only on time t (logweights(t)), see Wu et. al. (2017) 
+    In case of biased simulations the reweight can be performed in two different ways (``reweight_mode``):
     
+    1. ``rescale_time`` : the search for time-lagged pairs is performed in the accelerated time (dt' = dt*exp(logweights)), as described in [1]_ . 
+    2. ``weights_t`` : the weight of each pair of configurations (t,t+lag_time) depends only on time t (logweights(t)), as done in [2]_ , [3]_ .
+
     If reweighting is None and tprime is given the `rescale_time` mode is used. If instead only the logweights are specified the user needs to choose the reweighting mode.
+
+    References
+    ----------
+    .. [1] Y. I. Yang and M. Parrinello, “Refining collective coordinates and improving free energy 
+        representation in variational enhanced sampling,” JCTC 14, 2889–2894 (2018).
+    .. [2] J. McCarty and M. Parrinello, "A variational conformational dynamics approach to the selection
+        of collective variables in meta- dynamics,” JCP 147, 204109 (2017).
+    .. [3] H. Wu, et al. "Variational Koopman models: Slow collective variables and molecular kinetics 
+        from short off-equilibrium simulations." JCP 146.15 (2017).
 
     Parameters
     ----------
