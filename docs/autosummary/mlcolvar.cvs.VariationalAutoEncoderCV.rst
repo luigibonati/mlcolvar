@@ -19,6 +19,7 @@
       ~VariationalAutoEncoderCV.__init__
       ~VariationalAutoEncoderCV.encode_decode
       ~VariationalAutoEncoderCV.forward_cv
+      ~VariationalAutoEncoderCV.get_decoder
       ~VariationalAutoEncoderCV.training_step
    
    

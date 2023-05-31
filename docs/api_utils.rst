@@ -3,6 +3,8 @@ Utils
 
 .. rubric:: Input/Output
 
+Helper functions for loading dataframes (incl. PLUMED files) and directly creating datasets from them.
+
 .. currentmodule:: mlcolvar.utils.io
 
 .. autosummary::
@@ -14,6 +16,8 @@ Utils
 
 .. rubric:: Time-lagged datasets
 
+Create a dataset of pairs of time-lagged configurations.
+
 .. currentmodule:: mlcolvar.utils.timelagged
 
 .. autosummary::
@@ -24,6 +28,8 @@ Utils
 
 .. rubric:: FES
 
+Compute (and plot) the free energy surface along the CVs.
+
 .. currentmodule:: mlcolvar.utils.fes
 
 .. autosummary::
@@ -33,6 +39,8 @@ Utils
    compute_fes
 
 .. rubric:: Trainer
+
+Functions used in conjunction with the lightning Trainer (e.g. logging, metrics...).
 
 .. currentmodule:: mlcolvar.utils.trainer
 

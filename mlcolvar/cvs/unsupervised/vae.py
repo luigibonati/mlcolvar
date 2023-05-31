@@ -37,10 +37,24 @@ class VariationalAutoEncoderCV(BaseCV, lightning.LightningModule):
     divergence between the generated Gaussian and a N(0, 1) Gaussian.
 
     At evaluation time, the encoder's output mean is used as the CV, while the
-    variance output and the decoder are ignored.
+    variance output and the decoder are ignored. 
 
-    For training, it requires a DictDataset with the key ``'data'`` and
-    optionally ``'weights'``.
+    **Data**: for training, it requires a DictDataset with the key ``'data'`` and
+    optionally ``'weights'``. If a 'target' key is present this will be used as reference 
+    for the output of the decoder, otherway this will be compared with the input 'data'. 
+    This feature can be used to train (variational) time-lagged autoencoders like in [1]_.
+
+    **Loss**: Evidence Lower BOund (ELBO) 
+
+    References
+    ----------
+    .. [1] C. X. Hernández, H. K. Wayment-Steele, M. M. Sultan, B. E. Husic, and V. S. Pande, 
+        “Variational encoding of complex dynamics,” Physical Review E 97, 062412 (2018).
+
+    See also
+    --------
+    mlcolvar.core.loss.ELBOLoss
+        Evidence Lower BOund loss function
     """
     
     BLOCKS = ['norm_in', 'encoder', 'decoder']
@@ -54,7 +68,8 @@ class VariationalAutoEncoderCV(BaseCV, lightning.LightningModule):
             **kwargs
     ):
         """
-        Variational autoencoder constructor.
+        Variational autoencoder constructor. Initializes two neural network modules
+        (encoder and decoder). By default a module standardizing the inputs is also used. 
 
         Parameters
         ----------

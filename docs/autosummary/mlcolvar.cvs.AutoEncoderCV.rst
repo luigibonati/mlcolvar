@@ -19,6 +19,7 @@
       ~AutoEncoderCV.__init__
       ~AutoEncoderCV.encode_decode
       ~AutoEncoderCV.forward_cv
+      ~AutoEncoderCV.get_decoder
       ~AutoEncoderCV.training_step
    
    

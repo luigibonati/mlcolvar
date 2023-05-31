@@ -7,6 +7,7 @@ __all__ = ["DictDataset"]
 
 class DictDataset(Dataset):
     """Define a torch dataset from a dictionary of lists/array/tensors and names.
+    
     E.g. { 'data' : torch.Tensor([1,2,3,4]), 
            'labels' : [0,0,1,1],
            'weights' : np.asarray([0.5,1.5,1.5,0.5]) }

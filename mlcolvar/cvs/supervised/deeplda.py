@@ -9,16 +9,34 @@ from mlcolvar.core.loss import ReduceEigenvaluesLoss
 __all__ = ["DeepLDA"]
 
 class DeepLDA(BaseCV, lightning.LightningModule):
-    """Neural network-based discriminant collective variables.
-    
-    For the training it requires a DictDataset with the keys 'data' and 'labels'.
+    """Deep Linear Discriminant Analysis (Deep-LDA) CV.
+    Non-linear generalization of LDA in which a feature map is learned by a neural network optimized 
+    as to maximize the classes separation. The method is described in [1]_.
+
+    **Data**: for training it requires a DictDataset with the keys 'data' and 'labels'.
+
+    **Loss**: maximize LDA eigenvalues (ReduceEigenvaluesLoss)
+
+    References
+    ----------
+    .. [1] L. Bonati, V. Rizzi, and M. Parrinello, "Data-driven collective variables for enhanced 
+        sampling", JPCL 11, 2998–3004 (2020).
+
+    See also
+    --------
+    mlcolvar.core.stats.LDA
+        Linear Discriminant Analysis method
+    mlcolvar.core.loss.ReduceEigenvalueLoss
+        Eigenvalue reduction to a scalar quantity
     """
 
     BLOCKS = ['norm_in', 'nn', 'lda']
     
     def __init__(self, layers : list , n_states : int, options : dict = None, **kwargs):
         """ 
-        Define a Deep Linear Discriminant Analysis (Deep-LDA) CV.
+        Define a Deep Linear Discriminant Analysis (Deep-LDA) CV composed by a 
+        neural network module and a LDA object.
+        By default a module standardizing the inputs is also used. 
 
         Parameters
         ----------
@@ -87,7 +105,6 @@ class DeepLDA(BaseCV, lightning.LightningModule):
         Notes
         -----
         These regularizations are described in [1]_.
-        .. [1] Luigi Bonati, Valerio Rizzi, and Michele Parrinello, J. Phys. Chem. Lett. 11, 2998-3004 (2020).
 
         - S_w
         .. math:: S_w = S_w + \mathtt{sw_reg}\ \mathbf{1}.
@@ -118,6 +135,7 @@ class DeepLDA(BaseCV, lightning.LightningModule):
 
 
     def training_step(self, train_batch, batch_idx):
+        """Compute and return the training loss and record metrics."""
         # =================get data===================
         x = train_batch['data']
         y = train_batch['labels']

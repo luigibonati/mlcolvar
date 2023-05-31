@@ -11,8 +11,14 @@ class RegressionCV(BaseCV, lightning.LightningModule):
     Example of collective variable obtained with a regression task.
     Combine the inputs with a neural-network and optimize it to match a target function.
 
-    For the training it requires a DictDataset with the keys 'data' and 'target' and optionally 'weights'.
-    MSE Loss is used to optimize it.
+    **Data**: for training it requires a DictDataset with the keys 'data' and 'target' and optionally 'weights'.
+    
+    **Loss**: least squares (MSELoss).
+
+    See also
+    --------
+    mlcolvar.core.loss.MSELoss
+        (weighted) Mean Squared Error (MSE) loss function.
     """
 
     BLOCKS = ['norm_in', 'nn']
@@ -21,7 +27,8 @@ class RegressionCV(BaseCV, lightning.LightningModule):
                 layers : list, 
                 options : dict = None,
                 **kwargs):
-        """Example of collective variable obtained with a regression task.
+        """Example of collective variable obtained with a regression task. 
+        By default a module standardizing the inputs is used. 
 
         Parameters
         ----------
@@ -51,6 +58,7 @@ class RegressionCV(BaseCV, lightning.LightningModule):
         self.nn = FeedForward(layers, **options[o])
 
     def training_step(self, train_batch, batch_idx):
+        """Compute and return the training loss and record metrics."""
         # =================get data===================
         x = train_batch['data']
         labels = train_batch['target']

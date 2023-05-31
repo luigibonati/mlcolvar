@@ -31,7 +31,7 @@ from mlcolvar.core.transform.utils import Statistics
 # =============================================================================
 
 class DictLoader:
-    """PyTorch DataLoader for :class:`~mlcolvar.data.dataset.DictDataset`s.
+    """PyTorch DataLoader for :class:`~mlcolvar.data.dataset.DictDataset` .
     
     It is much faster than ``TensorDataset`` + ``DataLoader`` because ``DataLoader``
     grabs individual indices of the dataset and calls cat (slow).

@@ -33,9 +33,9 @@ from mlcolvar.data import DictLoader, DictDataset
 # =============================================================================
 
 class DictModule(lightning.LightningDataModule):
-    """Lightning DataModule constructed for :class:`~mlcolvar.data.dataset.DictDataset`(s).
+    """Lightning DataModule constructed for :class:`~mlcolvar.data.dataset.DictDataset` .
 
-    The DataModule automatically splits the :class:`~mlcolvar.data.dataset.DictDataset`s
+    The DataModule automatically splits the :class:`~mlcolvar.data.dataset.DictDataset` s
     (using either random or sequential splitting) into training, validation, and (optionally)
     test sets.
 

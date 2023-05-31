@@ -12,10 +12,10 @@ readme = "README.md"
 authors = [
     { name = "Luigi Bonati", email = "luigi.bonati@iit.it" }
 ]
-license = { text = "BSD-3-Clause" }
+license = { text = "MIT" }
 # See https://pypi.org/classifiers/
 classifiers = [
-    "License :: OSI Approved :: BSD License",
+    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
 ]
 requires-python = ">=3.8"
