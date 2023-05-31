@@ -31,8 +31,8 @@ Overview of the GitHub workflow
 
 Regardless of the type of contribution, the workflow on GitHub is the same.
 
-1. Implement and test your changes (see below for guidelines specific for `code <Contributing bugfixes and new features>`_,
-   `documentation <Contributing documentation>`_, and `tutorials <Contributing tutorials>`_).
+1. Implement and test your changes (see below for guidelines specific for `code <contributing.rst#Contributing-bugfixes-and-new-features>`_,
+   `documentation <contributing.rst#Contributing-documentation>`_, and `tutorials <contributing.rst#Contributing-tutorials>`_).
 2. When you are ready to receive feedback on your changes, navigate to your fork of ``mlcolvar`` on GitHub and
    `open a pull request <https://help.github.com/articles/using-pull-requests>`_ (PR). Note that after you launch the PR, all
    subsequent commits will be automatically added to the open PR and tested.
@@ -48,11 +48,11 @@ Contributing bugfixes and new features
 
 * If you are implementing a new CV, the documentation have guides on how to implement one `from scratch <https://mlcolvar.readthedocs.io/en/latest/notebooks/tutorials/adv_newcv_scratch.html>`_
   or by `subclassing an existing one <https://mlcolvar.readthedocs.io/en/latest/notebooks/tutorials/adv_newcv_subclass.html>`_.
-* Stick to the `coding style guidelines <Coding style guidelines>`_ when possible.
-* `Add tests <Writing tests>`_ for your new code! If are contributing a bugfix, chances are our current test suite
+* Stick to the `coding style guidelines <contributing.rst#Coding-style-guidelines>`_ when possible.
+* `Add tests <contributing.rst#Writing-tests>`_ for your new code! If are contributing a bugfix, chances are our current test suite
   does not cover this case, adn a test should be written to avoid future regressions. If you are contributing a new feature,
   your tests should make sure it is working as expected.
-* If you are writing a new features or changing the behavior of the library, `add/modify the docstrings <Contributing documentation>`_
+* If you are writing a new features or changing the behavior of the library, `add/modify the docstrings <contributing.rst#Contributing-documentation>`_
   describing the behavior of your code.
 
 
@@ -106,7 +106,7 @@ Contributing tutorials
 ----------------------
 
 * Tutorials are available in ``mlcolvar`` in the form of Jupyter notebooks saved in ``docs/notebooks/tutorials/``.
-* As for the library's code, stick to the :ref:`coding style guidelines <Coding style guidelines>` when possible.
+* As for the library's code, stick to the `coding style guidelines <contributing.rst#Coding-style-guidelines>`_ when possible.
 * Make sure the notebook runs from start to end before opening the PR as it will be automatically tested using ``pytest``'s
   `nbmake <https://github.com/treebeardtech/nbmake>`_ plugin.
 
