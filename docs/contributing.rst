@@ -15,11 +15,12 @@ implementation path from the start. Then
 
 1. `Create a fork <https://help.github.com/articles/fork-a-repo>`_ of this repository on GitHub.
 2. `Clone <https://help.github.com/articles/cloning-a-repository>`_ your fork of the repository on your local machine.
-3. Install the package locally from the cloned source in editable mode so that your changes will be automatically installed.
+3. Install the package locally (preferably in a `virtual environment <installation.rst#create-a-virtual-environment>`_
+   from the cloned source in editable mode so that your changes will be automatically installed.
 
    .. code-block:: bash
 
-      # Activate here your Python virtual environment (e.g., with virtualenv or conda) if you are using one.
+      # Activate here your Python virtual environment (e.g., with venv or conda).
       cd mlcolvar
       pip install -e .
 
