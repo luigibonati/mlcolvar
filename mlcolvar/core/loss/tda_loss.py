@@ -5,7 +5,7 @@
 # =============================================================================
 
 """
-(Weighted) Mean Squared Error (MSE) loss function.
+Target Discriminant Analysis Loss Function.
 """
 
 __all__ = ['TDALoss', 'tda_loss']

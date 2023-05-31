@@ -9,16 +9,35 @@ from mlcolvar.core.loss import MSELoss
 __all__ = ["AutoEncoderCV"]
 
 class AutoEncoderCV(BaseCV, lightning.LightningModule):
-    """AutoEncoding Collective Variable. It is composed by a first neural network (encoder) which projects 
+    """AutoEncoding Collective Variable. 
+    It is composed by a first neural network (encoder) which projects 
     the input data into a latent space (the CVs). Then a second network (decoder) takes 
     the CVs and tries to reconstruct the input data based on them. It is an unsupervised learning approach, 
-    typically used when no labels are available.
+    typically used when no labels are available. This CV is inspired by [1]_.
+
     Furthermore, it can also be used lo learn a representation which can be used not to reconstruct the data but 
     to predict, e.g. future configurations. 
 
-    For training it requires a DictDataset with the key 'data' and optionally 'weights'. If a 'target' 
-    key is present this will be used as reference for the output of the decoder, otherway this will be compared
-    with the input 'data'.
+    **Data**: for training it requires a DictDataset with the key 'data' and optionally 'weights' to reweight the 
+    data as done in [2]_. If a 'target' key is present this will be used as reference for the output of the decoder, 
+    otherway this will be compared with the input 'data'. This feature can be used to train a time-lagged autoencoder [3]_
+    where the task is not to reconstruct the input but the output at a later step. 
+    
+    **Loss**: reconstruction loss (MSELoss)
+
+    References
+    ----------
+    .. [1] W. Chen and A. L. Ferguson, “ Molecular enhanced sampling with autoencoders: On-the-fly collective 
+        variable discovery and accelerated free energy landscape exploration,” JCC 39, 2079–2102 (2018)
+    .. [2] Z. Belkacemi, P. Gkeka, T. Lelièvre, and G. Stoltz, “ Chasing collective variables using autoencoders and biased 
+        trajectories,” JCTC 18, 59–78 (2022)
+    .. [3] C. Wehmeyer and F. Noé, “Time-lagged autoencoders: Deep learning of slow collective variables for molecular 
+        kinetics,” JCP 148, 241703 (2018).
+
+    See also
+    --------
+    mlcolvar.core.loss.MSELoss
+        (weighted) Mean Squared Error (MSE) loss function.
     """
     
     BLOCKS = ['norm_in','encoder','decoder'] 
@@ -29,8 +48,9 @@ class AutoEncoderCV(BaseCV, lightning.LightningModule):
                 options : dict = None, 
                 **kwargs):
         """
-        Train a CV defined as the output layer of the encoder of an autoencoder model (latent space). 
+        Define a CV defined as the output layer of the encoder of an autoencoder model (latent space). 
         The decoder part is used only during the training for the reconstruction loss.
+        By default a module standardizing the inputs is also used. 
 
         Parameters
         ----------
@@ -74,12 +94,14 @@ class AutoEncoderCV(BaseCV, lightning.LightningModule):
         self.decoder = FeedForward(decoder_layers, **options[o])
 
     def forward_cv(self, x: torch.Tensor) -> (torch.Tensor):
+        """Evaluate the CV without pre or post/processing modules."""
         if self.norm_in is not None:
             x = self.norm_in(x)
         x = self.encoder(x)
         return x
 
     def encode_decode(self, x: torch.Tensor) -> (torch.Tensor):
+        """Pass the inputs through both the encoder and the decoder networks."""
         x = self.forward_cv(x)
         x = self.decoder(x)
         if self.norm_in is not None:
@@ -87,6 +109,7 @@ class AutoEncoderCV(BaseCV, lightning.LightningModule):
         return x
 
     def training_step(self, train_batch, batch_idx):
+        """Compute and return the training loss and record metrics."""
         # =================get data===================
         x = train_batch['data']
         loss_kwargs = {}

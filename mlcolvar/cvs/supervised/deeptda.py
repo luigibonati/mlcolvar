@@ -9,8 +9,23 @@ __all__ = ["DeepTDA"]
 
 class DeepTDA(BaseCV, lightning.LightningModule):
     """
-    Define Deep Targeted Discriminant Analysis (Deep-TDA) CV.
-    Combine the inputs with a neural-network and optimize it in a way such that the data are distributed accordingly to a target distribution.
+    Deep Targeted Discriminant Analysis (Deep-TDA) CV.
+    Combine the inputs with a neural-network and optimize it in a way such that 
+    the data are distributed accordingly to a mixture of Gaussians. The method is described in [1]_.
+
+    **Data**: for training it requires a DictDataset with the keys 'data' and 'labels'.
+
+    **Loss**: distance of the samples of each class from a set of Gaussians (TDALoss)
+
+    References
+    ----------
+    .. [1] E. Trizio and M. Parrinello, "From enhanced sampling to reaction profiles",
+        The Journal of Physical Chemistry Letters 12, 8621– 8626 (2021).
+
+    See also
+    --------
+    mlcolvar.core.loss.TDALoss
+        Distance from a simple Gaussian target distribution.
     """
 
     BLOCKS = ['norm_in', 'nn']
@@ -25,7 +40,8 @@ class DeepTDA(BaseCV, lightning.LightningModule):
                 options : dict = None, 
                 **kwargs):
         """
-        Define Deep Targeted Discriminant Analysis (Deep-TDA) CV.
+        Define Deep Targeted Discriminant Analysis (Deep-TDA) CV composed by a neural network module.
+        By default a module standardizing the inputs is also used. 
 
         Parameters
         ----------
@@ -88,6 +104,7 @@ class DeepTDA(BaseCV, lightning.LightningModule):
         self.nn = FeedForward(layers, **options[o])
 
     def training_step(self, train_batch, batch_idx):
+        """Compute and return the training loss and record metrics."""
         # =================get data===================
         x = train_batch['data']
         labels = train_batch['labels']
