@@ -18,6 +18,8 @@ else
         cp -r mlcolvar/docs/notebooks/paper_experiments/results results
         cp -r mlcolvar/docs/notebooks/paper_experiments/utils utils
         echo - Copied papers_experiments data
+    elif [ "$notebook_type" == "EXAMPLE" ]; then
+        echo - No data copied
     else
         cp -r mlcolvar/docs/notebooks/tutorials/data data
         cp -r mlcolvar/docs/notebooks/paper_experiments/input_data input_data
