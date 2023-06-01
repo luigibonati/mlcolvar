@@ -30,9 +30,10 @@ from mlcolvar.core.transform.utils import Statistics
 # FAST DICTIONARY LOADER CLASS
 # =============================================================================
 
+
 class DictLoader:
     """PyTorch DataLoader for :class:`~mlcolvar.data.dataset.DictDataset` .
-    
+
     It is much faster than ``TensorDataset`` + ``DataLoader`` because ``DataLoader``
     grabs individual indices of the dataset and calls cat (slow).
 
@@ -93,11 +94,12 @@ class DictLoader:
      'dataset1': {'some_unlabeled_data': tensor([11, 12])}}
 
     """
+
     def __init__(
-            self,
-            dataset: Union[dict, DictDataset, Subset, Sequence],
-            batch_size: Union[int, Sequence[int]] = 0,
-            shuffle: bool = True,
+        self,
+        dataset: Union[dict, DictDataset, Subset, Sequence],
+        batch_size: Union[int, Sequence[int]] = 0,
+        shuffle: bool = True,
     ):
         """Initialize a ``DictLoader``.
 
@@ -150,7 +152,9 @@ class DictLoader:
     def batch_size(self):
         """int or List[int]: Batch size or, in case of multiple datasets, a list of batch sizes."""
         if self.has_multiple_datasets:
-            return [b if b > 0 else l for b, l in zip(self._batch_size, self.dataset_len)]
+            return [
+                b if b > 0 else l for b, l in zip(self._batch_size, self.dataset_len)
+            ]
         return self._batch_size if self._batch_size > 0 else self.dataset_len
 
     @batch_size.setter
@@ -165,9 +169,9 @@ class DictLoader:
         return self.dataset.keys
 
     def set_dataset_and_batch_size(
-            self,
-            dataset: Union[None, dict, DictDataset, Subset, Sequence],
-            batch_size: Union[None, int, Sequence[int]]
+        self,
+        dataset: Union[None, dict, DictDataset, Subset, Sequence],
+        batch_size: Union[None, int, Sequence[int]],
     ):
         """Set a compatible pair of datasets and batch sizes.
 
@@ -205,7 +209,9 @@ class DictLoader:
 
         # Set batch size.
         if batch_size is not None:
-            if self.has_multiple_datasets and not isinstance(batch_size, collections.abc.Sequence):
+            if self.has_multiple_datasets and not isinstance(
+                batch_size, collections.abc.Sequence
+            ):
                 # If an integer is passed, we set the same batch size to all datasets.
                 batch_size = [batch_size] * len(dataset)
             self._batch_size = batch_size
@@ -216,15 +222,21 @@ class DictLoader:
             if len(self._batch_size) != len(self._dataset):
                 self._dataset = old_dataset
                 self._batch_size = old_batch_size
-                raise ValueError(f'batch_size (length {batch_size_len}) must have length equal to the number of datasets (length {len(self.dataset)}.')
+                raise ValueError(
+                    f"batch_size (length {batch_size_len}) must have length equal to the number of datasets (length {len(self.dataset)}."
+                )
 
             # The number of batches per epoch must be the same for all datasets.
-            n_batches = [math.ceil(dl / b) for dl, b in zip(self.dataset_len, self.batch_size)]
+            n_batches = [
+                math.ceil(dl / b) for dl, b in zip(self.dataset_len, self.batch_size)
+            ]
             if len(set(n_batches)) > 1:
                 self._dataset = old_dataset
                 self._batch_size = old_batch_size
-                raise ValueError('Multiple datasets must have the same number of batches per epoch. '
-                                 f'With batch_size {self._batch_size} the number of batches are {n_batches}.')
+                raise ValueError(
+                    "Multiple datasets must have the same number of batches per epoch. "
+                    f"With batch_size {self._batch_size} the number of batches are {n_batches}."
+                )
 
     def __iter__(self):
         # Since multiple datasets might have different length, we need to generate
@@ -247,7 +259,9 @@ class DictLoader:
         if self.has_multiple_datasets:
             batch = {}
             for dataset_idx in range(len(self.dataset)):
-                batch[f'dataset{dataset_idx}'] = self._get_batch(dataset_idx=dataset_idx)
+                batch[f"dataset{dataset_idx}"] = self._get_batch(
+                    dataset_idx=dataset_idx
+                )
         else:
             batch = self._get_batch()
 
@@ -264,9 +278,9 @@ class DictLoader:
             dataset_len = self.dataset_len
             batch_size = self.batch_size
         return (dataset_len + batch_size - 1) // batch_size
-    
+
     def __repr__(self) -> str:
-        string = f'DictLoader(length={self.dataset_len}, batch_size={self.batch_size}, shuffle={self.shuffle})'
+        string = f"DictLoader(length={self.dataset_len}, batch_size={self.batch_size}, shuffle={self.shuffle})"
         return string
 
     def get_stats(self, dataset_idx: Optional[int] = None):
@@ -299,14 +313,14 @@ class DictLoader:
             datasets = [datasets[dataset_idx]]
 
         # Compute stats.
-        stats = {f'dataset{i}': {} for i in range(len(datasets))}
+        stats = {f"dataset{i}": {} for i in range(len(datasets))}
         for dataset_idx, dataset in enumerate(datasets):
             for k in dataset.keys:
-                stats[f'dataset{dataset_idx}'][k] = Statistics(dataset[k]).to_dict()
+                stats[f"dataset{dataset_idx}"][k] = Statistics(dataset[k]).to_dict()
 
         # Return only a single dictionary if there are no multiple datasets.
         if is_selected_dataset or not self.has_multiple_datasets:
-            return stats['dataset0']
+            return stats["dataset0"]
         return stats
 
     def _get_batch(self, dataset_idx=None):
@@ -340,6 +354,7 @@ class DictLoader:
 # PRIVATE UTILITY FUNCTIONS
 # =============================================================================
 
+
 def _to_dict_dataset(d):
     """Convert Dict[Tensor] and Subset[DictDataset] to DictDataset.
 
@@ -353,10 +368,13 @@ def _to_dict_dataset(d):
         # Retrieve selection if it a subset.
         d = d.dataset.__class__(d.dataset[d.indices])
     elif not isinstance(d, DictDataset):
-        raise ValueError('The data must be of type dict, DictDataset or Subset[DictDataset].')
+        raise ValueError(
+            "The data must be of type dict, DictDataset or Subset[DictDataset]."
+        )
     return d
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import doctest
+
     doctest.testmod()

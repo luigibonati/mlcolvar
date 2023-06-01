@@ -8,7 +8,7 @@
 Evidence Lower BOund (ELBO) loss functions used to train variational Autoencoders.
 """
 
-__all__ = ['ELBOGaussiansLoss', 'elbo_gaussians_loss']
+__all__ = ["ELBOGaussiansLoss", "elbo_gaussians_loss"]
 
 
 # =============================================================================
@@ -24,6 +24,7 @@ from mlcolvar.core.loss.mse import mse_loss
 # LOSS FUNCTIONS
 # =============================================================================
 
+
 class ELBOGaussiansLoss(torch.nn.Module):
     """ELBO loss function assuming the latent and reconstruction distributions are Gaussian.
 
@@ -32,13 +33,14 @@ class ELBOGaussiansLoss(torch.nn.Module):
     the KL divergence between two normal distributions ``N(mean, var)`` and
     ``N(0, 1)``, where ``mean`` and ``var`` are the output of the encoder.
     """
+
     def forward(
-            self,
-            target: torch.Tensor,
-            output: torch.Tensor,
-            mean: torch.Tensor,
-            log_variance: torch.Tensor,
-            weights: Optional[torch.Tensor] = None
+        self,
+        target: torch.Tensor,
+        output: torch.Tensor,
+        mean: torch.Tensor,
+        log_variance: torch.Tensor,
+        weights: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """Compute the value of the loss function.
 
@@ -68,11 +70,11 @@ class ELBOGaussiansLoss(torch.nn.Module):
 
 
 def elbo_gaussians_loss(
-        target: torch.Tensor,
-        output: torch.Tensor,
-        mean: torch.Tensor,
-        log_variance: torch.Tensor,
-        weights: Optional[torch.Tensor] = None
+    target: torch.Tensor,
+    output: torch.Tensor,
+    mean: torch.Tensor,
+    log_variance: torch.Tensor,
+    weights: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     """ELBO loss function assuming the latent and reconstruction distributions are Gaussian.
 
@@ -87,7 +89,7 @@ def elbo_gaussians_loss(
         Shape ``(n_batches, in_features)``. Data points (e.g. input of encoder
         or time-lagged features).
     output : torch.Tensor
-        Shape ``(n_batches, in_features)``. Output of the decoder.        
+        Shape ``(n_batches, in_features)``. Output of the decoder.
     mean : torch.Tensor
         Shape ``(n_batches, latent_features)``. The means of the Gaussian
         distributions associated to the inputs.
@@ -113,7 +115,9 @@ def elbo_gaussians_loss(
     else:
         weights = weights.squeeze()
         if weights.shape != kl.shape:
-            raise ValueError(f'weights should be a tensor of shape (n_batches,) or (n_batches,1), not {weights.shape}.')
+            raise ValueError(
+                f"weights should be a tensor of shape (n_batches,) or (n_batches,1), not {weights.shape}."
+            )
         kl = (kl * weights).sum()
 
     # Reconstruction loss.

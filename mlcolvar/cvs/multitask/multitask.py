@@ -25,6 +25,7 @@ from mlcolvar.cvs.cv import BaseCV
 # VARIATIONAL AUTOENCODER CV
 # =============================================================================
 
+
 class MultiTaskCV:
     """Multi-task collective variable.
 
@@ -73,12 +74,12 @@ class MultiTaskCV:
     >>> trainer = lightning.Trainer(max_epochs=1, log_every_n_steps=5, logger=None, enable_checkpointing=False)
 
     """
-    
+
     def __init__(
-            self,
-            main_cv: BaseCV,
-            auxiliary_loss_fns: Sequence,
-            loss_coefficients : Optional[Sequence[float]] = None
+        self,
+        main_cv: BaseCV,
+        auxiliary_loss_fns: Sequence,
+        loss_coefficients: Optional[Sequence[float]] = None,
     ):
         """
         Constructor.
@@ -101,9 +102,9 @@ class MultiTaskCV:
         # MultiTaskCV and main_cv.__class__ so that we can access all members of
         # main_cv and still be able to override some of them.
         self.__class__ = type(
-            'MultiTask'+main_cv.__class__.__name__,  # class name
+            "MultiTask" + main_cv.__class__.__name__,  # class name
             (self.__class__, main_cv.__class__),  # base classes
-            {}  # self.__class__.__dict__
+            {},  # self.__class__.__dict__
         )
 
         # Copy all members of main_cv into this object.
@@ -113,41 +114,44 @@ class MultiTaskCV:
         self.loss_coefficients = loss_coefficients
 
     def training_step(self, train_batch, batch_idx):
-        stage = 'train' if self.training else 'valid'
+        stage = "train" if self.training else "valid"
 
         # Compute main loss (the main CV should already log the first loss).
-        loss = super().training_step(train_batch['dataset0'], batch_idx)
+        loss = super().training_step(train_batch["dataset0"], batch_idx)
 
         # Compute auxiliary losses one by one.
         for loss_idx, aux_loss_fn in enumerate(self.auxiliary_loss_fns):
-            dataset_batch = train_batch['dataset' + str(loss_idx+1)]
+            dataset_batch = train_batch["dataset" + str(loss_idx + 1)]
 
             # Prepare keyword arguments to pass to the auxiliary loss function.
-            aux_loss_kwargs = {k: v for k, v in dataset_batch.items() if not k.startswith('data')}
+            aux_loss_kwargs = {
+                k: v for k, v in dataset_batch.items() if not k.startswith("data")
+            }
 
             # Forward data of this dataset (and eventually the time-lagged one).
-            cv = self.forward_cv(dataset_batch['data'])
+            cv = self.forward_cv(dataset_batch["data"])
             try:
-                cv_lag = self.forward_cv(dataset_batch['data_lag'])
+                cv_lag = self.forward_cv(dataset_batch["data_lag"])
             except KeyError:  # Not a time-lagged CV.
                 aux_loss = aux_loss_fn(cv, **aux_loss_kwargs)
             else:
                 aux_loss = aux_loss_fn(cv, cv_lag, **aux_loss_kwargs)
 
             # Log the auxiliary loss (before the coefficient).
-            self.log(f'{stage}_aux_loss_{loss_idx}', aux_loss.to(float), on_epoch=True)
+            self.log(f"{stage}_aux_loss_{loss_idx}", aux_loss.to(float), on_epoch=True)
 
             if self.loss_coefficients is not None:
                 aux_loss = self.loss_coefficients[loss_idx] * aux_loss
             loss = loss + aux_loss
 
         # Log the total loss
-        self.log(f'{stage}_total_loss', loss.to(float), on_epoch=True)
+        self.log(f"{stage}_total_loss", loss.to(float), on_epoch=True)
 
         # return loss
         return loss
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import doctest
+
     doctest.testmod()

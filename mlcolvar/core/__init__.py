@@ -1,4 +1,4 @@
-__all__ = ["loss","nn","transform","stats"]
+__all__ = ["loss", "nn", "transform", "stats"]
 
 from .loss import *
 from .nn import *

@@ -5,7 +5,7 @@ import math
 
 class Shifted_Softplus(torch.nn.Softplus):
     """Element-wise softplus function shifted as to pass from the origin."""
-    
+
     def __init__(self, beta=1, threshold=20):
         super(Shifted_Softplus, self).__init__(beta, threshold)
 
@@ -14,8 +14,8 @@ class Shifted_Softplus(torch.nn.Softplus):
         return F.softplus(input, self.beta, self.threshold) - sp0
 
 
-def get_activation(activation : str):
-    """ Return activation module given string. """
+def get_activation(activation: str):
+    """Return activation module given string."""
     activ = None
     if activation == "relu":
         activ = torch.nn.ReLU(True)
@@ -46,16 +46,18 @@ def parse_nn_options(options: str, n_layers: int, last_layer_activation: bool):
     also for the output layer.
     """
     # If an iterable is given cheeck that its length matches the number of NN layers
-    if hasattr(options, '__iter__') and not isinstance(options, str):
+    if hasattr(options, "__iter__") and not isinstance(options, str):
         if len(options) != n_layers:
-            raise ValueError(f'Length of options: {options} ({len(options)} should be equal to number of layers ({n_layers})).')
+            raise ValueError(
+                f"Length of options: {options} ({len(options)} should be equal to number of layers ({n_layers}))."
+            )
         options_list = options
     # if a single value is given, repeat options to all layers but for the output one
     else:
         if last_layer_activation:
             options_list = [options for _ in range(n_layers)]
         else:
-            options_list = [options for _ in range(n_layers-1)]
+            options_list = [options for _ in range(n_layers - 1)]
             options_list.append(None)
-    
+
     return options_list

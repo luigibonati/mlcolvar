@@ -26,6 +26,7 @@ from mlcolvar.core.nn.utils import get_activation, parse_nn_options
 # STANDARD FEED FORWARD
 # =============================================================================
 
+
 class FeedForward(lightning.LightningModule):
     """Define a feedforward neural network given the list of layers.
 
@@ -33,13 +34,13 @@ class FeedForward(lightning.LightningModule):
     """
 
     def __init__(
-            self,
-            layers : list,
-            activation: Union[str, list] = "relu",
-            dropout: Optional[Union[float, list]] = None,
-            batchnorm: Union[bool, list] = False,
-            last_layer_activation: bool = False,
-            **kwargs
+        self,
+        layers: list,
+        activation: Union[str, list] = "relu",
+        dropout: Optional[Union[float, list]] = None,
+        batchnorm: Union[bool, list] = False,
+        last_layer_activation: bool = False,
+        **kwargs,
     ):
         """Constructor.
 
@@ -72,8 +73,8 @@ class FeedForward(lightning.LightningModule):
 
         # Parse layers
         if not isinstance(layers[0], int):
-            raise TypeError('layers should be a list-type of integers.')
-        
+            raise TypeError("layers should be a list-type of integers.")
+
         # Parse options per each hidden layer
         n_layers = len(layers) - 1
         # -- activation
@@ -82,7 +83,7 @@ class FeedForward(lightning.LightningModule):
         dropout_list = parse_nn_options(dropout, n_layers, last_layer_activation)
         # -- batchnorm
         batchnorm_list = parse_nn_options(batchnorm, n_layers, last_layer_activation)
-        
+
         # Create network
         modules = []
         for i in range(len(layers) - 1):
@@ -93,17 +94,17 @@ class FeedForward(lightning.LightningModule):
                 modules.append(get_activation(activ))
 
             if drop is not None:
-                modules.append(torch.nn.Dropout(p=drop,inplace=True))
-            
+                modules.append(torch.nn.Dropout(p=drop, inplace=True))
+
             if norm:
-                modules.append(torch.nn.BatchNorm1d(layers[i+1]))
+                modules.append(torch.nn.BatchNorm1d(layers[i + 1]))
 
         # store model and attributes
         self.nn = torch.nn.Sequential(*modules)
         self.in_features = layers[0]
         self.out_features = layers[-1]
 
-    #def extra_repr(self) -> str:
+    # def extra_repr(self) -> str:
     #    repr = f"in_features={self.in_features}, out_features={self.out_features}"
     #    return repr
 

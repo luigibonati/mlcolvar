@@ -1,4 +1,4 @@
-#__all__ = ["compute_fes"]
+# __all__ = ["compute_fes"]
 
 import pandas as pd
 import numpy as np
@@ -10,6 +10,7 @@ import warnings
 # pandas
 try:
     import pandas as pd
+
     PANDAS_IS_INSTALLED = True
 except ImportError:
     PANDAS_IS_INSTALLED = False
@@ -17,23 +18,43 @@ except ImportError:
 try:
     from KDEpy import FFTKDE
     from KDEpy.utils import cartesian
+
     KDEPY_IS_INSTALLED = True
 except ImportError:
     KDEPY_IS_INSTALLED = False
 try:
     import sklearn
+
     SKLEARN_IS_INSTALLED = True
 except ImportError:
     SKLEARN_IS_INSTALLED = False
 # set default backend based on installation
 if KDEPY_IS_INSTALLED:
-    kdelib = 'KDEpy'
+    kdelib = "KDEpy"
 elif SKLEARN_IS_INSTALLED:
-    kdelib = 'sklearn'
+    kdelib = "sklearn"
 else:
     kdelib = None
 
-def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0.01, kernel='gaussian', weights=None, scale_by = None, blocks = 1, fes_to_zero = None, plot=False, plot_max_fes=None, ax = None, backend=None, eps = 0):
+
+def compute_fes(
+    X,
+    temp=300,
+    kbt=None,
+    num_samples=100,
+    bounds=None,
+    bandwidth=0.01,
+    kernel="gaussian",
+    weights=None,
+    scale_by=None,
+    blocks=1,
+    fes_to_zero=None,
+    plot=False,
+    plot_max_fes=None,
+    ax=None,
+    backend=None,
+    eps=0,
+):
     """Compute the Free Energy Surface along the given variables.
 
     Parameters
@@ -49,9 +70,9 @@ def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0
     bounds : list of lists, optional
         limit the calculation of the FES to a region, by default equal to the range of values
     bandwidth : float, optional
-        Bandwidth use for the kernels, by default 0.1. 
+        Bandwidth use for the kernels, by default 0.1.
     kernel: string, optional
-        Kernel type, by default 'gaussian'. 
+        Kernel type, by default 'gaussian'.
     weights : array, optional
         array of samples weights, by default None
     scale_by : string, optional
@@ -95,11 +116,15 @@ def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0
     """
     # check backend for KDE
     if kdelib is None:
-        raise NotImplementedError ('The function compute_fes requires either KDEpy (fast) or scikit-learn (slow) to work.')
-    if kdelib == 'sklearn':
-        warnings.warn('Warning: KDEpy is not installed, falling back to scikit-learn for kernel density estimation (very slow for d>1).')
+        raise NotImplementedError(
+            "The function compute_fes requires either KDEpy (fast) or scikit-learn (slow) to work."
+        )
+    if kdelib == "sklearn":
+        warnings.warn(
+            "Warning: KDEpy is not installed, falling back to scikit-learn for kernel density estimation (very slow for d>1)."
+        )
 
-    if backend == 'sklearn':
+    if backend == "sklearn":
         from sklearn.neighbors import KernelDensity
     elif backend is None:
         backend = kdelib
@@ -108,7 +133,7 @@ def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0
     if kbt is None:
         kb = 0.00831441
         kbt = kb * temp
-    
+
     # dataset
     if PANDAS_IS_INSTALLED:
         if type(X) == pd.DataFrame:
@@ -118,12 +143,12 @@ def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0
     elif type(X) == torch.Tensor:
         X = X.numpy()
     if X.ndim == 1:
-        X = X.reshape([-1,1])  
+        X = X.reshape([-1, 1])
 
     # div
     nsamples = X.shape[0]
     dim = X.shape[1]
-    
+
     # weights
     if weights is None:
         weights = np.ones(nsamples)
@@ -133,10 +158,10 @@ def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0
 
     # rescale
     if scale_by is not None:
-        if scale_by == 'std':
+        if scale_by == "std":
             scale = X.std(axis=0)
-        elif scale_by == 'range':
-            scale = X.max(axis=0)-X.min(axis=0)
+        elif scale_by == "range":
+            scale = X.max(axis=0) - X.min(axis=0)
         elif type(scale_by) == list:
             scale = np.asarray(scale_by)
         X = np.copy(X)
@@ -146,21 +171,23 @@ def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0
     offset = 1e-3
     if dim == 1:
         if bounds is None:
-            bounds = (X[:,0].min()-offset, X[:,0].max()+offset)
+            bounds = (X[:, 0].min() - offset, X[:, 0].max() + offset)
         grid = np.linspace(bounds[0], bounds[1], num_samples)
-        positions = grid.reshape([-1,1])
+        positions = grid.reshape([-1, 1])
     else:
         if bounds is None:
-            bounds = [(X[:,i].min()-offset, X[:,i].max()+offset) for i in range(dim)]
+            bounds = [
+                (X[:, i].min() - offset, X[:, i].max() + offset) for i in range(dim)
+            ]
         grid_list = [np.linspace(b[0], b[1], num_samples) for b in bounds]
         grid = np.meshgrid(*grid_list)
         positions = np.vstack([g.ravel() for g in grid]).T
 
     # divide in blocks
-    X_b = np.array_split(X,blocks)
-    w_b = np.array_split(weights,blocks)
+    X_b = np.array_split(X, blocks)
+    w_b = np.array_split(weights, blocks)
 
-    O_i,W_i = [], [] #values per block
+    O_i, W_i = [], []  # values per block
     # block average
     for i in range(blocks):
         # data of each block
@@ -168,7 +195,7 @@ def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0
         w_i = w_b[i]
 
         # fit
-        if backend == 'KDEpy':
+        if backend == "KDEpy":
             kde = FFTKDE(bw=bandwidth, kernel=kernel)
             kde.fit(X_i, weights=w_i)
 
@@ -176,16 +203,23 @@ def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0
                 pos = [grid]
             else:
                 pos = grid_list
-                
+
             # pdf --> fes
-            fes = - kbt * np.log( kde.evaluate(cartesian(pos)) + eps ).reshape([num_samples for i in range(dim)]).T
-        
-        elif backend == 'sklearn':
+            fes = (
+                -kbt
+                * np.log(kde.evaluate(cartesian(pos)) + eps)
+                .reshape([num_samples for i in range(dim)])
+                .T
+            )
+
+        elif backend == "sklearn":
             kde = KernelDensity(bandwidth=bandwidth, kernel=kernel)
             kde.fit(X_i, sample_weight=w_i)
 
             # logpdf --> fes
-            fes = - kbt * kde.score_samples(positions).reshape([num_samples for i in range(dim)])
+            fes = -kbt * kde.score_samples(positions).reshape(
+                [num_samples for i in range(dim)]
+            )
 
         if fes_to_zero is not None:
             fes -= fes[fes_to_zero]
@@ -199,15 +233,17 @@ def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0
     O_i = np.asarray(O_i)
     W_i = np.asarray(W_i)
 
-    # compute avg and std 
-    if blocks > 1: 
+    # compute avg and std
+    if blocks > 1:
         # weighted average
-        O = np.dot(O_i.T,W_i)/np.sum(W_i)
+        O = np.dot(O_i.T, W_i) / np.sum(W_i)
         # weighted std
         dev = O_i - O
-        blocks_eff = (np.sum(W_i))**2/(np.sum(W_i**2))
-        variance = blocks_eff/(blocks_eff - 1) * (np.dot((dev**2).T,W_i) )/(np.sum(W_i))
-        error = np.sqrt(variance/blocks_eff)
+        blocks_eff = (np.sum(W_i)) ** 2 / (np.sum(W_i**2))
+        variance = (
+            blocks_eff / (blocks_eff - 1) * (np.dot((dev**2).T, W_i)) / (np.sum(W_i))
+        )
+        error = np.sqrt(variance / blocks_eff)
     else:
         O = O_i[0]
         error = None
@@ -215,59 +251,66 @@ def compute_fes(X, temp=300, kbt=None, num_samples=100, bounds=None, bandwidth=0
     # rescale back
     if scale_by is not None:
         if dim == 1:
-            bounds = (bounds[0]*scale[0], bounds[1]*scale[0])
+            bounds = (bounds[0] * scale[0], bounds[1] * scale[0])
             grid *= scale
         else:
-            bounds = [(bounds[i][0]*scale[i], bounds[i][1]*scale[i]) for i in range(dim)]
+            bounds = [
+                (bounds[i][0] * scale[i], bounds[i][1] * scale[i]) for i in range(dim)
+            ]
             for i in range(dim):
                 grid[i] *= scale[i]
 
     # Plot
     if plot:
         if ax is None:
-            fig,ax = plt.subplots()
+            fig, ax = plt.subplots()
         if dim == 1:
             fes2 = np.copy(O)
             if plot_max_fes is not None:
-                fes2[fes2>plot_max_fes] = np.nan
+                fes2[fes2 > plot_max_fes] = np.nan
             if blocks > 1:
-                ax.errorbar(grid,fes2,error)
+                ax.errorbar(grid, fes2, error)
             else:
-                ax.plot(grid,fes2)  
-            ax.set_ylabel('FES')
-        elif dim == 2: 
+                ax.plot(grid, fes2)
+            ax.set_ylabel("FES")
+        elif dim == 2:
             fes2 = np.copy(O)
             if plot_max_fes is not None:
-                fes2[fes2>plot_max_fes] = np.nan
-            extent = [item for sublist in bounds for item in sublist] 
-            pp = ax.contourf(fes2,cmap='fessa',extent=extent) #,vmax=max_fes)
-            cbar = plt.colorbar(pp,ax=ax)
-            cbar.set_label('FES')
+                fes2[fes2 > plot_max_fes] = np.nan
+            extent = [item for sublist in bounds for item in sublist]
+            pp = ax.contourf(fes2, cmap="fessa", extent=extent)  # ,vmax=max_fes)
+            cbar = plt.colorbar(pp, ax=ax)
+            cbar.set_label("FES")
 
-    return fes,grid,bounds,error
+    return fes, grid, bounds, error
+
 
 def test_compute_fes():
-    X = np.linspace(1,11,100)
-    fes,bins,bounds,error_= compute_fes(X=X,
-                                        weights=np.ones_like(X),
-                                        bandwidth=0.02,
-                                        kbt=None,
-                                        num_samples=120,
-                                        bounds=(0,10),
-                                        fes_to_zero=25,
-                                        scale_by='range',
-                                        blocks=2,
-                                        backend='KDEpy')
-    
-    Y = np.random.rand(2,100)
+    X = np.linspace(1, 11, 100)
+    fes, bins, bounds, error_ = compute_fes(
+        X=X,
+        weights=np.ones_like(X),
+        bandwidth=0.02,
+        kbt=None,
+        num_samples=120,
+        bounds=(0, 10),
+        fes_to_zero=25,
+        scale_by="range",
+        blocks=2,
+        backend="KDEpy",
+    )
 
-    fes,bins,bounds,error_= compute_fes(X=[Y[0], Y[1]],
-                                        weights=np.ones_like(X),
-                                        bandwidth=0.02,
-                                        kbt=1,
-                                        num_samples=120,
-                                        bounds=None,
-                                        fes_to_zero=None,
-                                        scale_by='std',
-                                        blocks=2,
-                                        backend='sklearn')
+    Y = np.random.rand(2, 100)
+
+    fes, bins, bounds, error_ = compute_fes(
+        X=[Y[0], Y[1]],
+        weights=np.ones_like(X),
+        bandwidth=0.02,
+        kbt=1,
+        num_samples=120,
+        bounds=None,
+        fes_to_zero=None,
+        scale_by="std",
+        blocks=2,
+        backend="sklearn",
+    )
