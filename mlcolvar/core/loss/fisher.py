@@ -8,7 +8,7 @@
 Fisher discriminant loss for (Deep) Linear Discriminant Analysis.
 """
 
-__all__ = ['FisherDiscriminantLoss', 'fisher_discriminant_loss']
+__all__ = ["FisherDiscriminantLoss", "fisher_discriminant_loss"]
 
 
 # =============================================================================
@@ -27,6 +27,7 @@ from mlcolvar.core.loss import reduce_eigenvalues_loss
 # LOSS FUNCTIONS
 # =============================================================================
 
+
 class FisherDiscriminantLoss(torch.nn.Module):
     """Fisher's discriminant ratio.
 
@@ -36,12 +37,12 @@ class FisherDiscriminantLoss(torch.nn.Module):
     """
 
     def __init__(
-            self,
-            n_states: int,
-            lda_mode: str = 'standard',
-            reduce_mode: str = 'sum',
-            lorentzian_reg: Optional[float] = None,
-            invert_sign: bool = True
+        self,
+        n_states: int,
+        lda_mode: str = "standard",
+        reduce_mode: str = "sum",
+        lorentzian_reg: Optional[float] = None,
+        invert_sign: bool = True,
     ):
         """Constructor.
 
@@ -72,9 +73,9 @@ class FisherDiscriminantLoss(torch.nn.Module):
         self.invert_sign = invert_sign
 
     def forward(
-            self,
-            x: torch.Tensor,
-            labels: torch.Tensor,
+        self,
+        x: torch.Tensor,
+        labels: torch.Tensor,
     ) -> torch.Tensor:
         """Compute the value of the loss function.
 
@@ -91,31 +92,32 @@ class FisherDiscriminantLoss(torch.nn.Module):
             Loss value.
         """
         return fisher_discriminant_loss(
-            x, labels,
+            x,
+            labels,
             n_states=self.n_states,
             lda_mode=self.lda_mode,
             reduce_mode=self.reduce_mode,
             lorentzian_reg=self.lorentzian_reg,
-            invert_sign=self.invert_sign
+            invert_sign=self.invert_sign,
         )
 
 
 def fisher_discriminant_loss(
-        x: torch.Tensor,
-        labels: torch.Tensor,
-        n_states: int,
-        lda_mode: str = 'standard',
-        reduce_mode: str = 'sum',
-        sw_reg: Optional[float] = 0.05,
-        lorentzian_reg: Optional[float] = None,
-        invert_sign: bool = True,
+    x: torch.Tensor,
+    labels: torch.Tensor,
+    n_states: int,
+    lda_mode: str = "standard",
+    reduce_mode: str = "sum",
+    sw_reg: Optional[float] = 0.05,
+    lorentzian_reg: Optional[float] = None,
+    invert_sign: bool = True,
 ) -> torch.Tensor:
     """Fisher's discriminant ratio.
 
     Computes the sum (or another reducing functions) of the eigenvalues of the
     ratio between the Fisher's scatter matrices with a Lorentzian regularization.
     This is the same loss function used in :class:`~mlcolvar.cvs.supervised.deeplda.DeepLDA`.
-    
+
     Parameters
     ----------
     x : torch.Tensor
@@ -161,9 +163,11 @@ def fisher_discriminant_loss(
     # TODO: ENCAPSULATE THIS IN A UTILITY FUNCTION USED BY BOTH THIS AND DEEPLDA?
     if lorentzian_reg is None:
         if sw_reg == 0 or sw_reg is None:
-            raise ValueError(f'Unable to calculate `lorentzian_reg` from `sw_reg` ({sw_reg}), please specify the value.')
+            raise ValueError(
+                f"Unable to calculate `lorentzian_reg` from `sw_reg` ({sw_reg}), please specify the value."
+            )
         lorentzian_reg = 2.0 / sw_reg
     reg_loss = x.pow(2).sum().div(x.size(0))
-    reg_loss = - lorentzian_reg / (1 + (reg_loss - 1).pow(2))
+    reg_loss = -lorentzian_reg / (1 + (reg_loss - 1).pow(2))
 
     return loss + reg_loss

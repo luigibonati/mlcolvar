@@ -8,7 +8,10 @@ else
     notebook_type=$1
     echo Setting up Colab environment.
 
-    git clone --quiet https://github.com/luigibonati/mlcolvar.git mlcolvar
+    pip install mlcolvar
+    echo - Installed mlcolvar
+
+    git clone --quiet --depth 1 https://github.com/luigibonati/mlcolvar.git mlcolvar
     echo - Cloned mlcolvar from git
 
     if [ "$notebook_type" == "TUTORIAL" ]; then
@@ -29,12 +32,6 @@ else
         echo - Copied tutorials + papers_experiments data
     fi
 
-    cd mlcolvar 
-    pip install -r requirements.txt -q .
-    echo - Installed mlcolvar requirements
-    echo - Installed mlcolvar
-
-    cd ../
     rm -r mlcolvar
     echo - Removed mlcolvar folder
 

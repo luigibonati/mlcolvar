@@ -8,7 +8,7 @@
 PyTorch Lightning DataModule object for DictDatasets.
 """
 
-__all__ = ['DictModule']
+__all__ = ["DictModule"]
 
 
 # =============================================================================
@@ -31,6 +31,7 @@ from mlcolvar.data import DictLoader, DictDataset
 # =============================================================================
 # DICTIONARY DATAMODULE CLASS
 # =============================================================================
+
 
 class DictModule(lightning.LightningDataModule):
     """Lightning DataModule constructed for :class:`~mlcolvar.data.dataset.DictDataset` .
@@ -80,14 +81,15 @@ class DictModule(lightning.LightningDataModule):
     batch dataset1: ['data2', 'weights']
 
     """
+
     def __init__(
-            self,
-            dataset: DictDataset,
-            lengths: Sequence = (0.8, 0.2),
-            batch_size: Union[int, Sequence] = 0,
-            random_split: bool = True,
-            shuffle: Union[bool, Sequence] = True,
-            generator: Optional[torch.Generator] = None
+        self,
+        dataset: DictDataset,
+        lengths: Sequence = (0.8, 0.2),
+        batch_size: Union[int, Sequence] = 0,
+        random_split: bool = True,
+        shuffle: Union[bool, Sequence] = True,
+        generator: Optional[torch.Generator] = None,
     ):
         """Create a ``DataModule`` wrapping a :class:`~mlcolvar.data.dataset.DictDataset`.
 
@@ -136,14 +138,14 @@ class DictModule(lightning.LightningDataModule):
             self.shuffle = [shuffle for _ in lengths]
         else:
             self.shuffle = shuffle
-        
+
         # This is initialized in setup().
         self._dataset_split = None
-        
+
         # dataloaders
         self.train_loader = None
         self.valid_loader = None
-        self.test_loader  = None
+        self.test_loader = None
 
     def setup(self, stage: Optional[str] = None):
         if self._dataset_split is None:
@@ -158,23 +160,37 @@ class DictModule(lightning.LightningDataModule):
         """Return training dataloader."""
         self._check_setup()
         if self.train_loader is None:
-            self.train_loader = DictLoader(self._dataset_split[0], batch_size=self.batch_size[0], shuffle=self.shuffle[0])
+            self.train_loader = DictLoader(
+                self._dataset_split[0],
+                batch_size=self.batch_size[0],
+                shuffle=self.shuffle[0],
+            )
         return self.train_loader
 
     def val_dataloader(self):
         """Return validation dataloader."""
         self._check_setup()
         if self.valid_loader is None:
-            self.valid_loader = DictLoader(self._dataset_split[1], batch_size=self.batch_size[1], shuffle=self.shuffle[1])
+            self.valid_loader = DictLoader(
+                self._dataset_split[1],
+                batch_size=self.batch_size[1],
+                shuffle=self.shuffle[1],
+            )
         return self.valid_loader
 
     def test_dataloader(self):
         """Return test dataloader."""
         self._check_setup()
         if len(self.lengths) < 3:
-            raise ValueError('Test dataset not available, you need to pass three lengths to datamodule.')
+            raise ValueError(
+                "Test dataset not available, you need to pass three lengths to datamodule."
+            )
         if self.test_loader is None:
-            self.test_loader = DictLoader(self._dataset_split[2], batch_size=self.batch_size[2], shuffle=self.shuffle[2])
+            self.test_loader = DictLoader(
+                self._dataset_split[2],
+                batch_size=self.batch_size[2],
+                shuffle=self.shuffle[2],
+            )
         return self.test_loader
 
     def predict_dataloader(self):
@@ -184,12 +200,12 @@ class DictModule(lightning.LightningDataModule):
         pass
 
     def __repr__(self) -> str:
-        string = f'DictModule(dataset -> {self.dataset.__repr__()}'
-        string+=f',\n\t\t     train_loader -> DictLoader(length={self.lengths[0]}, batch_size={self.batch_size[0]}, shuffle={self.shuffle[0]})'
-        string+=f',\n\t\t     valid_loader -> DictLoader(length={self.lengths[1]}, batch_size={self.batch_size[1]}, shuffle={self.shuffle[1]})'
+        string = f"DictModule(dataset -> {self.dataset.__repr__()}"
+        string += f",\n\t\t     train_loader -> DictLoader(length={self.lengths[0]}, batch_size={self.batch_size[0]}, shuffle={self.shuffle[0]})"
+        string += f",\n\t\t     valid_loader -> DictLoader(length={self.lengths[1]}, batch_size={self.batch_size[1]}, shuffle={self.shuffle[1]})"
         if len(self.lengths) >= 3:
-            string+=f',\n\t\t\ttest_loader =DictLoader(length={self.lengths[2]}, batch_size={self.batch_size[2]}, shuffle={self.shuffle[2]})'
-        string+=f')'
+            string += f",\n\t\t\ttest_loader =DictLoader(length={self.lengths[2]}, batch_size={self.batch_size[2]}, shuffle={self.shuffle[2]})"
+        string += f")"
         return string
 
     def _split(self, dataset):
@@ -198,7 +214,9 @@ class DictModule(lightning.LightningDataModule):
         Returns a list of Subset[DictDataset] objects.
         """
         if self._random_split:
-            dataset_split = random_split(dataset, self.lengths, generator=self.generator)
+            dataset_split = random_split(
+                dataset, self.lengths, generator=self.generator
+            )
         else:
             dataset_split = sequential_split(dataset, self.lengths)
         return dataset_split
@@ -206,15 +224,17 @@ class DictModule(lightning.LightningDataModule):
     def _check_setup(self):
         """Raise an error if setup() has not been called."""
         if self._dataset_split is None:
-            raise AttributeError('The datamodule has not been set up yet. To get the dataloaders '
-                                 'outside a Lightning trainer please call .setup() first.')
+            raise AttributeError(
+                "The datamodule has not been set up yet. To get the dataloaders "
+                "outside a Lightning trainer please call .setup() first."
+            )
 
 
 def sequential_split(dataset, lengths: Sequence) -> list:
     """
     Sequentially split a dataset into non-overlapping new datasets of given lengths.
-    
-    The behavior is the same as torch.utils.data.dataset.random_split. 
+
+    The behavior is the same as torch.utils.data.dataset.random_split.
 
     If a list of fractions that sum up to 1 is given,
     the lengths will be computed automatically as
@@ -223,7 +243,7 @@ def sequential_split(dataset, lengths: Sequence) -> list:
     After computing the lengths, if there are any remainders, 1 count will be
     distributed in round-robin fashion to the lengths
     until there are no remainders left.
-    """    
+    """
 
     if math.isclose(sum(lengths), 1) and sum(lengths) <= 1:
         subset_lengths = []
@@ -242,19 +262,27 @@ def sequential_split(dataset, lengths: Sequence) -> list:
         lengths = subset_lengths
         for i, length in enumerate(lengths):
             if length == 0:
-                warnings.warn(f"Length of split at index {i} is 0. "
-                                f"This might result in an empty dataset.")
+                warnings.warn(
+                    f"Length of split at index {i} is 0. "
+                    f"This might result in an empty dataset."
+                )
 
         # Cannot verify that dataset is Sized
-        if sum(lengths) != len(dataset):    # type: ignore[arg-type]
-            raise ValueError("Sum of input lengths does not equal the length of the input dataset!")
+        if sum(lengths) != len(dataset):  # type: ignore[arg-type]
+            raise ValueError(
+                "Sum of input lengths does not equal the length of the input dataset!"
+            )
 
         # LB change: do sequential rather then random splitting
-        return [Subset(dataset, np.arange(offset-length,offset)) for offset, length in zip(_accumulate(lengths), lengths)]
+        return [
+            Subset(dataset, np.arange(offset - length, offset))
+            for offset, length in zip(_accumulate(lengths), lengths)
+        ]
     else:
-        raise NotImplementedError('The lengths must sum to 1.')
+        raise NotImplementedError("The lengths must sum to 1.")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import doctest
+
     doctest.testmod()

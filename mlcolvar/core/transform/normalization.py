@@ -1,10 +1,11 @@
 import torch
-from mlcolvar.core.transform.utils import batch_reshape,Statistics
+from mlcolvar.core.transform.utils import batch_reshape, Statistics
 from mlcolvar.core.transform import Transform
 
 __all__ = ["Normalization"]
 
-def sanitize_range( range : torch.Tensor):
+
+def sanitize_range(range: torch.Tensor):
     """Sanitize
 
     Parameters
@@ -16,8 +17,8 @@ def sanitize_range( range : torch.Tensor):
 
     if (range < 1e-6).nonzero().sum() > 0:
         print(
-        "[Warning] Normalization: the following features have a range of values < 1e-6:",
-        (range < 1e-6).nonzero(),
+            "[Warning] Normalization: the following features have a range of values < 1e-6:",
+            (range < 1e-6).nonzero(),
         )
     range[range < 1e-6] = 1.0
 
@@ -29,15 +30,18 @@ class Normalization(Transform):
     Normalizing block, used for computing standardized inputs/outputs.
     """
 
-    def __init__(self, in_features : int,
-                 mean : torch.Tensor = None, 
-                 range : torch.Tensor = None, 
-                 stats : dict = None, 
-                 mode : str = 'mean_std'):
+    def __init__(
+        self,
+        in_features: int,
+        mean: torch.Tensor = None,
+        range: torch.Tensor = None,
+        stats: dict = None,
+        mode: str = "mean_std",
+    ):
         """Initialize a normalization object. Values will be subtracted by self.mean and then divided by self.range.
-        The parameters for the standardization can be either given from the user (via mean/range keywords), or they can be calculated from a datamodule. 
+        The parameters for the standardization can be either given from the user (via mean/range keywords), or they can be calculated from a datamodule.
         In the former, the mode will be overriden as 'custom'. 'In the latter, the standardization mode can be either 'mean_std' (remove by the mean and divide by the standard deviation) or 'min_max' (scale and shift the range of values such that all inputs are between -1 and 1).
-                                                        
+
         Parameters
         ----------
         in_features : int
@@ -45,24 +49,24 @@ class Normalization(Transform):
         mean: torch.Tensor, optional
             values to be subtracted
         range: torch.Tensor, optional
-            values to be scaled by        
-        mode : str, optional 
+            values to be scaled by
+        mode : str, optional
             normalization mode (mean_std, min_max), by default 'mean_std'
         """
 
         super().__init__(in_features=in_features, out_features=in_features)
-        
+
         # buffers containing mean and range for standardization
         self.register_buffer("mean", torch.zeros(in_features))
         self.register_buffer("range", torch.ones(in_features))
-        
+
         self.mode = mode
         self.is_initialized = False
 
         # set values based on args if provided
-        self.set_custom(mean,range)
+        self.set_custom(mean, range)
         if stats is not None:
-            self.set_from_stats(stats,mode=mode)
+            self.set_from_stats(stats, mode=mode)
 
         # save params
         self.in_features = in_features
@@ -71,8 +75,8 @@ class Normalization(Transform):
     def extra_repr(self) -> str:
         return f"in_features={self.in_features}, out_features={self.out_features}, mode={self.mode}"
 
-    def set_custom(self, mean : torch.Tensor = None, range : torch.Tensor = None): 
-        """ Set parameter of the normalization layer. 
+    def set_custom(self, mean: torch.Tensor = None, range: torch.Tensor = None):
+        """Set parameter of the normalization layer.
 
         Parameters
         ----------
@@ -89,10 +93,10 @@ class Normalization(Transform):
 
         if mean is not None or range is not None:
             self.is_initialized = True
-            self.mode = 'custom'
+            self.mode = "custom"
 
-    def set_from_stats(self, stats : dict or Statistics, mode : str = None): 
-        """ Set parameters of the normalization layer based on a dictionary with statistics 
+    def set_from_stats(self, stats: dict or Statistics, mode: str = None):
+        """Set parameters of the normalization layer based on a dictionary with statistics
 
         Parameters
         ----------
@@ -107,39 +111,45 @@ class Normalization(Transform):
         if isinstance(stats, Statistics):
             stats = stats.to_dict()
 
-        if mode == 'mean_std':
-            self.mean = stats['mean']
-            range = stats['std'] 
-            self.range = sanitize_range( range ) 
-        elif mode == 'min_max':
-            min = stats['min']
-            max = stats['max']
+        if mode == "mean_std":
+            self.mean = stats["mean"]
+            range = stats["std"]
+            self.range = sanitize_range(range)
+        elif mode == "min_max":
+            min = stats["min"]
+            max = stats["max"]
             self.mean = (max + min) / 2.0
             range = (max - min) / 2.0
-            self.range = sanitize_range( range ) 
-        elif mode == 'custom':
-            raise AttributeError('If mode is custom the parameters should be supplied via mean and range values when creating the Normalization object or with the set_custom, not with set_from_stats.')
-        else: 
-            raise ValueError(f'Mode {self.mode} unknonwn. Available modes: "mean_std", "min_max","custom"')
-    
+            self.range = sanitize_range(range)
+        elif mode == "custom":
+            raise AttributeError(
+                "If mode is custom the parameters should be supplied via mean and range values when creating the Normalization object or with the set_custom, not with set_from_stats."
+            )
+        else:
+            raise ValueError(
+                f'Mode {self.mode} unknonwn. Available modes: "mean_std", "min_max","custom"'
+            )
+
         self.is_initialized = True
-        
+
         if mode != self.mode:
             self.mode = mode
 
-    def setup_from_datamodule(self,datamodule):
+    def setup_from_datamodule(self, datamodule):
         if not self.is_initialized:
             # obtain statistics from the dataloader
             try:
-                stats = datamodule.train_dataloader().get_stats()['data']
+                stats = datamodule.train_dataloader().get_stats()["data"]
             except KeyError:
-                raise ValueError(f'Impossible to initialize {self.__class__.__name__} '
-                                 'because the training dataloader does not have a "data" key '
-                                 '(are you using multiple datasets?). A manual initialization '
-                                 'of "mean" and "range" is necessary.')
-            self.set_from_stats(stats,self.mode)
+                raise ValueError(
+                    f"Impossible to initialize {self.__class__.__name__} "
+                    'because the training dataloader does not have a "data" key '
+                    "(are you using multiple datasets?). A manual initialization "
+                    'of "mean" and "range" is necessary.'
+                )
+            self.set_from_stats(stats, self.mode)
 
-    def forward(self, x: torch.Tensor) -> (torch.Tensor):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Compute standardized inputs.
 
@@ -153,14 +163,14 @@ class Normalization(Transform):
         out : torch.Tensor
             standardized inputs
         """
-            
+
         # get mean and range
-        mean  = batch_reshape(self.mean, x.size())
+        mean = batch_reshape(self.mean, x.size())
         range = batch_reshape(self.range, x.size())
 
         return x.sub(mean).div(range)
 
-    def inverse(self, x: torch.Tensor) -> (torch.Tensor):
+    def inverse(self, x: torch.Tensor) -> torch.Tensor:
         """
         Remove standardization.
 
@@ -175,7 +185,7 @@ class Normalization(Transform):
             un-normalized inputs
         """
         # get mean and range
-        mean  = batch_reshape(self.mean, x.size())
+        mean = batch_reshape(self.mean, x.size())
         range = batch_reshape(self.range, x.size())
 
         return x.mul(range).add(mean)
@@ -183,21 +193,23 @@ class Normalization(Transform):
 
 def test_normalization():
     from mlcolvar.core.transform.utils import Inverse
+
     # create data
     torch.manual_seed(42)
     in_features = 2
-    X = torch.randn((100,in_features))*10
+    X = torch.randn((100, in_features)) * 10
 
     # get stats
     from mlcolvar.core.transform.utils import Statistics
+
     stats = Statistics(X).to_dict()
-    norm = Normalization(in_features, mean=stats['mean'],range=stats['std'])
+    norm = Normalization(in_features, mean=stats["mean"], range=stats["std"])
 
     y = norm(X)
     # print(X.mean(0),y.mean(0))
     # print(X.std(0),y.std(0))
 
-    # test inverse 
+    # test inverse
     z = norm.inverse(y)
     # print(X.mean(0),z.mean(0))
     # print(X.std(0),z.std(0))
@@ -207,7 +219,10 @@ def test_normalization():
     q = inverse(y)
     # print(X.mean(0),q.mean(0))
     # print(X.std(0),q.std(0))
-    norm = Normalization(in_features, mean=stats['mean'],range=stats['std'], mode='min_max')
+    norm = Normalization(
+        in_features, mean=stats["mean"], range=stats["std"], mode="min_max"
+    )
+
 
 if __name__ == "__main__":
     test_normalization()

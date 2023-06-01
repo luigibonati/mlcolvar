@@ -1,15 +1,22 @@
 import torch
 from mlcolvar.core.transform import Transform
 
+
 class BaseCV:
     """
     To inherit from this class, the class must define a BLOCKS class attribute.
     """
 
-    def __init__(self, in_features, out_features, 
-                        preprocessing : torch.nn.Module = None, postprocessing : torch.nn.Module = None,
-                        *args, **kwargs):
-        """ Base CV class options.
+    def __init__(
+        self,
+        in_features,
+        out_features,
+        preprocessing: torch.nn.Module = None,
+        postprocessing: torch.nn.Module = None,
+        *args,
+        **kwargs,
+    ):
+        """Base CV class options.
 
         Parameters
         ----------
@@ -21,23 +28,23 @@ class BaseCV:
             Preprocessing module, default None
         postprocessing : torch.nn.Module, optional
             Postprocessing module, default None
-            
+
         """
         super().__init__(*args, **kwargs)
         self.save_hyperparameters()
 
-        # MODEL 
+        # MODEL
         self.initialize_blocks()
-        self.in_features        = in_features
-        self.out_features       = out_features
-    
+        self.in_features = in_features
+        self.out_features = out_features
+
         # OPTIM
-        self._optimizer_name     = 'Adam'
-        self.optimizer_kwargs    = {}
+        self._optimizer_name = "Adam"
+        self.optimizer_kwargs = {}
 
         # PRE/POST
-        self.preprocessing      = preprocessing
-        self.postprocessing     = postprocessing
+        self.preprocessing = preprocessing
+        self.postprocessing = postprocessing
 
     @property
     def n_cvs(self):
@@ -46,9 +53,14 @@ class BaseCV:
 
     @property
     def example_input_array(self):
-        return torch.randn(self.in_features if self.preprocessing is None or not hasattr(self.preprocessing,'in_features') else self.preprocessing.in_features)
+        return torch.randn(
+            self.in_features
+            if self.preprocessing is None
+            or not hasattr(self.preprocessing, "in_features")
+            else self.preprocessing.in_features
+        )
 
-    def parse_options(self, options : dict = None):
+    def parse_options(self, options: dict = None):
         """
         Sanitize options and create defaults ({}) if not in options.
         Furthermore, it sets the optimizer kwargs, if given.
@@ -62,14 +74,16 @@ class BaseCV:
             options = {}
 
         for b in self.BLOCKS:
-            options.setdefault(b,{})
+            options.setdefault(b, {})
 
         for o in options.keys():
             if o not in self.BLOCKS:
-                if o == 'optimizer':
+                if o == "optimizer":
                     self.optimizer_kwargs.update(options[o])
                 else:
-                    raise ValueError(f'The key {o} is not available in this class. The available keys are: {", ".join(self.BLOCKS)}, and optimizer.')
+                    raise ValueError(
+                        f'The key {o} is not available in this class. The available keys are: {", ".join(self.BLOCKS)}, and optimizer.'
+                    )
 
         return options
 
@@ -78,7 +92,7 @@ class BaseCV:
         Initialize the blocks as attributes of the CV class.
         """
         for b in self.BLOCKS:
-            self.__setattr__(b,None)
+            self.__setattr__(b, None)
 
     def setup(self, stage=None):
         if stage == "fit":
@@ -86,10 +100,10 @@ class BaseCV:
 
     def initialize_transforms(self, datamodule):
         for b in self.BLOCKS:
-            if isinstance(getattr(self,b), Transform): 
-                getattr(self,b).setup_from_datamodule(datamodule)
+            if isinstance(getattr(self, b), Transform):
+                getattr(self, b).setup_from_datamodule(datamodule)
 
-    def forward(self, x : torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Evaluation of the CV
 
@@ -118,10 +132,10 @@ class BaseCV:
 
         return x
 
-    def forward_cv(self, x : torch.Tensor) -> torch.Tensor:
+    def forward_cv(self, x: torch.Tensor) -> torch.Tensor:
         """
         Execute sequentially all the blocks in self.BLOCKS unless they are not initialized.
-        
+
         No pre/post processing will be executed here. This is supposed to be called during training/validation and to be overloaded if necessary.
 
         Parameters
@@ -143,30 +157,31 @@ class BaseCV:
         return x
 
     def validation_step(self, val_batch, batch_idx):
-        """ 
-        Equal to training step if not overridden. Different behaviors for train/valid step can be enforced in training_step() based on the self.training variable. 
+        """
+        Equal to training step if not overridden. Different behaviors for train/valid step can be enforced in training_step() based on the self.training variable.
         """
         self.training_step(val_batch, batch_idx)
 
     def test_step(self, test_batch, batch_idx):
-        """ 
-        Equal to training step if not overridden. Different behaviors for train/valid step can be enforced in training_step() based on the self.training variable. 
+        """
+        Equal to training step if not overridden. Different behaviors for train/valid step can be enforced in training_step() based on the self.training variable.
         """
         self.training_step(test_batch, batch_idx)
 
     @property
     def optimizer_name(self) -> str:
-        """Optimizer name. Options can be set using optimizer_kwargs. Actual optimizer will be return during training from configure_optimizer function.
-        """
+        """Optimizer name. Options can be set using optimizer_kwargs. Actual optimizer will be return during training from configure_optimizer function."""
         return self._optimizer_name
-    
+
     @optimizer_name.setter
-    def optimizer_name(self, optimizer_name : str): 
+    def optimizer_name(self, optimizer_name: str):
         if not hasattr(torch.optim, optimizer_name):
-            raise AttributeError (f'torch.optim does not have a {optimizer_name} optimizer.')
+            raise AttributeError(
+                f"torch.optim does not have a {optimizer_name} optimizer."
+            )
         self._optimizer_name = optimizer_name
 
-    def configure_optimizers(self): 
+    def configure_optimizers(self):
         """
         Initialize the optimizer based on self._optimizer_name and self.optimizer_kwargs.
 
@@ -174,8 +189,10 @@ class BaseCV:
         -------
         torch.optim
             Torch optimizer
-        """ 
-        optimizer = getattr(torch.optim,self._optimizer_name)(self.parameters(),**self.optimizer_kwargs)
+        """
+        optimizer = getattr(torch.optim, self._optimizer_name)(
+            self.parameters(), **self.optimizer_kwargs
+        )
         return optimizer
 
     def __setattr__(self, key, value):
@@ -189,6 +206,6 @@ class BaseCV:
             super().__setattr__(key, value)
         except TypeError as e:
             # We make an exception only for loss_fn.
-            if (key == 'loss_fn') and ('cannot assign' in str(e)):
+            if (key == "loss_fn") and ("cannot assign" in str(e)):
                 del self.loss_fn
                 super().__setattr__(key, value)

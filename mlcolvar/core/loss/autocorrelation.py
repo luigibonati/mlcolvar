@@ -8,7 +8,7 @@
 Autocorrelation loss.
 """
 
-__all__ = ['AutocorrelationLoss', 'autocorrelation_loss']
+__all__ = ["AutocorrelationLoss", "autocorrelation_loss"]
 
 
 # =============================================================================
@@ -27,6 +27,7 @@ from mlcolvar.core.loss.eigvals import reduce_eigenvalues_loss
 # LOSS FUNCTIONS
 # =============================================================================
 
+
 class AutocorrelationLoss(torch.nn.Module):
     """(Weighted) autocorrelation loss.
 
@@ -36,7 +37,7 @@ class AutocorrelationLoss(torch.nn.Module):
 
     """
 
-    def __init__(self, reduce_mode: str = 'sum2', invert_sign: bool = True):
+    def __init__(self, reduce_mode: str = "sum2", invert_sign: bool = True):
         """Constructor.
 
         Parameters
@@ -54,11 +55,11 @@ class AutocorrelationLoss(torch.nn.Module):
         self.invert_sign = invert_sign
 
     def forward(
-            self,
-            x: torch.Tensor,
-            x_lag: torch.Tensor,
-            weights: Optional[torch.Tensor] = None,
-            weights_lag: Optional[torch.Tensor] = None,
+        self,
+        x: torch.Tensor,
+        x_lag: torch.Tensor,
+        weights: Optional[torch.Tensor] = None,
+        weights_lag: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """Estimate the autocorrelation.
 
@@ -83,7 +84,8 @@ class AutocorrelationLoss(torch.nn.Module):
             Loss value.
         """
         return autocorrelation_loss(
-            x, x_lag,
+            x,
+            x_lag,
             weights=weights,
             weights_lag=weights_lag,
             reduce_mode=self.reduce_mode,
@@ -92,19 +94,19 @@ class AutocorrelationLoss(torch.nn.Module):
 
 
 def autocorrelation_loss(
-        x: torch.Tensor,
-        x_lag: torch.Tensor,
-        weights: Optional[torch.Tensor] = None,
-        weights_lag: Optional[torch.Tensor] = None,
-        reduce_mode: str = 'sum2',
-        invert_sign: bool = True,
+    x: torch.Tensor,
+    x_lag: torch.Tensor,
+    weights: Optional[torch.Tensor] = None,
+    weights_lag: Optional[torch.Tensor] = None,
+    reduce_mode: str = "sum2",
+    invert_sign: bool = True,
 ) -> torch.Tensor:
     """(Weighted) autocorrelation loss.
 
     Computes the sum (or another reducing functions) of the eigenvalues of the
     autocorrelation matrix. This is the same loss function used in
     :class:`~mlcolvar.cvs.timelagged.deeptica.DeepTICA`.
-    
+
     Parameters
     ----------
     x : torch.Tensor

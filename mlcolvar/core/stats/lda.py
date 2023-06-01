@@ -5,7 +5,8 @@ from .utils import cholesky_eigh
 
 from mlcolvar.core.stats import Stats
 
-__all__ = ['LDA']
+__all__ = ["LDA"]
+
 
 class LDA(Stats):
     """
@@ -31,7 +32,7 @@ class LDA(Stats):
         Regularization to S_w matrix
     """
 
-    def __init__(self, in_features : int, n_states : int, mode : str = 'standard'):
+    def __init__(self, in_features: int, n_states: int, mode: str = "standard"):
         """
         Initialize a LDA object.
 
@@ -48,15 +49,15 @@ class LDA(Stats):
 
         # Save attributes
         self.n_states = n_states
-        self.in_features = in_features 
+        self.in_features = in_features
         self.out_features = n_states - 1
-        if (mode == 'standard') or (mode=='harmonic'):
+        if (mode == "standard") or (mode == "harmonic"):
             self.mode = mode
         else:
-            raise ValueError(f'LDA mode should be standard or harmonic, not {mode}.')
+            raise ValueError(f"LDA mode should be standard or harmonic, not {mode}.")
 
         # create eigenvector buffer
-        self.register_buffer("evecs", torch.eye(in_features,self.out_features))
+        self.register_buffer("evecs", torch.eye(in_features, self.out_features))
 
         # initialize other attributes
         self.evals = None
@@ -68,14 +69,14 @@ class LDA(Stats):
 
     def extra_repr(self) -> str:
         repr = f"in_features={self.in_features}, out_features={self.out_features}"
-        if self.mode=='harmonic':
+        if self.mode == "harmonic":
             repr += f" mode={self.mode}"
         return repr
 
-    def compute(self, X, labels, save_params = True):
+    def compute(self, X, labels, save_params=True):
         """
-        Compute LDA eigenvalues and eigenvectors. 
-        First compute the scatter matrices S_between (S_b) and S_within (S_w) and then solve the generalized eigenvalue problem.  
+        Compute LDA eigenvalues and eigenvectors.
+        First compute the scatter matrices S_between (S_b) and S_within (S_w) and then solve the generalized eigenvalue problem.
 
         Parameters
         ----------
@@ -98,13 +99,13 @@ class LDA(Stats):
         The eigenvecs object which is returned is a matrix whose column eigvecs[:,i] is the eigenvector associated to eigvals[i]
         """
 
-        S_b, S_w = self.compute_scatter_matrices(X,labels,save_params)
-        evals, evecs = cholesky_eigh(S_b,S_w,self.sw_reg,n_eig=self.n_states-1)
+        S_b, S_w = self.compute_scatter_matrices(X, labels, save_params)
+        evals, evecs = cholesky_eigh(S_b, S_w, self.sw_reg, n_eig=self.n_states - 1)
         if save_params:
             self.evals = evals
             self.evecs = evecs
 
-        return evals,evecs
+        return evals, evecs
 
     def compute_scatter_matrices(self, X, labels, save_params=True):
         """
@@ -141,7 +142,7 @@ class LDA(Stats):
         S_t = X_bar.t().matmul(X_bar) / (N - 1)
         # Define within scatter matrix and compute it
         S_w = torch.Tensor().new_zeros((d, d)).to(device)
-        if self.mode == 'harmonic':
+        if self.mode == "harmonic":
             S_w_inv = torch.Tensor().new_zeros((d, d)).to(device)
         # Loop over states to compute means and covs
         for i in states:
@@ -157,11 +158,11 @@ class LDA(Stats):
             S_w += X_i_bar.t().matmul(X_i_bar) / ((N_i - 1) * n_states)
 
             # HLDA
-            if self.mode == 'harmonic':
+            if self.mode == "harmonic":
                 inv_i = X_i_bar.t().matmul(X_i_bar) / ((N_i - 1) * n_states)
                 S_w_inv += inv_i.inverse()
 
-        if self.mode == 'harmonic':
+        if self.mode == "harmonic":
             S_w = S_w_inv.inverse()
 
         # Compute S_b from total scatter matrix
@@ -173,8 +174,7 @@ class LDA(Stats):
 
         return S_b, S_w
 
-    
-    def forward(self, x: torch.Tensor) -> (torch.Tensor):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Compute linear combination with saved eigenvectors
 
@@ -190,31 +190,33 @@ class LDA(Stats):
         """
         return torch.matmul(x, self.evecs)
 
+
 def test_lda():
     in_features = 2
     n_states = 2
-    
+
     torch.manual_seed(42)
-    X = torch.rand(100,in_features)*100
-    y = torch.randint(n_states,(100,1)).squeeze(1)
+    X = torch.rand(100, in_features) * 100
+    y = torch.randint(n_states, (100, 1)).squeeze(1)
 
     # standard
-    lda = LDA(in_features,n_states)
+    lda = LDA(in_features, n_states)
     print(lda)
-    S_b, S_w = lda.compute_scatter_matrices(X,y)
-    print(S_w,S_b)
-    evals,evecs = lda.compute(X,y,True)
-    print(lda.S_w.shape,lda.S_b.shape)
-    print(evals.shape,evecs.shape)
+    S_b, S_w = lda.compute_scatter_matrices(X, y)
+    print(S_w, S_b)
+    evals, evecs = lda.compute(X, y, True)
+    print(lda.S_w.shape, lda.S_b.shape)
+    print(evals.shape, evecs.shape)
     s = lda(X)
     print(s.shape)
-    assert (s.ndim == 2) and (s.shape[1]==n_states-1)
+    assert (s.ndim == 2) and (s.shape[1] == n_states - 1)
 
     # harmonic variant
-    hlda = LDA(in_features, n_states, mode='harmonic')
+    hlda = LDA(in_features, n_states, mode="harmonic")
     print(hlda)
-    hlda.compute(X,y)
+    hlda.compute(X, y)
     s = lda(X)
-    
+
+
 if __name__ == "__main__":
     test_lda()

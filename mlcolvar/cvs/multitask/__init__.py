@@ -1,3 +1,3 @@
-__all__ = ['MultiTaskCV']
+__all__ = ["MultiTaskCV"]
 
 from mlcolvar.cvs.multitask.multitask import MultiTaskCV
