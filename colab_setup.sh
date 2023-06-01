@@ -6,6 +6,7 @@ if test -f "is_colab_set_up.txt"; then
     echo This Colab environment is already set up!
 else
     notebook_type=$1
+    echo Setting up Colab environment.
 
     git clone --quiet https://github.com/luigibonati/mlcolvar.git mlcolvar
     echo - Cloned mlcolvar from git
@@ -37,6 +38,6 @@ else
     rm -r mlcolvar
     echo - Removed mlcolvar folder
 
-    echo This Colab environment is setup, enjoy! > is_colab_set_up.txt
-    echo Done!
+    echo True > is_colab_set_up.txt
+    echo The environment is ready, enjoy!
 fi
