@@ -1,6 +1,6 @@
-torch
-pandas
-numpy
-matplotlib
 lightning
+torch
+numpy
+pandas
+matplotlib
 kdepy

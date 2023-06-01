@@ -10,21 +10,32 @@ description = "Machine learning collective variables for enhanced sampling"
 dynamic = ["version"]
 readme = "README.md"
 authors = [
-    { name = "Luigi Bonati", email = "luigi.bonati@iit.it" }
+    { name = "Luigi Bonati" , email = "luigi.bonati@iit.it"},
+    { name = "Enrico Trizio" },
+    { name = "Andrea Rizzi" }, 
+    { name = "Michele Parrinello" }
 ]
 license = { text = "MIT" }
 # See https://pypi.org/classifiers/
 classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+    "Natural Language :: English",
 ]
 requires-python = ">=3.8"
 # Declare any run-time dependencies that should be installed with the package.
-#dependencies = [
-#    "importlib-resources;python_version<'3.10'",
-#]
+dependencies = [
+    "lightning",
+    "pytorch",
+    "numpy",
+    "pandas",
+    "matplotlib",
+    "kdepy"
+]
 
-# Update the urls once the hosting is set up.
 [project.urls]
 "Source" = "https://github.com/luigibonati/mlcolvar/"
 "Documentation" = "https://mlcolvar.readthedocs.io/"
@@ -32,7 +43,10 @@ requires-python = ">=3.8"
 [project.optional-dependencies]
 test = [
   "pytest>=6.1.2",
-  "pytest-runner"
+  "pytest-runner",
+  "pytest-cov", 
+  "codecov",
+  "nbmake"
 ]
 
 [tool.setuptools]
