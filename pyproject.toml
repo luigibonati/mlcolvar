@@ -29,11 +29,11 @@ requires-python = ">=3.8"
 # Declare any run-time dependencies that should be installed with the package.
 dependencies = [
     "lightning",
-    "pytorch",
+    "torch",
     "numpy",
     "pandas",
     "matplotlib",
-    "kdepy"
+    "KDEpy"
 ]
 
 [project.urls]
