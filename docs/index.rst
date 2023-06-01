@@ -46,6 +46,7 @@ Table of contents
    installation
    api
    tutorials
+   examples
    plumed
    contributing
 
