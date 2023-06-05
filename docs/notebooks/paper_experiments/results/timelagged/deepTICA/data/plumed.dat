@@ -12,12 +12,11 @@ pot: BIASVALUE ARG=ene
 
 # load deep cv pytorch model
 tica: PYTORCH_MODEL FILE=../model_deepTICA.pt ARG=p.x,p.y
-#cv: PYTORCH_MODEL FILE=../../../muller_experiments/deepTDA_bad/model_deepTDA_bad.pt ARG=p.x,p.y 
 
 # apply static bias from previous sim
 static: OPES_METAD ARG=p.y ...
     RESTART=YES
-    STATE_RFILE=../../../muller_experiments/opes-y/State.data
+    STATE_RFILE=../../../../input_data/timelagged/opes-y/State.data
     BARRIER=16
     PACE=10000000
 ...
