@@ -130,7 +130,7 @@ def batch_reshape(t: torch.Tensor, size: torch.Size) -> torch.Tensor:
 def sym_func(x, centers, sigma):
     return torch.exp(- torch.div(torch.pow(x-centers, 2), 2*torch.pow(sigma,2) ))
 
-def easy_KDE(x, n_input, min_max, n, sigma_to_center, normalize=False):
+def easy_KDE(x, n_input, min_max, n, sigma_to_center, normalize=False, return_bins=False):
     if len(x.shape) == 1:
         x = torch.reshape(x, (1, n_input, 1))
     if x.shape[-1] != 1:
@@ -139,12 +139,16 @@ def easy_KDE(x, n_input, min_max, n, sigma_to_center, normalize=False):
         x = x.unsqueeze(0)
 
     centers = torch.linspace(min_max[0], min_max[1], n, device=x.device)
+    bins = torch.clone(centers)
     sigma = (centers[1] - centers[0]) * sigma_to_center
     centers = torch.tile(centers, dims=(n_input,1))
     out = torch.sum(sym_func(x, centers, sigma), dim=1)
     if normalize:
         out = torch.div(out, torch.sum(out, -1, keepdim=True)) * n_input
-    return out
+    if return_bins:
+        return out, bins
+    else:
+        return out
 
 
 def compute_distances_components_matrices(pos : torch.Tensor,
