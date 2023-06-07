@@ -91,9 +91,9 @@ class RDF(Transform):
         x = self.compute_rdf(x)
         if self.peak_integral is not None:
             if self.integral_baseline:
-                integral = torch.sum((x[:, self.peak_lower_bound:self.peak_upper_bound] - 1) * self.bins_size, dim = 1, keepdim=True)
+                integral = torch.sum((x[:, self.peak_lower_bound:self.peak_upper_bound] - 1) * self.bins_size, dim = 1)
             else:
-                integral = torch.sum((x[:, self.peak_lower_bound:self.peak_upper_bound]) * self.bins_size, dim = 1, keepdim=True)
+                integral = torch.sum((x[:, self.peak_lower_bound:self.peak_upper_bound]) * self.bins_size, dim = 1)
             return integral
         else:
             return x
