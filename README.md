@@ -1,11 +1,20 @@
-`mlcolvar`: Machine Learning COLlective VARiables
+Machine Learning Collective Variables for Enhanced Sampling
 =================================================
+
 [//]: # (Badges)
-[![Documentation Status](https://readthedocs.org/projects/mlcolvar/badge/?version=latest)](https://mlcolvar.readthedocs.io/en/latest/?badge=latest)
+**CODE**  [![Documentation Status](https://readthedocs.org/projects/mlcolvar/badge/?version=latest)](https://mlcolvar.readthedocs.io/en/latest/?badge=latest)
 [![GitHub Actions Build Status](https://github.com/luigibonati/mlcolvar/workflows/CI/badge.svg)](https://github.com/luigibonati/mlcolvar/actions?query=workflow%3ACI)
 [![codecov](https://codecov.io/gh/luigibonati/mlcolvar/branch/main/graph/badge.svg?token=H01H68KNNG)](https://codecov.io/gh/luigibonati/mlcolvar)
 [![license](https://img.shields.io/github/license/luigibonati/mlcolvar)](https://github.com/luigibonati/mlcolvar/blob/main/LICENSE)
-[![preprint](https://img.shields.io/badge/preprint-arXiv:2305.19980-lightgrey)](https://arxiv.org/abs/2305.19980)
+
+**PAPER**  [![paper](https://img.shields.io/badge/doi-10.1063/5.0156343-blue)](https://doi.org/10.1063/5.0156343)
+[![preprint](https://img.shields.io/badge/arXiv-2305.19980-red)](https://arxiv.org/abs/2305.19980)
+
+---
+
+
+<img src="https://raw.githubusercontent.com/luigibonati/mlcolvar/main/docs/images/logo_name_black_big.png" width="400" />
+
 
 `mlcolvar` is a Python library aimed to help design data-driven collective-variables (CVs) for enhanced sampling simulations. The key features are:
 

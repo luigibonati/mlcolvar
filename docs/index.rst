@@ -9,7 +9,10 @@ mlcolvar: Machine Learning Collective Variables
 .. image:: https://img.shields.io/badge/Github-mlcolvar-brightgreen
    :target: https://github.com/luigibonati/mlcolvar   
 
-.. image:: https://img.shields.io/badge/preprint-arXiv:2305.19980-red
+.. image:: https://img.shields.io/badge/doi-10.1063/5.0156343-blue
+   :target: https://doi.org/10.1063/5.0156343
+
+.. image:: https://img.shields.io/badge/arXiv:2305.19980-red
    :target: https://arxiv.org/abs/2305.19980
    
 ``mlcolvar`` is a Python library aimed to help design data-driven collective-variables (CVs) for enhanced sampling simulations. The key features are:
