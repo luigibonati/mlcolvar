@@ -33,6 +33,7 @@ dependencies = [
     "numpy",
     "pandas",
     "matplotlib",
+    "scipy<1.11.0",
     "KDEpy"
 ]
 

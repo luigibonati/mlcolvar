@@ -22,6 +22,7 @@ dependencies:
   - nbsphinx
   - ipython
   - ipykernel
+  - scipy<1.11
 
   # Pip-only installs
   - pip:
