@@ -15,14 +15,15 @@ dependencies:
   - numpy
   - pandas
   - pytorch
-  - lightning<=2.0.1
+  - pydantic<2 # workaround to avoid clashes with lightning
+  - lightning
 
   # utils
   - matplotlib
   - nbsphinx
   - ipython
   - ipykernel
-  - scipy<1.11
+  - scipy<1.11 # latest version does not work with kdepy
 
   # Pip-only installs
   - pip:
