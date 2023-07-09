@@ -25,7 +25,7 @@ from mlcolvar.data.datamodule import DictModule
 # =============================================================================
 
 
-@pytest.mark.parametrize("lengths", [[0.8, 0.2], [0.7, 0.2, 0.1]])
+@pytest.mark.parametrize("lengths", [[1.0], [0.8, 0.2], [0.7, 0.2, 0.1]])
 @pytest.mark.parametrize("fields", [[], ["labels", "weights"]])
 @pytest.mark.parametrize("random_split", [True, False])
 def test_dictionary_data_module_split(lengths, fields, random_split):
@@ -75,7 +75,7 @@ def test_dictionary_data_module_split(lengths, fields, random_split):
 
     # An error is raised if the length of the test set has not been specified.
     if len(lengths) < 3:
-        with pytest.raises(ValueError, match="you need to pass three lengths"):
+        with pytest.raises(NotImplementedError, match="you need to pass three lengths"):
             datamodule.test_dataloader()
 
 
