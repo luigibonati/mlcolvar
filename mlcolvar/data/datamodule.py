@@ -170,6 +170,10 @@ class DictModule(lightning.LightningDataModule):
     def val_dataloader(self):
         """Return validation dataloader."""
         self._check_setup()
+        if len(self.lengths) < 2:
+            raise NotImplementedError(
+                "Validation dataset not available, you need to pass two lengths to datamodule."
+            )
         if self.valid_loader is None:
             self.valid_loader = DictLoader(
                 self._dataset_split[1],
@@ -182,7 +186,7 @@ class DictModule(lightning.LightningDataModule):
         """Return test dataloader."""
         self._check_setup()
         if len(self.lengths) < 3:
-            raise ValueError(
+            raise NotImplementedError(
                 "Test dataset not available, you need to pass three lengths to datamodule."
             )
         if self.test_loader is None:
@@ -202,7 +206,8 @@ class DictModule(lightning.LightningDataModule):
     def __repr__(self) -> str:
         string = f"DictModule(dataset -> {self.dataset.__repr__()}"
         string += f",\n\t\t     train_loader -> DictLoader(length={self.lengths[0]}, batch_size={self.batch_size[0]}, shuffle={self.shuffle[0]})"
-        string += f",\n\t\t     valid_loader -> DictLoader(length={self.lengths[1]}, batch_size={self.batch_size[1]}, shuffle={self.shuffle[1]})"
+        if len(self.lengths) >= 2:
+            string += f",\n\t\t     valid_loader -> DictLoader(length={self.lengths[1]}, batch_size={self.batch_size[1]}, shuffle={self.shuffle[1]})"
         if len(self.lengths) >= 3:
             string += f",\n\t\t\ttest_loader =DictLoader(length={self.lengths[2]}, batch_size={self.batch_size[2]}, shuffle={self.shuffle[2]})"
         string += f")"
