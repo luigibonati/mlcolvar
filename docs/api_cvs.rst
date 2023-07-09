@@ -3,7 +3,19 @@ Collective variables
 
 In this section we report the neural network-based collective variables implemented in the library. Note that the linear statistical methods are implemented in ``mlcolvar.core.stats`` instead. 
 
-For each CV it is described the keys of the expected dataset and the loss function used.
+.. rubric:: Base class
+
+All CVs inherits from this base class, which also implement default methods.
+
+.. currentmodule:: mlcolvar.cvs
+
+.. autosummary::
+   :toctree: autosummary
+   :template: custom-class-template.rst
+
+   BaseCV
+
+For each of the specific CV described below there are reported the keys of the expected dataset and the loss function used.
 
 .. rubric:: Unsupervised learning 
 

@@ -47,7 +47,13 @@ test = [
   "pytest-runner",
   "pytest-cov", 
   "codecov",
-  "nbmake"
+  "nbmake",
+]
+doc = [
+  "sphinx",
+  "nbsphinx",
+  "furo",
+  "sphinx-copybutton", 
 ]
 
 [tool.setuptools]

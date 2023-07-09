@@ -1,0 +1,38 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Luigi"
+  given-names: "Bonati"
+  orcid: "https://orcid.org/0000-0002-9118-6239"
+- family-names: "Enrico"
+  given-names: "Trizio"
+  orcid: "https://orcid.org/0000-0003-2042-0232"
+- family-names: "Andrea"
+  given-names: "Rizzi"
+  orcid: "https://orcid.org/0000-0001-7693-2013"
+- family-names: "Michele"
+  given-names: "Parrinello"
+  orcid: "https://orcid.org/0000-0001-6550-3272"
+title: "mlcolvar"
+url: "https://github.com/luigibonati/mlcolvar"
+preferred-citation:
+  type: article
+  authors:
+  - family-names: "Luigi"
+    given-names: "Bonati"
+    orcid: "https://orcid.org/0000-0002-9118-6239"
+  - family-names: "Enrico"
+    given-names: "Trizio"
+    orcid: "https://orcid.org/0000-0003-2042-0232"
+  - family-names: "Andrea"
+    given-names: "Rizzi"
+    orcid: "https://orcid.org/0000-0001-7693-2013"
+  - family-names: "Michele"
+    given-names: "Parrinello"
+    orcid: "https://orcid.org/0000-0001-6550-3272"
+  doi: "10.1063/5.0156343"  
+  journal: "Journal of Chemical Physics"
+  start: 014801
+  title: "A unified framework for machine learning collective variables for enhanced sampling simulations: mlcolvar"
+  volume: 159
+  year: 2023
