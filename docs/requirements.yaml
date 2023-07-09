@@ -15,7 +15,7 @@ dependencies:
   - numpy
   - pandas
   - pytorch
-  - lightning
+  - lightning<=2.0.1
 
   # utils
   - matplotlib
