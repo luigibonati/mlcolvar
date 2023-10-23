@@ -296,7 +296,7 @@ def compute_distances_matrix(pos : torch.Tensor,
         Matrix of the pairwise distances along the cell dimensions, index map: (batch_idx, atom_i_idx, atom_j_idx, component_idx)
     """
     # compute distances components, keep only first element of the output tuple
-    dist_components = compute_distances_components_matrices(pos=pos, n_atoms=n_atoms, PBC=PBC, real_cell=real_cell, scaled_coords=scaled_coords)[0]
+    dist_components, real_cell,_ = compute_distances_components_matrices(pos=pos, n_atoms=n_atoms, PBC=PBC, real_cell=real_cell, scaled_coords=scaled_coords)
     
     # all the checks on the shape are already in the components function
     batch_size = dist_components.shape[0]
@@ -304,7 +304,7 @@ def compute_distances_matrix(pos : torch.Tensor,
     # mask out diagonal --> to keep the derivatives safe
     mask_diag = ~torch.eye(n_atoms, dtype=bool)
     mask_diag = torch.tile(mask_diag, (batch_size, 1, 1))
-    
+
     # if we used scaled coords we need to get back to real distances
     if scaled_coords:
         dist_components = torch.einsum('bijk,i->bijk', dist_components, real_cell)
