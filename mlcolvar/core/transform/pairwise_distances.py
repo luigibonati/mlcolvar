@@ -50,8 +50,9 @@ class PairwiseDistances(Transform):
                                         real_cell=self.real_cell,
                                         scaled_coords=self.scaled_coords)
         batch_size = dist.shape[0]
+        device = pos.device
         # mask out diagonal elements
-        aux_mask = torch.ones_like(dist) - torch.eye(dist.shape[-1])
+        aux_mask = torch.ones_like(dist, device=device) - torch.eye(dist.shape[-1], device=device)
         # keep upper triangular part to avoid duplicates
         unique = aux_mask.triu().nonzero(as_tuple=True)
         pairwise_distances = dist[unique].reshape((batch_size, -1)) 
