@@ -26,7 +26,7 @@ class MetricsCallback(Callback):
         super().__init__()
         self.metrics = {"epoch": []}
 
-    def on_validation_epoch_end(self, trainer, pl_module):
+    def on_train_epoch_end(self, trainer, pl_module):
         metrics = trainer.callback_metrics
         if not trainer.sanity_checking:
             self.metrics["epoch"].append(trainer.current_epoch)
