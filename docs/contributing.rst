@@ -24,11 +24,11 @@ implementation path from the start. Then
       cd mlcolvar
       pip install -e .
 
-In order to perform the regtests you can install the required packages with:
+4. In order to perform the regtests and build the documentation you need to install additional packages:
 
-.. code-block:: bash
+    .. code-block:: bash
 
-    pip install mlcolvar[test]
+      pip install mlcolvar[docs,test]
 
 Once your environment is set up you are ready to implement your changes.
 
