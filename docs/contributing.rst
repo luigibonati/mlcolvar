@@ -24,6 +24,12 @@ implementation path from the start. Then
       cd mlcolvar
       pip install -e .
 
+4. In order to perform the regtests and build the documentation you need to install additional packages:
+
+    .. code-block:: bash
+
+      pip install mlcolvar[docs,test]
+
 Once your environment is set up you are ready to implement your changes.
 
 
@@ -87,13 +93,19 @@ and simply run
     python myfile.py
 
 Finally, when modifying the documentation (especially when using reStructuredText syntax), it is a very good idea to build the
-documentation to check the result. To do this you will need to install these additional packages
+documentation to check the result. To do this you will need to install these additional packages:
 
 .. code-block:: bash
 
     pip install furo nbsphinx sphinx-copybutton
 
-and then run the commands
+or more simply using:
+
+.. code-block:: bash
+
+    pip install mlcolvar[doc]
+
+Then, you can build the docs via the command
 
 .. code-block:: bash
 

@@ -4,6 +4,8 @@ from mlcolvar.core.transform import Transform
 
 class BaseCV:
     """
+    Base collective variable class.
+    
     To inherit from this class, the class must define a BLOCKS class attribute.
     """
 

@@ -52,6 +52,13 @@ modifications automatically installed
 
     pip install -e .
 
+Furthermore, if you want to check that the library is working properly, you can perform the regtests by installing the optional dependencies and then executing `pytest` in the mlcolvar folder.
+
+.. code-block:: bash
+
+    pip install mlcolvar[test]
+    pytest
+
 
 Create a virtual environment
 ----------------------------
