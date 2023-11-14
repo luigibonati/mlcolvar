@@ -15,7 +15,7 @@ class Shifted_Softplus(torch.nn.Softplus):
     
 class Sharp_Sigmoid(torch.nn.Module):
     def __init__(self, p=3):
-        super(Sharp_Sigmoid, self).__init__(p)
+        super(Sharp_Sigmoid, self).__init__()
         self.p = p
 
     def forward(self, input):
