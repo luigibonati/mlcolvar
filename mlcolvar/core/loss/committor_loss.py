@@ -32,8 +32,7 @@ class CommittorLoss(torch.nn.Module):
                 alpha : float,
                 cell_size: float = None,
                 gamma : float = 10000,
-                delta_f: float = 0,
-                create_graph : bool = True
+                delta_f: float = 0
                  ):
         super().__init__()
         self.mass = mass
@@ -41,10 +40,9 @@ class CommittorLoss(torch.nn.Module):
         self.cell_size = cell_size
         self.gamma = gamma
         self.delta_f = delta_f
-        self.create_graph = create_graph
 
     def forward(
-        self, x : torch.Tensor, q : torch.Tensor, labels : torch.Tensor, w : torch.Tensor
+        self, x : torch.Tensor, q : torch.Tensor, labels : torch.Tensor, w : torch.Tensor, create_graph : bool = True
     ) -> torch.Tensor:
         return committor_loss(
             x,
@@ -56,7 +54,7 @@ class CommittorLoss(torch.nn.Module):
             self.cell_size,
             self.gamma,
             self.delta_f,
-            self.create_graph
+            create_graph
         )
 
 
@@ -109,6 +107,8 @@ def committor_loss(x : torch.Tensor,
     # inherit right device
     device = x.device 
 
+    mass = mass.to(device)
+
     # Create masks to access different states data
     mask_A = torch.nonzero(labels.squeeze() == 0, as_tuple=True) 
     mask_B = torch.nonzero(labels.squeeze() == 1, as_tuple=True) 
@@ -149,4 +149,4 @@ def committor_loss(x : torch.Tensor,
     loss = gamma*( loss_var + alpha*(loss_A + loss_B) )
     
     # TODO maybe there is no need to detacch them for logging
-    return loss, loss_var.detach(), alpha*loss_A.detach(), alpha*loss_B.detach()
+    return loss, gamma*loss_var.detach(), alpha*gamma*loss_A.detach(), alpha*gamma*loss_B.detach()
