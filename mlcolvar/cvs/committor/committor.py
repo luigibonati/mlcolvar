@@ -40,8 +40,9 @@ class Committor(BaseCV, lightning.LightningModule):
         options = self.parse_options(options)
         
         # add the relevant nn options, set tanh for hidden layers and sharp sigmoid for output layer
-        activ_list = ["tanh" for i in range( len(layers) - 1 )]
+        activ_list = ["tanh" for i in range( len(layers) - 2 )]
         activ_list.append("sharp_sigmoid")
+        
         # update options dict for activations if not already set
         if not "activation" in options["nn"]:
             options["nn"]["activation"] = activ_list
@@ -59,15 +60,22 @@ class Committor(BaseCV, lightning.LightningModule):
         """Compute and return the training loss and record metrics."""
         # =================get data===================
         x = train_batch["data"]
+        x.requires_grad = True
+
         labels = train_batch["labels"]
         weights = train_batch["weights"]
 
         # =================forward====================
         q = self.forward_cv(x)
         # ===================loss=====================
-        loss, loss_var, loss_bound_A, loss_bound_B = self.loss_fn(
-            x, q, labels, weights 
-        )
+        if self.training:
+            loss, loss_var, loss_bound_A, loss_bound_B = self.loss_fn(
+                x, q, labels, weights 
+            )
+        else:
+            loss, loss_var, loss_bound_A, loss_bound_B = self.loss_fn(
+                x, q, labels, weights, create_graph=False 
+            )
         # ====================log=====================+
         name = "train" if self.training else "valid"
         self.log(f"{name}_loss", loss, on_epoch=True)
@@ -76,5 +84,30 @@ class Committor(BaseCV, lightning.LightningModule):
         self.log(f"{name}_loss_bound_B", loss_bound_B, on_epoch=True)
         return loss
     
+    def configure_optimizers(self):
+        """
+        Initialize the optimizer based on self._optimizer_name and self.optimizer_kwargs.
+
+        Returns
+        -------
+        torch.optim
+            Torch optimizer
+        """
+        lr_scheduler_dict = self.optimizer_kwargs.pop('lr_scheduler', None)
+    
+        optimizer = getattr(torch.optim, self._optimizer_name)(
+            self.parameters(), **self.optimizer_kwargs
+        )
+        if lr_scheduler_dict is not None:
+            lr_scheduler_name = lr_scheduler_dict.pop('scheduler')
+            lr_scheduler = {
+                'scheduler': lr_scheduler_name(optimizer, **lr_scheduler_dict),
+            }
+            lr_scheduler_dict['scheduler'] = lr_scheduler_name
+            self.optimizer_kwargs['lr_scheduler'] = lr_scheduler_dict
+            return [optimizer] , [lr_scheduler]
+        else: 
+            return optimizer
+        
 
 # TODO add test function
