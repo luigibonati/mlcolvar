@@ -108,6 +108,9 @@ class Committor(BaseCV, lightning.LightningModule):
             return [optimizer] , [lr_scheduler]
         else: 
             return optimizer
-        
+    
+    def on_validation_model_eval(self, *args, **kwargs):
+        super().on_validation_model_eval(*args, **kwargs)
+        torch.set_grad_enabled(True)
 
 # TODO add test function
