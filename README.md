@@ -3,7 +3,7 @@ Machine Learning Collective Variables for Enhanced Sampling
 
 [//]: # (Badges)
 **CODE**  [![Documentation Status](https://readthedocs.org/projects/mlcolvar/badge/?version=latest)](https://mlcolvar.readthedocs.io/en/latest/?badge=latest)
-[![GitHub Actions Build Status](https://github.com/luigibonati/mlcolvar/workflows/CI/badge.svg)](https://github.com/luigibonati/mlcolvar/actions?query=workflow%3ACI)
+[![GitHub Actions Build Status](https://github.com/luigibonati/mlcolvar/actions/workflows/CI.yaml/badge.svg?branch=main)](https://github.com/luigibonati/mlcolvar/actions?query=workflow%3ACI)
 [![codecov](https://codecov.io/gh/luigibonati/mlcolvar/branch/main/graph/badge.svg?token=H01H68KNNG)](https://codecov.io/gh/luigibonati/mlcolvar)
 [![license](https://img.shields.io/github/license/luigibonati/mlcolvar)](https://github.com/luigibonati/mlcolvar/blob/main/LICENSE)
 
