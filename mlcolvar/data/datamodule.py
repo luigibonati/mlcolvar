@@ -302,7 +302,7 @@ def sequential_split(dataset, lengths: Sequence) -> list:
     until there are no remainders left.
     """
 
-    warnings.warn("The function sequential_split is deprecated, use split_dataset(.., .., random_split=False, ..)", DeprecationWarning)
+    warnings.warn("The function sequential_split is deprecated, use split_dataset(.., .., random_split=False, ..)", FutureWarning, stacklevel=2)
     
     return split_dataset(dataset=dataset, lengths=lengths, random_split=False)
 
