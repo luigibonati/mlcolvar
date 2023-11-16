@@ -35,6 +35,29 @@ And many others can be implemented based on the building blocks or with simple m
 
 ---
 
+
+**Install with `pip`**
+
+The library is available on [PyPi](https://pypi.org/project/mlcolvar/) and can be installed with `pip`. This is the preferred choice for **users** as it automatically installs the package requirements. 
+
+```bash
+pip install mlcolvar
+```
+
+**Clone from GitHub**
+
+The library can also be installed cloning the repository from GitHub. This is the preferred choice for **developers** as it provides more flexibility and allows editable installation.
+
+```bash
+git clone https://github.com/luigibonati/mlcolvar.git
+cd mlcolvar
+pip -e install .
+```
+
+
+
+---
+
 **PLUMED interface**: the resulting CVs can be deployed for enhancing sampling with the [PLUMED](https://www.plumed.org/) package via the [pytorch](https://www.plumed.org/doc-master/user-doc/html/_p_y_t_o_r_c_h__m_o_d_e_l.html>`_) interface, available since version 2.9. 
 
 ---
