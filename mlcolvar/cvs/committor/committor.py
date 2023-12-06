@@ -8,8 +8,27 @@ __all__ = ["Committor"]
 
 
 class Committor(BaseCV, lightning.LightningModule):
-    """
-    Committor class
+    """Base class for data-driven learning of committor function.
+    The committor function q is expressed as the output of a neural network optimized with a self-consistent
+    approach based on the Kolmogorov's variational principle for the committor and on the imposition of its boundary conditions. 
+    TODO: Add reference upon publication
+
+    **Data**: for training it requires a DictDataset with the keys 'data', 'labels' and 'weights'
+
+    **Loss**: Minimize Kolmogorov's variational functional of q and impose boundary condition on the metastable states (CommittorLoss)
+    
+    References
+    ----------
+    .. [*] P. Kang, E. Trizio, and M. Parrinello, "Amazing committor paper", xxxx yy, 2zzz
+
+    See also
+    --------
+    mlcolvar.core.loss.CommittorLoss
+        Kolmogorov's variational optimization of committor and imposition of boundary conditions
+    mlcolvar.cvs.committor.utils.compute_committor_weights
+        Utils to compute the appropriate weights for the training set
+    mlcolvar.cvs.committor.utils.initialize_committor_masses
+        Utils to initialize the masses tensor for the training
     """
 
     BLOCKS = ["nn"]
@@ -25,6 +44,28 @@ class Committor(BaseCV, lightning.LightningModule):
         options: dict = None,
         **kwargs,
     ):
+        """Define a NN-based committor model
+
+        Parameters
+        ----------
+        layers : list
+            Number of neurons per layer
+        mass : torch.Tensor
+            List of masses of all the atoms we are using, for each atom we need to repeat three times for x,y,z.
+            The mlcolvar.cvs.committor.utils.initialize_committor_masses can be used to simplify this.
+        alpha : float
+            Hyperparamer that scales the boundary conditions contribution to loss, i.e. alpha*(loss_bound_A + loss_bound_B)
+        cell_size : float, optional
+            CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, by default None
+        gamma : float, optional
+            Hyperparamer that scales the whole loss to avoid too small numbers, i.e. gamma*(loss_var + loss_bound), by default 10000
+        delta_f : float, optional
+            Delta free energy between A (label 0) and B (label 1), units is kBT, by default 0. 
+            State B is supposed to be higher in energy.
+        options : dict[str, Any], optional
+            Options for the building blocks of the model, by default {}.
+            Available blocks: ['nn'] .
+        """
         super().__init__(in_features=layers[0], out_features=layers[-1], **kwargs) 
         
         # =======  LOSS  =======
@@ -84,6 +125,8 @@ class Committor(BaseCV, lightning.LightningModule):
         self.log(f"{name}_loss_bound_B", loss_bound_B, on_epoch=True)
         return loss
     
+# we override the default configure_optimizer function of BaseCV to allow setting a lr_scheduler
+# This may be improve and/or fixed in future commits TODO !
     def configure_optimizers(self):
         """
         Initialize the optimizer based on self._optimizer_name and self.optimizer_kwargs.

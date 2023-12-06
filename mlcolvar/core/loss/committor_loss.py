@@ -34,6 +34,22 @@ class CommittorLoss(torch.nn.Module):
                 gamma : float = 10000,
                 delta_f: float = 0
                  ):
+        """Compute Kolmogorov's variational principle loss and impose boundary condition on the metastable states
+
+        Parameters
+        ----------
+        mass : torch.Tensor
+            Atomic masses of the atoms in the system
+        alpha : float
+            Hyperparamer that scales the boundary conditions contribution to loss, i.e. alpha*(loss_bound_A + loss_bound_B)
+        cell_size : float, optional
+            CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, by default None
+        gamma : float, optional
+            Hyperparamer that scales the whole loss to avoid too small numbers, i.e. gamma*(loss_var + loss_bound), by default 10000
+        delta_f : float, optional
+            Delta free energy between A (label 0) and B (label 1), units is kBT, by default 0. 
+            State B is supposed to be higher in energy.
+        """
         super().__init__()
         self.mass = mass
         self.alpha = alpha
@@ -100,9 +116,12 @@ def committor_loss(x : torch.Tensor,
     -------
     loss : torch.Tensor
         Loss value.
-    [loss_var, alpha*loss_A, alpha*loss_B] : list of torch.Tensor, optional
-        The values of the variational term and the A and B boundary conditions terms of the loss
-    loss_
+    gamma*loss_var : torch.Tensor
+        The variational loss term
+    gamma*alpha*loss_A : torch.Tensor
+        The boundary loss term on basin A
+    gamma*alpha*loss_B : torch.Tensor
+        The boundary loss term on basin B
     """
     # inherit right device
     device = x.device 
@@ -148,5 +167,5 @@ def committor_loss(x : torch.Tensor,
 
     loss = gamma*( loss_var + alpha*(loss_A + loss_B) )
     
-    # TODO maybe there is no need to detacch them for logging
+    # TODO maybe there is no need to detach them for logging
     return loss, gamma*loss_var.detach(), alpha*gamma*loss_A.detach(), alpha*gamma*loss_B.detach()

@@ -6,9 +6,33 @@ def compute_committor_weights(
     dataframe, 
     dataset, 
     beta : float, 
-    mixing : bool, 
-    mixing_csi : float
+    mixing : bool = False, 
+    mixing_csi : float = None
     ):
+    """Utils to compute the appropriate weights for the training set for the learning of committor function.
+    Compute the weights of training data based on the bias and the iteration they belong to
+
+    Parameters
+    ----------
+    dataframe : pd.Dataframe
+        Pandas dataframe with the training data, including descriptors, labels and bias columns.
+        This should be created using the mlcolvar.utils.io.create_dataset_from_files function
+    dataset : _type_
+        Dataset to be updated. This should be created using the mlcolvar.utils.io.create_dataset_from_files function
+    beta : float
+        Inverse temperature in the right energy units
+    mixing : bool
+        Switch for mixing of coefficients, by default False. TODO deprecate
+    mixing_csi : float
+        Mixing coefficient, by default None. TODO deprecate
+
+    Returns
+    -------
+    Dataframe
+        Updated Pandas dataframe with the 'weights' column
+    Dataset
+        Updated dataset with the 'weights' entry
+    """
     # Check if we have the bias column and sanitize it
     if 'bias' in dataframe.columns:
         dataframe = dataframe.fillna({'bias': 0})
@@ -44,7 +68,21 @@ def compute_committor_weights(
     
     return dataframe, dataset
 
-def initialize_committor_masses(atoms_map : list, n_dims : int):
+def initialize_committor_masses(atoms_map : list, n_dims : int = 3):
+    """Initialize the masses tensor with the right shape for committor learning
+
+    Parameters
+    ----------
+    atoms_map : list[int, float]
+        List of atoms in the system and the corresponing masses. Each entry should be [atom_type, atomic_mass]
+    n_dims : int
+        Number of dimensions of the system, by default 3.
+
+    Returns
+    -------
+    atomic_masses
+        Atomic masses tensor readdy to be used for committor learning.
+    """
     # atomic masses of the atoms --> size N_atoms * n_dims
 
     # put number of atoms for each type and the corresponding atomic mass
