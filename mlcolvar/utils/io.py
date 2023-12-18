@@ -251,7 +251,7 @@ def create_dataset_from_files(
     dictionary = {"data": torch.Tensor(df_data.values)}
     if create_labels:
         dictionary["labels"] = torch.Tensor(df["labels"].values)
-    dataset = DictDataset(dictionary,feature_names=df_data.columns.values)
+    dataset = DictDataset(dictionary, feature_names=df_data.columns.values)
 
     if return_dataframe:
         return dataset, df

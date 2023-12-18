@@ -3,10 +3,19 @@ import torch
 
 from mlcolvar.utils.plot import plot_sensitivity
 
-def sensitivity_analysis(model, dataset, feature_names = None, metric='mean_abs_val', per_class=False, plot_mode='violin', ax=None):
+
+def sensitivity_analysis(
+    model,
+    dataset,
+    feature_names=None,
+    metric="mean_abs_val",
+    per_class=False,
+    plot_mode="violin",
+    ax=None,
+):
     """Perform a sensitivity analysis to measure which input features the model is most sensitive to (i.e., which quantities produce significant changes in the output).
-    
-    To do this, the partial derivatives of the model with respect to each input :math:`x_i` are computed over a set of `N` points of a :math:`$$\{\mathbf{x}^{(j)}\}_{j=1} ^N$$` dataset. 
+
+    To do this, the partial derivatives of the model with respect to each input :math:`x_i` are computed over a set of `N` points of a :math:`$$\{\mathbf{x}^{(j)}\}_{j=1} ^N$$` dataset.
     These values, in the case where the dataset is not standardized, are multiplied by the standard deviation of the features over the dataset.
 
     Then, an average sensitivity value :math:`s_i` is computed, either as the mean absolute value (metric=`MAV`):
@@ -48,8 +57,8 @@ def sensitivity_analysis(model, dataset, feature_names = None, metric='mean_abs_
     """
 
     # get dataset
-    X = dataset['data']
-    std = dataset.get_stats()['data']['std'].detach().numpy()
+    X = dataset["data"]
+    std = dataset.get_stats()["data"]["std"].detach().numpy()
     n_inputs = X.shape[1]
 
     # get feature names
@@ -57,11 +66,11 @@ def sensitivity_analysis(model, dataset, feature_names = None, metric='mean_abs_
         if dataset.feature_names is not None:
             feature_names = dataset.feature_names
         else:
-            feature_names = np.asarray([str(i+1) for i in range(n_inputs)])
+            feature_names = np.asarray([str(i + 1) for i in range(n_inputs)])
 
     # compute cv
-    X.requires_grad=True
-    s = model(X) 
+    X.requires_grad = True
+    s = model(X)
 
     # get gradients
     grad_output = torch.ones_like(s)
@@ -69,19 +78,21 @@ def sensitivity_analysis(model, dataset, feature_names = None, metric='mean_abs_
     grad = np.abs(grad)
 
     # multiply grad_xi by std_xi
-    grad = grad*std
+    grad = grad * std
 
     # normalize such that the averages sums to 1
     grad /= grad.mean(axis=0).sum()
 
     # get metrics
     def _compute_score(grad, metric):
-        if (metric == 'mean_abs_val') | (metric == 'MEAN_ABS') | (metric == 'MAV'):
+        if (metric == "mean_abs_val") | (metric == "MEAN_ABS") | (metric == "MAV"):
             score = grad.mean(axis=0)
-        elif (metric == 'root_mean_square') | (metric == 'rms') | (metric == 'RMS'):
+        elif (metric == "root_mean_square") | (metric == "rms") | (metric == "RMS"):
             score = np.sqrt((grad**2).mean(axis=0))
         else:
-            raise NotImplementedError('only mean_abs_value (MAV) or root_mean_square (RMS) metrics are allowed')
+            raise NotImplementedError(
+                "only mean_abs_value (MAV) or root_mean_square (RMS) metrics are allowed"
+            )
         return score
 
     score = _compute_score(grad, metric)
@@ -90,34 +101,37 @@ def sensitivity_analysis(model, dataset, feature_names = None, metric='mean_abs_
     index = score.argsort()
     feature_names = np.asarray(feature_names)[index]
     score = score[index]
-    grad = grad[:,index]
+    grad = grad[:, index]
 
     # store into results
     out = {}
-    out['feature_names'] = feature_names
-    out['sensitivity'] = { 'Dataset' : score }
-    out['gradients'] = { 'Dataset' : grad }
-    
-    # per class statistics 
+    out["feature_names"] = feature_names
+    out["sensitivity"] = {"Dataset": score}
+    out["gradients"] = {"Dataset": grad}
+
+    # per class statistics
     if per_class:
-        try: 
-            labels = dataset['labels'].numpy().astype(int)
+        try:
+            labels = dataset["labels"].numpy().astype(int)
         except KeyError:
-            raise KeyError('Per class analyis requested but no labels found in the given dataset.')
+            raise KeyError(
+                "Per class analyis requested but no labels found in the given dataset."
+            )
 
         unique_labels = np.unique(labels)
-        for i,l in enumerate(unique_labels):
-            mask = np.argwhere(labels==l)[:,0]
-            grad_l = grad[mask,:]
+        for i, l in enumerate(unique_labels):
+            mask = np.argwhere(labels == l)[:, 0]
+            grad_l = grad[mask, :]
             score_l = _compute_score(grad_l, metric)
-            out['sensitivity'][f'State {l}'] =  score_l
-            out['gradients'][f'State {l}'] =  grad_l
+            out["sensitivity"][f"State {l}"] = score_l
+            out["gradients"][f"State {l}"] = grad_l
 
     # plot
     if plot_mode is not None:
-        plot_sensitivity(out,mode=plot_mode,ax=ax)
-    
+        plot_sensitivity(out, mode=plot_mode, ax=ax)
+
     return out
+
 
 def test_sensitivity_analysis():
     from mlcolvar.data import DictDataset
@@ -145,6 +159,8 @@ def test_sensitivity_analysis():
     model = DeepLDA(layers, n_states, options=opts)
 
     # feature importances
-    for per_class in [True,False,None]:
-        for names in [None,['x','y'],np.asarray(['x','y'])]:
-            results =  sensitivity_analysis(model,dataset,feature_names=names,per_class=per_class,plot_mode=None)
+    for per_class in [True, False, None]:
+        for names in [None, ["x", "y"], np.asarray(["x", "y"])]:
+            results = sensitivity_analysis(
+                model, dataset, feature_names=names, per_class=per_class, plot_mode=None
+            )

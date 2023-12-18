@@ -14,7 +14,7 @@ class DictDataset(Dataset):
            'weights' : np.asarray([0.5,1.5,1.5,0.5]) }
     """
 
-    def __init__(self, dictionary: dict = None, feature_names = None, **kwargs):
+    def __init__(self, dictionary: dict = None, feature_names=None, **kwargs):
         """Create a Dataset from a dictionary or from a list of kwargs.
 
         Parameters
@@ -105,7 +105,7 @@ class DictDataset(Dataset):
     @property
     def keys(self):
         return tuple(self._dictionary.keys())
-    
+
     @property
     def feature_names(self):
         """Feature names."""
@@ -113,7 +113,9 @@ class DictDataset(Dataset):
 
     @feature_names.setter
     def feature_names(self, value):
-        self._feature_names = np.asarray(value,dtype=str) if value is not None else value
+        self._feature_names = (
+            np.asarray(value, dtype=str) if value is not None else value
+        )
 
 
 def test_DictDataset():

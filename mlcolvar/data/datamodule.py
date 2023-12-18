@@ -127,11 +127,13 @@ class DictModule(lightning.LightningDataModule):
         # Keeping this private for now. Changing it at runtime would
         # require changing dataset_split and the dataloaders.
         self._random_split = random_split
-        
+
         # save generator if given, otherwise set it to torch.default_generator
         self.generator = generator if generator is not None else default_generator
         if self.generator is not None and not self._random_split:
-            warnings.warn("A torch.generator was provided but it is not used with random_split=False")
+            warnings.warn(
+                "A torch.generator was provided but it is not used with random_split=False"
+            )
 
         # Make sure batch_size and shuffle are lists.
         if isinstance(batch_size, int):
@@ -219,11 +221,13 @@ class DictModule(lightning.LightningDataModule):
 
     def _split(self, dataset):
         """Perform the random or sequential spliting of a single dataset.
- 
+
         Returns a list of Subset[DictDataset] objects.
         """
 
-        dataset_split = split_dataset(dataset, self.lengths, self._random_split, self.generator)
+        dataset_split = split_dataset(
+            dataset, self.lengths, self._random_split, self.generator
+        )
         return dataset_split
 
     def _check_setup(self):
@@ -234,10 +238,13 @@ class DictModule(lightning.LightningDataModule):
                 "outside a Lightning trainer please call .setup() first."
             )
 
-def split_dataset(dataset, 
-                  lengths: Sequence, 
-                  random_split : bool, 
-                  generator : Optional[torch.Generator] = default_generator) -> list:
+
+def split_dataset(
+    dataset,
+    lengths: Sequence,
+    random_split: bool,
+    generator: Optional[torch.Generator] = default_generator,
+) -> list:
     """
     Sequentially or randomly split a dataset into non-overlapping new datasets of given lengths.
 
@@ -271,15 +278,22 @@ def split_dataset(dataset,
         lengths = subset_lengths
         for i, length in enumerate(lengths):
             if length == 0:
-                warnings.warn(f"Length of split at index {i} is 0. "
-                              f"This might result in an empty dataset.")
+                warnings.warn(
+                    f"Length of split at index {i} is 0. "
+                    f"This might result in an empty dataset."
+                )
 
     # Cannot verify that dataset is Sized
-    if sum(lengths) != len(dataset):    # type: ignore[arg-type]
-        raise ValueError("Sum of input lengths does not equal the length of the input dataset!")
+    if sum(lengths) != len(dataset):  # type: ignore[arg-type]
+        raise ValueError(
+            "Sum of input lengths does not equal the length of the input dataset!"
+        )
     if random_split:
         indices = randperm(sum(lengths), generator=generator).tolist()  # type: ignore[call-overload]
-        return [Subset(dataset, indices[offset - length : offset]) for offset, length in zip(_accumulate(lengths), lengths)]
+        return [
+            Subset(dataset, indices[offset - length : offset])
+            for offset, length in zip(_accumulate(lengths), lengths)
+        ]
     else:
         return [
             Subset(dataset, np.arange(offset - length, offset))
@@ -302,8 +316,12 @@ def sequential_split(dataset, lengths: Sequence) -> list:
     until there are no remainders left.
     """
 
-    warnings.warn("The function sequential_split is deprecated, use split_dataset(.., .., random_split=False, ..)", FutureWarning, stacklevel=2)
-    
+    warnings.warn(
+        "The function sequential_split is deprecated, use split_dataset(.., .., random_split=False, ..)",
+        FutureWarning,
+        stacklevel=2,
+    )
+
     return split_dataset(dataset=dataset, lengths=lengths, random_split=False)
 
 
