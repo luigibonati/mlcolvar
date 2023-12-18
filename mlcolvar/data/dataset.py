@@ -14,13 +14,15 @@ class DictDataset(Dataset):
            'weights' : np.asarray([0.5,1.5,1.5,0.5]) }
     """
 
-    def __init__(self, dictionary: dict = None, **kwargs):
+    def __init__(self, dictionary: dict = None, feature_names = None, **kwargs):
         """Create a Dataset from a dictionary or from a list of kwargs.
 
         Parameters
         ----------
         dictionary : dict
             Dictionary with names and tensors
+        feature_names : array-like
+            List or numpy array with feature names
 
         """
         # assert type dict
@@ -43,6 +45,9 @@ class DictDataset(Dataset):
 
         # save dictionary
         self._dictionary = dictionary
+
+        # save feature names
+        self.feature_names = feature_names
 
         # check that all elements of dict have same length
         it = iter(dictionary.values())
@@ -100,6 +105,15 @@ class DictDataset(Dataset):
     @property
     def keys(self):
         return tuple(self._dictionary.keys())
+    
+    @property
+    def feature_names(self):
+        """Feature names."""
+        return self._feature_names
+
+    @feature_names.setter
+    def feature_names(self, value):
+        self._feature_names = np.asarray(value,dtype=str)
 
 
 def test_DictDataset():
