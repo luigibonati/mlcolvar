@@ -6,14 +6,16 @@ from mlcolvar.utils.plot import plot_sensitivity
 def sensitivity_analysis(model, dataset, feature_names = None, metric='mean_abs_val', per_class=False, plot_mode='violin', ax=None):
     """Perform a sensitivity analysis to measure which input features the model is most sensitive to (i.e., which quantities produce significant changes in the output).
     
-    To do this, the partial derivatives of the model with respect to each input :math:`x_i` are computed over a set of `N` points of a :math:`\{x_j\}_j=1 ^N` dataset. 
-    These values, in the case where the dataset is not standardized, are multiplied by the standard deviation the feature :math:`s_i` over the dataset.
+    To do this, the partial derivatives of the model with respect to each input :math:`x_i` are computed over a set of `N` points of a :math:`$$\{\mathbf{x}^{(j)}\}_{j=1} ^N$$` dataset. 
+    These values, in the case where the dataset is not standardized, are multiplied by the standard deviation of the features over the dataset.
 
     Then, an average sensitivity value :math:`s_i` is computed, either as the mean absolute value (metric=`MAV`):
-    .. math:: s_i = 1/N \sum_j \abs{\frac{\partial s}{\partial x_i} } \sigma_i
+    .. math:: s_i = \frac{1}{N} \sum_j \left|{\frac{\partial s}{\partial x_i}(\mathbf{x}^{(j)})}\right| \sigma_i
 
     or as the root mean square (metric=`RMS`):
-    .. math:: s_i = \sqrt{1/N \sum_j (\frac{\partial s}{\partial x_i} })^2 \sigma_i}
+    .. math:: s_i = \sqrt{\frac{1}{N} \sum_j \left({\frac{\partial s}{\partial x_i}(\mathbf{x}^{(j)})}\  \sigma_i\right)^2 }
+
+    The sensitivity values are normalized such that they sum to 1.
 
     In case in which a labeled dataset these quantities can be computed also on the subset of the data belonging to each class.
 
