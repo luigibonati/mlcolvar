@@ -23,7 +23,7 @@ dependencies:
   - lightning
   - matplotlib
   - scikit-learn
-  - scipy<1.11
+  - scipy
    
     # Pip-only installs
   - pip:

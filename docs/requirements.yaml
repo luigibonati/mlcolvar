@@ -23,7 +23,7 @@ dependencies:
   - nbsphinx
   - ipython
   - ipykernel
-  - scipy<1.11 # latest version does not work with kdepy
+  - scipy
 
   # Pip-only installs
   - pip:
