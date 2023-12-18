@@ -5,8 +5,8 @@
 
 import mlcolvar
 from matplotlib.colors import LinearSegmentedColormap, ColorConverter
-from matplotlib.cm import register_cmap
 from matplotlib import patches as mpatches
+import matplotlib as mpl
 
 __all__ = ["paletteFessa", "paletteCortina"]
 
@@ -22,8 +22,8 @@ paletteFessa = [
 ]
 
 cm_fessa = LinearSegmentedColormap.from_list("fessa", paletteFessa)
-register_cmap(cmap=cm_fessa)
-register_cmap(cmap=cm_fessa.reversed())
+mpl.colormaps.register(cmap=cm_fessa)
+mpl.colormaps.register(cmap=cm_fessa.reversed())
 
 for i in range(len(paletteFessa)):
     ColorConverter.colors[f"fessa{i}"] = paletteFessa[i]
@@ -50,8 +50,8 @@ paletteCortina = [
 ]
 
 cm_cortina = LinearSegmentedColormap.from_list("cortina80", paletteCortina)
-register_cmap(cmap=cm_cortina)
-register_cmap(cmap=cm_cortina.reversed())
+mpl.colormaps.register(cmap=cm_cortina)
+mpl.colormaps.register(cmap=cm_cortina.reversed())
 
 ##########################################################################
 ## HELPER FUNCTIONS FOR 2D SYSTEMS
@@ -369,7 +369,6 @@ def plot_sensitivity(results,mode='violin',per_class=None,ax=None):
     if return_ax:
         return ax
 
-
 def test_utils_plot():
     import matplotlib
 
@@ -386,3 +385,4 @@ def test_utils_plot():
     cmap = matplotlib.colors.Colormap("fessa_r", 2)
     cmap = matplotlib.colors.Colormap("cortina80", 2)
     cmap = matplotlib.colors.Colormap("cortina80_r", 2)
+
