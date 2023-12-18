@@ -393,7 +393,10 @@ def plot_sensitivity(results, mode="violin", per_class=None, ax=None):
         ax.legend(*zip(*patch_labels), loc="lower right", frameon=False)
     else:
         ax.legend(loc="lower right", frameon=False)
-    ax.set_xlim(0, None)
+    if np.min(results["sensitivity"]["Dataset"])>=0: 
+        ax.set_xlim(0, None)
+    else:
+        ax.axvline(0,color='grey')
     ax.set_ylim(-1, in_num[-1] + 1)
 
     if return_ax:
