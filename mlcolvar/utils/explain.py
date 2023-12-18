@@ -31,7 +31,7 @@ def sensitivity_analysis(model, dataset, feature_names = None, metric='mean_abs_
     dataset : mlcovar.data.DictDataset
         dataset on which to compute the sensitivity analysis.
     feature_names : _type_, optional
-        array-like with input features names, by default None
+        array-like with input features names, by default it takes them from the dataset if available
     metric : str, optional
         sensitivity measure ('mean_abs_val'|'MAV','root_mean_square'|'RMS')', by default 'mean_abs_val'
     per_class : bool, optional
@@ -44,7 +44,7 @@ def sensitivity_analysis(model, dataset, feature_names = None, metric='mean_abs_
     Returns
     -------
     results: dictionary
-        results of the sensitivity analysis, containing 'feature_names', the 'sensitivity' and the 'gradients' per samples, ordered according to the sensitivity.
+        results of the sensitivity analysis, containing  'feature_names', the 'sensitivity' and the 'gradients' per samples, ordered according to the sensitivity.
     """
 
     # get dataset
@@ -54,7 +54,10 @@ def sensitivity_analysis(model, dataset, feature_names = None, metric='mean_abs_
 
     # get feature names
     if feature_names is None:
-        feature_names = np.asarray([str(i+1) for i in range(n_inputs)])
+        if dataset.feature_names is not None:
+            feature_names = dataset.feature_names
+        else:
+            feature_names = np.asarray([str(i+1) for i in range(n_inputs)])
 
     # compute cv
     X.requires_grad=True
