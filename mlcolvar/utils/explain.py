@@ -44,7 +44,7 @@ def sensitivity_analysis(model, dataset, feature_names = None, metric='mean_abs_
     Returns
     -------
     results: dictionary
-        results of the sensitivity analysis, containing  'feature_names', the 'sensitivity' and the 'gradients' per samples, ordered according to the sensitivity.
+        results of the sensitivity analysis, containing 'feature_names', the 'sensitivity' and the 'gradients' per samples, ordered according to the sensitivity.
     """
 
     # get dataset
@@ -101,13 +101,11 @@ def sensitivity_analysis(model, dataset, feature_names = None, metric='mean_abs_
     # per class statistics 
     if per_class:
         try: 
-            labels = dataset["labels"]
+            labels = dataset['labels'].numpy().astype(int)
         except KeyError:
             raise KeyError('Per class analyis requested but no labels found in the given dataset.')
 
-        labels = dataset['labels'].numpy().astype(int)
         unique_labels = np.unique(labels)
-        n_labels = len(unique_labels)
         for i,l in enumerate(unique_labels):
             mask = np.argwhere(labels==l)[:,0]
             grad_l = grad[mask,:]

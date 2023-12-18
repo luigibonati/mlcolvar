@@ -113,7 +113,7 @@ class DictDataset(Dataset):
 
     @feature_names.setter
     def feature_names(self, value):
-        self._feature_names = np.asarray(value,dtype=str)
+        self._feature_names = np.asarray(value,dtype=str) if value is not None else value
 
 
 def test_DictDataset():
