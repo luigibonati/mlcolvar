@@ -292,7 +292,7 @@ def plot_sensitivity(results, mode="violin", per_class=None, max_features = 100,
     n_inputs = len(feature_names)
     if max_features < n_inputs:
         print(f'Plotting only the first {max_features} features out of {n_inputs}.')
-        feature_names = feature_names[:max_features]
+        feature_names = feature_names[-max_features:]
         n_inputs = max_features
     
     in_num = np.arange(n_inputs)
@@ -335,8 +335,8 @@ def plot_sensitivity(results, mode="violin", per_class=None, max_features = 100,
     patterns = ["", "", "/", "\\", "|", "-", "+", "x", "o", "O", ".", "*"]
 
     for i, label in enumerate(results["sensitivity"].keys()):
-        score = results["sensitivity"][label][:max_features]
-        grad = results["gradients"][label][:,:max_features]
+        score = results["sensitivity"][label][-max_features:]
+        grad = results["gradients"][label][:,-max_features:]
 
         color = "fessa0" if "Dataset" in label else f"fessa{7-i}"
 
