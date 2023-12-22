@@ -7,6 +7,7 @@ from mlcolvar.utils.plot import plot_sensitivity
 def sensitivity_analysis(
     model,
     dataset,
+    std=None,
     feature_names=None,
     metric="mean_abs_val",
     per_class=False,
@@ -41,8 +42,10 @@ def sensitivity_analysis(
         collective variable model
     dataset : mlcovar.data.DictDataset
         dataset on which to compute the sensitivity analysis.
-    feature_names : _type_, optional
-        array-like with input features names, by default it takes them from the dataset if available
+    std : array_like, optional
+        standard deviation of the features, by default it will be computed from the dataset
+    feature_names : array-like, optional
+        array-like with input features names, by default they will be taken from the dataset if available
     metric : str, optional
         sensitivity measure ('mean_abs_val'|'MAV','root_mean_square'|'RMS','mean'), by default 'mean_abs_val'
     per_class : bool, optional
@@ -60,7 +63,6 @@ def sensitivity_analysis(
 
     # get dataset
     X = dataset["data"]
-    std = dataset.get_stats()["data"]["std"].detach().numpy()
     n_inputs = X.shape[1]
 
     # get feature names
@@ -69,6 +71,12 @@ def sensitivity_analysis(
             feature_names = dataset.feature_names
         else:
             feature_names = np.asarray([str(i + 1) for i in range(n_inputs)])
+
+    # get standard deviation
+    if std is None:
+        std = dataset.get_stats()["data"]["std"].detach().numpy()
+    else: 
+        std = np.asarray(std)
 
     # compute cv
     X.requires_grad = True
