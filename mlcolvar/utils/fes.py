@@ -302,7 +302,7 @@ def test_compute_fes():
 
     Y = np.random.rand(2, 100)
 
-    if SKLEARN_IS_INSTALLED: # TODO: change to use pytest functionalities?
+    if SKLEARN_IS_INSTALLED:  # TODO: change to use pytest functionalities?
         fes, bins, bounds, error_ = compute_fes(
             X=[Y[0], Y[1]],
             weights=np.ones_like(X),
