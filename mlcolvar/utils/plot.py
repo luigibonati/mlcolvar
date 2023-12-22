@@ -257,7 +257,7 @@ def plot_metrics(
         return None
 
 
-def plot_sensitivity(results, mode="violin", per_class=None, ax=None):
+def plot_sensitivity(results, mode="violin", per_class=None, max_features = 100, ax=None):
     """Plot results of the sensitivity analysis. They can be plotted in three modes:
     * Violin plot ('violin'), showing the density of per-sample sensitivities besides the mean value
     * Scatter ('scatter'), plotting the mean and standard deviation of the gradients
@@ -271,6 +271,8 @@ def plot_sensitivity(results, mode="violin", per_class=None, ax=None):
         ('violin','barh','scatter'), by default 'violin'
     per_class : bool, optional
         plot per-class statistics if available, by default plot them if available
+    max_features : int, optional
+        plot at most max_features, by default 100
     ax : matplotlib axis, optional
         ax where to plot the results, by default it will be initialized
 
@@ -288,6 +290,11 @@ def plot_sensitivity(results, mode="violin", per_class=None, ax=None):
     # retrieve info from results dictionary
     feature_names = results["feature_names"]
     n_inputs = len(feature_names)
+    if max_features < n_inputs:
+        print(f'Plotting only the first {max_features} features out of {n_inputs}.')
+        feature_names = feature_names[:max_features]
+        n_inputs = max_features
+    
     in_num = np.arange(n_inputs)
     n_results = len(results["sensitivity"].keys())
 
@@ -328,8 +335,8 @@ def plot_sensitivity(results, mode="violin", per_class=None, ax=None):
     patterns = ["", "", "/", "\\", "|", "-", "+", "x", "o", "O", ".", "*"]
 
     for i, label in enumerate(results["sensitivity"].keys()):
-        score = results["sensitivity"][label]
-        grad = results["gradients"][label]
+        score = results["sensitivity"][label][:max_features]
+        grad = results["gradients"][label][:,:max_features]
 
         color = "fessa0" if "Dataset" in label else f"fessa{7-i}"
 
