@@ -43,6 +43,8 @@ class BaseCV:
         # OPTIM
         self._optimizer_name = "Adam"
         self.optimizer_kwargs = {}
+        self._lr_scheduler_name = None
+        self.lr_scheduler_kwargs = {}
 
         # PRE/POST
         self.preprocessing = preprocessing
@@ -82,9 +84,11 @@ class BaseCV:
             if o not in self.BLOCKS:
                 if o == "optimizer":
                     self.optimizer_kwargs.update(options[o])
+                elif o == "lr_scheduler":
+                    self.lr_scheduler_kwargs.update(options[o])
                 else:
                     raise ValueError(
-                        f'The key {o} is not available in this class. The available keys are: {", ".join(self.BLOCKS)}, and optimizer.'
+                        f'The key {o} is not available in this class. The available keys are: {", ".join(self.BLOCKS)}, optimizer and lr_scheduler.'
                     )
 
         return options
@@ -192,10 +196,18 @@ class BaseCV:
         torch.optim
             Torch optimizer
         """
+
         optimizer = getattr(torch.optim, self._optimizer_name)(
             self.parameters(), **self.optimizer_kwargs
         )
-        return optimizer
+
+        if self.lr_scheduler_kwargs:
+            if self._lr_scheduler_name is None:
+                self._lr_scheduler_name = self.lr_scheduler_kwargs.pop('scheduler')
+            lr_scheduler = self._lr_scheduler_name(optimizer, **self.lr_scheduler_kwargs)
+            return [optimizer] , [lr_scheduler]
+        else: 
+            return optimizer
 
     def __setattr__(self, key, value):
         # PyTorch overrides __setattr__ to raise a TypeError when you try to assign
