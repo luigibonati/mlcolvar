@@ -33,7 +33,10 @@ class BaseCV:
 
         """
         super().__init__(*args, **kwargs)
-        self.save_hyperparameters()
+
+        # The parent class sets in_features and out_features based on their own
+        # init arguments so we don't need to save them here (see #103).
+        self.save_hyperparameters(ignore=['in_features', 'out_features'])
 
         # MODEL
         self.initialize_blocks()
