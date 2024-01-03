@@ -112,7 +112,7 @@ class DeepLDA(BaseCV, lightning.LightningModule):
 
         - Lorentzian
 
-        TODO Add equation
+        .. math:: \text{reg}_{lor}=\alpha \left( 1+( \mathbb{E}\left[||\mathbf{s}||^2\right]-1)^2 \right)^{-1}
 
         """
         self.lda.sw_reg = sw_reg
@@ -121,16 +121,16 @@ class DeepLDA(BaseCV, lightning.LightningModule):
         else:
             self.lorentzian_reg = lorentzian_reg
 
-    def regularization_lorentzian(self, H):
+    def regularization_lorentzian(self, x):
         """
-        Compute lorentzian regularization on NN outputs.
+        Compute lorentzian regularization on the CVs.
 
         Parameters
         ----------
         x : float
             input data
         """
-        reg_loss = H.pow(2).sum().div(H.size(0))
+        reg_loss = x.pow(2).sum().div(x.size(0))
         reg_loss_lor = -self.lorentzian_reg / (1 + (reg_loss - 1).pow(2))
         return reg_loss_lor
 
@@ -148,7 +148,8 @@ class DeepLDA(BaseCV, lightning.LightningModule):
         # ===================loss=====================
         loss = self.loss_fn(eigvals)
         if self.lorentzian_reg > 0:
-            lorentzian_reg = self.regularization_lorentzian(h)
+            s = self.lda(h)
+            lorentzian_reg = self.regularization_lorentzian(s)
             loss += lorentzian_reg
         # ====================log=====================
         name = "train" if self.training else "valid"
