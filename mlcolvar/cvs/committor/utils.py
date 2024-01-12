@@ -5,9 +5,7 @@ import numpy as np
 def compute_committor_weights(
     dataframe, 
     dataset, 
-    beta : float, 
-    mixing : bool = False, 
-    mixing_csi : float = None
+    beta : float
     ):
     """Utils to compute the appropriate weights for the training set for the learning of committor function.
     Compute the weights of training data based on the bias and the iteration they belong to
@@ -21,10 +19,6 @@ def compute_committor_weights(
         Dataset to be updated. This should be created using the mlcolvar.utils.io.create_dataset_from_files function
     beta : float
         Inverse temperature in the right energy units
-    mixing : bool
-        Switch for mixing of coefficients, by default False. TODO deprecate
-    mixing_csi : float
-        Mixing coefficient, by default None. TODO deprecate
 
     Returns
     -------
@@ -50,15 +44,7 @@ def compute_committor_weights(
     for i in np.unique(dataframe['labels'].values):
         # compute average of exp(beta*V) on this simualtions
         coeff = 1 / np.mean(dataframe.loc[dataframe['labels'] == i, 'weights'].values)
-
-        # we apply weight mixing between iterations: more weight to last iterations   
-        if mixing:
-            max_iter = np.max(np.unique(dataframe['labels'].values))
-            if i>1:
-                coeff = coeff * ( mixing_csi**(max_iter - i) * (1 - mixing_csi))
-            else:
-                coeff = coeff * (mixing_csi**(max_iter - 1))
-            
+    
         # update the weights
         dataframe.loc[dataframe['labels'] == i, 'weights'] = coeff * dataframe.loc[dataframe['labels'] == i, 'weights']
     
