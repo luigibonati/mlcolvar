@@ -206,7 +206,7 @@ class BaseCV:
         if self.lr_scheduler_kwargs:
             scheduler_cls = self.lr_scheduler_kwargs['scheduler']
             scheduler_kwargs = {k: v for k, v in self.lr_scheduler_kwargs.items() if k != 'scheduler'}
-            lr_scheduler = scheduler_cls(**scheduler_kwargs)
+            lr_scheduler = scheduler_cls(optimizer, **scheduler_kwargs)
             return [optimizer] , [lr_scheduler]
         else: 
             return optimizer
