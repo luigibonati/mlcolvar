@@ -101,4 +101,6 @@ def test_feedforward(activation, dropout, batchnorm, last_layer_activation):
     # Test that the forward doesn't explode.
     batch_size = 2
     x = torch.zeros((batch_size, in_features))
-    model(x)
+    out = model(x)
+    # check it can backprop
+    model.backward(out.sum())
