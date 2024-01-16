@@ -60,7 +60,7 @@ class BaseCV:
     @property
     def example_input_array(self):
         return torch.randn(
-            self.in_features
+            (1,self.in_features)
             if self.preprocessing is None
             or not hasattr(self.preprocessing, "in_features")
             else self.preprocessing.in_features

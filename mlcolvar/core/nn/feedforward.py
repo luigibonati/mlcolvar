@@ -94,7 +94,7 @@ class FeedForward(lightning.LightningModule):
                 modules.append(get_activation(activ))
 
             if drop is not None:
-                modules.append(torch.nn.Dropout(p=drop, inplace=True))
+                modules.append(torch.nn.Dropout(p=drop))
 
             if norm:
                 modules.append(torch.nn.BatchNorm1d(layers[i + 1]))
