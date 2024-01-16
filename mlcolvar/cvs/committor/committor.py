@@ -156,4 +156,34 @@ class Committor(BaseCV, lightning.LightningModule):
         super().on_validation_model_eval(*args, **kwargs)
         torch.set_grad_enabled(True)
 
-# TODO add test function
+def test_committor():
+    from mlcolvar.data import DictDataset, DictModule
+    from mlcolvar.cvs.committor.utils import initialize_committor_masses
+
+    beta = 1
+    atomic_masses = initialize_committor_masses(atoms_map=[[1,1]], n_dims=2)
+    model = Committor(layers = [2, 4, 2, 1],
+            mass = atomic_masses,
+            alpha = 1e-1,
+            delta_f=0)
+
+    # create dataset
+    samples = 50
+    X = torch.randn((2*samples, 2))
+    
+    # create labels
+    y = torch.zeros(X.shape[0])
+    y[samples:] += 1
+    
+    # create weights
+    w = torch.ones(X.shape[0])
+
+    dataset = DictDataset({"data": X, "labels": y, "weights": w})
+    datamodule = DictModule(dataset)
+
+    # train model
+    trainer = lightning.Trainer(max_epochs=5, logger=None, enable_checkpointing=False)
+    trainer.fit(model, datamodule)
+
+if __name__ == "__main__":
+    test_committor()
