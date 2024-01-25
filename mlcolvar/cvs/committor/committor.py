@@ -19,7 +19,7 @@ class Committor(BaseCV, lightning.LightningModule):
     
     References
     ----------
-    .. [*] P. Kang, E. Trizio, and M. Parrinello, "Amazing committor paper", xxxx yy, 2zzz
+    .. [*] P. Kang, E. Trizio, and M. Parrinello, "Computing the Committor using the Committor: an Anatomy of the Transition state Ensemble", xxxx yy, 20zz
 
     See also
     --------
@@ -124,37 +124,7 @@ class Committor(BaseCV, lightning.LightningModule):
         self.log(f"{name}_loss_bound_A", loss_bound_A, on_epoch=True)
         self.log(f"{name}_loss_bound_B", loss_bound_B, on_epoch=True)
         return loss
-    
-# we override the default configure_optimizer function of BaseCV to allow setting a lr_scheduler
-# This may be improve and/or fixed in future commits TODO !
-    def configure_optimizers(self):
-        """
-        Initialize the optimizer based on self._optimizer_name and self.optimizer_kwargs.
 
-        Returns
-        -------
-        torch.optim
-            Torch optimizer
-        """
-        lr_scheduler_dict = self.optimizer_kwargs.pop('lr_scheduler', None)
-    
-        optimizer = getattr(torch.optim, self._optimizer_name)(
-            self.parameters(), **self.optimizer_kwargs
-        )
-        if lr_scheduler_dict is not None:
-            lr_scheduler_name = lr_scheduler_dict.pop('scheduler')
-            lr_scheduler = {
-                'scheduler': lr_scheduler_name(optimizer, **lr_scheduler_dict),
-            }
-            lr_scheduler_dict['scheduler'] = lr_scheduler_name
-            self.optimizer_kwargs['lr_scheduler'] = lr_scheduler_dict
-            return [optimizer] , [lr_scheduler]
-        else: 
-            return optimizer
-    
-    def on_validation_model_eval(self, *args, **kwargs):
-        super().on_validation_model_eval(*args, **kwargs)
-        torch.set_grad_enabled(True)
 
 def test_committor():
     from mlcolvar.data import DictDataset, DictModule
