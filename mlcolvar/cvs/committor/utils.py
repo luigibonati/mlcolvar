@@ -8,7 +8,8 @@ def compute_committor_weights(
     beta : float
     ):
     """Utils to compute the appropriate weights for the training set for the learning of committor function.
-    Compute the weights of training data based on the bias and the iteration they belong to
+    Compute the weights of training data based on the bias and the iteration they belong to.
+    This function is meant to be used on a dataframe and dataset generated using the mlcolvar.utils.io.create_dataset_from_files function
 
     Parameters
     ----------
