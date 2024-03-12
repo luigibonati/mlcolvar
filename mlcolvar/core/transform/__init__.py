@@ -1,4 +1,4 @@
-__all__ = ["Transform","Normalization","Statistics","SwitchingFunctions","PairwiseDistances","RadiusGraph","EigsAdjMat","ContHist","RDF","Inverse"]
+__all__ = ["Transform","Normalization","Statistics","SwitchingFunctions","PairwiseDistances","RadiusGraph","EigsAdjMat","ContHist","RDF","Inverse",'TorsionalAngle']
 
 from .transform import *
 from .normalization import *
@@ -9,3 +9,4 @@ from .radius_graph import *
 from .switching_functions import *
 from .continuous_hist import *
 from .radial_distribution_function import *
+from .torsional_angle import *
