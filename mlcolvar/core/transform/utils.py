@@ -81,6 +81,7 @@ class Statistics(object):
         return repr
 
 
+
 class Inverse(torch.nn.Module):
     "Wrapper to return the inverse method of a module as a torch.nn.Module"
 
@@ -102,6 +103,7 @@ class Inverse(torch.nn.Module):
 
     def forward(self, *args, **kwargs):
         return self.inverse(*args, **kwargs)
+
 
 
 def batch_reshape(t: torch.Tensor, size: torch.Size) -> torch.Tensor:
@@ -150,15 +152,9 @@ def easy_KDE(x, n_input, min_max, n, sigma_to_center, normalize=False, return_bi
     else:
         return out
 
-
-def compute_distances_components_matrices(pos : torch.Tensor,
-                                     n_atoms : int,
-                                     PBC : bool,
-                                     real_cell : Union[float, list],
-                                     scaled_coords : bool,
-                                    ) -> torch.Tensor:
-    """Compute the matrices of all the atomic pairwise distances along the cell dimensions from batches of atomic coordinates.
-    The three matrices (xyz) are symmetric, of size (n_atoms,n_atoms) and i,j-th element gives the distance between atoms i and j along that component. 
+def sanitize_positions_shape(pos : torch.Tensor,
+                             n_atoms : int):
+    """Sanitize positions tensor to have [batch, atoms, dims=3] shape
 
     Parameters
     ----------
@@ -168,19 +164,7 @@ def compute_distances_components_matrices(pos : torch.Tensor,
         - Shape: (n_batch (optional), n_atoms, 3),  i.e [ [ [x1,y1,z1], [x2,y2,z2], .... [xn,yn,zn] ] ]
     n_atoms : int
         Number of atoms 
-    PBC : bool
-        Switch for Periodic Boundary Conditions use
-    real_cell : Union[float, list]
-        Dimensions of the real cell, orthorombic-like cells only
-    scaled_coords : bool
-        Switch for coordinates scaled on cell's vectors use
-
-    Returns
-    -------
-    torch.Tensor
-        Components of all the atomic pairwise distances along the cell dimensions, index map: (batch_idx, atom_i_idx, atom_j_idx, component_idx)
     """
-    # ======================= CHECKS =======================
     # check if we have batch dimension in positions tensor
     
     if len(pos.shape)==3:
@@ -210,20 +194,57 @@ def compute_distances_components_matrices(pos : torch.Tensor,
     pos = torch.reshape(pos, (-1, n_atoms, 3))
 
     batch_size = pos.shape[0]
-     
-    # Convert cell to tensor and shape it to have 3 dims
-    if isinstance(real_cell, float) or isinstance(real_cell, int):
-        real_cell = torch.Tensor([real_cell])
-    elif isinstance(real_cell, list):    
-        real_cell = torch.Tensor(real_cell)
+    return pos, batch_size
 
-    if real_cell.shape[0] != 1 and real_cell.shape[0] != 3:
+def sanitize_cell_shape(cell : Union[float, torch.Tensor, list]):
+    # Convert cell to tensor and shape it to have 3 dims
+    if isinstance(cell, float) or isinstance(cell, int):
+        cell = torch.Tensor([cell])
+    elif isinstance(cell, list):    
+        cell = torch.Tensor(cell)
+
+    if cell.shape[0] != 1 and cell.shape[0] != 3:
         raise ValueError(f"Cell must have either shape (1) or (3). Found {cell.shape} ")
 
-    if isinstance(real_cell, torch.Tensor):
+    if isinstance(cell, torch.Tensor):
         # TODO assert size makes sense if you directly pass a tensor
-        if len(real_cell) != 3:
-            real_cell = torch.tile(real_cell, (3,))
+        if len(cell) != 3:
+            cell = torch.tile(cell, (3,))
+    
+    return cell
+
+def compute_distances_components_matrices(pos : torch.Tensor,
+                                     n_atoms : int,
+                                     PBC : bool,
+                                     real_cell : Union[float, torch.Tensor, list],
+                                     scaled_coords : bool,
+                                    ) -> torch.Tensor:
+    """Compute the matrices of all the atomic pairwise distances along the cell dimensions from batches of atomic coordinates.
+    The three matrices (xyz) are symmetric, of size (n_atoms,n_atoms) and i,j-th element gives the distance between atoms i and j along that component. 
+
+    Parameters
+    ----------
+    pos : torch.Tensor
+        Positions of the atoms, they can be given with shapes:
+        - Shape: (n_batch (optional), n_atoms * 3), i.e [ [x1,y1,z1, x2,y2,z2, .... xn,yn,zn] ]
+        - Shape: (n_batch (optional), n_atoms, 3),  i.e [ [ [x1,y1,z1], [x2,y2,z2], .... [xn,yn,zn] ] ]
+    n_atoms : int
+        Number of atoms 
+    PBC : bool
+        Switch for Periodic Boundary Conditions use
+    real_cell : Union[float, list]
+        Dimensions of the real cell, orthorombic-like cells only
+    scaled_coords : bool
+        Switch for coordinates scaled on cell's vectors use
+
+    Returns
+    -------
+    torch.Tensor
+        Components of all the atomic pairwise distances along the cell dimensions, index map: (batch_idx, atom_i_idx, atom_j_idx, component_idx)
+    """
+    # ======================= CHECKS =======================
+    pos, batch_size = sanitize_positions_shape(pos, n_atoms)
+    real_cell = sanitize_cell_shape(real_cell)
 
     # Set which cell to be used for PBC
     if scaled_coords:
