@@ -88,7 +88,6 @@ def test_pairwise_distances():
                               real_cell = real_cell,
                               scaled_coords = False)
     out = model(pos)
-    print(out)
     assert(out.reshape(pos.shape[0], -1).shape[-1] == model.out_features)
 
     model = PairwiseDistances(n_atoms = 3,
@@ -97,7 +96,6 @@ def test_pairwise_distances():
                               scaled_coords = False,
                               slicing_indeces=[0, 2])
     out = model(pos)
-    print(out)
-    
+
 if __name__ == "__main__":
     test_pairwise_distances()
