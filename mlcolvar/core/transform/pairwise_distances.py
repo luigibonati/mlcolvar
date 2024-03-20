@@ -16,7 +16,8 @@ class PairwiseDistances(Transform):
                  n_atoms : int,
                  PBC: bool,
                  real_cell: Union[float, list],
-                 scaled_coords : bool) -> torch.Tensor:
+                 scaled_coords : bool,
+                 slicing_indeces : list = None) -> torch.Tensor:
         """Initialize a pairwise distances matrix object.
 
         Parameters
@@ -29,6 +30,8 @@ class PairwiseDistances(Transform):
             Dimensions of the real cell, orthorombic-like cells only
         scaled_coords : bool
             Switch for coordinates scaled on cell's vectors use
+        slicing_indeces : list
+            Indeces of the subset of distances to be returned, by default None
 
         Returns
         -------
@@ -42,6 +45,7 @@ class PairwiseDistances(Transform):
         self.PBC = PBC
         self.real_cell = real_cell
         self.scaled_coords = scaled_coords
+        self.slicing_indeces = slicing_indeces
 
     def compute_pairwise_distances(self, pos):
         dist = compute_distances_matrix(pos=pos,
@@ -56,7 +60,11 @@ class PairwiseDistances(Transform):
         # keep upper triangular part to avoid duplicates
         unique = aux_mask.triu().nonzero(as_tuple=True)
         pairwise_distances = dist[unique].reshape((batch_size, -1)) 
-        return pairwise_distances
+        if self.slicing_indeces is None:
+            return pairwise_distances
+        else:
+            return pairwise_distances[:, self.slicing_indeces]
+        
 
     def forward(self, x: torch.Tensor):
         x = self.compute_pairwise_distances(x)
@@ -80,7 +88,16 @@ def test_pairwise_distances():
                               real_cell = real_cell,
                               scaled_coords = False)
     out = model(pos)
+    print(out)
     assert(out.reshape(pos.shape[0], -1).shape[-1] == model.out_features)
 
+    model = PairwiseDistances(n_atoms = 3,
+                              PBC = True,
+                              real_cell = real_cell,
+                              scaled_coords = False,
+                              slicing_indeces=[0, 2])
+    out = model(pos)
+    print(out)
+    
 if __name__ == "__main__":
     test_pairwise_distances()
