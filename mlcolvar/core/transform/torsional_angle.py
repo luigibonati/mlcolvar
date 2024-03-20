@@ -10,7 +10,7 @@ __all__ = ["TorsionalAngle"]
 
 class TorsionalAngle(Transform):
     """
-    Pairwise distances transform, compute all the non duplicated pairwise distances for a set of atoms from their positions
+    Torsional angle transform, compute the torsional angle defined by a set of 4 atoms from their positions
     """
     
     MODES = ["angle", "sin", "cos"]
