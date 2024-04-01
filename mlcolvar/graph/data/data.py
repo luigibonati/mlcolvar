@@ -15,6 +15,30 @@ __all__ = ['GraphData']
 
 
 class GraphData(tg.data.Data):
+    """
+    The graph data class.
+
+    Parameters
+    ----------
+    edge_index: torch.Tensor (shape: [2, n_edges])
+        The edge index array.
+    node_attrs: torch.Tensor (shape: [n_nodes, n_node_attrs])
+        The node attribute array.
+    positions: torch.Tensor (shape: [n_nodes, 3], units: nm)
+        The node positions.
+    shifts: torch.Tensor (shape: [n_edges, 3], units: nm)
+        The shift array.
+    unit_shifts: torch.Tensor (shape: [n_edges, 3])
+        The unit shift array.
+    cell: torch.Tensor (shape: [3, 3], units: nm)
+        The lattice vectors.
+    node_labels: torch.Tensor (shape: [n_nodes, n_node_labels])
+        The node labels.
+    graph_labels: torch.Tensor (shape: [n_graph_labels])
+        The graph labels.
+    weight: torch.Tensor (shape: [])
+        The configuration weight in the loss funciton.
+    """
     batch: torch.Tensor
     edge_index: torch.Tensor
     node_attrs: torch.Tensor
@@ -30,15 +54,15 @@ class GraphData(tg.data.Data):
 
     def __init__(
         self,
-        edge_index: torch.Tensor,    # shape: [2, n_edges]
-        node_attrs: torch.Tensor,    # shape: [n_nodes, n_node_attrs]
-        positions: torch.Tensor,     # shape: [n_nodes, 3]
-        shifts: torch.Tensor,        # shape: [n_edges, 3],
-        unit_shifts: torch.Tensor,   # shape: [n_edges, 3]
-        cell: torch.Tensor,          # shape: [3, 3]
-        node_labels: torch.Tensor,   # shape: [n_nodes, n_node_labels]
-        graph_labels: torch.Tensor,  # shape: [n_graph_labels]
-        weight: torch.Tensor,        # shape: []
+        edge_index: torch.Tensor,
+        node_attrs: torch.Tensor,
+        positions: torch.Tensor,
+        shifts: torch.Tensor,
+        unit_shifts: torch.Tensor,
+        cell: torch.Tensor,
+        node_labels: torch.Tensor,
+        graph_labels: torch.Tensor,
+        weight: torch.Tensor,
     ):
         # Check shapes
         num_nodes = node_attrs.shape[0]
@@ -70,7 +94,18 @@ class GraphData(tg.data.Data):
         z_table: gutils.atomic.AtomicNumberTable,
         cutoff: float,
     ) -> 'GraphData':
+        """
+        Build the graph data object from a configuration.
 
+        Parameters
+        ----------
+        config: mlcolvar.graph.utils.atomic.Configuration
+            The configuration.
+        z_table: mlcolvar.graph.utils.atomic.AtomicNumberTable
+            The atomic number table used to build the node attributes.
+        cutoff: float
+            The graph cutoff radius.
+        """
         # fmt: off
         assert (
             (config.node_labels is not None) or
@@ -212,6 +247,50 @@ def test_graph_data():
     assert (data['graph_labels'] == torch.tensor([1.0])).all()
 
     assert data['weight'] == 1.0
+
+    config = gutils.atomic.Configuration(
+        atomic_numbers=numbers,
+        positions=positions,
+        cell=cell,
+        pbc=[True] * 3,
+        node_labels=node_labels,
+        graph_labels=graph_labels,
+        edge_senders=[0],
+    )
+    data = GraphData.from_config(config, z_table, 0.1)
+
+    assert (
+        data['edge_index'] == torch.tensor([[0, 0], [2, 1]])
+    ).all()
+
+    config = gutils.atomic.Configuration(
+        atomic_numbers=numbers,
+        positions=positions,
+        cell=cell,
+        pbc=[True] * 3,
+        node_labels=node_labels,
+        graph_labels=graph_labels,
+        edge_receivers=[1, 2],
+    )
+    data = GraphData.from_config(config, z_table, 0.1)
+
+    assert (
+        data['edge_index'] == torch.tensor([[0, 0, 1, 2], [2, 1, 2, 1]])
+    ).all()
+
+    config = gutils.atomic.Configuration(
+        atomic_numbers=numbers,
+        positions=positions,
+        cell=cell,
+        pbc=[True] * 3,
+        node_labels=node_labels,
+        graph_labels=graph_labels,
+        edge_senders=[1, 2],
+        edge_receivers=[1, 2],
+    )
+    data = GraphData.from_config(config, z_table, 0.1)
+
+    assert (data['edge_index'] == torch.tensor([[1, 2], [2, 1]])).all()
 
 
 if __name__ == '__main__':
