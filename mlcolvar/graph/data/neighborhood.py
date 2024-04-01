@@ -18,7 +18,38 @@ def get_neighborhood(
     true_self_interaction: Optional[bool] = False,
     sender_indices: Optional[List[int]] = None,
     receiver_indices: Optional[List[int]] = None,
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Get the neighbour list of a given set atoms.
+
+    Parameters
+    ----------
+    positions: numpy.ndarray (shape: [N, 3])
+        The positions array.
+    cutoff: float
+        The cutoff radius.
+    pbc: Tuple[bool, bool, bool] (shape: [3])
+        If enable PBC in the directions of the three lattice vectors.
+    cell: numpy.ndarray (shape: [3, 3])
+        The lattice vectors.
+    true_self_interaction: bool
+        If keep self-edges that don't cross periodic boundaries.
+    sender_indices: List[int]
+        Indices of senders. If given, only edges sent by these atoms will be
+        kept in the graph.
+    receiver_indices: List[int]
+        Indices of receiver. If given, only edges received by these atoms will
+        be kept in the graph.
+
+    Returns
+    -------
+    edge_index: numpy.ndarray (shape: [2, n_edges])
+        The edge indices in the graph.
+    shifts: numpy.ndarray (shape: [n_edges, 3])
+        The shift vectors (unit_shifts * cell_lengths).
+    unit_shifts: numpy.ndarray (shape: [n_edges, 3])
+        The unit shift vectors (number of PBC croessed by the edges).
+    """
     if pbc is None:
         pbc = (False, False, False)
 
