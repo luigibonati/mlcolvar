@@ -4,7 +4,7 @@ import numpy as np
 
 import mlcolvar.graph.utils as gutils
 
-from neighborhood import get_neighborhood
+from .neighborhood import get_neighborhood
 
 """
 The graph data class. This module is taken from MACE:
