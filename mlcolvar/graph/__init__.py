@@ -6,3 +6,4 @@ __all__ = []
 from . import core 
 from . import data 
 from . import cvs
+from . import io
