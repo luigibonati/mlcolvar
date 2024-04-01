@@ -3,7 +3,7 @@ from matscipy.neighbours import neighbour_list
 from typing import Optional, Tuple, List
 
 """
-The neighbour list function. This module is taken from MACE directly:
+The neighbor list function. This module is taken from MACE directly:
 https://github.com/ACEsuit/mace/blob/main/mace/data/neighborhood.py
 """
 
@@ -20,7 +20,7 @@ def get_neighborhood(
     receiver_indices: Optional[List[int]] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Get the neighbour list of a given set atoms.
+    Get the neighbor list of a given set atoms.
 
     Parameters
     ----------
@@ -75,7 +75,7 @@ def get_neighborhood(
         cell[:, 2] = max_positions * 5 * cutoff * identity[:, 2]
 
     sender, receiver, unit_shifts = neighbour_list(
-        quantities="ijS",
+        quantities='ijS',
         pbc=pbc,
         cell=cell,
         positions=positions,
