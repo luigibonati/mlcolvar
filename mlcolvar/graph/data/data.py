@@ -1,6 +1,7 @@
 import torch
 import torch_geometric as tg
 import numpy as np
+from typing import List
 
 import mlcolvar.graph.utils as gutils
 
@@ -93,6 +94,27 @@ def from_configuration(
         graph_labels=graph_labels,
         weight=weight,
     )
+
+
+def from_configurations(
+    config: gutils.atomic.Configurations,
+    z_table: gutils.atomic.AtomicNumberTable,
+    cutoff: float,
+) -> List[tg.data.Data]:
+    """
+    Build graph data objects from configurations.
+
+    Parameters
+    ----------
+    config: mlcolvar.graph.utils.atomic.Configurations
+        The configurations.
+    z_table: mlcolvar.graph.utils.atomic.AtomicNumberTable
+        The atomic number table used to build the node attributes.
+    cutoff: float
+        The graph cutoff radius.
+    """
+
+    return [from_configuration(c) for c in config]
 
 
 def test_from_configuration():
