@@ -137,13 +137,11 @@ def test_from_configuration():
         graph_labels=graph_labels,
     )
     data = from_configuration(config, z_table, 0.1)
-
     assert (
         data['edge_index'] == torch.tensor(
             [[0, 0, 1, 1, 2, 2], [2, 1, 0, 2, 1, 0]]
         )
     ).all()
-
     assert (
         data['shifts'] == torch.tensor([
             [0.0, 0.0, 0.0],
@@ -154,7 +152,6 @@ def test_from_configuration():
             [0.0, 0.0, 0.0],
         ])
     ).all()
-
     assert (
         data['unit_shifts'] == torch.tensor([
             [0.0, 0.0, 0.0],
@@ -165,7 +162,6 @@ def test_from_configuration():
             [0.0, 0.0, 0.0],
         ])
     ).all()
-
     assert (
         data['positions'] == torch.tensor([
             [0.0, 0.0, 0.0],
@@ -173,7 +169,6 @@ def test_from_configuration():
             [0.07, -0.07, 0.0],
         ])
     ).all()
-
     assert (
         data['cell'] == torch.tensor([
             [0.2, 0.0, 0.0],
@@ -181,17 +176,13 @@ def test_from_configuration():
             [0.0, 0.0, 0.2],
         ])
     ).all()
-
     assert (
         data['node_attrs'] == torch.tensor([
             [0.0, 1.0], [1.0, 0.0], [1.0, 0.0]
         ])
     ).all()
-
     assert (data['node_labels'] == torch.tensor([[0.0], [1.0], [1.0]])).all()
-
     assert (data['graph_labels'] == torch.tensor([1.0])).all()
-
     assert data['weight'] == 1.0
 
     config = gutils.atomic.Configuration(
@@ -204,7 +195,6 @@ def test_from_configuration():
         edge_senders=[0],
     )
     data = from_configuration(config, z_table, 0.1)
-
     assert (
         data['edge_index'] == torch.tensor([[0, 0], [2, 1]])
     ).all()
@@ -219,7 +209,6 @@ def test_from_configuration():
         edge_receivers=[1, 2],
     )
     data = from_configuration(config, z_table, 0.1)
-
     assert (
         data['edge_index'] == torch.tensor([[0, 0, 1, 2], [2, 1, 2, 1]])
     ).all()
@@ -235,7 +224,6 @@ def test_from_configuration():
         edge_receivers=[1, 2],
     )
     data = from_configuration(config, z_table, 0.1)
-
     assert (data['edge_index'] == torch.tensor([[1, 2], [2, 1]])).all()
 
 
