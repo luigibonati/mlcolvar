@@ -33,6 +33,28 @@ def to_one_hot(indices: torch.Tensor, n_classes: int) -> torch.Tensor:
     return oh.view(*shape)
 
 
+def set_default_dtype(dtype: str) -> None:
+    """
+    Wrapper function of `torch.set_default_dtype`.
+
+    Parameters
+    ----------
+    dtype: str
+        The date type.
+    """
+    if not isinstance(dtype, str):
+        raise TypeError('A string is required to set TORCH default dtype!')
+    dtype = dtype.lower()
+    if dtype in ['float', 'float32']:
+        torch.set_default_dtype(torch.float32)
+    elif dtype in ['double', 'float64']:
+        torch.set_default_dtype(torch.float64)
+    else:
+        raise RuntimeError(
+            'Unknown/Unsupported data type: "{:s}"!'.format(dtype)
+        )
+
+
 def test_to_one_hot():
     i = torch.tensor([[0], [2], [1]], dtype=torch.int64)
     e = to_one_hot(i, 4)
@@ -43,5 +65,24 @@ def test_to_one_hot():
     ).all()
 
 
+def test_set_default_dtype():
+    set_default_dtype('float64')
+    t = torch.Tensor([1.0])
+    assert t.dtype == torch.float64
+
+    set_default_dtype('float32')
+    t = torch.Tensor([1.0])
+    assert t.dtype == torch.float32
+
+    set_default_dtype('double')
+    t = torch.Tensor([1.0])
+    assert t.dtype == torch.float64
+
+    set_default_dtype('float')
+    t = torch.Tensor([1.0])
+    assert t.dtype == torch.float32
+
+
 if __name__ == '__main__':
     test_to_one_hot()
+    test_set_default_dtype()
