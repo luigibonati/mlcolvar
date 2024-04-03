@@ -120,7 +120,7 @@ def get_neighborhood(
     return edge_index, shifts, unit_shifts
 
 
-def test_get_neighborhood():
+def test_get_neighborhood() -> None:
 
     positions = np.array(
         [[0, 0, 0], [1, 1, 1], [2, 2, 2], [3, 3, 3]], dtype=float

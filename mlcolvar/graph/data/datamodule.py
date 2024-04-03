@@ -241,7 +241,7 @@ class GraphDataModule(lightning.LightningDataModule):
             )
 
 
-def test_datamodule():
+def test_datamodule() -> None:
     numbers = [8, 1, 1]
     positions = np.array(
         [[0.0, 0.0, 0.0], [0.07, 0.07, 0.0], [0.07, -0.07, 0.0]], dtype=float

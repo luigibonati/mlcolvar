@@ -22,7 +22,7 @@ class AtomicNumberTable:
         The atomic numbers in this table.
     """
 
-    def __init__(self, zs: List[int]):
+    def __init__(self, zs: List[int]) -> None:
         self.zs = zs
 
     def __len__(self) -> int:
@@ -31,7 +31,7 @@ class AtomicNumberTable:
         """
         return len(self.zs)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f'AtomicNumberTable: {tuple(s for s in self.zs)}'
 
     def index_to_z(self, index: int) -> int:
@@ -103,7 +103,7 @@ class Configuration:
 Configurations = List[Configuration]
 
 
-def test_atomic_number_table():
+def test_atomic_number_table() -> None:
     table = AtomicNumberTable([1, 6, 7, 8])
 
     numbers = np.array([1, 7, 6, 8])

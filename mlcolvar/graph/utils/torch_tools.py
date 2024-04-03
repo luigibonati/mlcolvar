@@ -55,7 +55,7 @@ def set_default_dtype(dtype: str) -> None:
         )
 
 
-def test_to_one_hot():
+def test_to_one_hot() -> None:
     i = torch.tensor([[0], [2], [1]], dtype=torch.int64)
     e = to_one_hot(i, 4)
     assert (
@@ -65,7 +65,7 @@ def test_to_one_hot():
     ).all()
 
 
-def test_set_default_dtype():
+def test_set_default_dtype() -> None:
     set_default_dtype('float64')
     t = torch.Tensor([1.0])
     assert t.dtype == torch.float64

@@ -120,7 +120,7 @@ def from_configurations(
     return [from_configuration(c) for c in config]
 
 
-def test_from_configuration():
+def test_from_configuration() -> None:
     numbers = [8, 1, 1]
     positions = np.array(
         [[0.0, 0.0, 0.0], [0.07, 0.07, 0.0], [0.07, -0.07, 0.0]],
