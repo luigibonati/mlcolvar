@@ -3,9 +3,9 @@ import torch_geometric as tg
 import numpy as np
 from typing import List
 
-from mlcolvar.graph.utils import atomic
-from mlcolvar.graph.utils import torch_tools
+from mlcolvar.graph.data import atomic
 from mlcolvar.graph.data.neighborhood import get_neighborhood
+from mlcolvar.graph.utils import torch_tools
 
 """
 Build the graph data from a configuration. This module is taken from MACE:

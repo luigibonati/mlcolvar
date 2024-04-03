@@ -4,8 +4,7 @@ import torch_geometric as tg
 import numpy as np
 from typing import Sequence, Union, Optional
 
-from mlcolvar.graph.utils import atomic
-from mlcolvar.graph.data import from_configuration
+from mlcolvar.graph.data import atomic, from_configuration
 
 """
 The data module for lightning.
