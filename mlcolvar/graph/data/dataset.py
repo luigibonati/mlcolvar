@@ -35,14 +35,6 @@ def from_configuration(
     cutoff: float
         The graph cutoff radius.
     """
-
-    # fmt: off
-    assert (
-        (config.node_labels is not None) or
-        (config.graph_labels is not None)
-    ), "Either node labels or graph labels should be given!"
-    # fmt: on
-
     edge_index, shifts, unit_shifts = get_neighborhood(
         positions=config.positions,
         cutoff=cutoff,
@@ -116,8 +108,7 @@ def from_configurations(
     cutoff: float
         The graph cutoff radius.
     """
-
-    return [from_configuration(c) for c in config]
+    return [from_configuration(c, z_table, cutoff) for c in config]
 
 
 def test_from_configuration() -> None:
