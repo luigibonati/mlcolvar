@@ -12,13 +12,72 @@ Build the graph data from a configuration. This module is taken from MACE:
 https://github.com/ACEsuit/mace/blob/main/mace/data/atomic_data.py
 """
 
-__all__ = ['GraphDataSet', 'from_configuration', 'from_configurations']
+__all__ = [
+    'GraphDataSet',
+    'create_dataset_from_configurations',
+    'save_dataset',
+    'load_dataset'
+]
 
 
-GraphDataSet = List[tg.data.Data]
+class GraphDataSet(list):
+    """
+    A very simple graph dataset class.
+
+    Parameters
+    ----------
+    data: List[torch_geometric.data.Data]
+        The data.
+    atomic_numbers: List[int]
+        The atomic numbers used to build the node attributes.
+    cutoff: float
+        The graph cutoff radius.
+    """
+
+    def __init__(
+        self,
+        data: List[tg.data.Data],
+        atomic_numbers: List[int],
+        cutoff: float
+    ) -> None:
+        super().__init__()
+        self.extend(data)
+        self.__atomic_numbers = list(atomic_numbers)
+        self.__cutoff = cutoff
+
+    def __repr__(self) -> str:
+        result = 'GRAPHDATASET [ '
+
+        data_string = '\033[32m{:d}\033[0m\033[36m 󰡷 \033[0m'
+        result = result + data_string.format(len(self))
+        result = result + '| '
+        data_string = '[\033[32m{}\033[0m]\033[36m 󰝨 \033[0m'
+        result = result + data_string.format(
+            ('{:d} ' * len(self.atomic_numbers)).strip()
+        ).format(*self.atomic_numbers)
+        result = result + '| '
+        data_string = '\033[32m{:f}\033[0m\033[36m 󰳁 \033[0m'
+        result = result + data_string.format(self.cutoff)
+        result = result + ']'
+
+        return result
+
+    @property
+    def cutoff(self) -> float:
+        """
+        The graph cutoff radius.
+        """
+        return self.__cutoff
+
+    @property
+    def atomic_numbers(self) -> List[int]:
+        """
+        The atomic numbers used to build the node attributes.
+        """
+        return self.__atomic_numbers.copy()
 
 
-def from_configuration(
+def _create_dataset_from_configuration(
     config: atomic.Configuration,
     z_table: atomic.AtomicNumberTable,
     cutoff: float,
@@ -91,7 +150,7 @@ def from_configuration(
     )
 
 
-def from_configurations(
+def create_dataset_from_configurations(
     config: atomic.Configurations,
     z_table: atomic.AtomicNumberTable,
     cutoff: float,
@@ -108,7 +167,44 @@ def from_configurations(
     cutoff: float
         The graph cutoff radius.
     """
-    return [from_configuration(c, z_table, cutoff) for c in config]
+    data_list = [
+        _create_dataset_from_configuration(c, z_table, cutoff) for c in config
+    ]
+    dataset = GraphDataSet(data_list, z_table.zs, cutoff)
+
+    return dataset
+
+
+def save_dataset(dataset: GraphDataSet, file_name: str) -> None:
+    """
+    Save a dataset to disk.
+
+    Parameters
+    ----------
+    dataset: GraphDataSet
+        The dataset.
+    file_name: str
+        The filename.
+    """
+    assert isinstance(dataset, GraphDataSet)
+
+    torch.save(dataset, file_name)  # super torch magic go brrrrrrrrr
+
+
+def load_dataset(file_name: str) -> GraphDataSet:
+    """
+    Load a dataset from disk.
+
+    Parameters
+    ----------
+    file_name: str
+        The filename.
+    """
+    dataset = torch.load(file_name)
+
+    assert isinstance(dataset, GraphDataSet)
+
+    return dataset
 
 
 def test_from_configuration() -> None:
@@ -130,7 +226,7 @@ def test_from_configuration() -> None:
         node_labels=node_labels,
         graph_labels=graph_labels,
     )
-    data = from_configuration(config, z_table, 0.1)
+    data = _create_dataset_from_configuration(config, z_table, 0.1)
     assert (
         data['edge_index'] == torch.tensor(
             [[0, 0, 1, 1, 2, 2], [2, 1, 0, 2, 1, 0]]
@@ -188,7 +284,7 @@ def test_from_configuration() -> None:
         graph_labels=graph_labels,
         edge_senders=[0],
     )
-    data = from_configuration(config, z_table, 0.1)
+    data = _create_dataset_from_configuration(config, z_table, 0.1)
     assert (
         data['edge_index'] == torch.tensor([[0, 0], [2, 1]])
     ).all()
@@ -202,7 +298,7 @@ def test_from_configuration() -> None:
         graph_labels=graph_labels,
         edge_receivers=[1, 2],
     )
-    data = from_configuration(config, z_table, 0.1)
+    data = _create_dataset_from_configuration(config, z_table, 0.1)
     assert (
         data['edge_index'] == torch.tensor([[0, 0, 1, 2], [2, 1, 2, 1]])
     ).all()
@@ -217,7 +313,7 @@ def test_from_configuration() -> None:
         edge_senders=[1, 2],
         edge_receivers=[1, 2],
     )
-    data = from_configuration(config, z_table, 0.1)
+    data = _create_dataset_from_configuration(config, z_table, 0.1)
     assert (data['edge_index'] == torch.tensor([[1, 2], [2, 1]])).all()
 
 

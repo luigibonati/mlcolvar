@@ -40,7 +40,7 @@ def set_default_dtype(dtype: str) -> None:
     Parameters
     ----------
     dtype: str
-        The date type.
+        The data type.
     """
     if not isinstance(dtype, str):
         raise TypeError('A string is required to set TORCH default dtype!')

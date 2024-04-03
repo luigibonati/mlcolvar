@@ -4,7 +4,7 @@ import torch_geometric as tg
 import numpy as np
 from typing import Sequence, Union, Optional
 
-from mlcolvar.graph.data import atomic, from_configuration
+from mlcolvar.graph.data import atomic, create_dataset_from_configurations
 
 """
 The data module for lightning.
@@ -258,7 +258,7 @@ def test_datamodule() -> None:
         node_labels=node_labels,
         graph_labels=graph_labels,
     )
-    dataset = [from_configuration(config, z_table, 0.1) for i in range(10)]
+    dataset = create_dataset_from_configurations([config] * 10, z_table, 0.1)
     for i, d in enumerate(dataset):
         d['graph_labels'][0] = i
 
