@@ -4,7 +4,7 @@ import torch_geometric as tg
 import numpy as np
 from typing import Sequence, Union, Optional
 
-import mlcolvar.graph.utils as gutils
+from mlcolvar.graph.utils import atomic
 from mlcolvar.graph.data import from_configuration
 
 """
@@ -249,9 +249,9 @@ def test_datamodule():
     cell = np.identity(3, dtype=float) * 0.2
     graph_labels = np.array([1])
     node_labels = np.array([[0], [1], [1]])
-    z_table = gutils.atomic.AtomicNumberTable.from_zs(numbers)
+    z_table = atomic.AtomicNumberTable.from_zs(numbers)
 
-    config = gutils.atomic.Configuration(
+    config = atomic.Configuration(
         atomic_numbers=numbers,
         positions=positions,
         cell=cell,

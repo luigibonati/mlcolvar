@@ -3,8 +3,8 @@ import torch_geometric as tg
 import numpy as np
 from typing import List
 
-import mlcolvar.graph.utils as gutils
-
+from mlcolvar.graph.utils import atomic
+from mlcolvar.graph.utils import torch_tools
 from mlcolvar.graph.data.neighborhood import get_neighborhood
 
 """
@@ -19,8 +19,8 @@ GraphDataSet = List[tg.data.Data]
 
 
 def from_configuration(
-    config: gutils.atomic.Configuration,
-    z_table: gutils.atomic.AtomicNumberTable,
+    config: atomic.Configuration,
+    z_table: atomic.AtomicNumberTable,
     cutoff: float,
 ) -> tg.data.Data:
     """
@@ -63,7 +63,7 @@ def from_configuration(
     cell = torch.tensor(config.cell, dtype=torch.get_default_dtype())
 
     indices = z_table.zs_to_indices(config.atomic_numbers)
-    one_hot = gutils.torch_tools.to_one_hot(
+    one_hot = torch_tools.to_one_hot(
         torch.tensor(indices, dtype=torch.long).unsqueeze(-1),
         n_classes=len(z_table),
     )
@@ -100,8 +100,8 @@ def from_configuration(
 
 
 def from_configurations(
-    config: gutils.atomic.Configurations,
-    z_table: gutils.atomic.AtomicNumberTable,
+    config: atomic.Configurations,
+    z_table: atomic.AtomicNumberTable,
     cutoff: float,
 ) -> GraphDataSet:
     """
@@ -129,9 +129,9 @@ def test_from_configuration():
     cell = np.identity(3, dtype=float) * 0.2
     graph_labels = np.array([1])
     node_labels = np.array([[0], [1], [1]])
-    z_table = gutils.atomic.AtomicNumberTable.from_zs(numbers)
+    z_table = atomic.AtomicNumberTable.from_zs(numbers)
 
-    config = gutils.atomic.Configuration(
+    config = atomic.Configuration(
         atomic_numbers=numbers,
         positions=positions,
         cell=cell,
@@ -188,7 +188,7 @@ def test_from_configuration():
     assert (data['graph_labels'] == torch.tensor([1.0])).all()
     assert data['weight'] == 1.0
 
-    config = gutils.atomic.Configuration(
+    config = atomic.Configuration(
         atomic_numbers=numbers,
         positions=positions,
         cell=cell,
@@ -202,7 +202,7 @@ def test_from_configuration():
         data['edge_index'] == torch.tensor([[0, 0], [2, 1]])
     ).all()
 
-    config = gutils.atomic.Configuration(
+    config = atomic.Configuration(
         atomic_numbers=numbers,
         positions=positions,
         cell=cell,
@@ -216,7 +216,7 @@ def test_from_configuration():
         data['edge_index'] == torch.tensor([[0, 0, 1, 2], [2, 1, 2, 1]])
     ).all()
 
-    config = gutils.atomic.Configuration(
+    config = atomic.Configuration(
         atomic_numbers=numbers,
         positions=positions,
         cell=cell,
