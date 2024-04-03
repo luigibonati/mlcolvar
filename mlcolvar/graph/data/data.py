@@ -12,7 +12,10 @@ Build the graph data from a configuration. This module is taken from MACE:
 https://github.com/ACEsuit/mace/blob/main/mace/data/atomic_data.py
 """
 
-__all__ = ['from_configuration']
+__all__ = ['GraphDataSet', 'from_configuration', 'from_configurations']
+
+
+GraphDataSet = List[tg.data.Data]
 
 
 def from_configuration(
@@ -100,7 +103,7 @@ def from_configurations(
     config: gutils.atomic.Configurations,
     z_table: gutils.atomic.AtomicNumberTable,
     cutoff: float,
-) -> List[tg.data.Data]:
+) -> GraphDataSet:
     """
     Build graph data objects from configurations.
 
