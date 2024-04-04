@@ -338,6 +338,7 @@ def test_create_dataset_from_trajectories(
                 [0.0, 1.0], [1.0, 0.0], [1.0, 0.0]
             ])
         ).all()
+        assert (data['n_receivers'] == torch.tensor([3])).all()
 
     for i in range(6):
         check_data_1(dataset[i])
@@ -357,6 +358,10 @@ def test_create_dataset_from_trajectories(
                 [0.0, 1.0], [1.0, 0.0], [1.0, 0.0]
             ])
         ).all()
+        # NOTE: This is a very bad testing case: as you can see, the oxygen
+        # is one of the receivers, however no edge is pointing to it.
+        # This is the risk when you have too few edge senders.
+        assert (data['n_receivers'] == torch.tensor([3])).all()
 
     for i in range(6):
         check_data_2(dataset[i])
@@ -378,6 +383,8 @@ def test_create_dataset_from_trajectories(
                 [0.0, 1.0], [1.0, 0.0], [1.0, 0.0]
             ])
         ).all()
+        assert (data['n_receivers'] == torch.tensor([2])).all()
+        assert (data['receiver_masks'] == torch.tensor([[0], [1], [1]])).all()
 
     for i in range(6):
         check_data_3(dataset[i])
@@ -398,6 +405,8 @@ def test_create_dataset_from_trajectories(
                 [0.0, 1.0], [1.0, 0.0], [1.0, 0.0]
             ])
         ).all()
+        assert (data['n_receivers'] == torch.tensor([2])).all()
+        assert (data['receiver_masks'] == torch.tensor([[0], [1], [1]])).all()
 
     for i in range(6):
         check_data_4(dataset[i])

@@ -301,6 +301,7 @@ def test_datamodule() -> None:
     assert (
         data_dict['graph_labels'] == torch.tensor([8, 4, 7, 0, 1, 2])
     ).all()
+    assert (data_dict['n_receivers'] == torch.tensor([3] * 6)).all()
 
     data_dict = next(iter(loader.val_dataloader())).to_dict()
     assert (
@@ -314,6 +315,7 @@ def test_datamodule() -> None:
     ).all()
     assert (data_dict['graph_labels'] == torch.tensor([5, 9, 6])).all()
     assert (data_dict['ptr'] == torch.tensor([0, 3, 6, 9])).all()
+    assert (data_dict['n_receivers'] == torch.tensor([3] * 3)).all()
 
     data_dict = next(iter(loader.test_dataloader())).to_dict()
     assert (data_dict['graph_labels'] == torch.tensor([3])).all()
@@ -360,6 +362,42 @@ def test_datamodule() -> None:
         data_dict['node_attrs'] == torch.tensor([
             [0.0, 1.0], [1.0, 0.0], [1.0, 0.0]
         ])
+    ).all()
+    assert (data_dict['n_receivers'] == torch.tensor([3])).all()
+
+    config = atomic.Configuration(
+        atomic_numbers=numbers,
+        positions=positions,
+        cell=cell,
+        pbc=[True] * 3,
+        edge_receivers=[0],
+        node_labels=node_labels,
+        graph_labels=graph_labels,
+    )
+    dataset = create_dataset_from_configurations([config] * 10, z_table, 0.1)
+
+    loader = GraphDataModule(
+        dataset,
+        lengths=(0.6, 0.3, 0.1),
+        batch_size=10,
+        shuffle=False,
+        seed=1
+    )
+
+    loader.setup()
+    assert loader._dataset_indices == [[8, 4, 7, 0, 1, 2], [5, 9, 6], [3]]
+    data_dict = next(iter(loader.train_dataloader())).to_dict()
+
+    assert (data_dict['n_receivers'] == torch.tensor([1] * 6)).all()
+    assert (
+        data_dict['receiver_masks'] == torch.tensor([[1], [0], [0]] * 6)
+    ).all()
+
+    data_dict = next(iter(loader.val_dataloader())).to_dict()
+
+    assert (data_dict['n_receivers'] == torch.tensor([1] * 3)).all()
+    assert (
+        data_dict['receiver_masks'] == torch.tensor([[1], [0], [0]] * 3)
     ).all()
 
 
