@@ -68,13 +68,7 @@ def create_dataset_from_trajectories(
 
     Notes
     -----
-    1. Atoms selected by `edge_sender_selection` and `edge_receiver_selection`
-    should cover all atoms in the system. If only part of the system should be
-    used to build the graphs, the `system_selection` option should be used, and
-    all atoms selected by this selection should be again cover by the edge
-    selections. Thus, using the two types of edge selections requires extra
-    cautious.
-    2. The selections `edge_sender_selection` and `edge_receiver_selection`
+    The selections `edge_sender_selection` and `edge_receiver_selection`
     will be made after the `system_selection` was made. Thus, absolute index
     based edge selections may lead to unwanted results when `system_selection`
     is given.
@@ -243,18 +237,6 @@ def _configures_from_trajectory(
         )
     else:
         edge_receivers = None
-
-    # here we check for dead nodes (all unselected atoms).
-    if edge_senders is not None and edge_receivers is not None:
-        alive_atoms = [*edge_senders.tolist(), *edge_receivers.tolist()]
-        alive_atoms = sorted(list(set(alive_atoms)))
-        if alive_atoms != list(range(trajectory.n_atoms)):
-            raise RuntimeError(
-                'Your edge sender selection and edge receiver selection '
-                + 'could not select all atoms in your trajectory! If you '
-                + 'want to build graphs with only part of your system, '
-                + 'consider using the `system_selection` parameter.'
-            )
 
     atomic_numbers = [a.element.number for a in trajectory.top.atoms]
     if trajectory.unitcell_vectors is not None:
