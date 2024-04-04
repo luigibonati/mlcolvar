@@ -176,12 +176,11 @@ def sanitize_positions_shape(pos : torch.Tensor,
             
     if len(pos.shape)==2:
         # check that index 0: atoms, 1: coords
-        # if pos.shape[0]==n_atoms and pos.shape[1] == 3:
-        #     pos = pos.unsqueeze(0) # add batch dimension
-        #     batch_size = pos.shape[0]
-        # # check that is not 0: batch, 1: atom*coords
-        # el
-        if not pos.shape[1] == int(n_atoms * 3):
+        if pos.shape[0]==n_atoms and pos.shape[1] == 3:
+            pos = pos.unsqueeze(0) # add batch dimension
+            batch_size = pos.shape[0]
+        # check that is not 0: batch, 1: atom*coords
+        elif not pos.shape[1] == int(n_atoms * 3):
             raise ValueError(f"The given positions tensor has the wrong format, found {pos.shape}, expected either {[n_atoms, 3]} or {-1, n_atoms*3}")
 
     if len(pos.shape)==1:
@@ -365,7 +364,7 @@ def apply_cutoff(x : torch.Tensor,
     """
     x_clone = torch.clone(x)
     if mode == 'continuous' and switching_function is None:
-        warn('switching_function is required to use continuous mode! Set This can be either a user-defined and torch-based function or a method of class switching_functions/SwitchingFunctions')
+        raise ValueError('switching_function is required to use continuous mode! Set This can be either a user-defined and torch-based function or a method of class switching_functions/SwitchingFunctions')
     
     batch_size = x.shape[0]
     mask_diag = ~torch.eye(x.shape[-1], dtype=bool)
