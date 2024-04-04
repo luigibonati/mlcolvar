@@ -31,7 +31,7 @@ class Transform(torch.nn.Module):
         pass
 
     def forward(self, X: torch.Tensor):
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def teardown(self):
         pass

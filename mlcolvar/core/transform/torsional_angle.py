@@ -16,7 +16,7 @@ class TorsionalAngle(Transform):
     MODES = ["angle", "sin", "cos"]
 
     def __init__(self, 
-                 indeces : Union[list, np.ndarray, torch.Tensor],
+                 indices : Union[list, np.ndarray, torch.Tensor],
                  n_atoms : int,
                  mode: Union[str, list],
                  PBC: bool,
@@ -38,7 +38,7 @@ class TorsionalAngle(Transform):
         super().__init__(in_features=int(n_atoms*3), out_features=len(mode_idx))
 
         # initialize class attributes
-        self.indeces = indeces
+        self.indices = indices
         self.n_atoms = n_atoms
         self.PBC = PBC
         self.real_cell = real_cell
@@ -49,7 +49,7 @@ class TorsionalAngle(Transform):
         tors_pos, batch_size = sanitize_positions_shape(pos, self.n_atoms)
 
         # select relevant atoms only
-        tors_pos = tors_pos[:, self.indeces, :]
+        tors_pos = tors_pos[:, self.indices, :]
 
         dist_components, _, _ = compute_distances_components_matrices(pos = tors_pos,
                                                                       n_atoms = 4,
