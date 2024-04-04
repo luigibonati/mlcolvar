@@ -99,10 +99,10 @@ class Inverse(torch.nn.Module):
         self.module = module
 
     def inverse(self, *args, **kwargs):
-        return self.module.inverse(*args, **kwargs)
+        return self.module(*args, **kwargs)
 
     def forward(self, *args, **kwargs):
-        return self.inverse(*args, **kwargs)
+        return self.module.inverse(*args, **kwargs)
 
 
 
