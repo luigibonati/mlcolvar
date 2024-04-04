@@ -310,11 +310,11 @@ def test_from_configuration() -> None:
         pbc=[True] * 3,
         node_labels=node_labels,
         graph_labels=graph_labels,
-        edge_senders=[1, 2],
+        edge_senders=[0],
         edge_receivers=[1, 2],
     )
     data = _create_dataset_from_configuration(config, z_table, 0.1)
-    assert (data['edge_index'] == torch.tensor([[1, 2], [2, 1]])).all()
+    assert (data['edge_index'] == torch.tensor([[0, 0], [2, 1]])).all()
 
 
 if __name__ == '__main__':
