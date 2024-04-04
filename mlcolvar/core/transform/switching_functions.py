@@ -40,7 +40,7 @@ class SwitchingFunctions(Transform):
                     You can initialize it as a method of the SwitchingFunctions class and tell us on Github, contributions are welcome!''')  
 
     def forward(self, x : torch.Tensor):
-        switch_function = self.__getattribute__(f'{self.name}_switch')
+        switch_function = getattr(self, f'{self.name}_switch')
         y = switch_function(x, self.cutoff, **self.options)
         return y
     
