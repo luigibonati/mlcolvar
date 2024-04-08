@@ -6,7 +6,7 @@ The radial functions. This module is taken from MACE directly:
 https://github.com/ACEsuit/mace/blob/main/mace/modules/radial.py
 """
 
-__all__ = ['BesselBasis', 'PolynomialCutoff']
+__all__ = ['RadialEmbeddingBlock']
 
 
 class BesselBasis(torch.nn.Module):
@@ -17,7 +17,7 @@ class BesselBasis(torch.nn.Module):
     ----------
     cutoff: float
         The cutoff radius.
-    n_basis: int
+    n_bases: int
         Size of the basis set.
     trainable: bool
         If use trainable basis set parameters.
@@ -28,7 +28,7 @@ class BesselBasis(torch.nn.Module):
     for Molecular Graphs; ICLR 2020.
     """
 
-    def __init__(self, cutoff: float, n_basis=8, trainable=False) -> None:
+    def __init__(self, cutoff: float, n_bases=8, trainable=False) -> None:
         super().__init__()
 
         bessel_weights = (
@@ -36,8 +36,8 @@ class BesselBasis(torch.nn.Module):
             / cutoff
             * torch.linspace(
                 start=1.0,
-                end=n_basis,
-                steps=n_basis,
+                end=n_bases,
+                steps=n_bases,
                 dtype=torch.get_default_dtype(),
             )
         )
@@ -141,7 +141,7 @@ class RadialEmbeddingBlock(torch.nn.Module):
     ----------
     cutoff: float
         The cutoff radius.
-    n_basis: int
+    n_bases: int
         Size of the basis set.
     n_polynomial: bool
         Order of the polynomial.
@@ -155,12 +155,12 @@ class RadialEmbeddingBlock(torch.nn.Module):
     def __init__(
         self,
         cutoff: float,
-        n_basis: int = 8,
+        n_bases: int = 8,
         n_polynomial: int = 6,
     ) -> None:
         super().__init__()
-        self.n_out = n_basis
-        self.bessel_fn = BesselBasis(cutoff=cutoff, n_basis=n_basis)
+        self.n_out = n_bases
+        self.bessel_fn = BesselBasis(cutoff=cutoff, n_bases=n_bases)
         self.cutoff_fn = PolynomialCutoff(cutoff=cutoff, p=n_polynomial)
 
     def forward(self, edge_lengths: torch.Tensor) -> torch.Tensor:
@@ -174,10 +174,10 @@ class RadialEmbeddingBlock(torch.nn.Module):
 
         Returns
         -------
-        edge_embedding: torch.Tensor (shape: [n_edges, n_basis])
+        edge_embedding: torch.Tensor (shape: [n_edges, n_bases])
             The radial edge embedding.
         """
-        r = self.bessel_fn(edge_lengths)  # shape: [n_edges, n_basis]
+        r = self.bessel_fn(edge_lengths)  # shape: [n_edges, n_bases]
         c = self.cutoff_fn(edge_lengths)  # shape: [n_edges, 1]
         return r * c
 
