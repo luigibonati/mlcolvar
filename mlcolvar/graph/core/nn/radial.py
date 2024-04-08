@@ -143,7 +143,7 @@ class RadialEmbeddingBlock(torch.nn.Module):
         The cutoff radius.
     n_bases: int
         Size of the basis set.
-    n_polynomial: bool
+    n_polynomials: bool
         Order of the polynomial.
 
     References
@@ -156,12 +156,12 @@ class RadialEmbeddingBlock(torch.nn.Module):
         self,
         cutoff: float,
         n_bases: int = 8,
-        n_polynomial: int = 6,
+        n_polynomials: int = 6,
     ) -> None:
         super().__init__()
         self.n_out = n_bases
         self.bessel_fn = BesselBasis(cutoff=cutoff, n_bases=n_bases)
-        self.cutoff_fn = PolynomialCutoff(cutoff=cutoff, p=n_polynomial)
+        self.cutoff_fn = PolynomialCutoff(cutoff=cutoff, p=n_polynomials)
 
     def forward(self, edge_lengths: torch.Tensor) -> torch.Tensor:
         """
