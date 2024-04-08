@@ -46,7 +46,6 @@ def get_edge_vectors_and_lengths(
     edge_index: torch.Tensor,
     shifts: torch.Tensor,
     normalize: bool = True,
-    eps: float = 1e-9,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Calculate edge vectors and lengths by indices and shift vectors.
@@ -61,8 +60,6 @@ def get_edge_vectors_and_lengths(
         The shift vector.
     normalize: bool
         If return the normalized distance vectors.
-    eps: float
-        The tolerance of zero-length vectors.
 
     Returns
     -------
@@ -75,9 +72,9 @@ def get_edge_vectors_and_lengths(
     receiver = edge_index[1]
     vectors = positions[receiver] - positions[sender] + shifts  # [n_edges, 3]
     lengths = torch.linalg.norm(vectors, dim=-1, keepdim=True)  # [n_edges, 1]
+
     if normalize:
-        vectors_normed = vectors / (lengths + eps)
-        return vectors_normed, lengths
+        vectors = torch.nan_to_num(torch.div(vectors, lengths))
 
     return vectors, lengths
 
@@ -270,12 +267,12 @@ def test_get_edge_vectors_and_lengths() -> None:
         torch.abs(
             vectors
             - torch.tensor([
-                [0.70710677404369050, -0.7071067740436905, 0.0],
-                [0.70710677404369050,  0.7071067740436905, 0.0],
-                [-0.7071067740436905, -0.7071067740436905, 0.0],
-                [0.00000000000000000,  0.9999999833333336, 0.0],
-                [0.00000000000000000, -0.9999999833333336, 0.0],
-                [-0.7071067740436905,  0.7071067740436905, 0.0],
+                [0.70710678118654757, -0.70710678118654757, 0.0],
+                [0.70710678118654757,  0.70710678118654757, 0.0],
+                [-0.7071067811865476, -0.70710678118654757, 0.0],
+                [0.00000000000000000,  1.00000000000000000, 0.0],
+                [0.00000000000000000, -1.00000000000000000, 0.0],
+                [-0.7071067811865476,  0.70710678118654757, 0.0],
             ])
         ) < 1E-12
     ).all()
