@@ -67,7 +67,7 @@ class RadiusGraph(Transform):
         self.switching_function = switching_function
         self.zero_threshold = zero_threshold
         
-    def compute_radius_graph(self, pos, mode):
+    def compute_radius_graph(self, pos):
         dist = compute_distances_matrix(pos=pos,
                                         n_atoms=self.n_atoms,
                                         PBC=self.PBC,
@@ -79,18 +79,21 @@ class RadiusGraph(Transform):
         aux_switch = torch.clone(dist)
         aux_switch = apply_cutoff(x=aux_switch,
                                   cutoff=self.cutoff, 
-                                  mode=mode, 
+                                  mode=self.mode, 
                                   switching_function = self.switching_function)          
 
-        if mode == 'continuous':
+        if self.mode == 'continuous':
             # smooth dist
             dist = dist * aux_switch 
             # discard what is almost zero --> use self.zero_threshold
             unique = torch.nonzero(torch.ge(dist.triu(), self.zero_threshold), as_tuple=True)
 
-        elif mode == 'discontinuous': 
+        elif self.mode == 'discontinuous': 
             # discard zeros entries
-            unique = dist.triu().nonzero(as_tuple=True) 
+            unique = dist.triu().nonzero(as_tuple=True)
+
+        else:
+            raise ValueError(f"self.mode must be either 'continuous' or 'discontinuous', found {mode}") 
         
         distances = dist[unique]
         batch_indeces, edge_src, edge_dst = unique
