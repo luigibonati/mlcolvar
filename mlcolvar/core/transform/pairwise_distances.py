@@ -81,7 +81,6 @@ def test_pairwise_distances():
                       )
     
     real_cell = torch.Tensor([1., 2., 1.])
-    cutoff = 1.8
   
     model = PairwiseDistances(n_atoms = 3,
                               PBC = True,
