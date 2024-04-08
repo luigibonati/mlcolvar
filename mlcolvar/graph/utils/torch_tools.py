@@ -10,7 +10,9 @@ https://github.com/ACEsuit/mace/blob/main/mace/tools/scatter.py
 __all__ = [
     'to_one_hot',
     'set_default_dtype',
-    'get_edge_vectors_and_lengths'
+    'get_edge_vectors_and_lengths',
+    'scatter_sum',
+    'scatter_mean'
 ]
 
 
