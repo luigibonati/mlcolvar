@@ -101,7 +101,7 @@ class RadiusGraph(Transform):
         return distances,batch_indeces,edge_src,edge_dst
 
     def forward(self, x : torch.Tensor):
-        x = self.compute_radius_graph(x, mode=self.mode)
+        x = self.compute_radius_graph(x)
         return x
 
 def test_radiusgraph():
