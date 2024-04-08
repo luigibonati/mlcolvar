@@ -301,7 +301,7 @@ def test_datamodule() -> None:
     assert (
         data_dict['graph_labels'] == torch.tensor([8, 4, 7, 0, 1, 2])
     ).all()
-    assert (data_dict['n_receivers'] == torch.tensor([3] * 6)).all()
+    assert (data_dict['n_receivers'] == torch.tensor([[3]] * 6)).all()
 
     data_dict = next(iter(loader.val_dataloader())).to_dict()
     assert (
@@ -315,7 +315,7 @@ def test_datamodule() -> None:
     ).all()
     assert (data_dict['graph_labels'] == torch.tensor([5, 9, 6])).all()
     assert (data_dict['ptr'] == torch.tensor([0, 3, 6, 9])).all()
-    assert (data_dict['n_receivers'] == torch.tensor([3] * 3)).all()
+    assert (data_dict['n_receivers'] == torch.tensor([[3]] * 3)).all()
 
     data_dict = next(iter(loader.test_dataloader())).to_dict()
     assert (data_dict['graph_labels'] == torch.tensor([3])).all()
@@ -363,7 +363,7 @@ def test_datamodule() -> None:
             [0.0, 1.0], [1.0, 0.0], [1.0, 0.0]
         ])
     ).all()
-    assert (data_dict['n_receivers'] == torch.tensor([3])).all()
+    assert (data_dict['n_receivers'] == torch.tensor([[3]])).all()
 
     config = atomic.Configuration(
         atomic_numbers=numbers,
@@ -388,14 +388,14 @@ def test_datamodule() -> None:
     assert loader._dataset_indices == [[8, 4, 7, 0, 1, 2], [5, 9, 6], [3]]
     data_dict = next(iter(loader.train_dataloader())).to_dict()
 
-    assert (data_dict['n_receivers'] == torch.tensor([1] * 6)).all()
+    assert (data_dict['n_receivers'] == torch.tensor([[1]] * 6)).all()
     assert (
         data_dict['receiver_masks'] == torch.tensor([[1], [0], [0]] * 6)
     ).all()
 
     data_dict = next(iter(loader.val_dataloader())).to_dict()
 
-    assert (data_dict['n_receivers'] == torch.tensor([1] * 3)).all()
+    assert (data_dict['n_receivers'] == torch.tensor([[1]] * 3)).all()
     assert (
         data_dict['receiver_masks'] == torch.tensor([[1], [0], [0]] * 3)
     ).all()

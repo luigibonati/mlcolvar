@@ -138,9 +138,12 @@ def _create_dataset_from_configuration(
     )
 
     n_receivers = (
-        torch.tensor([len(config.edge_receivers)], dtype=torch.long)
-        if config.edge_receivers is not None
-        else torch.tensor([one_hot.shape[0]], dtype=torch.long)
+        torch.tensor(
+            [[len(config.edge_receivers)]], dtype=torch.get_default_dtype()
+        ) if config.edge_receivers is not None
+        else torch.tensor(
+            [[one_hot.shape[0]]], dtype=torch.get_default_dtype()
+        )
     )
 
     if config.edge_receivers is not None:
@@ -287,7 +290,7 @@ def test_from_configuration() -> None:
     ).all()
     assert (data['node_labels'] == torch.tensor([[0.0], [1.0], [1.0]])).all()
     assert (data['graph_labels'] == torch.tensor([1.0])).all()
-    assert (data['n_receivers'] == torch.tensor([3])).all()
+    assert (data['n_receivers'] == torch.tensor([[3]])).all()
     assert data['weight'] == 1.0
 
     config = atomic.Configuration(
@@ -303,7 +306,7 @@ def test_from_configuration() -> None:
     assert (
         data['edge_index'] == torch.tensor([[0, 0], [2, 1]])
     ).all()
-    assert (data['n_receivers'] == torch.tensor([3])).all()
+    assert (data['n_receivers'] == torch.tensor([[3]])).all()
 
     config = atomic.Configuration(
         atomic_numbers=numbers,
@@ -318,7 +321,7 @@ def test_from_configuration() -> None:
     assert (
         data['edge_index'] == torch.tensor([[0, 0, 1, 2], [2, 1, 2, 1]])
     ).all()
-    assert (data['n_receivers'] == torch.tensor([2])).all()
+    assert (data['n_receivers'] == torch.tensor([[2]])).all()
     assert (data['receiver_masks'] == torch.tensor([[0], [1], [1]])).all()
 
     config = atomic.Configuration(
@@ -333,7 +336,7 @@ def test_from_configuration() -> None:
     )
     data = _create_dataset_from_configuration(config, z_table, 0.1)
     assert (data['edge_index'] == torch.tensor([[0, 0], [2, 1]])).all()
-    assert (data['n_receivers'] == torch.tensor([2])).all()
+    assert (data['n_receivers'] == torch.tensor([[2]])).all()
     assert (data['receiver_masks'] == torch.tensor([[0], [1], [1]])).all()
 
 
