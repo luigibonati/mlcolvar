@@ -1,9 +1,10 @@
 import torch
-from typing import Tuple
+from typing import Tuple, Optional
 
 """
-The helper functions for torch. This module is taken from MACE directly:
+Helper functions for torch. These modules are taken from MACE directly:
 https://github.com/ACEsuit/mace/blob/main/mace/tools/torch_tools.py
+https://github.com/ACEsuit/mace/blob/main/mace/tools/scatter.py
 """
 
 __all__ = [
@@ -39,9 +40,9 @@ def to_one_hot(indices: torch.Tensor, n_classes: int) -> torch.Tensor:
 
 
 def get_edge_vectors_and_lengths(
-    positions: torch.Tensor,  # [n_nodes, 3]
-    edge_index: torch.Tensor,  # [2, n_edges]
-    shifts: torch.Tensor,  # [n_edges, 3]
+    positions: torch.Tensor,
+    edge_index: torch.Tensor,
+    shifts: torch.Tensor,
     normalize: bool = True,
     eps: float = 1e-9,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -99,6 +100,108 @@ def set_default_dtype(dtype: str) -> None:
         raise RuntimeError(
             'Unknown/Unsupported data type: "{:s}"!'.format(dtype)
         )
+
+
+def _broadcast(src: torch.Tensor, other: torch.Tensor, dim: int):
+    """
+    Helper function of scatter functions.
+    """
+    if dim < 0:
+        dim = other.dim() + dim
+    if src.dim() == 1:
+        for _ in range(0, dim):
+            src = src.unsqueeze(0)
+    for _ in range(src.dim(), other.dim()):
+        src = src.unsqueeze(-1)
+    src = src.expand_as(other)
+    return src
+
+
+@torch.jit.script
+def scatter_sum(
+    src: torch.Tensor,
+    index: torch.Tensor,
+    dim: int = -1,
+    out: Optional[torch.Tensor] = None,
+    dim_size: Optional[int] = None,
+) -> torch.Tensor:
+    """
+    Basic `scatter_sum` operations from `torch_scatter`.
+
+    Parameters
+    ----------
+    src: torch.Tensor
+        The source tensor.
+    index: torch.Tensor
+        The indices of elements to scatter.
+    dim: int
+        The axis along which to index.
+    out: Optional[torch.Tensor]
+        The destination tensor.
+    dim_size: int
+        If out is not given, automatically create output with size dim_size at
+        dimension dim. If dim_size is not given, a minimal sized output tensor
+        according to index.max() + 1 is returned.
+    """
+    index = _broadcast(index, src, dim)
+    if out is None:
+        size = list(src.size())
+        if dim_size is not None:
+            size[dim] = dim_size
+        elif index.numel() == 0:
+            size[dim] = 0
+        else:
+            size[dim] = int(index.max()) + 1
+        out = torch.zeros(size, dtype=src.dtype, device=src.device)
+        return out.scatter_add_(dim, index, src)
+    else:
+        return out.scatter_add_(dim, index, src)
+
+
+@torch.jit.script
+def scatter_mean(
+    src: torch.Tensor,
+    index: torch.Tensor,
+    dim: int = -1,
+    out: Optional[torch.Tensor] = None,
+    dim_size: Optional[int] = None,
+) -> torch.Tensor:
+    """
+    Basic `scatter_mean` operations from `torch_scatter`.
+
+    Parameters
+    ----------
+    src: torch.Tensor
+        The source tensor.
+    index: torch.Tensor
+        The indices of elements to scatter.
+    dim: int
+        The axis along which to index.
+    out: Optional[torch.Tensor]
+        The destination tensor.
+    dim_size: int
+        If out is not given, automatically create output with size dim_size at
+        dimension dim. If dim_size is not given, a minimal sized output tensor
+        according to index.max() + 1 is returned.
+    """
+    out = scatter_sum(src, index, dim, out, dim_size)
+    dim_size = out.size(dim)
+
+    index_dim = dim
+    if index_dim < 0:
+        index_dim = index_dim + src.dim()
+    if index.dim() <= index_dim:
+        index_dim = index.dim() - 1
+
+    ones = torch.ones(index.size(), dtype=src.dtype, device=src.device)
+    count = scatter_sum(ones, index, index_dim, None, dim_size)
+    count[count < 1] = 1
+    count = _broadcast(count, out, dim)
+    if out.is_floating_point():
+        out.true_divide_(count)
+    else:
+        out.div_(count, rounding_mode="floor")
+    return out
 
 
 def test_to_one_hot() -> None:
@@ -209,7 +312,29 @@ def test_set_default_dtype() -> None:
     assert t.dtype == torch.float32
 
 
+def test_scatter() -> None:
+    src = torch.ones((2, 6, 2), dtype=torch.long)
+    index = torch.tensor([0, 1, 0, 1, 2, 1], dtype=torch.long)
+
+    out = scatter_sum(src, index, dim=1)
+    assert (
+        out == torch.tensor(
+            [[[2, 2], [3, 3], [1, 1]], [[2, 2], [3, 3], [1, 1]]],
+            dtype=torch.long
+        )
+    ).all()
+
+    out = scatter_mean(src, index, dim=1)
+    assert (
+        out == torch.tensor(
+            [[[1, 1], [1, 1], [1, 1]], [[1, 1], [1, 1], [1, 1]]],
+            dtype=torch.long
+        )
+    ).all()
+
+
 if __name__ == '__main__':
     test_to_one_hot()
     test_get_edge_vectors_and_lengths()
     test_set_default_dtype()
+    test_scatter()
