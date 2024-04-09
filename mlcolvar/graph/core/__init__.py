@@ -1,1 +1,1 @@
-from . import nn
+from .nn import BaseModel, GVPModel
