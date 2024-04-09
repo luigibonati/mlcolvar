@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 import numpy as np
+import torch_geometric as tg
 from typing import List, Dict, Tuple
 
 from mlcolvar.graph import data as gdata
@@ -240,7 +241,7 @@ class GVPModel(BaseModel):
         return out
 
 
-def test_get_data(receivers: List[int] = [0, 1, 2]) -> Dict[str, torch.Tensor]:
+def test_get_data(receivers: List[int] = [0, 1, 2]) -> tg.data.Batch:
     # TODO: This is not a real test, but a helper function for other tests.
     # Maybe should change its name.
     torch.manual_seed(0)
@@ -283,7 +284,7 @@ def test_get_data(receivers: List[int] = [0, 1, 2]) -> Dict[str, torch.Tensor]:
     )
     loader.setup()
 
-    return next(iter(loader.train_dataloader())).to_dict()
+    return next(iter(loader.train_dataloader()))
 
 
 def test_gvp() -> None:
@@ -306,7 +307,7 @@ def test_gvp() -> None:
         activation='SiLU',
     )
 
-    data = test_get_data()
+    data = test_get_data().to_dict()
     assert (
         torch.abs(
             model(data) -
@@ -314,7 +315,7 @@ def test_gvp() -> None:
         ) < 1E-12
     ).all()
 
-    data = test_get_data([0])
+    data = test_get_data([0]).to_dict()
     assert (
         torch.abs(
             model(data) -
