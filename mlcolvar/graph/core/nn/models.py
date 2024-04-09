@@ -194,10 +194,19 @@ class GVPModel(BaseModel):
         )
 
     def forward(
-        self,
-        data: Dict[str, torch.Tensor],
-        scatter_mean: bool = True,
+        self, data: Dict[str, torch.Tensor], scatter_mean: bool = True
     ) -> torch.Tensor:
+        """
+        The forward pass.
+
+        Parameters
+        ----------
+        data: Dict[str, torch.Tensor]
+            The data dict. Usually came from the `to_dict` method of a
+            `torch_geometric.data.Batch` object.
+        scatter_mean: bool
+            If perform the scatter mean to the model output.
+        """
         h_V = data['node_attrs']
         h_E = self.embed_edge(data)
         h_E = (h_E[0], h_E[1].unsqueeze(-2))
