@@ -245,6 +245,7 @@ def test_get_data(receivers: List[int] = [0, 1, 2]) -> tg.data.Batch:
     # TODO: This is not a real test, but a helper function for other tests.
     # Maybe should change its name.
     torch.manual_seed(0)
+    torch_tools.set_default_dtype('float64')
 
     numbers = [8, 1, 1]
     positions = np.array(
