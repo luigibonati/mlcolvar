@@ -221,7 +221,7 @@ def _configures_from_trajectory(
         edges received by these atoms will be kept in the graph.
     """
     if label is not None:
-        label = np.array([label])
+        label = np.array([[label]])
 
     if edge_sender_selection is not None:
         edge_senders = trajectory.top.select(edge_sender_selection)
@@ -288,12 +288,12 @@ def test_create_dataset_from_trajectories(
     assert len(trajectories[1][0]) == 2
     assert len(trajectories[1][1]) == 2
 
-    assert dataset[0]['graph_labels'] == torch.tensor([0.0])
-    assert dataset[1]['graph_labels'] == torch.tensor([0.0])
-    assert dataset[2]['graph_labels'] == torch.tensor([1.0])
-    assert dataset[3]['graph_labels'] == torch.tensor([1.0])
-    assert dataset[4]['graph_labels'] == torch.tensor([1.0])
-    assert dataset[5]['graph_labels'] == torch.tensor([1.0])
+    assert dataset[0]['graph_labels'] == torch.tensor([[0.0]])
+    assert dataset[1]['graph_labels'] == torch.tensor([[0.0]])
+    assert dataset[2]['graph_labels'] == torch.tensor([[1.0]])
+    assert dataset[3]['graph_labels'] == torch.tensor([[1.0]])
+    assert dataset[4]['graph_labels'] == torch.tensor([[1.0]])
+    assert dataset[5]['graph_labels'] == torch.tensor([[1.0]])
 
     def check_data_1(data) -> None:
         assert (

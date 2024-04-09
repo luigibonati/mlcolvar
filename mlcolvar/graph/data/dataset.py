@@ -94,6 +94,9 @@ def _create_dataset_from_configuration(
     cutoff: float
         The graph cutoff radius.
     """
+
+    assert config.graph_labels is None or len(config.graph_labels.shape) == 2
+
     edge_index, shifts, unit_shifts = get_neighborhood(
         positions=config.positions,
         cutoff=cutoff,
@@ -231,7 +234,7 @@ def test_from_configuration() -> None:
         dtype=float
     )
     cell = np.identity(3, dtype=float) * 0.2
-    graph_labels = np.array([1])
+    graph_labels = np.array([[1]])
     node_labels = np.array([[0], [1], [1]])
     z_table = atomic.AtomicNumberTable.from_zs(numbers)
 
@@ -289,7 +292,7 @@ def test_from_configuration() -> None:
         ])
     ).all()
     assert (data['node_labels'] == torch.tensor([[0.0], [1.0], [1.0]])).all()
-    assert (data['graph_labels'] == torch.tensor([1.0])).all()
+    assert (data['graph_labels'] == torch.tensor([[1.0]])).all()
     assert (data['n_receivers'] == torch.tensor([[3]])).all()
     assert data['weight'] == 1.0
 

@@ -259,7 +259,7 @@ def test_get_data(receivers: List[int] = [0, 1, 2]) -> tg.data.Batch:
         dtype=np.float64
     )
     cell = np.identity(3, dtype=float) * 0.2
-    graph_labels = np.array([1])
+    graph_labels = np.array([[1]])
     node_labels = np.array([[0], [1], [1]])
     z_table = gdata.atomic.AtomicNumberTable.from_zs(numbers)
 

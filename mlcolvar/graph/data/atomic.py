@@ -94,7 +94,7 @@ class Configuration:
     cell: np.ndarray                    # shape: [n_atoms, 3], units: nm
     pbc: Optional[tuple]                # shape: [3]
     node_labels: Optional[np.ndarray]   # shape: [n_atoms, n_node_labels]
-    graph_labels: Optional[np.ndarray]  # shape: [n_graph_labels]
+    graph_labels: Optional[np.ndarray]  # shape: [n_graph_labels, 1]
     edge_senders: Optional[np.ndarray] = None    # shape: [n_senders]
     edge_receivers: Optional[np.ndarray] = None  # shape: [n_receivers]
     weight: Optional[float] = 1.0                # shape: []

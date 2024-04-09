@@ -247,7 +247,7 @@ def test_datamodule() -> None:
         [[0.0, 0.0, 0.0], [0.07, 0.07, 0.0], [0.07, -0.07, 0.0]], dtype=float
     )
     cell = np.identity(3, dtype=float) * 0.2
-    graph_labels = np.array([1])
+    graph_labels = np.array([[1]])
     node_labels = np.array([[0], [1], [1]])
     z_table = atomic.AtomicNumberTable.from_zs(numbers)
 
@@ -261,7 +261,7 @@ def test_datamodule() -> None:
     )
     dataset = create_dataset_from_configurations([config] * 10, z_table, 0.1)
     for i, d in enumerate(dataset):
-        d['graph_labels'][0] = i
+        d['graph_labels'][0][0] = i
 
     loader = GraphDataModule(
         dataset,
@@ -299,7 +299,9 @@ def test_datamodule() -> None:
     data_dict = next(iter(loader.train_dataloader())).to_dict()
     assert data_dict['edge_index'].shape == (2, 36)
     assert (
-        data_dict['graph_labels'] == torch.tensor([8, 4, 7, 0, 1, 2])
+        data_dict['graph_labels'] == torch.tensor(
+            [[8], [4], [7], [0], [1], [2]]
+        )
     ).all()
     assert (data_dict['n_receivers'] == torch.tensor([[3]] * 6)).all()
 
@@ -313,12 +315,12 @@ def test_datamodule() -> None:
     assert (
         data_dict['batch'] == torch.tensor([0, 0, 0, 1, 1, 1, 2, 2, 2])
     ).all()
-    assert (data_dict['graph_labels'] == torch.tensor([5, 9, 6])).all()
+    assert (data_dict['graph_labels'] == torch.tensor([[5], [9], [6]])).all()
     assert (data_dict['ptr'] == torch.tensor([0, 3, 6, 9])).all()
     assert (data_dict['n_receivers'] == torch.tensor([[3]] * 3)).all()
 
     data_dict = next(iter(loader.test_dataloader())).to_dict()
-    assert (data_dict['graph_labels'] == torch.tensor([3])).all()
+    assert (data_dict['graph_labels'] == torch.tensor([[3]])).all()
     assert (
         data_dict['edge_index'] == torch.tensor(
             [[0, 0, 1, 1, 2, 2], [2, 1, 0, 2, 1, 0]]
