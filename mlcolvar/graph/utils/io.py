@@ -1,12 +1,9 @@
 import torch
 import numpy as np
 import mdtraj as md
-
 from typing import Union, List, Tuple
 
-from mlcolvar.graph.data import (
-    atomic, GraphDataSet, create_dataset_from_configurations
-)
+from mlcolvar.graph import data as gdata
 
 __all__ = ['create_dataset_from_trajectories']
 
@@ -15,7 +12,7 @@ def create_dataset_from_trajectories(
     trajectories: Union[List[List[str]], List[str], str],
     top: Union[List[List[str]], List[str], str],
     cutoff: float,
-    z_table: atomic.AtomicNumberTable = None,
+    z_table: gdata.atomic.AtomicNumberTable = None,
     folder: str = None,
     create_labels: bool = None,
     system_selection: str = None,
@@ -23,8 +20,11 @@ def create_dataset_from_trajectories(
     edge_receiver_selection: str = None,
     return_trajectories: bool = False,
 ) -> Union[
-    GraphDataSet,
-    Tuple[GraphDataSet, Union[List[List[md.Trajectory]], List[md.Trajectory]]]
+    gdata.GraphDataSet,
+    Tuple[
+        gdata.GraphDataSet,
+        Union[List[List[md.Trajectory]], List[md.Trajectory]]
+    ]
 ]:
     """
     Create a dataset from a set of trajectory files.
@@ -169,7 +169,7 @@ def create_dataset_from_trajectories(
             )
             configurations.extend(configuration)
 
-    dataset = create_dataset_from_configurations(
+    dataset = gdata.create_dataset_from_configurations(
         configurations, z_table, cutoff
     )
 
@@ -179,7 +179,9 @@ def create_dataset_from_trajectories(
         return dataset
 
 
-def _z_table_from_top(top: List[md.Topology]) -> atomic.AtomicNumberTable:
+def _z_table_from_top(
+    top: List[md.Topology]
+) -> gdata.atomic.AtomicNumberTable:
     """
     Create an atomic number table from the topologies.
 
@@ -192,7 +194,7 @@ def _z_table_from_top(top: List[md.Topology]) -> atomic.AtomicNumberTable:
     for t in top:
         atomic_numbers.extend([a.element.number for a in t.atoms])
     atomic_numbers = np.array(atomic_numbers, dtype=int)
-    z_table = atomic.AtomicNumberTable.from_zs(atomic_numbers)
+    z_table = gdata.atomic.AtomicNumberTable.from_zs(atomic_numbers)
     return z_table
 
 
@@ -201,7 +203,7 @@ def _configures_from_trajectory(
     label: int = None,
     edge_sender_selection: str = None,
     edge_receiver_selection: str = None,
-) -> atomic.Configurations:
+) -> gdata.atomic.Configurations:
     """
     Create configurations from one trajectory.
 
@@ -248,7 +250,7 @@ def _configures_from_trajectory(
 
     configurations = []
     for i in range(len(trajectory)):
-        configuration = atomic.Configuration(
+        configuration = gdata.atomic.Configuration(
             atomic_numbers=atomic_numbers,
             positions=trajectory.xyz[i],
             cell=cell[i],

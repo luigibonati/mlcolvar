@@ -3,14 +3,10 @@ from torch import nn
 import numpy as np
 from typing import List, Dict, Tuple
 
+from mlcolvar.graph import data as gdata
 from mlcolvar.graph.utils import torch_tools
 from mlcolvar.graph.core.nn import radial
 from mlcolvar.graph.core.nn import gvp_layer
-from mlcolvar.graph.data import (
-    atomic,
-    GraphDataModule,
-    create_dataset_from_configurations
-)
 
 """
 GNN models.
@@ -255,10 +251,10 @@ def test_get_data(receivers: List[int] = [0, 1, 2]) -> Dict[str, torch.Tensor]:
     cell = np.identity(3, dtype=float) * 0.2
     graph_labels = np.array([1])
     node_labels = np.array([[0], [1], [1]])
-    z_table = atomic.AtomicNumberTable.from_zs(numbers)
+    z_table = gdata.atomic.AtomicNumberTable.from_zs(numbers)
 
     config = [
-        atomic.Configuration(
+        gdata.atomic.Configuration(
             atomic_numbers=numbers,
             positions=p,
             cell=cell,
@@ -268,9 +264,9 @@ def test_get_data(receivers: List[int] = [0, 1, 2]) -> Dict[str, torch.Tensor]:
             edge_receivers=receivers,
         ) for p in positions
     ]
-    dataset = create_dataset_from_configurations(config, z_table, 0.1)
+    dataset = gdata.create_dataset_from_configurations(config, z_table, 0.1)
 
-    loader = GraphDataModule(
+    loader = gdata.GraphDataModule(
         dataset,
         lengths=(1.0,),
         batch_size=10,
