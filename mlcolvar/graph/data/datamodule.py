@@ -40,7 +40,7 @@ class GraphDataModule(lightning.LightningDataModule):
         self,
         dataset: Sequence[tg.data.Data],
         lengths: Sequence = (0.8, 0.2),
-        batch_size: Union[int, Sequence] = 1,
+        batch_size: Union[int, Sequence] = None,
         random_split: bool = True,
         shuffle: Union[bool, Sequence] = True,
         seed: Optional[int] = None,
@@ -93,6 +93,8 @@ class GraphDataModule(lightning.LightningDataModule):
         ]
 
         # Make sure batch_size and shuffle are lists.
+        if batch_size is None:
+            batch_size = len(dataset)
         if isinstance(batch_size, int):
             self.batch_size = [batch_size for _ in lengths]
         else:
