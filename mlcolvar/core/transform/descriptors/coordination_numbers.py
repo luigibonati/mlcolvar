@@ -142,7 +142,7 @@ class CoordinationNumbers(Transform):
 #     print(out)
 
 def test_coordination_number():
-    from mlcolvar.core.transform.switching_functions import SwitchingFunctions
+    from mlcolvar.core.transform.tools.switching_functions import SwitchingFunctions
 
     # pos = torch.Tensor([[3.057573, -0.970874, 0.010963],
     #                     [3.303463, -0.921235, -0.093758],

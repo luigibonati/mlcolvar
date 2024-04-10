@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from mlcolvar.core.transform.utils import Statistics
+from mlcolvar.core.transform.tools.utils import Statistics
 from torch.utils.data import Dataset
 
 __all__ = ["DictDataset"]

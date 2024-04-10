@@ -1,7 +1,7 @@
 import torch
 
 from mlcolvar.core.transform import Transform
-from mlcolvar.core.transform.utils import compute_distances_matrix,apply_cutoff
+from mlcolvar.core.transform.descriptors.utils import compute_distances_matrix,apply_cutoff
 
 from typing import Union
 
@@ -105,7 +105,7 @@ class RadiusGraph(Transform):
         return x
 
 def test_radiusgraph():
-    from mlcolvar.core.transform.switching_functions import SwitchingFunctions
+    from mlcolvar.core.transform.tools.switching_functions import SwitchingFunctions
 
     n_atoms=3
     pos = torch.Tensor([ [ [0., 0., 0.],

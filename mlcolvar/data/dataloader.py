@@ -23,7 +23,7 @@ import torch
 from torch.utils.data import Subset
 
 from mlcolvar.data import DictDataset
-from mlcolvar.core.transform.utils import Statistics
+from mlcolvar.core.transform.tools.utils import Statistics
 
 
 # =============================================================================

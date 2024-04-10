@@ -10,7 +10,7 @@ from mlcolvar.core.stats.utils import (
     compute_average,
     reduced_rank_eig,
 )
-from mlcolvar.core.transform.utils import batch_reshape
+from mlcolvar.core.transform.tools.utils import batch_reshape
 import warnings
 
 

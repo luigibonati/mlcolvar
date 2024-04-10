@@ -1,7 +1,7 @@
 import torch
 
 from mlcolvar.core.transform import Transform
-from mlcolvar.core.transform.utils import easy_KDE
+from mlcolvar.core.transform.tools.utils import easy_KDE
 
 from typing import Union
 

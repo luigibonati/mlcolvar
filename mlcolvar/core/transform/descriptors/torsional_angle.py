@@ -2,7 +2,7 @@ import torch
 import numpy as np 
 
 from mlcolvar.core.transform import Transform
-from mlcolvar.core.transform.utils import compute_distances_components_matrices, sanitize_positions_shape
+from mlcolvar.core.transform.descriptors.utils import compute_distances_components_matrices, sanitize_positions_shape
 
 from typing import Union
 

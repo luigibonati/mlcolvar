@@ -1,5 +1,5 @@
 import torch
-from mlcolvar.core.transform.utils import batch_reshape, Statistics
+from mlcolvar.core.transform.tools.utils import batch_reshape, Statistics
 from mlcolvar.core.transform import Transform
 
 __all__ = ["Normalization"]
@@ -200,7 +200,7 @@ def test_normalization():
     X = torch.randn((100, in_features)) * 10
 
     # get stats
-    from mlcolvar.core.transform.utils import Statistics
+    from mlcolvar.core.transform.tools.utils import Statistics
 
     stats = Statistics(X).to_dict()
     norm = Normalization(in_features, mean=stats["mean"], range=stats["std"])
@@ -220,7 +220,6 @@ def test_normalization():
     norm = Normalization(
         in_features, mean=stats["mean"], range=stats["std"], mode="min_max"
     )
-
 
 if __name__ == "__main__":
     test_normalization()
