@@ -189,7 +189,7 @@ class GVPModel(BaseModel):
             gvp_layer.GVP(
                 (n_scalars_node, n_vectors_node),
                 (n_out, 0),
-                activations=(eval(f'torch.nn.{activation}')(), None),
+                activations=(None, None),
                 vector_gate=True,
             ),
         )
