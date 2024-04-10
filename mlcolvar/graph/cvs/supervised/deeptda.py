@@ -1,10 +1,12 @@
 import torch
 import torch_geometric as tg
+import numpy as np
 from typing import Dict, Any, List, Union
 
 from mlcolvar.core.loss import TDALoss
 from mlcolvar.graph.cvs import GraphBaseCV
 from mlcolvar.graph.cvs.cv import test_get_data
+from mlcolvar.graph import data as gdata
 from mlcolvar.graph.utils import torch_tools
 
 """
@@ -71,20 +73,33 @@ class GraphDeepTDA(GraphBaseCV):
 
         # check size and type of targets
         if not isinstance(target_centers, torch.Tensor):
-            target_centers = torch.Tensor(target_centers)
+            target_centers = torch.tensor(
+                target_centers, dtype=torch.get_default_dtype()
+            )
         if not isinstance(target_sigmas, torch.Tensor):
-            target_sigmas = torch.Tensor(target_sigmas)
+            target_sigmas = torch.tensor(
+                target_sigmas, dtype=torch.get_default_dtype()
+            )
 
+        self._n_states = target_centers.shape[0]
         if target_centers.shape != target_sigmas.shape:
             raise ValueError(
                 'Size of target_centers and target_sigmas should be the same!'
             )
-        if len(target_centers.shape) == 2 and n_cvs != target_centers.shape[1]:
-            raise ValueError(
-                'Size of target_centers at dimension 1 should match the number'
-                + f' of cvs! Expected {n_cvs} found {target_centers.shape[1]}'
-            )
-        elif not len(target_centers.shape) in [1, 2]:
+        if len(target_centers.shape) == 1:
+            if n_cvs != 1:
+                raise ValueError(
+                    'Size of target_centers at dimension 1 should match the '
+                    + f'number of cvs! Expected 1 found {n_cvs}'
+                )
+        elif len(target_centers.shape) == 2:
+            if n_cvs != target_centers.shape[1]:
+                raise ValueError(
+                    'Size of target_centers at dimension 1 should match the '
+                    + f'number of cvs! Expected {n_cvs} found '
+                    + f'{target_centers.shape[1]}'
+                )
+        elif len(target_centers.shape) > 2:
             raise ValueError('Too much target_centers dimensions!')
 
         self.loss_fn = TDALoss(
@@ -104,13 +119,10 @@ class GraphDeepTDA(GraphBaseCV):
         train_batch: torch_geometric.data.Batch
             The data batch.
         """
-        data = train_batch.to_dict()
-        labels = data['graph_labels']
-
-        output = self.forward(data)
+        output = self.forward(train_batch)
 
         loss, loss_centers, loss_sigmas = self.loss_fn(
-            output, labels, return_loss_terms=True
+            output, train_batch.graph_labels, return_loss_terms=True
         )
 
         name = 'train' if self.training else 'valid'
@@ -118,6 +130,42 @@ class GraphDeepTDA(GraphBaseCV):
         self.log(f'{name}_loss_centers', loss_centers, on_epoch=True)
         self.log(f'{name}_loss_sigmas', loss_sigmas, on_epoch=True)
         return loss
+
+    @property
+    def example_input_array(self) -> tg.data.Batch:
+        """
+        Example data.
+        """
+        numbers = self._model.atomic_numbers.cpu().numpy().tolist()
+        positions = np.random.randn(2, len(numbers), 3)
+        cell = np.identity(3, dtype=float) * 0.2
+        graph_labels = np.array([[[0]], [[1]]])
+        node_labels = np.array([[0]] * len(numbers))
+        z_table = gdata.atomic.AtomicNumberTable.from_zs(numbers)
+
+        config = [
+            gdata.atomic.Configuration(
+                atomic_numbers=numbers,
+                positions=positions[i],
+                cell=cell,
+                pbc=[True] * 3,
+                node_labels=node_labels,
+                graph_labels=graph_labels[i],
+            ) for i in range(2)
+        ]
+        dataset = gdata.create_dataset_from_configurations(
+            config, z_table, 0.1
+        )
+
+        loader = gdata.GraphDataModule(
+            dataset,
+            lengths=(1.0,),
+            batch_size=10,
+            shuffle=False,
+        )
+        loader.setup()
+
+        return next(iter(loader.train_dataloader()))
 
 
 def test_deep_tda():
@@ -128,8 +176,8 @@ def test_deep_tda():
         2,
         0.1,
         [1, 8],
-        [-1, -1],
-        [1, 1],
+        [[-1, -1], [1, 1]],
+        [[1, 1], [1, 1]],
         model_options={
             'n_bases': 6,
             'n_polynomials': 6,
@@ -148,14 +196,28 @@ def test_deep_tda():
 
     assert (
         torch.abs(
-            cv(data) -
-            torch.tensor([[0.3952499007512221, -0.1116923232430907]] * 6)
+            cv(data)
+            - torch.tensor([[0.3952499007512221, -0.1116923232430907]] * 6)
         ) < 1E-12
     ).all()
 
     assert torch.abs(
-        cv.training_step(data) - torch.tensor(203.8934445710926)
+        cv.training_step(data) - torch.tensor(404.6248899361754)
     ) < 1E-12
+
+    try:
+        cv = GraphDeepTDA(2, 0.1, [1, 8], [-1, 1], [1, 1])
+    except ValueError:
+        pass
+    else:
+        raise RuntimeError
+
+    try:
+        cv = GraphDeepTDA(2, 0.1, [1, 8], [[-1, -1], [1, 1]], [1, 1])
+    except ValueError:
+        pass
+    else:
+        raise RuntimeError
 
 
 if __name__ == '__main__':

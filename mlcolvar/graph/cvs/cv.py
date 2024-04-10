@@ -6,7 +6,6 @@ from typing import Dict, Any, List, Union, Tuple
 
 from mlcolvar.graph import data as gdata
 from mlcolvar.graph.core.nn import models
-from mlcolvar.graph.utils import torch_tools
 
 """
 Base collective variable class for Graph Neural Networks.
@@ -112,9 +111,7 @@ class GraphBaseCV(lightning.LightningModule):
         if lr_scheduler_kwargs is not None:
             self.lr_scheduler_kwargs.update(lr_scheduler_kwargs)
 
-    def forward(
-        self, data: Dict[str, torch.Tensor], *args, **kwargs
-    ) -> torch.Tensor:
+    def forward(self, data: tg.data.Batch) -> torch.Tensor:
         """
         The forward pass.
 
@@ -124,7 +121,7 @@ class GraphBaseCV(lightning.LightningModule):
             The data dict. Usually came from the `to_dict` method of a
             `torch_geometric.data.Batch` object.
         """
-        return self._model(data, *args, **kwargs)
+        return self._model(data.to_dict())
 
     def validation_step(self, *args, **kwargs) -> torch.Tensor:
         """
@@ -200,39 +197,10 @@ class GraphBaseCV(lightning.LightningModule):
         """
         return self._model.cutoff.item()
 
-    @property
-    def example_input_array(self) -> None:
-        numbers = [8, 1, 1]
-        positions = np.array(
-            [[0.0, 0.0, 0.0], [0.07, 0.07, 0.0], [0.07, -0.07, 0.0]],
-            dtype=np.float64
-        )
-        cell = np.identity(3, dtype=float) * 0.2
-        graph_labels = np.array([[1]])
-        node_labels = np.array([[0], [1], [1]])
-        z_table = gdata.atomic.AtomicNumberTable.from_zs(numbers)
-
-        config = gdata.atomic.Configuration(
-            atomic_numbers=numbers,
-            positions=positions,
-            cell=cell,
-            pbc=[True] * 3,
-            node_labels=node_labels,
-            graph_labels=graph_labels,
-            edge_receivers=[0]
-        )
-        dataset = gdata.create_dataset_from_configurations(
-            [config], z_table, 0.1
-        )
-
-        return dataset.to_dict()
-
 
 def test_get_data(receivers: List[int] = [0, 1, 2]) -> tg.data.Batch:
     # TODO: This is not a real test, but a helper function for other tests.
     # Maybe should change its name.
-    torch.manual_seed(0)
-    torch_tools.set_default_dtype('float64')
 
     numbers = [8, 1, 1]
     positions = np.array(

@@ -45,6 +45,8 @@ class GraphDataModule(lightning.LightningDataModule):
         shuffle: Union[bool, Sequence] = True,
         seed: Optional[int] = None,
     ) -> None:
+        super().__init__()
+
         self._dataset = dataset
         self._lengths = lengths
         self._n_total = len(dataset)
