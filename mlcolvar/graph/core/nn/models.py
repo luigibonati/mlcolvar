@@ -138,15 +138,15 @@ class GVPModel(BaseModel):
         n_out: int,
         cutoff: float,
         atomic_numbers: List[int],
-        n_bases: int = 6,
+        n_bases: int = 8,
         n_polynomials: int = 6,
         n_layers: int = 2,
-        n_messages: int = 2,
+        n_messages: int = 1,
         n_feedforwards: int = 1,
         n_scalars_node: int = 16,
-        n_vectors_node: int = 8,
+        n_vectors_node: int = 16,
         n_scalars_edge: int = 16,
-        drop_rate: int = 0.1,
+        drop_rate: int = 0.2,
         activation: str = 'SiLU',
     ) -> None:
         super().__init__(n_out, cutoff, atomic_numbers, n_bases, n_polynomials)
@@ -312,7 +312,7 @@ def test_gvp() -> None:
     assert (
         torch.abs(
             model(data) -
-            torch.tensor([[0.3952499007512221, -0.1116923232430907]] * 6)
+            torch.tensor([[0.6100070244145421, -0.2559670171962067]] * 6)
         ) < 1E-12
     ).all()
 
@@ -320,7 +320,7 @@ def test_gvp() -> None:
     assert (
         torch.abs(
             model(data) -
-            torch.tensor([[0.3912415198336253, -0.1113128442154236]] * 6)
+            torch.tensor([[0.6049081358540733, -0.2549507187584082]] * 6)
         ) < 1E-12
     ).all()
 

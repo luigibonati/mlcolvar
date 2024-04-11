@@ -33,14 +33,7 @@ class GraphBaseCV(lightning.LightningModule):
     model_options: Dict[Any, Any]
         Model options.
     optimizer_options: Dict[Any, Any]
-        Optimizer options. E.g.:
-        optimizer_options = {
-            'optimizer': {'lr': 2E-3, 'weight_decay': 1E-4},
-            'lr_scheduler': {
-                'scheduler': torch.optim.lr_scheduler.ExponentialLR,
-                'gamma': 0.9999
-            }
-        }
+        Optimizer options.
     """
 
     def __init__(
@@ -49,8 +42,25 @@ class GraphBaseCV(lightning.LightningModule):
         cutoff: float,
         atomic_numbers: List[int],
         model_name: str = 'GVPModel',
-        model_options: Dict[Any, Any] = {},
-        optimizer_options: Dict[Any, Any] = {},
+        model_options: Dict[Any, Any] = {
+            'n_bases': 8,
+            'n_polynomials': 6,
+            'n_layers': 2,
+            'n_messages': 1,
+            'n_feedforwards': 1,
+            'n_scalars_node': 16,
+            'n_vectors_node': 16,
+            'n_scalars_edge': 16,
+            'drop_rate': 0.2,
+            'activation': 'SiLU',
+        },
+        optimizer_options: Dict[Any, Any] = {
+            'optimizer': {'lr': 1E-3, 'weight_decay': 1E-4},
+            'lr_scheduler': {
+                'scheduler': torch.optim.lr_scheduler.ExponentialLR,
+                'gamma': 0.9999
+            }
+        },
         *args,
         **kwargs,
     ) -> None:
@@ -255,24 +265,30 @@ def test_base_cv() -> None:
 
     assert cv.optimizer_name == 'Adam'
     objects = cv.configure_optimizers()
-    assert isinstance(objects, torch.optim.Adam)
+    assert isinstance(objects[0][0], torch.optim.Adam)
+    assert isinstance(objects[1][0], torch.optim.lr_scheduler.ExponentialLR)
+    assert objects[0][0].param_groups[0]['weight_decay'] == 1E-4
+    assert objects[0][0].param_groups[0]['lr'] == 1E-3
+    assert objects[1][0].gamma == 0.9999
 
     cv.optimizer_name = 'SGD'
     cv.optimizer_kwargs = {'lr': 2E-3, 'weight_decay': 1E-4}
     objects = cv.configure_optimizers()
-    assert isinstance(objects, torch.optim.SGD)
-    assert objects.param_groups[0]['weight_decay'] == 1E-4
-    assert objects.param_groups[0]['lr'] == 2E-3
+    assert isinstance(objects[0][0], torch.optim.SGD)
+    assert objects[0][0].param_groups[0]['weight_decay'] == 1E-4
+    assert objects[0][0].param_groups[0]['lr'] == 2E-3
 
     cv.lr_scheduler_kwargs = {
-        'scheduler': torch.optim.lr_scheduler.ExponentialLR, 'gamma': 0.9999
+        'scheduler': torch.optim.lr_scheduler.StepLR,
+        'gamma': 0.999,
+        'step_size': 1
     }
     objects = cv.configure_optimizers()
     assert isinstance(objects[0][0], torch.optim.SGD)
-    assert isinstance(objects[1][0], torch.optim.lr_scheduler.ExponentialLR)
+    assert isinstance(objects[1][0], torch.optim.lr_scheduler.StepLR)
     assert objects[0][0].param_groups[0]['weight_decay'] == 1E-4
     assert objects[0][0].param_groups[0]['lr'] == 2E-3
-    assert objects[1][0].gamma == 0.9999
+    assert objects[1][0].gamma == 0.999
 
     cv = GraphBaseCV(
         2,

@@ -197,12 +197,12 @@ def test_deep_tda():
     assert (
         torch.abs(
             cv(data)
-            - torch.tensor([[0.3952499007512221, -0.1116923232430907]] * 6)
+            - torch.tensor([[0.6100070244145421, -0.2559670171962067]] * 6)
         ) < 1E-12
     ).all()
 
     assert torch.abs(
-        cv.training_step(data) - torch.tensor(404.6248899361754)
+        cv.training_step(data) - torch.tensor(405.4884342793402)
     ) < 1E-12
 
     try:
