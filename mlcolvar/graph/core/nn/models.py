@@ -151,25 +151,25 @@ class GVPModel(BaseModel):
     ) -> None:
         super().__init__(n_out, cutoff, atomic_numbers, n_bases, n_polynomials)
 
-        self.W_e = nn.Sequential(
+        self.W_e = nn.ModuleList([
             gvp_layer.LayerNorm((n_bases, 1)),
             gvp_layer.GVP(
                 (n_bases, 1),
                 (n_scalars_edge, 1),
                 activations=(None, None),
                 vector_gate=True,
-            ),
-        )
+            )
+        ])
 
-        self.W_v = nn.Sequential(
+        self.W_v = nn.ModuleList([
             gvp_layer.LayerNorm((len(atomic_numbers), 0)),
             gvp_layer.GVP(
                 (len(atomic_numbers), 0),
                 (n_scalars_node, n_vectors_node),
                 activations=(None, None),
                 vector_gate=True,
-            ),
-        )
+            )
+        ])
 
         self.layers = nn.ModuleList(
             gvp_layer.GVPConvLayer(
@@ -184,7 +184,7 @@ class GVPModel(BaseModel):
             for _ in range(n_layers)
         )
 
-        self.W_out = nn.Sequential(
+        self.W_out = nn.ModuleList([
             gvp_layer.LayerNorm((n_scalars_node, n_vectors_node)),
             gvp_layer.GVP(
                 (n_scalars_node, n_vectors_node),
@@ -192,7 +192,7 @@ class GVPModel(BaseModel):
                 activations=(None, None),
                 vector_gate=True,
             ),
-        )
+        ])
 
     def forward(
         self, data: Dict[str, torch.Tensor], scatter_mean: bool = True
@@ -208,11 +208,20 @@ class GVPModel(BaseModel):
         scatter_mean: bool
             If perform the scatter mean to the model output.
         """
-        h_V = data['node_attrs']
+        h_V = (data['node_attrs'], None)
+        for w in self.W_v:
+            h_V = w(h_V)
+        h_V_1, h_V_2 = h_V
+        assert h_V_2 is not None
+        h_V = (h_V_1, h_V_2)
+
         h_E = self.embed_edge(data)
         h_E = (h_E[0], h_E[1].unsqueeze(-2))
-        h_V = self.W_v(h_V)
-        h_E = self.W_e(h_E)
+        for w in self.W_e:
+            h_E = w(h_E)
+        h_E_1, h_E_2 = h_E
+        assert h_E_2 is not None
+        h_E = (h_E_1, h_E_2)
 
         batch_id = data['batch']
         if data.get('receiver_masks') is not None:
@@ -228,7 +237,9 @@ class GVPModel(BaseModel):
                 node_mask=receiver_masks
             )
 
-        out = self.W_out(h_V)
+        for w in self.W_out:
+            h_V = w(h_V)
+        out = h_V[0]
 
         if scatter_mean:
             if receiver_masks is None:

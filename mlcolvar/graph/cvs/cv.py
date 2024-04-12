@@ -58,7 +58,7 @@ class GraphBaseCV(lightning.LightningModule):
             'optimizer': {'lr': 1E-3, 'weight_decay': 1E-4},
             'lr_scheduler': {
                 'scheduler': torch.optim.lr_scheduler.ExponentialLR,
-                'gamma': 0.9999
+                'gamma': 0.9997
             }
         },
         *args,
@@ -121,7 +121,7 @@ class GraphBaseCV(lightning.LightningModule):
         if lr_scheduler_kwargs is not None:
             self.lr_scheduler_kwargs.update(lr_scheduler_kwargs)
 
-    def forward(self, data: tg.data.Batch) -> torch.Tensor:
+    def forward(self, data: Dict[str, torch.Tensor]) -> torch.Tensor:
         """
         The forward pass.
 
@@ -131,7 +131,7 @@ class GraphBaseCV(lightning.LightningModule):
             The data dict. Usually came from the `to_dict` method of a
             `torch_geometric.data.Batch` object.
         """
-        return self._model(data.to_dict())
+        return self._model(data)
 
     def validation_step(self, *args, **kwargs) -> torch.Tensor:
         """
@@ -160,10 +160,6 @@ class GraphBaseCV(lightning.LightningModule):
 
     @optimizer_name.setter
     def optimizer_name(self, optimizer_name: str) -> None:
-        if not hasattr(torch.optim, optimizer_name):
-            raise AttributeError(
-                f'torch.optim does not have a {optimizer_name} optimizer.'
-            )
         self._optimizer_name = optimizer_name
 
     def configure_optimizers(self) -> Union[

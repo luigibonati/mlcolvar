@@ -119,10 +119,12 @@ class GraphDeepTDA(GraphBaseCV):
         train_batch: torch_geometric.data.Batch
             The data batch.
         """
-        output = self.forward(train_batch)
+        output = self.forward(train_batch.to_dict())
 
         loss, loss_centers, loss_sigmas = self.loss_fn(
-            output, train_batch.graph_labels, return_loss_terms=True
+            output,
+            train_batch.graph_labels.squeeze(),
+            return_loss_terms=True
         )
 
         name = 'train' if self.training else 'valid'
@@ -132,7 +134,7 @@ class GraphDeepTDA(GraphBaseCV):
         return loss
 
     @property
-    def example_input_array(self) -> tg.data.Batch:
+    def example_input_array(self) -> Dict[str, torch.Tensor]:
         """
         Example data.
         """
@@ -202,7 +204,7 @@ def test_deep_tda():
     ).all()
 
     assert torch.abs(
-        cv.training_step(data) - torch.tensor(405.4884342793402)
+        cv.training_step(data) - torch.tensor(404.8752553674548)
     ) < 1E-12
 
     try:
