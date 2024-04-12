@@ -90,8 +90,8 @@ class Configuration:
     Internal helper class that describe a given configuration of the system.
     """
     atomic_numbers: np.ndarray          # shape: [n_atoms]
-    positions: np.ndarray               # shape: [n_atoms, 3], units: nm
-    cell: np.ndarray                    # shape: [n_atoms, 3], units: nm
+    positions: np.ndarray               # shape: [n_atoms, 3], units: Ang
+    cell: np.ndarray                    # shape: [n_atoms, 3], units: Ang
     pbc: Optional[tuple]                # shape: [3]
     node_labels: Optional[np.ndarray]   # shape: [n_atoms, n_node_labels]
     graph_labels: Optional[np.ndarray]  # shape: [n_graph_labels, 1]

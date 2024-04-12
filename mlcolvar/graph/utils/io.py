@@ -35,7 +35,7 @@ def create_dataset_from_trajectories(
         Names of trajectories files.
     top: Union[List[List[str]], List[str], str]
         Names of topology files.
-    cutoff: float (units: nm)
+    cutoff: float (units: Ang)
         The graph cutoff radius.
     z_table: mlcolvar.graph.data.atomic.AtomicNumberTable
         The atomic number table used to build the node attributes. If not
@@ -252,7 +252,7 @@ def _configures_from_trajectory(
     for i in range(len(trajectory)):
         configuration = gdata.atomic.Configuration(
             atomic_numbers=atomic_numbers,
-            positions=trajectory.xyz[i],
+            positions=trajectory.xyz[i] * 10,
             cell=cell[i],
             pbc=pbc,
             graph_labels=label,
