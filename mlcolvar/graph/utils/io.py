@@ -253,7 +253,7 @@ def _configures_from_trajectory(
         configuration = gdata.atomic.Configuration(
             atomic_numbers=atomic_numbers,
             positions=trajectory.xyz[i] * 10,
-            cell=cell[i],
+            cell=cell[i] * 10,
             pbc=pbc,
             graph_labels=label,
             node_labels=None,  # TODO: Add supports for per-node labels.

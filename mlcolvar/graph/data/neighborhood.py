@@ -79,7 +79,7 @@ def get_neighborhood(
         pbc=pbc,
         cell=cell,
         positions=positions,
-        cutoff=cutoff,
+        cutoff=float(cutoff),
         # self_interaction=True,  # we want edges from atom to itself in different periodic images
         # use_scaled_positions=False,  # positions are not scaled positions
     )
