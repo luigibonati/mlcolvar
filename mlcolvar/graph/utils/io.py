@@ -274,13 +274,13 @@ def test_create_dataset_from_trajectories(
     dataset, trajectories = create_dataset_from_trajectories(
         ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
         ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
-        0.1,
+        1.0,
         system_selection=system_selection,
         return_trajectories=True
     )
 
     assert len(dataset) == 6
-    assert dataset.cutoff == 0.1
+    assert dataset.cutoff == 1.0
     assert dataset.atomic_numbers == [1, 8]
     assert len(trajectories) == 2
     assert len(trajectories[0]) == 2
@@ -306,8 +306,8 @@ def test_create_dataset_from_trajectories(
                 [0.0, 0.0, 0.0],
                 [0.0, 0.0, 0.0],
                 [0.0, 0.0, 0.0],
-                [0.0, 0.2, 0.0],
-                [0.0, -0.2, 0.0],
+                [0.0, 2.0, 0.0],
+                [0.0, -2.0, 0.0],
                 [0.0, 0.0, 0.0],
             ])
         ).all()
@@ -324,15 +324,15 @@ def test_create_dataset_from_trajectories(
         assert (
             data['positions'] == torch.tensor([
                 [0.0, 0.0, 0.0],
-                [0.07, 0.07, 0.0],
-                [0.07, -0.07, 0.0],
+                [0.7, 0.7, 0.0],
+                [0.7, -0.7, 0.0],
             ])
         ).all()
         assert (
             data['cell'] == torch.tensor([
-                [0.2, 0.0, 0.0],
-                [0.0, 0.2, 0.0],
-                [0.0, 0.0, 0.2],
+                [2.0, 0.0, 0.0],
+                [0.0, 2.0, 0.0],
+                [0.0, 0.0, 2.0],
             ])
         ).all()
         assert (
@@ -348,7 +348,7 @@ def test_create_dataset_from_trajectories(
     dataset = create_dataset_from_trajectories(
         ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
         ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
-        0.1,
+        1.0,
         system_selection=system_selection,
         edge_sender_selection='element O',
     )
@@ -371,7 +371,7 @@ def test_create_dataset_from_trajectories(
     dataset = create_dataset_from_trajectories(
         ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
         ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
-        0.1,
+        1.0,
         system_selection=system_selection,
         edge_receiver_selection='element H',
     )
@@ -394,7 +394,7 @@ def test_create_dataset_from_trajectories(
     dataset = create_dataset_from_trajectories(
         ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
         ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
-        0.1,
+        1.0,
         system_selection=system_selection,
         edge_sender_selection='element O',
         edge_receiver_selection='element H',

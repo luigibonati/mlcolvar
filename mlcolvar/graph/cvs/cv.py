@@ -270,7 +270,7 @@ def test_base_cv() -> None:
     assert isinstance(objects[1][0], torch.optim.lr_scheduler.ExponentialLR)
     assert objects[0][0].param_groups[0]['weight_decay'] == 1E-4
     assert objects[0][0].param_groups[0]['lr'] == 1E-3
-    assert objects[1][0].gamma == 0.9999
+    assert objects[1][0].gamma == 0.9997
 
     cv.optimizer_name = 'SGD'
     cv.optimizer_kwargs = {'lr': 2E-3, 'weight_decay': 1E-4}
