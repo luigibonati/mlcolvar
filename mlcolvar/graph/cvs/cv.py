@@ -69,6 +69,16 @@ class GraphBaseCV(lightning.LightningModule):
         """
         super().__init__(*args, **kwargs)
 
+        self.register_buffer(
+            'n_cvs', torch.tensor(n_cvs, dtype=torch.int64)
+        )
+        self.register_buffer(
+            'cutoff', torch.tensor(cutoff, dtype=torch.get_default_dtype())
+        )
+        self.register_buffer(
+            'atomic_numbers', torch.tensor(atomic_numbers, dtype=torch.int64)
+        )
+
         for key in ['n_out', 'cutoff', 'atomic_numbers']:
             model_options.pop(key, None)
 
@@ -121,7 +131,11 @@ class GraphBaseCV(lightning.LightningModule):
         if lr_scheduler_kwargs is not None:
             self.lr_scheduler_kwargs.update(lr_scheduler_kwargs)
 
-    def forward(self, data: Dict[str, torch.Tensor]) -> torch.Tensor:
+    def forward(
+        self,
+        data: Dict[str, torch.Tensor],
+        token: bool = False
+    ) -> torch.Tensor:
         """
         The forward pass.
 
@@ -130,7 +144,12 @@ class GraphBaseCV(lightning.LightningModule):
         data: Dict[str, torch.Tensor]
             The data dict. Usually came from the `to_dict` method of a
             `torch_geometric.data.Batch` object.
+        token: bool
+            To be used.
         """
+        data['positions'].requires_grad_(True)
+        data['node_attrs'].requires_grad_(True)
+
         return self._model(data)
 
     def validation_step(self, *args, **kwargs) -> torch.Tensor:
@@ -188,27 +207,6 @@ class GraphBaseCV(lightning.LightningModule):
             return [optimizer], [lr_scheduler]
         else:
             return optimizer
-
-    @property
-    def n_cvs(self) -> int:
-        """
-        Number of components of the CV.
-        """
-        return self._model.n_out.item()
-
-    @property
-    def cutoff(self) -> float:
-        """
-        Number of components of the CV.
-        """
-        return self._model.cutoff.item()
-
-    @property
-    def atomic_numbers(self) -> torch.Tensor:
-        """
-        The atomic numbers mapping.
-        """
-        return self._model.atomic_numbers
 
 
 def test_get_data(receivers: List[int] = [0, 1, 2]) -> tg.data.Batch:
