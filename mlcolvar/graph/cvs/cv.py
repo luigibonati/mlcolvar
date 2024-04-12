@@ -203,6 +203,13 @@ class GraphBaseCV(lightning.LightningModule):
         """
         return self._model.cutoff.item()
 
+    @property
+    def atomic_numbers(self) -> torch.Tensor:
+        """
+        The atomic numbers mapping.
+        """
+        return self._model.atomic_numbers
+
 
 def test_get_data(receivers: List[int] = [0, 1, 2]) -> tg.data.Batch:
     # TODO: This is not a real test, but a helper function for other tests.
