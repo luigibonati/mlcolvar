@@ -96,7 +96,11 @@ class GVP(nn.Module):
             s = self.ws(s)
             if self.vo:
                 v = torch.zeros(
-                    s.shape[0], self.vo, 3, device=self.dummy_param.device
+                    s.shape[0],
+                    self.vo,
+                    3,
+                    device=self.dummy_param.device,
+                    dtype=s.dtype
                 )
             else:
                 v = None
