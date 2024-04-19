@@ -41,19 +41,8 @@ class GraphBaseCV(lightning.LightningModule):
         n_cvs: int,
         cutoff: float,
         atomic_numbers: List[int],
-        model_name: str = 'GVPModel',
-        model_options: Dict[Any, Any] = {
-            'n_bases': 8,
-            'n_polynomials': 6,
-            'n_layers': 2,
-            'n_messages': 1,
-            'n_feedforwards': 1,
-            'n_scalars_node': 16,
-            'n_vectors_node': 16,
-            'n_scalars_edge': 16,
-            'drop_rate': 0.2,
-            'activation': 'SiLU',
-        },
+        model_name: str,
+        model_options: Dict[Any, Any] = {},
         optimizer_options: Dict[Any, Any] = {
             'optimizer': {'lr': 1E-3, 'weight_decay': 1E-4},
             'lr_scheduler': {
@@ -258,7 +247,7 @@ def test_base_cv() -> None:
     dtype = torch.get_default_dtype()
     torch.set_default_dtype(torch.float64)
 
-    cv = GraphBaseCV(2, 0.1, [1, 2, 3])
+    cv = GraphBaseCV(2, 0.1, [1, 2, 3], 'GVPModel')
 
     assert cv.n_cvs == 2
     assert (cv.cutoff - 0.1) < 1E-12
@@ -295,6 +284,7 @@ def test_base_cv() -> None:
         2,
         0.1,
         [1, 2, 3],
+        'GVPModel',
         optimizer_options={
             'optimizer': {'lr': 2E-3, 'weight_decay': 1E-4},
             'lr_scheduler': {
