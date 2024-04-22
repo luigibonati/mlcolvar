@@ -174,6 +174,7 @@ def create_dataset_from_configurations(
     config: atomic.Configurations,
     z_table: atomic.AtomicNumberTable,
     cutoff: float,
+    remove_isolated_nodes: bool = False
 ) -> GraphDataSet:
     """
     Build graph data objects from configurations.
@@ -186,10 +187,17 @@ def create_dataset_from_configurations(
         The atomic number table used to build the node attributes.
     cutoff: float
         The graph cutoff radius.
+    remove_isolated_nodes: bool
+        If remove isolated nodes from the dataset.
     """
     data_list = [
         _create_dataset_from_configuration(c, z_table, cutoff) for c in config
     ]
+
+    if remove_isolated_nodes:
+        transform = tg.transforms.remove_isolated_nodes.RemoveIsolatedNodes()
+        data_list = [transform(d) for d in data_list]
+
     dataset = GraphDataSet(data_list, z_table.zs, cutoff)
 
     return dataset
