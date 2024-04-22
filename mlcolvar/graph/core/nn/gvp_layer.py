@@ -124,8 +124,6 @@ class GVPConv(MessagePassing):
     :param out_dims: output node embedding dimensions (n_scalar, n_vector)
     :param edge_dims: input edge embedding dimensions (n_scalar, n_vector)
     :param n_layers: number of GVPs in the message function
-    :param aggr: should be 'add' if some incoming edges are masked, as in
-           a masked autoregressive decoder architecture, otherwise 'mean'
     :param activations:
            tuple of functions (scalar_act, vector_act) to use in GVPs
     :param vector_gate: whether to use vector gating.
@@ -244,9 +242,6 @@ class GVPConvLayer(nn.Module):
     :param n_message: number of GVPs to use in message function
     :param n_feedforward: number of GVPs to use in feedforward function
     :param drop_rate: drop probability in all dropout layers
-    :param autoregressive: if `True`, this `GVPConvLayer` will be used
-           with a different set of input node embeddings for messages
-           where src >= dst
     :param activations:
            tuple of functions (scalar_act, vector_act) to use in GVPs
     :param vector_gate: whether to use vector gating.
@@ -260,7 +255,6 @@ class GVPConvLayer(nn.Module):
         n_message=3,
         n_feedforward=2,
         drop_rate=0.1,
-        autoregressive=False,
         activations=(nn.functional.relu, torch.sigmoid),
         vector_gate=True,
         residual=True,
@@ -271,7 +265,7 @@ class GVPConvLayer(nn.Module):
             node_dims,
             edge_dims,
             n_message,
-            aggr='add' if autoregressive else 'mean',
+            aggr='mean',
             activations=activations,
             vector_gate=vector_gate,
         )
@@ -308,11 +302,6 @@ class GVPConvLayer(nn.Module):
         :param x: tuple (s, V) of `torch.Tensor`
         :param edge_index: array of shape [2, n_edges]
         :param edge_attr: tuple (s, V) of `torch.Tensor`
-        :param autoregressive_x: tuple (s, V) of `torch.Tensor`.
-               If not `None`, will be used as src node embeddings
-               for forming messages where src >= dst. The corrent node
-               embeddings `x` will still be the base of the update and the
-               pointwise feedforward.
         :param node_mask: array of type `bool` to index into the first
                dim of node embeddings (s, V). If not `None`, only
                these nodes will be updated.
