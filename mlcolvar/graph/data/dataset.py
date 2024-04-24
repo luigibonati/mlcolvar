@@ -6,6 +6,7 @@ from typing import List
 from mlcolvar.graph.data import atomic
 from mlcolvar.graph.data.neighborhood import get_neighborhood
 from mlcolvar.graph.utils import torch_tools
+from mlcolvar.graph.utils import progress
 
 """
 Build the graph data from a configuration. This module is taken from MACE:
@@ -174,7 +175,8 @@ def create_dataset_from_configurations(
     config: atomic.Configurations,
     z_table: atomic.AtomicNumberTable,
     cutoff: float,
-    remove_isolated_nodes: bool = False
+    remove_isolated_nodes: bool = False,
+    show_progress: bool = True
 ) -> GraphDataSet:
     """
     Build graph data objects from configurations.
@@ -189,9 +191,16 @@ def create_dataset_from_configurations(
         The graph cutoff radius.
     remove_isolated_nodes: bool
         If remove isolated nodes from the dataset.
+    show_progress: bool
+        If show the progress bar.
     """
+    if show_progress:
+        items = progress.pbar(config, frequency=0.0001, prefix='Making graphs')
+    else:
+        items = config
+
     data_list = [
-        _create_dataset_from_configuration(c, z_table, cutoff) for c in config
+        _create_dataset_from_configuration(c, z_table, cutoff) for c in items
     ]
 
     if remove_isolated_nodes:

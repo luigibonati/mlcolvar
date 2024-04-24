@@ -19,7 +19,8 @@ def create_dataset_from_trajectories(
     edge_sender_selection: str = None,
     edge_receiver_selection: str = None,
     return_trajectories: bool = False,
-    remove_isolated_nodes: bool = True
+    remove_isolated_nodes: bool = True,
+    show_progress: bool = True
 ) -> Union[
     gdata.GraphDataSet,
     Tuple[
@@ -61,6 +62,8 @@ def create_dataset_from_trajectories(
         If also return the loaded trajectory objects.
     remove_isolated_nodes: bool
         If remove isolated nodes from the dataset.
+    show_progress: bool
+        If show the progress bar.
 
     Returns
     -------
@@ -173,7 +176,7 @@ def create_dataset_from_trajectories(
             configurations.extend(configuration)
 
     dataset = gdata.create_dataset_from_configurations(
-        configurations, z_table, cutoff, remove_isolated_nodes
+        configurations, z_table, cutoff, remove_isolated_nodes, show_progress
     )
 
     if return_trajectories:
