@@ -20,8 +20,30 @@ class TorsionalAngle(Transform):
                  n_atoms : int,
                  mode: Union[str, list],
                  PBC: bool,
-                 real_cell: Union[float, list],
-                 scaled_coords : bool) -> torch.Tensor:
+                 cell: Union[float, list],
+                 scaled_coords : bool = False) -> torch.Tensor:
+        """Initialize a torsional angle object
+
+        Parameters
+        ----------
+        indices : Union[list, np.ndarray, torch.Tensor]
+            Indices of the ordered atoms defining the torsional angle
+        n_atoms : int
+            Number of atoms in the positions tensor used in the forward.
+        mode : Union[str, list]
+            Which quantities to return among 'angle', 'sin' and 'cos'
+        PBC : bool
+            Switch for Periodic Boundary Conditions use
+        cell : Union[float, list]
+            Dimensions of the real cell, orthorombic-like cells only
+        scaled_coords : bool, optional
+            Switch for coordinates scaled on cell's vectors use, by default False
+
+        Returns
+        -------
+        torch.Tensor
+            Depending on `mode` selection, the torsional angle in radiants, its sine and its cosine. 
+        """
         
         # check mode here to get number of out_features
         for i in mode:
@@ -41,7 +63,7 @@ class TorsionalAngle(Transform):
         self.indices = indices
         self.n_atoms = n_atoms
         self.PBC = PBC
-        self.real_cell = real_cell
+        self.cell = cell
         self.scaled_coords = scaled_coords
 
 
@@ -51,10 +73,10 @@ class TorsionalAngle(Transform):
         # select relevant atoms only
         tors_pos = tors_pos[:, self.indices, :]
 
-        dist_components, _, _ = compute_distances_components_matrices(pos = tors_pos,
+        dist_components = compute_distances_components_matrices(pos = tors_pos,
                                                                       n_atoms = 4,
                                                                       PBC = self.PBC,
-                                                                      real_cell = self.real_cell,
+                                                                      cell = self.cell,
                                                                       scaled_coords = self.scaled_coords)
 
         # get AB, BC, CD distances
@@ -113,13 +135,13 @@ def test_torsional_angle():
          [-0.4490, -0.4933, -0.1668]]])
     pos.requires_grad = True
 
-    real_cell = torch.Tensor([3.0233, 3.0233, 3.0233])
-    model = TorsionalAngle([1,3,4,6], 10, ['angle', 'sin', 'cos'], False, real_cell, False)
+    cell = torch.Tensor([3.0233, 3.0233, 3.0233])
+    model = TorsionalAngle([1,3,4,6], 10, ['angle', 'sin', 'cos'], False, cell, False)
     angle = model(pos)
     print(angle)
     angle.sum().backward()
 
-    model = TorsionalAngle([1,3,4,6], 10, ['sin'], False, real_cell, False)
+    model = TorsionalAngle([1,3,4,6], 10, ['sin'], False, cell, False)
     angle = model(pos)
     print(angle)
     angle.sum().backward()

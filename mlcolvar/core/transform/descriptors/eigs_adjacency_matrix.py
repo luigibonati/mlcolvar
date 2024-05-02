@@ -17,8 +17,8 @@ class EigsAdjMat(Transform):
                  cutoff : float, 
                  n_atoms : int,
                  PBC: bool,
-                 real_cell: Union[float, list],
-                 scaled_coords : bool,
+                 cell: Union[float, list],
+                 scaled_coords : bool = False,
                  switching_function = None) -> torch.Tensor:
         """Initialize an eigenvalues of an adjacency matrix object.
 
@@ -34,10 +34,10 @@ class EigsAdjMat(Transform):
             Number of atoms in the system
         PBC : bool
             Switch for Periodic Boundary Conditions use
-        real_cell : Union[float, list]
+        cell : Union[float, list]
             Dimensions of the real cell, orthorombic-like cells only
         scaled_coords : bool
-            Switch for coordinates scaled on cell's vectors use
+            Switch for coordinates scaled on cell's vectors use, by default False
         switching_function : _type_, optional
             Switching function to be applied for the cutoff, can be either initialized as a switching_functions/SwitchingFunctions class or a simple function, by default None
 
@@ -53,7 +53,7 @@ class EigsAdjMat(Transform):
         self.cutoff = cutoff 
         self.n_atoms = n_atoms
         self.PBC = PBC
-        self.real_cell = real_cell
+        self.cell = cell
         self.scaled_coords = scaled_coords
         self.switching_function = switching_function
 
@@ -63,7 +63,7 @@ class EigsAdjMat(Transform):
                                      cutoff = self.cutoff, 
                                      n_atoms = self.n_atoms,
                                      PBC = self.PBC,
-                                     real_cell = self.real_cell,
+                                     cell = self.cell,
                                      scaled_coords = self.scaled_coords,
                                      switching_function=self.switching_function)
         # x = torch.squeeze(x)
@@ -87,7 +87,7 @@ def test_eigs_of_adj_matrix():
                          [ [0., 0., 0.],
                            [1., 1.1, 1.] ] ]
                       )
-    real_cell = torch.Tensor([1., 2., 1.])
+    cell = torch.Tensor([1., 2., 1.])
     cutoff = 1.8
     switching_function=SwitchingFunctions(in_features=n_atoms*3, name='Fermi', cutoff=cutoff, options={'q':0.05})
   
@@ -95,17 +95,17 @@ def test_eigs_of_adj_matrix():
                        cutoff = cutoff, 
                        n_atoms = n_atoms,
                        PBC = True,
-                       real_cell = real_cell,
+                       cell = cell,
                        scaled_coords = False,
                        switching_function=switching_function)
     out = model(pos)
 
-    pos = torch.einsum('bij,j->bij', pos, 1/real_cell)
+    pos = torch.einsum('bij,j->bij', pos, 1/cell)
     model = EigsAdjMat(mode = 'continuous',
                        cutoff = cutoff, 
                        n_atoms = n_atoms,
                        PBC = True,
-                       real_cell = real_cell,
+                       cell = cell,
                        scaled_coords = True,
                        switching_function=switching_function)
     out = model(pos)

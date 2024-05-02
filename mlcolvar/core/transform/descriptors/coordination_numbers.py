@@ -19,9 +19,9 @@ class CoordinationNumbers(Transform):
                  cutoff : float,
                  n_atoms : int,
                  PBC : bool,
-                 real_cell : Union[float, list],
-                 scaled_coords : bool,
-                 mode : str, 
+                 cell : Union[float, list],
+                 mode : str,
+                 scaled_coords : bool = False,
                  switching_function = None) -> torch.Tensor:
         """Initialize a coordination number object between two groups of atoms A and B.
 
@@ -37,14 +37,14 @@ class CoordinationNumbers(Transform):
             Total number of atoms in the system
         PBC : bool
             Switch for Periodic Boundary Conditions use
-        real_cell : Union[float, list]
+        cell : Union[float, list]
             Dimensions of the real cell, orthorombic-like cells only
-        scaled_coords : bool
-            Switch for coordinates scaled on cell's vectors use
         mode : str
             Mode for cutoff application, either:
             - 'continuous': applies a switching function to the distances which can be specified with switching_function keyword, has stable derivatives
             - 'discontinuous': set at zero everything above the cutoff and one below, derivatives may be be incorrect        
+        scaled_coords : bool
+            Switch for coordinates scaled on cell's vectors use, by default False
         switching_function : _type_, optional
             Switching function to be applied for the cutoff, can be either initialized as a switching_functions/SwitchingFunctions class or a simple function, by default None
 
@@ -66,7 +66,7 @@ class CoordinationNumbers(Transform):
 
         self.n_atoms = n_atoms
         self.PBC = PBC
-        self.real_cell = real_cell
+        self.cell = cell
         self.scaled_coords = scaled_coords
 
         self.mode = mode
@@ -78,7 +78,7 @@ class CoordinationNumbers(Transform):
         dist = compute_distances_matrix(pos=pos,
                                         n_atoms=self.n_atoms,
                                         PBC=self.PBC,
-                                        real_cell=self.real_cell,
+                                        cell=self.cell,
                                         scaled_coords=self.scaled_coords)
         # batch_size = dist.shape[0]
         # device = pos.device
@@ -132,7 +132,7 @@ class CoordinationNumbers(Transform):
 #                                 cutoff= cutoff,
 #                                 n_atoms=n_atoms, 
 #                                 PBC=False,
-#                                 real_cell=10, # fake
+#                                 cell=10, # fake
 #                                 scaled_coords=False,
 #                                 mode='continuous',
 #                                 switching_function=switching_function)
@@ -238,9 +238,9 @@ def test_coordination_number():
                                 cutoff= cutoff,
                                 n_atoms=n_atoms, 
                                 PBC=True,
-                                real_cell=cell,
-                                scaled_coords=False,
+                                cell=cell,
                                 mode='continuous',
+                                scaled_coords=False,
                                 switching_function=switching_function)
     
     out = model(pos)

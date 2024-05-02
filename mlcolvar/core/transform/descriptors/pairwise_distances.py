@@ -15,8 +15,8 @@ class PairwiseDistances(Transform):
     def __init__(self, 
                  n_atoms : int,
                  PBC: bool,
-                 real_cell: Union[float, list],
-                 scaled_coords : bool,
+                 cell: Union[float, list],
+                 scaled_coords : bool = False,
                  slicing_indeces : list = None) -> torch.Tensor:
         """Initialize a pairwise distances matrix object.
 
@@ -26,10 +26,10 @@ class PairwiseDistances(Transform):
             Number of atoms in the system
         PBC : bool
             Switch for Periodic Boundary Conditions use
-        real_cell : Union[float, list]
+        cell : Union[float, list]
             Dimensions of the real cell, orthorombic-like cells only
         scaled_coords : bool
-            Switch for coordinates scaled on cell's vectors use
+            Switch for coordinates scaled on cell's vectors use, by default False
         slicing_indeces : list
             Indeces of the subset of distances to be returned, by default None
 
@@ -43,7 +43,7 @@ class PairwiseDistances(Transform):
         # parse args
         self.n_atoms = n_atoms
         self.PBC = PBC
-        self.real_cell = real_cell
+        self.cell = cell
         self.scaled_coords = scaled_coords
         self.slicing_indeces = slicing_indeces
 
@@ -51,7 +51,7 @@ class PairwiseDistances(Transform):
         dist = compute_distances_matrix(pos=pos,
                                         n_atoms=self.n_atoms,
                                         PBC=self.PBC,
-                                        real_cell=self.real_cell,
+                                        cell=self.cell,
                                         scaled_coords=self.scaled_coords)
         batch_size = dist.shape[0]
         device = pos.device
@@ -80,18 +80,18 @@ def test_pairwise_distances():
                            [1., 1., 1.] ] ]
                       )
     
-    real_cell = torch.Tensor([1., 2., 1.])
+    cell = torch.Tensor([1., 2., 1.])
   
     model = PairwiseDistances(n_atoms = 3,
                               PBC = True,
-                              real_cell = real_cell,
+                              cell = cell,
                               scaled_coords = False)
     out = model(pos)
     assert(out.reshape(pos.shape[0], -1).shape[-1] == model.out_features)
 
     model = PairwiseDistances(n_atoms = 3,
                               PBC = True,
-                              real_cell = real_cell,
+                              cell = cell,
                               scaled_coords = False,
                               slicing_indeces=[0, 2])
     out = model(pos)
