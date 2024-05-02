@@ -1,4 +1,7 @@
 import torch
+import numpy as np
+
+from typing import Union
 
 __all__ = ["Statistics"]
 
@@ -102,10 +105,53 @@ def batch_reshape(t: torch.Tensor, size: torch.Size) -> torch.Tensor:
     return t
 
 
-def sym_func(x, centers, sigma):
+def _gaussian_expansion(x : torch.Tensor, 
+                        centers : torch.Tensor, 
+                        sigma : torch.Tensor):
+    """Computes the values in x of a set of Gaussian kernels centered on centers and with width sigma
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Input value(s)
+    centers : torch.Tensor
+        Centers of the Gaussian kernels
+    sigma : torch.Tensor
+        Width of the Gaussian kernels
+    """
     return torch.exp(- torch.div(torch.pow(x-centers, 2), 2*torch.pow(sigma,2) ))
 
-def easy_KDE(x, n_input, min_max, n, sigma_to_center, normalize=False, return_bins=False):
+def easy_KDE(x : torch.Tensor, 
+             n_input : int, 
+             min_max : Union[list[float], np.ndarray], 
+             n : int, 
+             sigma_to_center : float = 1.0, 
+             normalize : bool = False, 
+             return_bins : bool = False) -> torch.Tensor:
+    """Compute histogram using KDE with Gaussian kernels
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        Input
+    n_input : int
+        Number of inputs per batch
+    min_max : Union[list[float], np.ndarray]
+        Minimum and maximum values for the histogram
+    n : int
+        Number of Gaussian kernels
+    sigma_to_center : float, optional
+        Sigma value in bin_size units, by default 1.0
+    normalize : bool, optional
+        Switch for normalization of the histogram to sum to n_input, by default False
+    return_bins : bool, optional
+        Switch to return the bins of the histogram alongside the values, by default False
+
+    Returns
+    -------
+    torch.Tensor
+        Values of the histogram for each bin. The bins can be optionally returned enabling `return_bins`.
+    """
     if len(x.shape) == 1:
         x = torch.reshape(x, (1, n_input, 1))
     if x.shape[-1] != 1:
@@ -117,7 +163,7 @@ def easy_KDE(x, n_input, min_max, n, sigma_to_center, normalize=False, return_bi
     bins = torch.clone(centers)
     sigma = (centers[1] - centers[0]) * sigma_to_center
     centers = torch.tile(centers, dims=(n_input,1))
-    out = torch.sum(sym_func(x, centers, sigma), dim=1)
+    out = torch.sum(_gaussian_expansion(x, centers, sigma), dim=1)
     if normalize:
         out = torch.div(out, torch.sum(out, -1, keepdim=True)) * n_input
     if return_bins:

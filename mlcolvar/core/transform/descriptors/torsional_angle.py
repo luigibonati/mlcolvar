@@ -113,6 +113,7 @@ class TorsionalAngle(Transform):
         return out[:, self.mode_idx]
 
 def test_torsional_angle():
+    # simple test on alanine phi angle
     pos = torch.Tensor([[[ 0.3887, -0.4169, -0.1212],
          [ 0.4264, -0.4374, -0.0983],
          [ 0.4574, -0.4136, -0.0931],
@@ -145,6 +146,8 @@ def test_torsional_angle():
     angle = model(pos)
     print(angle)
     angle.sum().backward()
+
+    # TODO add reference value for check
 
 
 if __name__ == "__main__":
