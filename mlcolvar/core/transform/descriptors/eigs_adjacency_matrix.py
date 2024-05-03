@@ -87,6 +87,8 @@ def test_eigs_of_adj_matrix():
                          [ [0., 0., 0.],
                            [1., 1.1, 1.] ] ]
                       )
+    pos.requires_grad = True
+
     cell = torch.Tensor([1., 2., 1.])
     cutoff = 1.8
     switching_function=SwitchingFunctions(in_features=n_atoms*3, name='Fermi', cutoff=cutoff, options={'q':0.05})
@@ -99,6 +101,7 @@ def test_eigs_of_adj_matrix():
                        scaled_coords = False,
                        switching_function=switching_function)
     out = model(pos)
+    out.sum().backward()
 
     pos = torch.einsum('bij,j->bij', pos, 1/cell)
     model = EigsAdjMat(mode = 'continuous',
@@ -110,6 +113,7 @@ def test_eigs_of_adj_matrix():
                        switching_function=switching_function)
     out = model(pos)
     assert(out.shape[-1] == model.out_features)
+    out.sum().backward()
 
 if __name__ == "__main__":
     test_eigs_of_adj_matrix()

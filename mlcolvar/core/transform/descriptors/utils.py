@@ -27,7 +27,6 @@ def sanitize_positions_shape(pos : torch.Tensor,
         # check that index 0: atoms, 1: coords
         if pos.shape[0]==n_atoms and pos.shape[1] == 3:
             pos = pos.unsqueeze(0) # add batch dimension
-            batch_size = pos.shape[0]
         # check that is not 0: batch, 1: atom*coords
         elif not pos.shape[1] == int(n_atoms * 3):
             raise ValueError(f"The given positions tensor has the wrong format, found {pos.shape}, expected either {[n_atoms, 3]} or {-1, n_atoms*3}")
@@ -304,13 +303,13 @@ def test_applycutoff():
                                    scaled_coords=False)
     cutoff = 1.8
     switching_function=SwitchingFunctions(in_features=n_atoms**2, name='Fermi', cutoff=cutoff, options={'q':0.01})
-    out2 = apply_cutoff(out, cutoff, mode='continuous', switching_function=switching_function)
+    apply_cutoff(out, cutoff, mode='continuous', switching_function=switching_function)
     
     def silly_switch(x):
         return torch.pow(x, 2)
     switching_function = silly_switch
-    out2 = apply_cutoff(out, cutoff, mode='continuous', switching_function=switching_function)
-    out2 = apply_cutoff(out, cutoff, mode='discontinuous')
+    apply_cutoff(out, cutoff, mode='continuous', switching_function=switching_function)
+    apply_cutoff(out, cutoff, mode='discontinuous')
 
     # TEST scaled coords
     pos = torch.einsum('bij,j->bij', pos, 1/cell)
@@ -321,8 +320,9 @@ def test_applycutoff():
                                    scaled_coords=True)
     cutoff = 1.8
     switching_function=SwitchingFunctions(in_features=n_atoms**2, name='Fermi', cutoff=cutoff, options={'q':0.01})
-    out2 = apply_cutoff(out, cutoff, mode='continuous', switching_function=switching_function)
-    out2 = apply_cutoff(out, cutoff, mode='discontinuous')
+    apply_cutoff(out, cutoff, mode='continuous', switching_function=switching_function)
+    apply_cutoff(out, cutoff, mode='discontinuous')
+
 
 def test_adjacency_matrix():
     from mlcolvar.core.transform.tools.switching_functions import SwitchingFunctions
@@ -338,14 +338,14 @@ def test_adjacency_matrix():
     cutoff = 1.8
     switching_function=SwitchingFunctions(in_features=n_atoms*3, name='Fermi', cutoff=cutoff, options={'q':0.01})
   
-    out = compute_adjacency_matrix(pos=pos,
-                                   mode = 'continuous',
-                                   cutoff = cutoff, 
-                                   n_atoms = n_atoms,
-                                   PBC = True,
-                                   real_cell = real_cell,
-                                   scaled_coords = False,
-                                   switching_function=switching_function)
+    compute_adjacency_matrix(pos=pos,
+                                mode = 'continuous',
+                                cutoff = cutoff, 
+                                n_atoms = n_atoms,
+                                PBC = True,
+                                cell = cell,
+                                scaled_coords = False,
+                                switching_function=switching_function)
 
 if __name__ == "__main__":
     # test_debug()

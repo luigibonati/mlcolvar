@@ -3,8 +3,6 @@ import torch
 from mlcolvar.core.transform import Transform
 from mlcolvar.core.transform.tools.utils import easy_KDE
 
-from typing import Union
-
 __all__ = ["ContinuousHistogram"]
 
 class ContinuousHistogram(Transform):
@@ -42,7 +40,6 @@ class ContinuousHistogram(Transform):
        
         super().__init__(in_features=in_features, out_features=bins)
 
-        self.in_features = in_features
         self.min = min
         self.max = max
         self.bins = bins

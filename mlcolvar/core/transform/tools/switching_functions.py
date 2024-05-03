@@ -68,13 +68,14 @@ def test_switchingfunctions():
     x = torch.Tensor([1., 2., 3.])
     cutoff = 2
     switch = SwitchingFunctions(in_features=len(x), name='Fermi', cutoff=cutoff)
-    out = switch(x)
+    switch(x)
 
     switch = SwitchingFunctions(in_features=len(x), name='Fermi', cutoff=cutoff, options = {'q' : 0.5})
-    out = switch(x)
+    switch(x)
 
     switch = SwitchingFunctions(in_features=len(x), name='Rational', cutoff=cutoff, options = {'n' : 6, 'm' : 12})
-    out = switch(x)
+    switch(x)
+
 
 if __name__ == "__main__":
     test_switchingfunctions()
