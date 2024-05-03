@@ -1,4 +1,5 @@
-from mlcolvar.core.transform.utils import test_inverse
+from mlcolvar.core.transform.descriptors.utils import test_adjacency_matrix,test_applycutoff
 
 if __name__ == "__main__":
-    test_inverse()
+    test_applycutoff()
+    test_adjacency_matrix()
