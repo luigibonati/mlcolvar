@@ -5,9 +5,9 @@ from mlcolvar.core.transform.tools.utils import easy_KDE
 
 from typing import Union
 
-__all__ = ["ContHist"]
+__all__ = ["ContinuousHistogram"]
 
-class ContHist(Transform):
+class ContinuousHistogram(Transform):
     """
     Compute continuous histogram using Gaussian kernels
     """
@@ -64,7 +64,7 @@ class ContHist(Transform):
 def test_continuous_histogram():
     x = torch.randn((5,100))
     x.requires_grad = True
-    hist = ContHist(in_features=100,
+    hist = ContinuousHistogram(in_features=100,
                     min=-1,
                     max=1,
                     bins=10,
