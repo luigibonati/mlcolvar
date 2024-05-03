@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 
-from typing import Union
+from typing import Union, List
 
 __all__ = ["Statistics"]
 
@@ -123,7 +123,7 @@ def _gaussian_expansion(x : torch.Tensor,
 
 def easy_KDE(x : torch.Tensor, 
              n_input : int, 
-             min_max : Union[list[float], np.ndarray], 
+             min_max : Union[List[float], np.ndarray], 
              n : int, 
              sigma_to_center : float = 1.0, 
              normalize : bool = False, 
