@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 from mlcolvar.core.transform import Transform
-from mlcolvar.core.transform.utils import compute_distances_matrix, apply_cutoff
+from mlcolvar.core.transform.descriptors.utils import compute_distances_matrix, apply_cutoff
 
 from typing import Union
 
