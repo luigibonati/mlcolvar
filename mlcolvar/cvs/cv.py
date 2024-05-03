@@ -5,7 +5,7 @@ from mlcolvar.core.transform import Transform
 class BaseCV:
     """
     Base collective variable class.
-    
+
     To inherit from this class, the class must define a BLOCKS class attribute.
     """
 
@@ -33,7 +33,10 @@ class BaseCV:
 
         """
         super().__init__(*args, **kwargs)
-        self.save_hyperparameters()
+
+        # The parent class sets in_features and out_features based on their own
+        # init arguments so we don't need to save them here (see #103).
+        self.save_hyperparameters(ignore=['in_features', 'out_features'])
 
         # MODEL
         self.initialize_blocks()
@@ -43,6 +46,7 @@ class BaseCV:
         # OPTIM
         self._optimizer_name = "Adam"
         self.optimizer_kwargs = {}
+        self.lr_scheduler_kwargs = {}
 
         # PRE/POST
         self.preprocessing = preprocessing
@@ -56,7 +60,7 @@ class BaseCV:
     @property
     def example_input_array(self):
         return torch.randn(
-            self.in_features
+            (1,self.in_features)
             if self.preprocessing is None
             or not hasattr(self.preprocessing, "in_features")
             else self.preprocessing.in_features
@@ -82,9 +86,11 @@ class BaseCV:
             if o not in self.BLOCKS:
                 if o == "optimizer":
                     self.optimizer_kwargs.update(options[o])
+                elif o == "lr_scheduler":
+                    self.lr_scheduler_kwargs.update(options[o])
                 else:
                     raise ValueError(
-                        f'The key {o} is not available in this class. The available keys are: {", ".join(self.BLOCKS)}, and optimizer.'
+                        f'The key {o} is not available in this class. The available keys are: {", ".join(self.BLOCKS)}, optimizer and lr_scheduler.'
                     )
 
         return options
@@ -192,10 +198,18 @@ class BaseCV:
         torch.optim
             Torch optimizer
         """
+
         optimizer = getattr(torch.optim, self._optimizer_name)(
             self.parameters(), **self.optimizer_kwargs
         )
-        return optimizer
+
+        if self.lr_scheduler_kwargs:
+            scheduler_cls = self.lr_scheduler_kwargs['scheduler']
+            scheduler_kwargs = {k: v for k, v in self.lr_scheduler_kwargs.items() if k != 'scheduler'}
+            lr_scheduler = scheduler_cls(optimizer, **scheduler_kwargs)
+            return [optimizer] , [lr_scheduler]
+        else: 
+            return optimizer
 
     def __setattr__(self, key, value):
         # PyTorch overrides __setattr__ to raise a TypeError when you try to assign

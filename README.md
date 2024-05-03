@@ -3,7 +3,7 @@ Machine Learning Collective Variables for Enhanced Sampling
 
 [//]: # (Badges)
 **CODE**  [![Documentation Status](https://readthedocs.org/projects/mlcolvar/badge/?version=latest)](https://mlcolvar.readthedocs.io/en/latest/?badge=latest)
-[![GitHub Actions Build Status](https://github.com/luigibonati/mlcolvar/workflows/CI/badge.svg)](https://github.com/luigibonati/mlcolvar/actions?query=workflow%3ACI)
+[![GitHub Actions Build Status](https://github.com/luigibonati/mlcolvar/actions/workflows/CI.yaml/badge.svg?branch=main)](https://github.com/luigibonati/mlcolvar/actions?query=workflow%3ACI)
 [![codecov](https://codecov.io/gh/luigibonati/mlcolvar/branch/main/graph/badge.svg?token=H01H68KNNG)](https://codecov.io/gh/luigibonati/mlcolvar)
 [![license](https://img.shields.io/github/license/luigibonati/mlcolvar)](https://github.com/luigibonati/mlcolvar/blob/main/LICENSE)
 
@@ -32,6 +32,29 @@ Some of the **CVs** which are implemented, organized by learning setting:
 - _Time-informed_: TICA [[6](http://dx.doi.org/%2010.1063/1.4811489)], DeepTICA/SRVs [[7](http://dx.doi.org/10.1073/pnas.2113533118),[8](http://dx.doi.org/%2010.1063/1.5092521)], VDE [[9](http://dx.doi.org/10.1103/PhysRevE.97.062412)]
 
 And many others can be implemented based on the building blocks or with simple modifications. Check out the documentation and the examples section!
+
+---
+
+
+**Install with `pip`**
+
+The library is available on [PyPi](https://pypi.org/project/mlcolvar/) and can be installed with `pip`. This is the preferred choice for **users** as it automatically installs the package requirements. 
+
+```bash
+pip install mlcolvar
+```
+
+**Clone from GitHub**
+
+The library can also be installed cloning the repository from GitHub. This is the preferred choice for **developers** as it provides more flexibility and allows editable installation.
+
+```bash
+git clone https://github.com/luigibonati/mlcolvar.git
+cd mlcolvar
+pip -e install .
+```
+
+
 
 ---
 

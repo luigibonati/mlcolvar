@@ -156,7 +156,7 @@ def tda_loss(
 
     for i in range(n_states):
         # check which elements belong to class i
-        if not torch.nonzero(labels == i).any():
+        if not (labels == i).any():
             raise ValueError(
                 f"State {i} was not represented in this batch! Either use bigger batch_size or a more equilibrated dataset composition!"
             )
