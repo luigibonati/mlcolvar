@@ -282,7 +282,8 @@ def test_create_dataset_from_trajectories(
         ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
         1.0,
         system_selection=system_selection,
-        return_trajectories=True
+        return_trajectories=True,
+        show_progress=False
     )
 
     assert len(dataset) == 6
@@ -357,6 +358,7 @@ def test_create_dataset_from_trajectories(
         1.0,
         system_selection=system_selection,
         edge_sender_selection='element O',
+        show_progress=False
     )
 
     def check_data_2(data) -> None:
@@ -380,6 +382,7 @@ def test_create_dataset_from_trajectories(
         1.0,
         system_selection=system_selection,
         edge_receiver_selection='element H',
+        show_progress=False
     )
 
     def check_data_3(data) -> None:
@@ -404,6 +407,7 @@ def test_create_dataset_from_trajectories(
         system_selection=system_selection,
         edge_sender_selection='element O',
         edge_receiver_selection='element H',
+        show_progress=False
     )
 
     def check_data_4(data) -> None:

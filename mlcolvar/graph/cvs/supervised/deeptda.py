@@ -161,7 +161,7 @@ class GraphDeepTDA(GraphBaseCV):
             ) for i in range(2)
         ]
         dataset = gdata.create_dataset_from_configurations(
-            config, z_table, 0.1
+            config, z_table, 0.1,  show_progress=False
         )
 
         loader = gdata.GraphDataModule(

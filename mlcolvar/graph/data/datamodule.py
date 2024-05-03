@@ -263,7 +263,9 @@ def test_datamodule() -> None:
         node_labels=node_labels,
         graph_labels=graph_labels,
     )
-    dataset = create_dataset_from_configurations([config] * 10, z_table, 0.1)
+    dataset = create_dataset_from_configurations(
+        [config] * 10, z_table, 0.1, show_progress=False
+    )
     for i, d in enumerate(dataset):
         d['graph_labels'][0][0] = i
 
@@ -380,7 +382,9 @@ def test_datamodule() -> None:
         node_labels=node_labels,
         graph_labels=graph_labels,
     )
-    dataset = create_dataset_from_configurations([config] * 10, z_table, 0.1)
+    dataset = create_dataset_from_configurations(
+        [config] * 10, z_table, 0.1, show_progress=False
+    )
 
     loader = GraphDataModule(
         dataset,

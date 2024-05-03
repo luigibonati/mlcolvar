@@ -230,7 +230,9 @@ def test_get_data(receivers: List[int] = [0, 1, 2]) -> tg.data.Batch:
             edge_receivers=receivers,
         ) for i in range(0, 6)
     ]
-    dataset = gdata.create_dataset_from_configurations(config, z_table, 0.1)
+    dataset = gdata.create_dataset_from_configurations(
+        config, z_table, 0.1, show_progress=False
+    )
 
     loader = gdata.GraphDataModule(
         dataset,
