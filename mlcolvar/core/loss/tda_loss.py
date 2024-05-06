@@ -15,7 +15,7 @@ __all__ = ["TDALoss", "tda_loss"]
 # GLOBAL IMPORTS
 # =============================================================================
 
-from typing import Union
+from typing import Union, List, Tuple
 from warnings import warn
 
 import torch
@@ -32,8 +32,8 @@ class TDALoss(torch.nn.Module):
     def __init__(
         self,
         n_states: int,
-        target_centers: Union[list, torch.Tensor],
-        target_sigmas: Union[list, torch.Tensor],
+        target_centers: Union[List[float], torch.Tensor],
+        target_sigmas: Union[List[float], torch.Tensor],
         alpha: float = 1,
         beta: float = 100,
     ):
@@ -62,7 +62,7 @@ class TDALoss(torch.nn.Module):
 
     def forward(
         self, H: torch.Tensor, labels: torch.Tensor, return_loss_terms: bool = False
-    ) -> torch.Tensor:
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         """Compute the value of the loss function.
 
         Parameters
@@ -108,7 +108,7 @@ def tda_loss(
     alpha: float = 1,
     beta: float = 100,
     return_loss_terms: bool = False,
-) -> torch.Tensor:
+)  -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
     """
     Compute a loss function as the distance from a simple Gaussian target distribution.
 
