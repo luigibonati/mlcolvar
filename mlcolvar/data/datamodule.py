@@ -24,7 +24,6 @@ import numpy as np
 import lightning
 from torch.utils.data import random_split, Subset
 from torch import default_generator, randperm
-from torch._utils import _accumulate
 
 from mlcolvar.data import DictLoader, DictDataset
 
@@ -324,6 +323,20 @@ def sequential_split(dataset, lengths: Sequence) -> list:
 
     return split_dataset(dataset=dataset, lengths=lengths, random_split=False)
 
+# Taken from python 3.5 docs, removed from PyTorch 2.3 onward
+def _accumulate(iterable, fn=lambda x, y: x + y):
+    "Return running totals"
+    # _accumulate([1,2,3,4,5]) --> 1 3 6 10 15
+    # _accumulate([1,2,3,4,5], operator.mul) --> 1 2 6 24 120
+    it = iter(iterable)
+    try:
+        total = next(it)
+    except StopIteration:
+        return
+    yield total
+    for element in it:
+        total = fn(total, element)
+        yield total
 
 if __name__ == "__main__":
     import doctest
