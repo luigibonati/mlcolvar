@@ -1,5 +1,6 @@
 import torch
-from mlcolvar.core.transform.tools.utils import batch_reshape, Statistics
+from mlcolvar.core.transform.utils import Statistics
+from mlcolvar.core.transform.tools.utils import batch_reshape
 from mlcolvar.core.transform import Transform
 
 __all__ = ["Normalization"]

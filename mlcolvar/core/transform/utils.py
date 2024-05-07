@@ -2,7 +2,7 @@ import torch
 from typing import Union
 from warnings import warn
 
-__all__ = ["Inverse"]
+__all__ = ["Inverse", "Statistics"]
 
 
 class Inverse(torch.nn.Module):
