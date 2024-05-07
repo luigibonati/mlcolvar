@@ -17,7 +17,7 @@ class PairwiseDistances(Transform):
                  PBC: bool,
                  cell: Union[float, list],
                  scaled_coords : bool = False,
-                 slicing_indeces : list = None) -> torch.Tensor:
+                 slicing_pairs : list = None) -> torch.Tensor:
         """Initialize a pairwise distances matrix object.
 
         Parameters
@@ -30,7 +30,7 @@ class PairwiseDistances(Transform):
             Dimensions of the real cell, orthorombic-like cells only
         scaled_coords : bool
             Switch for coordinates scaled on cell's vectors use, by default False
-        slicing_indeces : list
+        slicing_pairs : list
             Indeces of the subset of distances to be returned, by default None
 
         Returns
@@ -45,7 +45,10 @@ class PairwiseDistances(Transform):
         self.PBC = PBC
         self.cell = cell
         self.scaled_coords = scaled_coords
-        self.slicing_indeces = slicing_indeces
+        if slicing_pairs is not None:
+            self.slicing_pairs = torch.Tensor(slicing_pairs).to(torch.long)
+        else:
+            self.slicing_pairs = slicing_pairs
 
     def compute_pairwise_distances(self, pos):
         dist = compute_distances_matrix(pos=pos,
@@ -54,16 +57,16 @@ class PairwiseDistances(Transform):
                                         cell=self.cell,
                                         scaled_coords=self.scaled_coords)
         batch_size = dist.shape[0]
-        device = pos.device
-        # mask out diagonal elements
-        aux_mask = torch.ones_like(dist, device=device) - torch.eye(dist.shape[-1], device=device)
-        # keep upper triangular part to avoid duplicates
-        unique = aux_mask.triu().nonzero(as_tuple=True)
-        pairwise_distances = dist[unique].reshape((batch_size, -1)) 
-        if self.slicing_indeces is None:
+        if self.slicing_pairs is None:
+            device = pos.device
+            # mask out diagonal elements
+            aux_mask = torch.ones_like(dist, device=device) - torch.eye(dist.shape[-1], device=device)
+            # keep upper triangular part to avoid duplicates
+            unique = aux_mask.triu().nonzero(as_tuple=True)
+            pairwise_distances = dist[unique].reshape((batch_size, -1)) 
             return pairwise_distances
         else:
-            return pairwise_distances[:, self.slicing_indeces]
+            return dist[:, self.slicing_pairs[:, 0], self.slicing_pairs[:, 1]]
         
 
     def forward(self, x: torch.Tensor):
@@ -96,7 +99,6 @@ def test_pairwise_distances():
                               scaled_coords = False)
     out = model(pos_abs)
     assert(out.reshape(pos_abs.shape[0], -1).shape[-1] == model.out_features)
-    print((out - ref_distances).max())
     assert(torch.allclose(out, ref_distances, atol=1e-3))
     out.sum().backward()
 
@@ -105,9 +107,9 @@ def test_pairwise_distances():
                               PBC = True,
                               cell = cell,
                               scaled_coords = False,
-                              slicing_indeces=[0, 2])
+                              slicing_pairs=[[0, 1], [0, 2]])
     out = model(pos_abs)
-    assert(torch.allclose(out, ref_distances[:, [0, 2]], atol=1e-3))
+    assert(torch.allclose(out, ref_distances[:, [0, 1]], atol=1e-3))
     out.sum().backward()
 
     model = PairwiseDistances(n_atoms = 10,
