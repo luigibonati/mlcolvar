@@ -60,14 +60,95 @@ def sanitize_cell_shape(cell : Union[float, torch.Tensor, list]):
     
     return cell
 
-def compute_distances_components_matrices(pos : torch.Tensor,
-                                     n_atoms : int,
-                                     PBC : bool,
-                                     cell : Union[float, torch.Tensor, list],
-                                     scaled_coords : bool = False,
-                                    ) -> torch.Tensor:
-    """Compute the matrices of all the atomic pairwise distances along the cell dimensions from batches of atomic coordinates.
-    The three matrices (xyz) are symmetric, of size (n_atoms,n_atoms) and i,j-th element gives the distance between atoms i and j along that component. 
+# def compute_distances_components_matrices(pos : torch.Tensor,
+#                                      n_atoms : int,
+#                                      PBC : bool,
+#                                      cell : Union[float, torch.Tensor, list],
+#                                      scaled_coords : bool = False,
+#                                     ) -> torch.Tensor:
+#     """Compute the matrices of all the atomic pairwise distances along the cell dimensions from batches of atomic coordinates.
+#     The three matrices (xyz) are symmetric, of size (n_atoms,n_atoms) and i,j-th element gives the distance between atoms i and j along that component. 
+
+#     Parameters
+#     ----------
+#     pos : torch.Tensor
+#         Positions of the atoms, they can be given with shapes:
+#         - Shape: (n_batch (optional), n_atoms * 3), i.e [ [x1,y1,z1, x2,y2,z2, .... xn,yn,zn] ]
+#         - Shape: (n_batch (optional), n_atoms, 3),  i.e [ [ [x1,y1,z1], [x2,y2,z2], .... [xn,yn,zn] ] ]
+#     n_atoms : int
+#         Number of atoms 
+#     PBC : bool
+#         Switch for Periodic Boundary Conditions use
+#     cell : Union[float, list]
+#         Dimensions of the real cell, orthorombic-like cells only
+#     scaled_coords : bool
+#         Switch for coordinates scaled on cell's vectors use, by default False
+
+#     Returns
+#     -------
+#     torch.Tensor
+#         Components of all the atomic pairwise distances along the cell dimensions, index map: (batch_idx, atom_i_idx, atom_j_idx, component_idx)
+#     """
+#     # ======================= CHECKS =======================
+#     pos, batch_size = sanitize_positions_shape(pos, n_atoms)
+#     cell = sanitize_cell_shape(cell)
+
+#     # Set which cell to be used for PBC
+#     if scaled_coords:
+#         pbc_cell = torch.Tensor([1., 1., 1.])
+#     else:
+#         pbc_cell = cell
+
+#     # ======================= COMPUTE =======================
+#     pos = torch.reshape(pos, (batch_size, n_atoms, 3)) # this preserves the order when the pos are passed as a list
+#     pos = torch.transpose(pos, 1, 2)
+#     pos = pos.reshape((batch_size, 3, n_atoms))
+
+#     # expand tiling the coordinates to a tensor of shape (n_batch, 3, n_atoms, n_atoms)
+#     pos_expanded = torch.tile(pos,(1, 1, n_atoms)).reshape(batch_size, 3, n_atoms, n_atoms)
+
+#     # compute the distances with transpose trick
+#     # This works only with orthorombic cells 
+#     dist_components = pos_expanded - torch.transpose(pos_expanded, -2, -1)  # transpose over the atom index dimensions
+#     # print('DIST COMP: \n', dist_components)
+
+#     # get PBC shifts
+#     if PBC:
+#         shifts = torch.zeros_like(dist_components)
+#         # avoid loop if cell is cubic
+#         if pbc_cell[0]==pbc_cell[1] and pbc_cell[1]==pbc_cell[2]:
+#             shifts = torch.div(dist_components, pbc_cell[0]/2, rounding_mode='trunc') 
+#             shifts = torch.div(shifts + 1*torch.sign(shifts), 2, rounding_mode='trunc' )*pbc_cell[0]
+#             # print('SHIFTS cubic: \n', shifts)
+
+#         else: 
+#             # loop over dimensions of the pbc_cell
+#             for d in range(3):
+#                 shifts[:, d, :, :] = torch.div(dist_components[:, d, :, :], pbc_cell[d]/2, rounding_mode='trunc')
+#                 shifts[:, d, :, :] = torch.div(shifts[:, d, :, :] + 1*torch.sign(shifts[:, d, :, :]), 2, rounding_mode='trunc' )*pbc_cell[d]/2
+#                 # print('SHIFTS ortho: \n', shifts)
+
+            
+#         # apply shifts
+#         dist_components = dist_components - shifts
+
+#     # if we used scaled coords we need to get back to real distances
+#     if scaled_coords:
+#         dist_components = torch.einsum('bijk,i->bijk', dist_components, cell)
+
+#     return dist_components
+
+
+def compute_distances_matrix(pos : torch.Tensor,
+                             n_atoms : int,
+                             PBC : bool,
+                             cell : Union[float, list],
+                             vector : bool = False,
+                             scaled_coords : bool = False,
+                            ) -> torch.Tensor:
+    """Compute the pairwise distances matrix from batches of atomic coordinates. 
+    The matrix is symmetric, of size (n_atoms,n_atoms) and i,j-th element gives the distance between atoms i and j. 
+    Optionally can return the vector distances.
 
     Parameters
     ----------
@@ -76,20 +157,24 @@ def compute_distances_components_matrices(pos : torch.Tensor,
         - Shape: (n_batch (optional), n_atoms * 3), i.e [ [x1,y1,z1, x2,y2,z2, .... xn,yn,zn] ]
         - Shape: (n_batch (optional), n_atoms, 3),  i.e [ [ [x1,y1,z1], [x2,y2,z2], .... [xn,yn,zn] ] ]
     n_atoms : int
-        Number of atoms 
+        Number of atoms
     PBC : bool
         Switch for Periodic Boundary Conditions use
     cell : Union[float, list]
-        Dimensions of the real cell, orthorombic-like cells only
-    scaled_coords : bool
-        Switch for coordinates scaled on cell's vectors use, by default False
+        Dimensions of the real cell, orthorombic-like cells only, by default False
+    vector : bool, optional
+        Switch to return vector distances
+    scaled_coords : bool, optional
+        Switch for coordinates scaled on cell's vectors use
 
     Returns
     -------
     torch.Tensor
-        Components of all the atomic pairwise distances along the cell dimensions, index map: (batch_idx, atom_i_idx, atom_j_idx, component_idx)
+        Matrix of the scalar pairwise distances, index map: (batch_idx, atom_i_idx, atom_j_idx)
+        Enabling `vector=True` can return the vector components of the distances, index map: (batch_idx, atom_i_idx, atom_j_idx, component_idx)
     """
-    # ======================= CHECKS =======================
+    # compute distances components, keep only first element of the output tuple
+# ======================= CHECKS =======================
     pos, batch_size = sanitize_positions_shape(pos, n_atoms)
     cell = sanitize_cell_shape(cell)
 
@@ -136,53 +221,17 @@ def compute_distances_components_matrices(pos : torch.Tensor,
     if scaled_coords:
         dist_components = torch.einsum('bijk,i->bijk', dist_components, cell)
 
-    return dist_components
+    if vector: 
+        return dist_components
+    else:
+        # mask out diagonal --> to keep the derivatives safe
+        mask_diag = ~torch.eye(n_atoms, dtype=bool)
+        mask_diag = torch.tile(mask_diag, (batch_size, 1, 1))
 
-
-def compute_distances_matrix(pos : torch.Tensor,
-                             n_atoms : int,
-                             PBC : bool,
-                             cell : Union[float, list],
-                             scaled_coords : bool = False,
-                            ) -> torch.Tensor:
-    """Compute the pairwise distances matrix from batches of atomic coordinates. 
-    The matrix is symmetric, of size (n_atoms,n_atoms) and i,j-th element gives the distance between atoms i and j. 
-
-    Parameters
-    ----------
-    pos : torch.Tensor
-        Positions of the atoms, they can be given with shapes:
-        - Shape: (n_batch (optional), n_atoms * 3), i.e [ [x1,y1,z1, x2,y2,z2, .... xn,yn,zn] ]
-        - Shape: (n_batch (optional), n_atoms, 3),  i.e [ [ [x1,y1,z1], [x2,y2,z2], .... [xn,yn,zn] ] ]
-    n_atoms : int
-        Number of atoms
-    PBC : bool
-        Switch for Periodic Boundary Conditions use
-    cell : Union[float, list]
-        Dimensions of the real cell, orthorombic-like cells only, by default False
-    scaled_coords : bool
-        Switch for coordinates scaled on cell's vectors use
-
-    Returns
-    -------
-    torch.Tensor
-        Matrix of the pairwise distances along the cell dimensions, index map: (batch_idx, atom_i_idx, atom_j_idx, component_idx)
-    """
-    # compute distances components, keep only first element of the output tuple
-    dist_components = compute_distances_components_matrices(pos=pos, n_atoms=n_atoms, PBC=PBC, cell=cell, scaled_coords=scaled_coords)
-    
-    # all the checks on the shape are already in the components function
-    batch_size = dist_components.shape[0]
-
-    # mask out diagonal --> to keep the derivatives safe
-    mask_diag = ~torch.eye(n_atoms, dtype=bool)
-    mask_diag = torch.tile(mask_diag, (batch_size, 1, 1))
-
-    # sum squared components and get final distance
-    dist = torch.sum( torch.pow(dist_components, 2), 1 )
-    dist[mask_diag] = torch.sqrt( dist[mask_diag]) 
-    return dist
-
+        # sum squared components and get final distance
+        dist = torch.sum( torch.pow(dist_components, 2), 1 )
+        dist[mask_diag] = torch.sqrt( dist[mask_diag]) 
+        return dist
 
 def apply_cutoff(x : torch.Tensor,
                  cutoff : float,

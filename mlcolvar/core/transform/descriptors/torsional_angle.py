@@ -2,7 +2,7 @@ import torch
 import numpy as np 
 
 from mlcolvar.core.transform import Transform
-from mlcolvar.core.transform.descriptors.utils import compute_distances_components_matrices, sanitize_positions_shape
+from mlcolvar.core.transform.descriptors.utils import compute_distances_matrix, sanitize_positions_shape
 
 from typing import Union
 
@@ -73,11 +73,12 @@ class TorsionalAngle(Transform):
         # select relevant atoms only
         tors_pos = tors_pos[:, self.indices, :]
 
-        dist_components = compute_distances_components_matrices(pos = tors_pos,
-                                                                      n_atoms = 4,
-                                                                      PBC = self.PBC,
-                                                                      cell = self.cell,
-                                                                      scaled_coords = self.scaled_coords)
+        dist_components = compute_distances_matrix(pos = tors_pos,
+                                                    n_atoms = 4,
+                                                    PBC = self.PBC,
+                                                    cell = self.cell,
+                                                    scaled_coords = self.scaled_coords,
+                                                    vector = True)
 
         # get AB, BC, CD distances
         AB = dist_components[:, :, 0, 1]
