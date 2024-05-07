@@ -103,8 +103,8 @@ def tda_loss(
     H: torch.Tensor,
     labels: torch.Tensor,
     n_states: int,
-    target_centers: Union[list, torch.Tensor],
-    target_sigmas: Union[list, torch.Tensor],
+    target_centers: Union[List[float], torch.Tensor],
+    target_sigmas: Union[List[float], torch.Tensor],
     alpha: float = 1,
     beta: float = 100,
     return_loss_terms: bool = False,
@@ -120,9 +120,9 @@ def tda_loss(
         Shape ``(n_batches,)``. Labels of the dataset.
     n_states : int
         The integer labels are expected to be in between 0 and ``n_states-1``.
-    target_centers : list or torch.Tensor
+    target_centers : List[float] or torch.Tensor
         Shape ``(n_states, n_cvs)``. Centers of the Gaussian targets.
-    target_sigmas : list or torch.Tensor
+    target_sigmas : List[float] or torch.Tensor
         Shape ``(n_states, n_cvs)``. Standard deviations of the Gaussian targets.
     alpha : float, optional
         Centers_loss component prefactor, by default 1.
