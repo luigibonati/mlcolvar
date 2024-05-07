@@ -60,85 +60,6 @@ def sanitize_cell_shape(cell : Union[float, torch.Tensor, list]):
     
     return cell
 
-# def compute_distances_components_matrices(pos : torch.Tensor,
-#                                      n_atoms : int,
-#                                      PBC : bool,
-#                                      cell : Union[float, torch.Tensor, list],
-#                                      scaled_coords : bool = False,
-#                                     ) -> torch.Tensor:
-#     """Compute the matrices of all the atomic pairwise distances along the cell dimensions from batches of atomic coordinates.
-#     The three matrices (xyz) are symmetric, of size (n_atoms,n_atoms) and i,j-th element gives the distance between atoms i and j along that component. 
-
-#     Parameters
-#     ----------
-#     pos : torch.Tensor
-#         Positions of the atoms, they can be given with shapes:
-#         - Shape: (n_batch (optional), n_atoms * 3), i.e [ [x1,y1,z1, x2,y2,z2, .... xn,yn,zn] ]
-#         - Shape: (n_batch (optional), n_atoms, 3),  i.e [ [ [x1,y1,z1], [x2,y2,z2], .... [xn,yn,zn] ] ]
-#     n_atoms : int
-#         Number of atoms 
-#     PBC : bool
-#         Switch for Periodic Boundary Conditions use
-#     cell : Union[float, list]
-#         Dimensions of the real cell, orthorombic-like cells only
-#     scaled_coords : bool
-#         Switch for coordinates scaled on cell's vectors use, by default False
-
-#     Returns
-#     -------
-#     torch.Tensor
-#         Components of all the atomic pairwise distances along the cell dimensions, index map: (batch_idx, atom_i_idx, atom_j_idx, component_idx)
-#     """
-#     # ======================= CHECKS =======================
-#     pos, batch_size = sanitize_positions_shape(pos, n_atoms)
-#     cell = sanitize_cell_shape(cell)
-
-#     # Set which cell to be used for PBC
-#     if scaled_coords:
-#         pbc_cell = torch.Tensor([1., 1., 1.])
-#     else:
-#         pbc_cell = cell
-
-#     # ======================= COMPUTE =======================
-#     pos = torch.reshape(pos, (batch_size, n_atoms, 3)) # this preserves the order when the pos are passed as a list
-#     pos = torch.transpose(pos, 1, 2)
-#     pos = pos.reshape((batch_size, 3, n_atoms))
-
-#     # expand tiling the coordinates to a tensor of shape (n_batch, 3, n_atoms, n_atoms)
-#     pos_expanded = torch.tile(pos,(1, 1, n_atoms)).reshape(batch_size, 3, n_atoms, n_atoms)
-
-#     # compute the distances with transpose trick
-#     # This works only with orthorombic cells 
-#     dist_components = pos_expanded - torch.transpose(pos_expanded, -2, -1)  # transpose over the atom index dimensions
-#     # print('DIST COMP: \n', dist_components)
-
-#     # get PBC shifts
-#     if PBC:
-#         shifts = torch.zeros_like(dist_components)
-#         # avoid loop if cell is cubic
-#         if pbc_cell[0]==pbc_cell[1] and pbc_cell[1]==pbc_cell[2]:
-#             shifts = torch.div(dist_components, pbc_cell[0]/2, rounding_mode='trunc') 
-#             shifts = torch.div(shifts + 1*torch.sign(shifts), 2, rounding_mode='trunc' )*pbc_cell[0]
-#             # print('SHIFTS cubic: \n', shifts)
-
-#         else: 
-#             # loop over dimensions of the pbc_cell
-#             for d in range(3):
-#                 shifts[:, d, :, :] = torch.div(dist_components[:, d, :, :], pbc_cell[d]/2, rounding_mode='trunc')
-#                 shifts[:, d, :, :] = torch.div(shifts[:, d, :, :] + 1*torch.sign(shifts[:, d, :, :]), 2, rounding_mode='trunc' )*pbc_cell[d]/2
-#                 # print('SHIFTS ortho: \n', shifts)
-
-            
-#         # apply shifts
-#         dist_components = dist_components - shifts
-
-#     # if we used scaled coords we need to get back to real distances
-#     if scaled_coords:
-#         dist_components = torch.einsum('bijk,i->bijk', dist_components, cell)
-
-#     return dist_components
-
-
 def compute_distances_matrix(pos : torch.Tensor,
                              n_atoms : int,
                              PBC : bool,
@@ -174,7 +95,7 @@ def compute_distances_matrix(pos : torch.Tensor,
         Enabling `vector=True` can return the vector components of the distances, index map: (batch_idx, atom_i_idx, atom_j_idx, component_idx)
     """
     # compute distances components, keep only first element of the output tuple
-# ======================= CHECKS =======================
+    # ======================= CHECKS =======================
     pos, batch_size = sanitize_positions_shape(pos, n_atoms)
     cell = sanitize_cell_shape(cell)
 
@@ -328,10 +249,6 @@ def compute_adjacency_matrix(pos : torch.Tensor,
                                 switching_function = switching_function)
     return adj_matrix                          
 
-# ================================================================================================
-# ======================================== TEST FUNCTIONS ========================================
-# ================================================================================================
-
 
 def test_applycutoff():
     from mlcolvar.core.transform.tools.switching_functions import SwitchingFunctions
@@ -397,6 +314,5 @@ def test_adjacency_matrix():
                                 switching_function=switching_function)
 
 if __name__ == "__main__":
-    # test_debug()
     test_applycutoff()
     test_adjacency_matrix()
