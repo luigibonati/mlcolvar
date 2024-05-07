@@ -57,8 +57,8 @@ class EigsAdjMat(Transform):
         self.scaled_coords = scaled_coords
         self.switching_function = switching_function
 
-    def compute_adjacency_matrix(self, x):
-        x = compute_adjacency_matrix(pos=x,
+    def compute_adjacency_matrix(self, pos):
+        pos = compute_adjacency_matrix(pos=pos,
                                      mode = self.mode,
                                      cutoff = self.cutoff, 
                                      n_atoms = self.n_atoms,
@@ -66,8 +66,7 @@ class EigsAdjMat(Transform):
                                      cell = self.cell,
                                      scaled_coords = self.scaled_coords,
                                      switching_function=self.switching_function)
-        # x = torch.squeeze(x)
-        return x
+        return pos
     
     def get_eigenvalues(self, x):
         eigs = torch.linalg.eigvalsh(x)
