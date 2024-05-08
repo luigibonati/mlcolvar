@@ -51,3 +51,17 @@ These are the building blocks which are used to construct the CVs.
 
    Transform
    Normalization
+   
+
+.. currentmodule:: mlcolvar.core.transform.descriptors
+
+.. autosummary::
+   :toctree: autosummary
+   :template: custom-class-template.rst
+
+   PairwiseDistances
+   TorsionalAngle
+   CoordinationNumbers
+   EigsAdjMat
+   MultipleDescriptors
+
