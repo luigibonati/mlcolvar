@@ -63,20 +63,17 @@ def test_multipledescriptors():
     cell = torch.Tensor([3.0233, 3.0233, 3.0233])
 
     # model 1 and 2 for torsional angles, model 3 for distances
-    model_1 = TorsionalAngle([1,3,4,6], 10, ['angle'], False, cell, False)
-    model_2 = TorsionalAngle([3,4,6,8], 10, ['angle'], False, cell, False)
-    model_3 = PairwiseDistances(n_atoms = 10,
-                                PBC = True,
-                                cell = cell,
-                                scaled_coords = False,
-                                slicing_pairs=[[0, 1], [0, 2]])
+    model_1 = TorsionalAngle(indices=[1,3,4,6], n_atoms=10, mode=['angle'], PBC=False, cell=cell, scaled_coords=False)
+    model_2 = TorsionalAngle(indices=[3,4,6,8], n_atoms=10, mode=['angle'], PBC=False, cell=cell, scaled_coords=False)
+    model_3 = PairwiseDistances(n_atoms=10, PBC=True, cell=cell, scaled_coords=False, slicing_pairs=[[0, 1], [0, 2]])
+    
     # compute single references
     angle_1 = model_1(pos)
     angle_2 = model_2(pos)
     distances = model_3(pos)
 
     # stack torsional angles
-    model_tot = MultipleDescriptors([model_1, model_2], n_atoms = 10)
+    model_tot = MultipleDescriptors(descriptors_list=[model_1, model_2], n_atoms=10)
     out = model_tot(pos)
     out.sum().backward()
     for i in range(len(pos)):
@@ -84,7 +81,7 @@ def test_multipledescriptors():
         assert(torch.allclose(out[i, 1], angle_2[i]))
 
     # stack torsional angle and two distances
-    model_tot = MultipleDescriptors([model_1, model_3], n_atoms = 10)
+    model_tot = MultipleDescriptors(descriptors_list=[model_1, model_3], n_atoms=10)
     out = model_tot(pos)
     out.sum().backward()
     for i in range(len(pos)):

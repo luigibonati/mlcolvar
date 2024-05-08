@@ -11,11 +11,11 @@ class ContinuousHistogram(Transform):
     """
 
     def __init__(self,
-                 in_features : int,
-                 min : float,
-                 max : float,
-                 bins : int,
-                 sigma_to_center : float = 1.0) -> torch.Tensor :
+                 in_features: int,
+                 min: float,
+                 max: float,
+                 bins: int,
+                 sigma_to_center: float = 1.0) -> torch.Tensor :
         """Computes the continuous histogram of a quantity using Gaussian kernels
 
         Parameters
@@ -51,7 +51,6 @@ class ContinuousHistogram(Transform):
                         min_max=[self.min, self.max], 
                         n=self.bins, 
                         sigma_to_center=self.sigma_to_center)
-        # if self.normalize = 
         return hist
 
     def forward(self, x: torch.Tensor):
@@ -61,11 +60,7 @@ class ContinuousHistogram(Transform):
 def test_continuous_histogram():
     x = torch.randn((5,100))
     x.requires_grad = True
-    hist = ContinuousHistogram(in_features=100,
-                    min=-1,
-                    max=1,
-                    bins=10,
-                    sigma_to_center=1)
+    hist = ContinuousHistogram(in_features=100, min=-1, max=1, bins=10, sigma_to_center=1)
     out = hist(x)
     out.sum().backward()
     

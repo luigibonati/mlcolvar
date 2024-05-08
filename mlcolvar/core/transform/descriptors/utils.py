@@ -1,8 +1,8 @@
 import torch
 from typing import Union
 
-def sanitize_positions_shape(pos : torch.Tensor,
-                             n_atoms : int):
+def sanitize_positions_shape(pos: torch.Tensor,
+                             n_atoms: int):
     """Sanitize positions tensor to have [batch, atoms, dims=3] shape
 
     Parameters
@@ -43,7 +43,7 @@ def sanitize_positions_shape(pos : torch.Tensor,
     batch_size = pos.shape[0]
     return pos, batch_size
 
-def sanitize_cell_shape(cell : Union[float, torch.Tensor, list]):
+def sanitize_cell_shape(cell: Union[float, torch.Tensor, list]):
     # Convert cell to tensor and shape it to have 3 dims
     if isinstance(cell, float) or isinstance(cell, int):
         cell = torch.Tensor([cell])
@@ -60,12 +60,12 @@ def sanitize_cell_shape(cell : Union[float, torch.Tensor, list]):
     
     return cell
 
-def compute_distances_matrix(pos : torch.Tensor,
-                             n_atoms : int,
-                             PBC : bool,
-                             cell : Union[float, list],
-                             vector : bool = False,
-                             scaled_coords : bool = False,
+def compute_distances_matrix(pos: torch.Tensor,
+                             n_atoms: int,
+                             PBC: bool,
+                             cell: Union[float, list],
+                             vector: bool = False,
+                             scaled_coords: bool = False,
                             ) -> torch.Tensor:
     """Compute the pairwise distances matrix from batches of atomic coordinates. 
     The matrix is symmetric, of size (n_atoms,n_atoms) and i,j-th element gives the distance between atoms i and j. 
@@ -116,7 +116,6 @@ def compute_distances_matrix(pos : torch.Tensor,
     # compute the distances with transpose trick
     # This works only with orthorombic cells 
     dist_components = pos_expanded - torch.transpose(pos_expanded, -2, -1)  # transpose over the atom index dimensions
-    # print('DIST COMP: \n', dist_components)
 
     # get PBC shifts
     if PBC:
@@ -125,16 +124,13 @@ def compute_distances_matrix(pos : torch.Tensor,
         if pbc_cell[0]==pbc_cell[1] and pbc_cell[1]==pbc_cell[2]:
             shifts = torch.div(dist_components, pbc_cell[0]/2, rounding_mode='trunc') 
             shifts = torch.div(shifts + 1*torch.sign(shifts), 2, rounding_mode='trunc' )*pbc_cell[0]
-            # print('SHIFTS cubic: \n', shifts)
 
         else: 
             # loop over dimensions of the pbc_cell
             for d in range(3):
                 shifts[:, d, :, :] = torch.div(dist_components[:, d, :, :], pbc_cell[d]/2, rounding_mode='trunc')
                 shifts[:, d, :, :] = torch.div(shifts[:, d, :, :] + 1*torch.sign(shifts[:, d, :, :]), 2, rounding_mode='trunc' )*pbc_cell[d]/2
-                # print('SHIFTS ortho: \n', shifts)
 
-            
         # apply shifts
         dist_components = dist_components - shifts
 
@@ -154,9 +150,9 @@ def compute_distances_matrix(pos : torch.Tensor,
         dist[mask_diag] = torch.sqrt( dist[mask_diag]) 
         return dist
 
-def apply_cutoff(x : torch.Tensor,
-                 cutoff : float,
-                 mode : str = 'continuous',
+def apply_cutoff(x: torch.Tensor,
+                 cutoff: float,
+                 mode: str = 'continuous',
                  switching_function = None) -> torch.Tensor:
     """Apply a cutoff to a quantity.
     Returns 1 below the cutoff and 0 above 
@@ -200,13 +196,13 @@ def apply_cutoff(x : torch.Tensor,
     return x_clone
 
 
-def compute_adjacency_matrix(pos : torch.Tensor,
-                             mode : str,
-                             cutoff : float, 
-                             n_atoms : int,
+def compute_adjacency_matrix(pos: torch.Tensor,
+                             mode: str,
+                             cutoff: float, 
+                             n_atoms: int,
                              PBC: bool,
                              cell: Union[float, list],
-                             scaled_coords : bool = False,
+                             scaled_coords: bool = False,
                              switching_function = None) -> torch.Tensor:
     """Initialize an adjacency matrix object.
 
@@ -244,9 +240,9 @@ def compute_adjacency_matrix(pos : torch.Tensor,
                                     cell=cell,
                                     scaled_coords=scaled_coords)
     adj_matrix = apply_cutoff(x=dist, 
-                                cutoff=cutoff, 
-                                mode=mode, 
-                                switching_function = switching_function)
+                              cutoff=cutoff, 
+                              mode=mode, 
+                              switching_function = switching_function)
     return adj_matrix                          
 
 
@@ -260,34 +256,25 @@ def test_applycutoff():
                            [1., 1., 1.] ] ]
                       )
     cell = torch.Tensor([1., 2, 1.])
-    
-    # TEST no scaled coords
-    out = compute_distances_matrix(pos=pos,
-                                   n_atoms=n_atoms,
-                                   PBC=True,
-                                   cell=cell,
-                                   scaled_coords=False)
     cutoff = 1.8
+
+    # TEST no scaled coords
+    out = compute_distances_matrix(pos=pos, n_atoms=n_atoms, PBC=True, cell=cell, scaled_coords=False)
     switching_function=SwitchingFunctions(in_features=n_atoms**2, name='Fermi', cutoff=cutoff, options={'q':0.01})
-    apply_cutoff(out, cutoff, mode='continuous', switching_function=switching_function)
+    apply_cutoff(x=out, cutoff=cutoff, mode='continuous', switching_function=switching_function)
     
     def silly_switch(x):
         return torch.pow(x, 2)
     switching_function = silly_switch
-    apply_cutoff(out, cutoff, mode='continuous', switching_function=switching_function)
-    apply_cutoff(out, cutoff, mode='discontinuous')
+    apply_cutoff(x=out, cutoff=cutoff, mode='continuous', switching_function=switching_function)
+    apply_cutoff(x=out, cutoff=cutoff, mode='discontinuous')
 
     # TEST scaled coords
     pos = torch.einsum('bij,j->bij', pos, 1/cell)
-    out = compute_distances_matrix(pos=pos,
-                                   n_atoms=2,
-                                   PBC=True,
-                                   cell=cell,
-                                   scaled_coords=True)
-    cutoff = 1.8
+    out = compute_distances_matrix(pos=pos, n_atoms=2, PBC=True, cell=cell, scaled_coords=True)
     switching_function=SwitchingFunctions(in_features=n_atoms**2, name='Fermi', cutoff=cutoff, options={'q':0.01})
-    apply_cutoff(out, cutoff, mode='continuous', switching_function=switching_function)
-    apply_cutoff(out, cutoff, mode='discontinuous')
+    apply_cutoff(x=out, cutoff=cutoff, mode='continuous', switching_function=switching_function)
+    apply_cutoff(x=out, cutoff=cutoff, mode='discontinuous')
 
 
 def test_adjacency_matrix():
@@ -302,16 +289,9 @@ def test_adjacency_matrix():
     
     cell = torch.Tensor([1., 2., 1.])
     cutoff = 1.8
-    switching_function=SwitchingFunctions(in_features=n_atoms*3, name='Fermi', cutoff=cutoff, options={'q':0.01})
+    switching_function=SwitchingFunctions(in_features=n_atoms*3, name='Fermi', cutoff=cutoff, options={'q' : 0.01})
   
-    compute_adjacency_matrix(pos=pos,
-                                mode = 'continuous',
-                                cutoff = cutoff, 
-                                n_atoms = n_atoms,
-                                PBC = True,
-                                cell = cell,
-                                scaled_coords = False,
-                                switching_function=switching_function)
+    compute_adjacency_matrix(pos=pos, mode='continuous', cutoff=cutoff,  n_atoms=n_atoms, PBC=True, cell=cell, scaled_coords=False, switching_function=switching_function)
 
 if __name__ == "__main__":
     test_applycutoff()

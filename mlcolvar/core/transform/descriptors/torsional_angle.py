@@ -16,12 +16,12 @@ class TorsionalAngle(Transform):
     MODES = ["angle", "sin", "cos"]
 
     def __init__(self, 
-                 indices : Union[list, np.ndarray, torch.Tensor],
-                 n_atoms : int,
+                 indices: Union[list, np.ndarray, torch.Tensor],
+                 n_atoms: int,
                  mode: Union[str, list],
                  PBC: bool,
                  cell: Union[float, list],
-                 scaled_coords : bool = False) -> torch.Tensor:
+                 scaled_coords: bool = False) -> torch.Tensor:
         """Initialize a torsional angle object
 
         Parameters
@@ -51,7 +51,12 @@ class TorsionalAngle(Transform):
                 raise ValueError(f'The mode {i} is not available in this class. The available modes are: {", ".join(self.MODES)}.')
 
         mode_idx = []
-        for i,m in enumerate(['angle', 'sin', 'cos']):
+
+        for n in mode:
+            if n not in self.MODES:
+                raise(ValueError(f"The given mode : {n} is not available! The available options are {', '.join(self.MODES)}")) 
+
+        for i,m in enumerate(self.MODES):
             if m in mode:
                 mode_idx.append(i)
         self.mode_idx = mode_idx
@@ -73,12 +78,12 @@ class TorsionalAngle(Transform):
         # select relevant atoms only
         tors_pos = tors_pos[:, self.indices, :]
 
-        dist_components = compute_distances_matrix(pos = tors_pos,
-                                                    n_atoms = 4,
-                                                    PBC = self.PBC,
-                                                    cell = self.cell,
-                                                    scaled_coords = self.scaled_coords,
-                                                    vector = True)
+        dist_components = compute_distances_matrix(pos=tors_pos,
+                                                    n_atoms=4,
+                                                    PBC=self.PBC,
+                                                    cell=self.cell,
+                                                    scaled_coords=self.scaled_coords,
+                                                    vector=True)
 
         # get AB, BC, CD distances
         AB = dist_components[:, :, 0, 1]
@@ -116,40 +121,39 @@ class TorsionalAngle(Transform):
 def test_torsional_angle():
     # simple test on alanine phi angle
     pos = torch.Tensor([[[ 0.3887, -0.4169, -0.1212],
-         [ 0.4264, -0.4374, -0.0983],
-         [ 0.4574, -0.4136, -0.0931],
-         [ 0.4273, -0.4797, -0.0871],
-         [ 0.4684,  0.4965, -0.0692],
-         [ 0.4478,  0.4571, -0.0441],
-         [-0.4933,  0.4869, -0.1026],
-         [-0.4840,  0.4488, -0.1116],
-         [-0.4748, -0.4781, -0.1232],
-         [-0.4407, -0.4781, -0.1569]],
-        [[ 0.3910, -0.4103, -0.1189],
-         [ 0.4334, -0.4329, -0.1020],
-         [ 0.4682, -0.4145, -0.1013],
-         [ 0.4322, -0.4739, -0.0867],
-         [ 0.4669, -0.4992, -0.0666],
-         [ 0.4448,  0.4670, -0.0375],
-         [-0.4975,  0.4844, -0.0981],
-         [-0.4849,  0.4466, -0.0991],
-         [-0.4818, -0.4870, -0.1291],
-         [-0.4490, -0.4933, -0.1668]]])
+                        [ 0.4264, -0.4374, -0.0983],
+                        [ 0.4574, -0.4136, -0.0931],
+                        [ 0.4273, -0.4797, -0.0871],
+                        [ 0.4684,  0.4965, -0.0692],
+                        [ 0.4478,  0.4571, -0.0441],
+                        [-0.4933,  0.4869, -0.1026],
+                        [-0.4840,  0.4488, -0.1116],
+                        [-0.4748, -0.4781, -0.1232],
+                        [-0.4407, -0.4781, -0.1569]],
+                        [[ 0.3910, -0.4103, -0.1189],
+                        [ 0.4334, -0.4329, -0.1020],
+                        [ 0.4682, -0.4145, -0.1013],
+                        [ 0.4322, -0.4739, -0.0867],
+                        [ 0.4669, -0.4992, -0.0666],
+                        [ 0.4448,  0.4670, -0.0375],
+                        [-0.4975,  0.4844, -0.0981],
+                        [-0.4849,  0.4466, -0.0991],
+                        [-0.4818, -0.4870, -0.1291],
+                        [-0.4490, -0.4933, -0.1668]]])
     pos.requires_grad = True
 
     cell = torch.Tensor([3.0233, 3.0233, 3.0233])
-    model = TorsionalAngle([1,3,4,6], 10, ['angle', 'sin', 'cos'], False, cell, False)
+    model = TorsionalAngle(indices=[1,3,4,6], n_atoms=10, mode=['angle', 'sin', 'cos'], PBC=False, cell=cell, scaled_coord=False)
     angle = model(pos)
     print(angle)
     angle.sum().backward()
 
-    model = TorsionalAngle([1,3,4,6], 10, ['sin'], False, cell, False)
+    model = TorsionalAngle([1,3,4,6], n_atoms=10, mode=['sin'], PBC=False, cell=cell, scaled_coords=False)
     angle = model(pos)
     print(angle)
     angle.sum().backward()
 
     # TODO add reference value for check
-
 
 if __name__ == "__main__":
     test_torsional_angle()

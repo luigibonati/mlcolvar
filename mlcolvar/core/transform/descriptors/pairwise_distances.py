@@ -13,11 +13,11 @@ class PairwiseDistances(Transform):
     """
 
     def __init__(self, 
-                 n_atoms : int,
+                 n_atoms: int,
                  PBC: bool,
                  cell: Union[float, list],
-                 scaled_coords : bool = False,
-                 slicing_pairs : list = None) -> torch.Tensor:
+                 scaled_coords: bool = False,
+                 slicing_pairs: list = None) -> torch.Tensor:
         """Initialize a pairwise distances matrix object.
 
         Parameters
@@ -31,7 +31,7 @@ class PairwiseDistances(Transform):
         scaled_coords : bool
             Switch for coordinates scaled on cell's vectors use, by default False
         slicing_pairs : list
-            Indeces of the subset of distances to be returned, by default None
+            indices of the subset of distances to be returned, by default None
 
         Returns
         -------
@@ -93,32 +93,22 @@ def test_pairwise_distances():
                                 0.2976, 0.3748, 0.4262, 0.4821, 0.5043, 0.6376, 0.1447, 0.2449, 0.2454,
                                 0.2705, 0.3597, 0.4833, 0.1528, 0.1502, 0.2370, 0.2408, 0.3805, 0.2472,
                                 0.3243, 0.3159, 0.4527, 0.1270, 0.1301, 0.2440, 0.2273, 0.2819, 0.1482]])
-    
-    # cell = torch.Tensor([1., 2., 1.])
   
-    model = PairwiseDistances(n_atoms = 10,
-                              PBC = True,
-                              cell = cell,
-                              scaled_coords = False)
+    # PBC no scaled coords
+    model = PairwiseDistances(n_atoms=10, PBC=True, cell=cell, scaled_coords=False)
     out = model(pos_abs)
     assert(out.reshape(pos_abs.shape[0], -1).shape[-1] == model.out_features)
     assert(torch.allclose(out, ref_distances, atol=1e-3))
     out.sum().backward()
 
-
-    model = PairwiseDistances(n_atoms = 10,
-                              PBC = True,
-                              cell = cell,
-                              scaled_coords = False,
-                              slicing_pairs=[[0, 1], [0, 2]])
+    # PBC no scaled coords slicing
+    model = PairwiseDistances(n_atoms=10, PBC=True, cell=cell, scaled_coords=False, slicing_pairs=[[0, 1], [0, 2]])
     out = model(pos_abs)
     assert(torch.allclose(out, ref_distances[:, [0, 1]], atol=1e-3))
     out.sum().backward()
 
-    model = PairwiseDistances(n_atoms = 10,
-                              PBC = True,
-                              cell = cell,
-                              scaled_coords = True)
+    # PBC and scaled coords
+    model = PairwiseDistances(n_atoms=10, PBC=True, cell=cell, scaled_coords=True)
     out = model(pos_scaled)
     assert(out.reshape(pos_scaled.shape[0], -1).shape[-1] == model.out_features)
     assert(torch.allclose(out, ref_distances, atol=1e-3))

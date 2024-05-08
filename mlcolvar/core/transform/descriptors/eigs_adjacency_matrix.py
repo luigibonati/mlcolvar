@@ -13,12 +13,12 @@ class EigsAdjMat(Transform):
     """
 
     def __init__(self,
-                 mode : str,
-                 cutoff : float, 
-                 n_atoms : int,
+                 mode: str,
+                 cutoff: float, 
+                 n_atoms: int,
                  PBC: bool,
                  cell: Union[float, list],
-                 scaled_coords : bool = False,
+                 scaled_coords: bool = False,
                  switching_function = None) -> torch.Tensor:
         """Initialize an eigenvalues of an adjacency matrix object.
 
@@ -59,13 +59,13 @@ class EigsAdjMat(Transform):
 
     def compute_adjacency_matrix(self, pos):
         pos = compute_adjacency_matrix(pos=pos,
-                                     mode = self.mode,
-                                     cutoff = self.cutoff, 
-                                     n_atoms = self.n_atoms,
-                                     PBC = self.PBC,
-                                     cell = self.cell,
-                                     scaled_coords = self.scaled_coords,
-                                     switching_function=self.switching_function)
+                                        mode=self.mode,
+                                        cutoff=self.cutoff, 
+                                        n_atoms=self.n_atoms,
+                                        PBC=self.PBC,
+                                        cell=self.cell,
+                                        scaled_coords=self.scaled_coords,
+                                        switching_function=self.switching_function)
         return pos
     
     def get_eigenvalues(self, x):
@@ -87,28 +87,28 @@ def test_eigs_of_adj_matrix():
                            [1., 1.1, 1.] ] ]
                       )
     pos.requires_grad = True
-
     cell = torch.Tensor([1., 2., 1.])
+
     cutoff = 1.8
     switching_function=SwitchingFunctions(in_features=n_atoms*3, name='Fermi', cutoff=cutoff, options={'q':0.05})
   
-    model = EigsAdjMat(mode = 'continuous',
-                       cutoff = cutoff, 
-                       n_atoms = n_atoms,
-                       PBC = True,
-                       cell = cell,
-                       scaled_coords = False,
+    model = EigsAdjMat(mode='continuous',
+                       cutoff=cutoff, 
+                       n_atoms=n_atoms,
+                       PBC=True,
+                       cell=cell,
+                       scaled_coords=False,
                        switching_function=switching_function)
     out = model(pos)
     out.sum().backward()
 
     pos = torch.einsum('bij,j->bij', pos, 1/cell)
-    model = EigsAdjMat(mode = 'continuous',
-                       cutoff = cutoff, 
-                       n_atoms = n_atoms,
-                       PBC = True,
-                       cell = cell,
-                       scaled_coords = True,
+    model = EigsAdjMat(mode='continuous',
+                       cutoff=cutoff, 
+                       n_atoms=n_atoms,
+                       PBC=True,
+                       cell=cell,
+                       scaled_coords=True,
                        switching_function=switching_function)
     out = model(pos)
     assert(out.shape[-1] == model.out_features)

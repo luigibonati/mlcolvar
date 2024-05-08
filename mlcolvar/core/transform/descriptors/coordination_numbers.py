@@ -14,23 +14,23 @@ class CoordinationNumbers(Transform):
     """
 
     def __init__(self,
-                 group_A : list,
-                 group_B : list,
-                 cutoff : float,
-                 n_atoms : int,
-                 PBC : bool,
-                 cell : Union[float, list],
-                 mode : str,
-                 scaled_coords : bool = False,
+                 group_A: list,
+                 group_B: list,
+                 cutoff: float,
+                 n_atoms: int,
+                 PBC: bool,
+                 cell: Union[float, list],
+                 mode: str,
+                 scaled_coords: bool = False,
                  switching_function = None) -> torch.Tensor:
         """Initialize a coordination number object between two groups of atoms A and B.
 
         Parameters
         ----------
         group_A : list
-            Zero-based indeces of group A atoms
+            Zero-based indices of group A atoms
         group_B : list
-            Zero-based indeces of group B atoms
+            Zero-based indices of group B atoms
         cutoff : float
             Cutoff radius for coordination number evaluation
         n_atoms : int
@@ -61,15 +61,11 @@ class CoordinationNumbers(Transform):
         self.group_B = group_B
         self._group_B_size = len(group_B)
         self._reordering = np.concatenate((self.group_A, self.group_B))
-
-
         self.cutoff = cutoff
-
         self.n_atoms = n_atoms
         self.PBC = PBC
         self.cell = cell
         self.scaled_coords = scaled_coords
-
         self.mode = mode
         self.switching_function = switching_function
     
@@ -82,8 +78,6 @@ class CoordinationNumbers(Transform):
                                         PBC=self.PBC,
                                         cell=self.cell,
                                         scaled_coords=self.scaled_coords)
-        # batch_size = dist.shape[0]
-        # device = pos.device
 
         # we can apply the switching cutoff with the switching function
         contributions = apply_cutoff(x=dist, 
@@ -111,6 +105,7 @@ class CoordinationNumbers(Transform):
 
 def test_coordination_number():
     from mlcolvar.core.transform.tools.switching_functions import SwitchingFunctions
+    
     # simple example based on calixarene water coordination numbers
     pos = torch.Tensor([[[-0.410219, -0.680065, -2.016121],
                          [-0.164329, -0.630426, -2.120843],
@@ -138,17 +133,15 @@ def test_coordination_number():
                          [-0.528576, -0.202031, -1.534733]]])
 
     cell = 4.0273098
-
     pos.requires_grad = True
-    
+
     n_atoms = 12
     cutoff=0.25
-
     switching_function=SwitchingFunctions(in_features=n_atoms*3, name='Rational', cutoff=cutoff, options={'n': 2, 'm' : 6, 'eps' : 1e0})
 
-    model = CoordinationNumbers(group_A = [0, 1],
-                                group_B = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
-                                cutoff= cutoff,
+    model = CoordinationNumbers(group_A=[0, 1],
+                                group_B=[2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+                                cutoff=cutoff,
                                 n_atoms=n_atoms, 
                                 PBC=True,
                                 cell=cell,
@@ -159,7 +152,7 @@ def test_coordination_number():
     out = model(pos)
     out.sum().backward()
 
-    # we shift by hand the 0,1 atoms with 2,3
+    # we swap by hand the 0,1 atoms with 2,3
     pos = torch.Tensor([[[-0.250341, -0.392700, -1.534535],
                          [-0.277187, -0.615506, -1.335904],
                          [-0.410219, -0.680065, -2.016121],
@@ -188,9 +181,9 @@ def test_coordination_number():
     pos.requires_grad = True
     switching_function=SwitchingFunctions(in_features=n_atoms*3, name='Rational', cutoff=cutoff, options={'n': 2, 'm' : 6, 'eps' : 1e0})
 
-    model = CoordinationNumbers(group_A = [2, 3],
-                                group_B = [0, 1, 4, 5, 6, 7, 8, 9, 10, 11],
-                                cutoff= cutoff,
+    model = CoordinationNumbers(group_A=[2, 3],
+                                group_B=[0, 1, 4, 5, 6, 7, 8, 9, 10, 11],
+                                cutoff=cutoff,
                                 n_atoms=n_atoms, 
                                 PBC=True,
                                 cell=cell,

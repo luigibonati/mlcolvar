@@ -12,10 +12,10 @@ class SwitchingFunctions(Transform):
     SWITCH_FUNCS = ['Fermi', 'Rational']
 
     def __init__(self,
-                 in_features : int,
-                 name : str, 
-                 cutoff : float, 
-                 options : dict = None):
+                 in_features: int,
+                 name: str, 
+                 cutoff: float, 
+                 options: dict = None):
         f"""Initialize switching function object
 
         Parameters
@@ -39,27 +39,27 @@ class SwitchingFunctions(Transform):
             raise NotImplementedError(f'''The switching function {name} is not implemented in this class. The available options are: {",".join(self.SWITCH_FUNCS)}.
                     You can initialize it as a method of the SwitchingFunctions class and tell us on Github, contributions are welcome!''')  
 
-    def forward(self, x : torch.Tensor):
+    def forward(self, x: torch.Tensor):
         switch_function = getattr(self, f'{self.name}_switch')
         y = switch_function(x, self.cutoff, **self.options)
         return y
     
     # ========================== define here switching functions ==========================
     def Fermi_switch(self,
-                     x : torch.Tensor, 
-                     cutoff : float, 
-                     q : float = 0.01, 
-                     prefactor_cutoff : float = 1.0):
+                     x: torch.Tensor, 
+                     cutoff: float, 
+                     q: float = 0.01, 
+                     prefactor_cutoff: float = 1.0):
         y = torch.div( 1, ( 1 + torch.exp( torch.div((x - prefactor_cutoff*cutoff) , q ))))
         return y
 
     def Rational_switch(self,
-                        x : torch.Tensor, 
-                        cutoff : float, 
-                        n : int = 6, 
-                        m : int = 12, 
-                        eps : float = 1e-8, 
-                        prefactor_cutoff : float = 1.0):
+                        x: torch.Tensor, 
+                        cutoff: float, 
+                        n: int = 6, 
+                        m: int = 12, 
+                        eps: float = 1e-8, 
+                        prefactor_cutoff: float = 1.0):
         y = torch.div((1 - torch.pow(x/(prefactor_cutoff*cutoff), n) + eps) , (1 - torch.pow(x/(prefactor_cutoff*cutoff), m)  + 2*eps) )
         return y
 
