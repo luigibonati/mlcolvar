@@ -9,7 +9,7 @@ __all__ = ["EigsAdjMat"]
 
 class EigsAdjMat(Transform):
     """
-    Eigenvalues of adjacency matrix transform, compute the eigenvalues of the adjacency matrix for a set of atoms from their positions
+    Eigenvalues of the adjacency matrix for a set of atoms from their positions
     """
 
     def __init__(self,

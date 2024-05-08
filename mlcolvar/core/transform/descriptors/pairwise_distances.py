@@ -9,7 +9,7 @@ __all__ = ["PairwiseDistances"]
 
 class PairwiseDistances(Transform):
     """
-    Pairwise distances transform, compute all the non duplicated pairwise distances for a set of atoms from their positions
+    Non duplicated pairwise distances for a set of atoms from their positions
     """
 
     def __init__(self, 

@@ -50,8 +50,9 @@ These are the building blocks which are used to construct the CVs.
    :template: custom-class-template.rst
 
    Transform
-   Normalization
    
+
+.. rubric:: Transform.descriptors
 
 .. currentmodule:: mlcolvar.core.transform.descriptors
 
@@ -65,3 +66,14 @@ These are the building blocks which are used to construct the CVs.
    EigsAdjMat
    MultipleDescriptors
 
+.. rubric:: Transform.tools
+
+.. currentmodule:: mlcolvar.core.transform.tools
+
+.. autosummary::
+   :toctree: autosummary
+   :template: custom-class-template.rst
+
+   Normalization
+   ContinuousHistogram
+   SwitchingFunctions

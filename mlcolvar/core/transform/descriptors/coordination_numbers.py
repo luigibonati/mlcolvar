@@ -10,7 +10,7 @@ __all__ = ["CoordinationNumbers"]
 
 class CoordinationNumbers(Transform):
     """
-    Coordination number transform, compute the coordination number between the elements of two groups of atoms for a set of atoms from their positions
+    Coordination number between the elements of two groups of atoms from their positions
     """
 
     def __init__(self,

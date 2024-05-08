@@ -7,7 +7,7 @@ __all__ = ["SwitchingFunctions"]
 
 class SwitchingFunctions(Transform):
     """
-    Transform class with some common switching functions
+    Common switching functions
     """
     SWITCH_FUNCS = ['Fermi', 'Rational']
 

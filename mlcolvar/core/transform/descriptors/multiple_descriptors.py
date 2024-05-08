@@ -3,7 +3,7 @@ import torch
 __all__ = ["MultipleDescriptors"]
 
 class MultipleDescriptors(torch.nn.Module):
-    """Wrapper class to combine multiple descriptor transform objects acting on the same set of atomic positions in a single module"""
+    """Wrapper class to combine multiple descriptor transform objects acting on the same set of atomic positions"""
     def __init__(self,
                  descriptors_list: list,
                  n_atoms: int,
