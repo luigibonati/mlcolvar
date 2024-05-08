@@ -157,7 +157,7 @@ def plot_isolines_2D(
         z = np.zeros_like(xv)
         for i in range(num_points[0]):
             for j in range(num_points[1]):
-                xy = torch.Tensor([xv[i, j], yv[i, j]])
+                xy = torch.Tensor([[xv[i, j], yv[i, j]]])
                 with torch.no_grad():
                     train_mode = function.training
                     function.eval()
