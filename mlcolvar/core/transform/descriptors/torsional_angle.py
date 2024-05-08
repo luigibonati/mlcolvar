@@ -143,7 +143,7 @@ def test_torsional_angle():
     pos.requires_grad = True
 
     cell = torch.Tensor([3.0233, 3.0233, 3.0233])
-    model = TorsionalAngle(indices=[1,3,4,6], n_atoms=10, mode=['angle', 'sin', 'cos'], PBC=False, cell=cell, scaled_coord=False)
+    model = TorsionalAngle(indices=[1,3,4,6], n_atoms=10, mode=['angle', 'sin', 'cos'], PBC=False, cell=cell, scaled_coords=False)
     angle = model(pos)
     print(angle)
     angle.sum().backward()
