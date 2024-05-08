@@ -38,7 +38,10 @@ class PairwiseDistances(Transform):
         torch.Tensor
             Non duplicated pairwise distances between all the atoms
         """
-        super().__init__(in_features=int(n_atoms*3), out_features=int(n_atoms*(n_atoms-1) / 2))
+        if slicing_pairs is None:
+            super().__init__(in_features=int(n_atoms*3), out_features=int(n_atoms*(n_atoms-1) / 2))
+        else: 
+            super().__init__(in_features=int(n_atoms*3), out_features=len(slicing_pairs))
 
         # parse args
         self.n_atoms = n_atoms
