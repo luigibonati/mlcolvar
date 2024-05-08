@@ -144,9 +144,11 @@ def tda_loss(
         term associated to the standard deviations of the target Gaussians.
     """
     if not isinstance(target_centers, torch.Tensor):
-        target_centers = torch.tensor(target_centers)
+        target_centers = torch.tensor(target_centers, dtype=H.dtype)
+        target_centers.requires_grad_(True)
     if not isinstance(target_sigmas, torch.Tensor):
-        target_sigmas = torch.tensor(target_sigmas)
+        target_sigmas = torch.tensor(target_sigmas, dtype=H.dtype)
+        target_sigmas.requires_grad_(True)
 
     device = H.device
     target_centers = target_centers.to(device)
