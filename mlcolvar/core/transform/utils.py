@@ -2,8 +2,30 @@ import torch
 from typing import Union
 from warnings import warn
 
-__all__ = ["Statistics", "Inverse"]
+__all__ = ["Inverse", "Statistics"]
 
+
+class Inverse(torch.nn.Module):
+    "Wrapper to return the inverse method of a module as a torch.nn.Module"
+
+    def __init__(self, module: torch.nn.Module):
+        """Return the inverse method of a module as a torch.nn.Module
+
+        Parameters
+        ----------
+        module : torch.nn.Module
+            Module to be inverted
+        """
+        super().__init__()
+        if not hasattr(module, "inverse"):
+            raise AttributeError("The given module does not have a 'inverse' method!")
+        self.module = module
+
+    def inverse(self, *args, **kwargs):
+        return self.module(*args, **kwargs)
+
+    def forward(self, *args, **kwargs):
+        return self.module.inverse(*args, **kwargs)
 
 class Statistics(object):
     """
@@ -79,58 +101,35 @@ class Statistics(object):
         for prop in self.properties:
             repr += f"{prop}: {getattr(self,prop).numpy()} "
         return repr
+    
 
+def test_inverse():
+    from mlcolvar.core.transform import Transform
+    # create dummy model to scale the average to 0
+    class ForwardModel(Transform):
+        def __init__(self, in_features=5, out_features=5):
+            super().__init__(in_features=5, out_features=5)
+            self.mean = 0
 
-class Inverse(torch.nn.Module):
-    "Wrapper to return the inverse method of a module as a torch.nn.Module"
+        def update_mean(self, x):
+            self.mean = torch.mean(x)
+        
+        def forward(self, x):
+            x = x - self.mean
+            return x
 
-    def __init__(self, module: torch.nn.Module):
-        """Return the inverse method of a module as a torch.nn.Module
+        def inverse(self, x):
+            x = x + self.mean
+            return x
 
-        Parameters
-        ----------
-        module : torch.nn.Module
-            Module to be inverted
-        """
-        super().__init__()
-        if not hasattr(module, "inverse"):
-            raise AttributeError("The given module does not have a 'inverse' method!")
-        self.module = module
+    forward_model = ForwardModel()
+    inverse_model = Inverse(forward_model)
 
-    def inverse(self, *args, **kwargs):
-        return self.module.inverse(*args, **kwargs)
+    input = torch.rand(5)
+    forward_model.update_mean(input)
+    out = forward_model(input)
 
-    def forward(self, *args, **kwargs):
-        return self.inverse(*args, **kwargs)
-
-
-def batch_reshape(t: torch.Tensor, size: torch.Size) -> torch.Tensor:
-    """Return value reshaped according to size.
-    In case of batch unsqueeze and expand along the first dimension.
-    For single inputs just pass.
-
-    Parameters
-    ----------
-        mean and range
-
-    """
-    if len(size) == 1:
-        return t
-    if len(size) == 2:
-        batch_size = size[0]
-        x_size = size[1]
-        t = t.unsqueeze(0).expand(batch_size, x_size)
-    else:
-        raise ValueError(
-            f"Input tensor must of shape (n_features) or (n_batch,n_features), not {size} (len={len(size)})."
-        )
-    return t
-
-
-# ================================================================================================
-# ======================================== TEST FUNCTIONS ========================================
-# ================================================================================================
-
+    assert(input.mean() == inverse_model(out).mean()) 
 
 def test_statistics():
     # create fake data
@@ -173,8 +172,9 @@ def test_statistics():
                 stats[key].update(batch[key])
 
     for key in loader.keys:
-        print(key, stats[key])
+        print(key,stats[key])
 
 
 if __name__ == "__main__":
+    test_inverse()
     test_statistics()

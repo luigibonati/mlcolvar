@@ -1,5 +1,6 @@
 import torch
-from mlcolvar.core.transform.utils import batch_reshape, Statistics
+from mlcolvar.core.transform.utils import Statistics
+from mlcolvar.core.transform.tools.utils import batch_reshape
 from mlcolvar.core.transform import Transform
 
 __all__ = ["Normalization"]
@@ -206,23 +207,20 @@ def test_normalization():
     norm = Normalization(in_features, mean=stats["mean"], range=stats["std"])
 
     y = norm(X)
-    # print(X.mean(0),y.mean(0))
-    # print(X.std(0),y.std(0))
 
     # test inverse
     z = norm.inverse(y)
-    # print(X.mean(0),z.mean(0))
-    # print(X.std(0),z.std(0))
+    assert(torch.allclose(X.mean(0), z.mean(0)))
+    assert(torch.allclose(X.std(0) , z.std(0)))
 
     # test inverse class
     inverse = Inverse(norm)
     q = inverse(y)
-    # print(X.mean(0),q.mean(0))
-    # print(X.std(0),q.std(0))
+    assert(torch.allclose(X.mean(0), q.mean(0)))
+    assert(torch.allclose(X.std(0), q.std(0)))
     norm = Normalization(
         in_features, mean=stats["mean"], range=stats["std"], mode="min_max"
     )
-
 
 if __name__ == "__main__":
     test_normalization()
