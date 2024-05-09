@@ -26,9 +26,9 @@ class CommittorLoss(torch.nn.Module):
 
     def __init__(self,
                 mass: torch.Tensor,
-                alpha : float,
+                alpha: float,
                 cell_size: float = None,
-                gamma : float = 10000,
+                gamma: float = 10000,
                 delta_f: float = 0
                  ):
         """Compute Kolmogorov's variational principle loss and impose boundary condition on the metastable states
@@ -71,16 +71,16 @@ class CommittorLoss(torch.nn.Module):
         )
 
 
-def committor_loss(x : torch.Tensor, 
-                  q : torch.Tensor, 
+def committor_loss(x: torch.Tensor, 
+                  q: torch.Tensor, 
                   labels: torch.Tensor, 
                   w: torch.Tensor,
                   mass: torch.Tensor,
-                  alpha : float,
+                  alpha: float,
                   cell_size: float = None,
-                  gamma : float = 10000,
+                  gamma: float = 10000,
                   delta_f: float = 0,
-                  create_graph : bool = True):
+                  create_graph: bool = True):
     """Compute variational loss for committor optimization with boundary conditions
 
     Parameters

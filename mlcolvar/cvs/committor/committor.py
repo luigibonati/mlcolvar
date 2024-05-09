@@ -37,9 +37,9 @@ class Committor(BaseCV, lightning.LightningModule):
         self, 
         layers: list,
         mass: torch.Tensor,
-        alpha : float,
+        alpha: float,
         cell_size: float = None,
-        gamma : float = 10000,
+        gamma: float = 10000,
         delta_f: float = 0,
         options: dict = None,
         **kwargs,
@@ -131,9 +131,9 @@ def test_committor():
     from mlcolvar.cvs.committor.utils import initialize_committor_masses
 
     atomic_masses = initialize_committor_masses(atoms_map=[[1,1]], n_dims=2)
-    model = Committor(layers = [2, 4, 2, 1],
-            mass = atomic_masses,
-            alpha = 1e-1,
+    model = Committor(layers=[2, 4, 2, 1],
+            mass=atomic_masses,
+            alpha=1e-1,
             delta_f=0)
 
     # create dataset
