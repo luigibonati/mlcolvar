@@ -54,7 +54,7 @@ def compute_committor_weights(dataset,
 
     return dataset
 
-def initialize_committor_masses(atoms_map : list, n_dims : int = 3):
+def initialize_committor_masses(atoms_map: list, n_dims: int = 3):
     """Initialize the masses tensor with the right shape for committor learning
 
     Parameters
@@ -67,7 +67,7 @@ def initialize_committor_masses(atoms_map : list, n_dims : int = 3):
     Returns
     -------
     atomic_masses
-        Atomic masses tensor readdy to be used for committor learning.
+        Atomic masses tensor ready to be used for committor learning.
     """
     # atomic masses of the atoms --> size N_atoms * n_dims
 
