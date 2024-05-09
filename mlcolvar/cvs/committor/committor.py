@@ -38,9 +38,9 @@ class Committor(BaseCV, lightning.LightningModule):
         layers: list,
         mass: torch.Tensor,
         alpha: float,
-        cell_size: float = None,
         gamma: float = 10000,
         delta_f: float = 0,
+        cell: float = None,
         options: dict = None,
         **kwargs,
     ):
@@ -55,13 +55,13 @@ class Committor(BaseCV, lightning.LightningModule):
             The mlcolvar.cvs.committor.utils.initialize_committor_masses can be used to simplify this.
         alpha : float
             Hyperparamer that scales the boundary conditions contribution to loss, i.e. alpha*(loss_bound_A + loss_bound_B)
-        cell_size : float, optional
-            CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, by default None
         gamma : float, optional
             Hyperparamer that scales the whole loss to avoid too small numbers, i.e. gamma*(loss_var + loss_bound), by default 10000
         delta_f : float, optional
             Delta free energy between A (label 0) and B (label 1), units is kBT, by default 0. 
             State B is supposed to be higher in energy.
+        cell : float, optional
+            CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, by default None
         options : dict[str, Any], optional
             Options for the building blocks of the model, by default {}.
             Available blocks: ['nn'] .
@@ -71,9 +71,9 @@ class Committor(BaseCV, lightning.LightningModule):
         # =======  LOSS  =======
         self.loss_fn = CommittorLoss(mass=mass,
                                      alpha=alpha,
-                                     cell_size=cell_size,
                                      gamma=gamma,
-                                     delta_f=delta_f
+                                     delta_f=delta_f,
+                                     cell=cell
         )
 
         # ======= OPTIONS =======
@@ -82,7 +82,7 @@ class Committor(BaseCV, lightning.LightningModule):
         
         # add the relevant nn options, set tanh for hidden layers and sharp sigmoid for output layer
         activ_list = ["tanh" for i in range( len(layers) - 2 )]
-        activ_list.append("sharp_sigmoid")
+        activ_list.append("custom_sigmoid")
         
         # update options dict for activations if not already set
         if not "activation" in options["nn"]:
@@ -131,10 +131,7 @@ def test_committor():
     from mlcolvar.cvs.committor.utils import initialize_committor_masses
 
     atomic_masses = initialize_committor_masses(atoms_map=[[1,1]], n_dims=2)
-    model = Committor(layers=[2, 4, 2, 1],
-            mass=atomic_masses,
-            alpha=1e-1,
-            delta_f=0)
+    model = Committor(layers=[2, 4, 2, 1], mass=atomic_masses, alpha=1e-1, delta_f=0)
 
     # create dataset
     samples = 50
