@@ -13,9 +13,9 @@ class Shifted_Softplus(torch.nn.Softplus):
         sp0 = F.softplus(torch.zeros(1), self.beta, self.threshold).item()
         return F.softplus(input, self.beta, self.threshold) - sp0
     
-class Sharp_Sigmoid(torch.nn.Module):
+class Custom_Sigmoid(torch.nn.Module):
     def __init__(self, p=3):
-        super(Sharp_Sigmoid, self).__init__()
+        super(Custom_Sigmoid, self).__init__()
         self.p = p
 
     def forward(self, input):
@@ -35,8 +35,8 @@ def get_activation(activation: str):
         activ = torch.nn.Softplus()
     elif activation == "shifted_softplus":
         activ = Shifted_Softplus()
-    elif activation == "sharp_sigmoid":
-        activ = Sharp_Sigmoid()    
+    elif activation == "custom_sigmoid":
+        activ = Custom_Sigmoid()    
     elif activation == "linear":
         print("WARNING: no activation selected")
     elif activation is None:
