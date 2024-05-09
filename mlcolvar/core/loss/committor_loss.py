@@ -14,9 +14,6 @@ __all__ = ["CommittorLoss", "committor_loss"]
 # GLOBAL IMPORTS
 # =============================================================================
 
-from typing import Union
-from warnings import warn
-
 import torch
 
 # =============================================================================

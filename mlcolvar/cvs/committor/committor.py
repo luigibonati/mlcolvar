@@ -130,7 +130,6 @@ def test_committor():
     from mlcolvar.data import DictDataset, DictModule
     from mlcolvar.cvs.committor.utils import initialize_committor_masses
 
-    beta = 1
     atomic_masses = initialize_committor_masses(atoms_map=[[1,1]], n_dims=2)
     model = Committor(layers = [2, 4, 2, 1],
             mass = atomic_masses,
@@ -140,7 +139,6 @@ def test_committor():
     # create dataset
     samples = 50
     X = torch.randn((2*samples, 2))
-    # X.requires_grad = True
     
     # create labels
     y = torch.zeros(X.shape[0])
@@ -151,15 +149,6 @@ def test_committor():
 
     dataset = DictDataset({"data": X, "labels": y, "weights": w})
     datamodule = DictModule(dataset, lengths=[1])
-
-    # inp = dataset['data']
-    # out = model.forward(inp)
-    # labels = dataset["labels"]
-    # weights = dataset["weights"]
-    # loss, loss_var, loss_bound_A, loss_bound_B = model.loss_fn(
-    #             inp, out, labels, weights 
-    #         )
-    # loss.backward()
     
     # train model
     trainer = lightning.Trainer(max_epochs=5, logger=None, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0)

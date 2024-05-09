@@ -117,9 +117,9 @@ class Smart_square_modulus_nabla_q(torch.nn.Module):
         del(src)
         if self.computation_device == self.return_device:
             return out
-        elif self.computation_device != self.return_device:
+        else:
             return out.to(self.return_device)
-
+        
     def create_right(self, x, batch_ind, des_ind, device=None):
         desc_vec = x[batch_ind, des_ind]
         if device is not None:
@@ -128,9 +128,6 @@ class Smart_square_modulus_nabla_q(torch.nn.Module):
 
 
     def compute_square_modulus(self,x, indeces, n_atoms, batch_size, device=None):
-        # if device is None:
-        #     device = indeces.device
-
         out = scatter(x.to(device), indeces.to(device).long())
 
         # now make the square
@@ -159,7 +156,7 @@ def test_smart_derivatives():
   
     Dist = PairwiseDistances(n_atoms = 3,
                               PBC = True,
-                              real_cell = real_cell,
+                              cell = real_cell,
                               scaled_coords = False)
     
     dist = Dist(pos)
