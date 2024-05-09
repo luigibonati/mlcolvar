@@ -1,6 +1,7 @@
 import torch
-import pandas as pd
 import numpy as np
+
+__all__ = ["compute_committor_weights", "initialize_committor_masses"]
 
 def compute_committor_weights(
     dataframe, 
@@ -28,6 +29,9 @@ def compute_committor_weights(
     Dataset
         Updated dataset with the 'weights' entry
     """
+
+    # TODO make this more general
+
     # Check if we have the bias column and sanitize it
     if 'bias' in dataframe.columns:
         dataframe = dataframe.fillna({'bias': 0})
