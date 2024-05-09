@@ -27,11 +27,11 @@ class CommittorLoss(torch.nn.Module):
     def __init__(self,
                 mass: torch.Tensor,
                 alpha: float,
-                cell_size: float = None,
+                cell: float = None,
                 gamma: float = 10000,
                 delta_f: float = 0
                  ):
-        """Compute Kolmogorov's variational principle loss and impose boundary condition on the metastable states
+        """Compute Kolmogorov's variational principle loss and impose boundary conditions on the metastable states
 
         Parameters
         ----------
@@ -39,7 +39,7 @@ class CommittorLoss(torch.nn.Module):
             Atomic masses of the atoms in the system
         alpha : float
             Hyperparamer that scales the boundary conditions contribution to loss, i.e. alpha*(loss_bound_A + loss_bound_B)
-        cell_size : float, optional
+        cell : float, optional
             CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, by default None
         gamma : float, optional
             Hyperparamer that scales the whole loss to avoid too small numbers, i.e. gamma*(loss_var + loss_bound), by default 10000
@@ -50,25 +50,23 @@ class CommittorLoss(torch.nn.Module):
         super().__init__()
         self.mass = mass
         self.alpha = alpha
-        self.cell_size = cell_size
+        self.cell = cell
         self.gamma = gamma
         self.delta_f = delta_f
 
     def forward(
-        self, x : torch.Tensor, q : torch.Tensor, labels : torch.Tensor, w : torch.Tensor, create_graph : bool = True
+        self, x: torch.Tensor, q: torch.Tensor, labels: torch.Tensor, w: torch.Tensor, create_graph: bool = True
     ) -> torch.Tensor:
-        return committor_loss(
-            x,
-            q,
-            labels,
-            w,
-            self.mass,
-            self.alpha,
-            self.cell_size,
-            self.gamma,
-            self.delta_f,
-            create_graph
-        )
+        return committor_loss(x=x,
+                                q=q,
+                                labels=labels,
+                                w=w,
+                                mass=self.mass,
+                                alpha=self.alpha,
+                                gamma=self.gamma,
+                                delta_f=self.delta_f,
+                                create_graph=create_graph,
+                                cell=self.cell)
 
 
 def committor_loss(x: torch.Tensor, 
@@ -77,10 +75,10 @@ def committor_loss(x: torch.Tensor,
                   w: torch.Tensor,
                   mass: torch.Tensor,
                   alpha: float,
-                  cell_size: float = None,
                   gamma: float = 10000,
                   delta_f: float = 0,
-                  create_graph: bool = True):
+                  create_graph: bool = True,
+                  cell: float = None):
     """Compute variational loss for committor optimization with boundary conditions
 
     Parameters
@@ -92,23 +90,22 @@ def committor_loss(x: torch.Tensor,
     labels : torch.Tensor
         Labels for states, A and B states for boundary conditions
     w : torch.Tensor
-        Reweighing factors. This depends on the simualtion in which the data were collected.
-        It is standard reweighing: exp[-beta*V(x)]
+        Reweighing factors to Boltzmann distribution. This should depend on the simulation in which the data were collected.
     mass : torch.Tensor
-        List of masses of all the atoms we are using, for each atom we need to repeat three times for x,y,z
+        List of masses of all the atoms we are using, for each atom we need to repeat three times for x,y,z.
+        Can be created using `committor.utils.initialize_committor_masses`
     alpha : float
         Hyperparamer that scales the boundary conditions contribution to loss, i.e. alpha*(loss_bound_A + loss_bound_B)
-    cell_size : float
-        CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, default None 
     gamma : float
         Hyperparamer that scales the whole loss to avoid too small numbers, i.e. gamma*(loss_var + loss_bound) 
         By default 10000
     delta_f : float
         Delta free energy between A (label 0) and B (label 1), units is kBT, by default 0. 
-        State B is supposed to be higher in energy.
     create_graph : bool
         Make loss backwardable, deactivate for validation to save memory, default True
-    
+    cell : float
+        CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, default None 
+
     Returns
     -------
     loss : torch.Tensor
@@ -131,7 +128,10 @@ def committor_loss(x: torch.Tensor,
     
     # Update weights of basin B using the information on the delta_f
     delta_f = torch.Tensor([delta_f])
-    w[mask_B] = w[mask_B] * torch.exp(delta_f.to(device)) 
+    if delta_f < 0: # B higher in energy --> A-B < 0
+        w[mask_B] = w[mask_B] * torch.exp(delta_f.to(device))
+    elif delta_f > 0: # A higher in energy --> A-B > 0
+        w[mask_A] = w[mask_A] * torch.exp(delta_f.to(device)) 
 
     ###### VARIATIONAL PRINICIPLE LOSS ######
     # Each loss contribution is scaled by the number of samples
@@ -141,8 +141,8 @@ def committor_loss(x: torch.Tensor,
     grad = torch.autograd.grad(q, x, grad_outputs=grad_outputs, retain_graph=True, create_graph=create_graph)[0]
 
     # TODO this fixes cell size issue
-    if cell_size is not None:
-        grad = grad / cell_size
+    if cell is not None:
+        grad = grad / cell
 
     # we sanitize the shapes of mass and weights tensors
     # mass should have size [1, n_atoms*spatial_dims]
