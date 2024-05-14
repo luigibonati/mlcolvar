@@ -105,6 +105,9 @@ def compute_distances_matrix(pos: torch.Tensor,
     else:
         pbc_cell = cell
 
+    _device = pos.device
+    cell = cell.to(_device)
+    
     # ======================= COMPUTE =======================
     pos = torch.reshape(pos, (batch_size, n_atoms, 3)) # this preserves the order when the pos are passed as a list
     pos = torch.transpose(pos, 1, 2)
