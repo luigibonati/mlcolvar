@@ -97,6 +97,7 @@ class Committor(BaseCV, lightning.LightningModule):
         o = "nn"
         self.nn = FeedForward(layers, last_layer_activation=True, **options[o])
 
+
     def training_step(self, train_batch, batch_idx):
         """Compute and return the training loss and record metrics."""
         # =================get data===================
@@ -107,7 +108,8 @@ class Committor(BaseCV, lightning.LightningModule):
         weights = train_batch["weights"]
 
         # =================forward====================
-        q = self.forward_cv(x)
+        # we use forward and not forward_cv to also apply the preprocessing (if present)
+        q = self.forward(x)
         # ===================loss=====================
         if self.training:
             loss, loss_var, loss_bound_A, loss_bound_B = self.loss_fn(
