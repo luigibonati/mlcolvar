@@ -90,10 +90,6 @@ class TorsionalAngle(Transform):
         BC = dist_components[:, :, 1, 2]
         CD = dist_components[:, :, 2, 3]
 
-        # check that they are in the -0.5 : 0.5 range
-        AB = self._center_distances(AB)
-        BC = self._center_distances(BC)
-        CD = self._center_distances(CD)
         # obtain normal direction 
         n1 = torch.cross(AB, BC)
         n2 = torch.cross(BC, CD)
@@ -108,11 +104,6 @@ class TorsionalAngle(Transform):
         angle = torch.atan2(sin, cos)
         
         return torch.hstack([angle, sin, cos])
-    
-    def _center_distances(self, dist):
-        dist[dist >  0.5] = dist[dist >  0.5] - 1
-        dist[dist < -0.5] = dist[dist < -0.5] + 1
-        return dist
 
     def forward(self, x):
         out = self.compute_torsional_angle(x)
@@ -120,37 +111,26 @@ class TorsionalAngle(Transform):
 
 def test_torsional_angle():
     # simple test on alanine phi angle
-    pos = torch.Tensor([[[ 0.3887, -0.4169, -0.1212],
-                        [ 0.4264, -0.4374, -0.0983],
-                        [ 0.4574, -0.4136, -0.0931],
-                        [ 0.4273, -0.4797, -0.0871],
-                        [ 0.4684,  0.4965, -0.0692],
-                        [ 0.4478,  0.4571, -0.0441],
-                        [-0.4933,  0.4869, -0.1026],
-                        [-0.4840,  0.4488, -0.1116],
-                        [-0.4748, -0.4781, -0.1232],
-                        [-0.4407, -0.4781, -0.1569]],
-                        [[ 0.3910, -0.4103, -0.1189],
-                        [ 0.4334, -0.4329, -0.1020],
-                        [ 0.4682, -0.4145, -0.1013],
-                        [ 0.4322, -0.4739, -0.0867],
-                        [ 0.4669, -0.4992, -0.0666],
-                        [ 0.4448,  0.4670, -0.0375],
-                        [-0.4975,  0.4844, -0.0981],
-                        [-0.4849,  0.4466, -0.0991],
-                        [-0.4818, -0.4870, -0.1291],
-                        [-0.4490, -0.4933, -0.1668]]])
+    pos = torch.Tensor([[ 1.4970,  1.3861, -0.0273, -1.4933,  1.5070, -0.1133, -1.4473, -1.4193,
+                        -0.0553,  1.4940,  1.4990, -0.2403,  1.4780, -1.4173, -0.3363, -1.4243,
+                        -1.4093, -0.4293,  1.3530, -1.4313, -0.4183,  1.3060,  1.4750, -0.4333,
+                        1.2970, -1.3233, -0.4643,  1.1670, -1.3253, -0.5354],
+                        [ 1.4932,  1.3759, -0.0133,  1.4651,  1.4984, -0.1044,  1.4294, -1.4193,
+                        -0.0564,  1.4877,  1.4869, -0.2352,  1.4949, -1.4240, -0.3326, -1.3827,
+                        -1.4189, -0.3863,  1.3877, -1.4264, -0.4353,  1.3727,  1.4973, -0.5063,
+                        1.3086, -1.3215, -0.4382,  1.2070, -1.3063, -0.5443]])
     pos.requires_grad = True
 
+    ref_phi = torch.Tensor([[-2.3687], [-2.0190]])
     cell = torch.Tensor([3.0233, 3.0233, 3.0233])
-    model = TorsionalAngle(indices=[1,3,4,6], n_atoms=10, mode=['angle', 'sin', 'cos'], PBC=False, cell=cell, scaled_coords=False)
+
+    model = TorsionalAngle(indices=[1,3,4,6], n_atoms=10, mode=['angle'], PBC=True, cell=cell, scaled_coords=False)
     angle = model(pos)
-    print(angle)
+    assert(torch.allclose(angle, ref_phi, atol=1e-3))
     angle.sum().backward()
 
-    model = TorsionalAngle([1,3,4,6], n_atoms=10, mode=['sin'], PBC=False, cell=cell, scaled_coords=False)
+    model = TorsionalAngle([1,3,4,6], n_atoms=10, mode=['angle', 'sin', 'cos'], PBC=True, cell=cell, scaled_coords=False)
     angle = model(pos)
-    print(angle)
     angle.sum().backward()
 
     # TODO add reference value for check
