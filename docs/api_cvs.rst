@@ -68,3 +68,13 @@ General framework which allows to optimize a single model with different loss fu
    :template: custom-class-template.rst
 
    MultiTaskCV
+
+Framework for the numerical determination of the committor function based on its variational principle.
+
+.. currentmodule:: mlcolvar.cvs
+
+.. autosummary::
+   :toctree: autosummary
+   :template: custom-class-template.rst
+
+   Committor
