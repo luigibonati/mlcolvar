@@ -17,7 +17,6 @@ def graph_node_sensitivity_analysis(
     model: gcvs.GraphBaseCV,
     dataset: gdata.GraphDataSet,
     node_indices: List[int] = None,
-    data_indices: List[int] = None,
     per_class: bool = False,
     device: str = 'cpu',
     show_progress: bool = True
@@ -39,8 +38,6 @@ def graph_node_sensitivity_analysis(
         Dataset on which to compute the sensitivity analysis.
     node_indices: List[int]
         Indices of the nodes to analysis.
-    data_indices: List[int]
-        Indices of the data to analysis.
     per_class: bool
         If the dataset has labels, compute also the sensitivity per class.
     device: str
@@ -58,10 +55,8 @@ def graph_node_sensitivity_analysis(
         n_nodes = [len(d.positions) for d in dataset]
         node_indices = list(range(max(n_nodes)))
 
-    if data_indices is None:
-        data_indices = list(range(len(dataset)))
-
     sensitivities = []
+    sensitivities_component = []
     model = model.to(device)
 
     for node, i in enumerate(node_indices):
@@ -70,12 +65,12 @@ def graph_node_sensitivity_analysis(
         n_nodes = len(node_indices)
         if show_progress:
             items = pbar(
-                dataset[data_indices],
+                dataset,
                 frequency=0.0001,
                 prefix='Node {:d}/{:d}'.format((i + 1), n_nodes)
             )
         else:
-            items = dataset[data_indices]
+            items = dataset
 
         with torch.no_grad():
             for data in items:
@@ -100,10 +95,14 @@ def graph_node_sensitivity_analysis(
                 delta = (cv_org - cv_masked).cpu().numpy().tolist()
                 node_results.extend(delta)
 
+        sensitivities_component.append(np.abs(node_results))
         sensitivities.append(np.mean(np.abs(node_results), axis=0))
 
     results = {}
     results['node_indices'] = node_indices
-    results['sensitivity'] = np.array(sensitivities)
+    results['sensitivities'] = np.array(sensitivities)
+    results['sensitivities_components'] = np.array(
+        sensitivities_component
+    ).transpose(2, 1, 0)[0]
 
     return results
