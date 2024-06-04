@@ -1,7 +1,7 @@
 import torch
 import torch_geometric as tg
 import numpy as np
-from typing import List
+from typing import List, Union
 
 from mlcolvar.graph.data import atomic
 from mlcolvar.graph.data.neighborhood import get_neighborhood
@@ -45,6 +45,30 @@ class GraphDataSet(list):
         self.extend(data)
         self.__atomic_numbers = list(atomic_numbers)
         self.__cutoff = cutoff
+
+    def __getitem__(
+        self,
+        index: Union[int, slice, list, np.ndarray]
+    ) -> Union['GraphDataSet', tg.data.Data]:
+        """
+        Build sub-dataset from the dataset.
+
+        Parameters
+        ----------
+        index : int, slice or list
+            Indices of the data.
+        """
+        if (isinstance(index, Union[slice, list, np.ndarray])):
+            if isinstance(index, slice):
+                index = list(range(len(self)))[index]
+            data = [super(GraphDataSet, self).__getitem__(i) for i in index]
+            return GraphDataSet(data, self.atomic_numbers, self.cutoff)
+        elif np.issubdtype(type(index), np.integer):
+            return super(GraphDataSet, self).__getitem__(index)
+        else:
+            raise RuntimeError(
+                'Could only indexing a GraphDataSet by an int, slice or list!'
+            )
 
     def __repr__(self) -> str:
         result = 'GRAPHDATASET [ '
