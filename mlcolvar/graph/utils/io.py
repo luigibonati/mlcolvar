@@ -5,6 +5,10 @@ from typing import Union, List, Tuple
 
 from mlcolvar.graph import data as gdata
 
+"""
+Some I/O things.
+"""
+
 __all__ = ['create_dataset_from_trajectories']
 
 
