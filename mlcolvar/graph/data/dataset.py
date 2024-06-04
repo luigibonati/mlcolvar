@@ -48,7 +48,7 @@ class GraphDataSet(list):
 
     def __getitem__(
         self,
-        index: Union[int, slice, list, np.ndarray]
+        index: Union[int, slice, list, range, np.ndarray]
     ) -> Union['GraphDataSet', tg.data.Data]:
         """
         Build sub-dataset from the dataset.
@@ -58,7 +58,7 @@ class GraphDataSet(list):
         index : int, slice or list
             Indices of the data.
         """
-        if (isinstance(index, Union[slice, list, np.ndarray])):
+        if type(index) in [slice, list, np.ndarray, range]:
             if isinstance(index, slice):
                 index = list(range(len(self)))[index]
             data = [super(GraphDataSet, self).__getitem__(i) for i in index]
