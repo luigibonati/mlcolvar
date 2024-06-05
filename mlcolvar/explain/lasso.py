@@ -1,10 +1,21 @@
 import numpy as np
 import torch
 
+import matplotlib 
+import matplotlib.pyplot as plt
+import mlcolvar.utils.plot
+
+try:
+    import sklearn
+except ImportError:
+    print('The lasso module requires scikit-learn as additional dependency.')
+
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegressionCV, LassoCV
 from sklearn.feature_selection import SelectFromModel
-from sklearn.metrics import accuracy_score,balanced_accuracy_score
+from sklearn.metrics import balanced_accuracy_score
+
+__all__ = [ "lasso_classification", "plot_lasso_classification", "lasso_regression", "plot_lasso_regression" ]
 
 class SparsityScoring:
     """Scorer function used as metric in lasso_classification. 
@@ -43,7 +54,6 @@ class SparsityScoring:
         acc = 1 - err/100
         return acc
 
-
 def lasso_classification(dataset,
                          min_features = 0,
                          Cs = 40,
@@ -77,7 +87,7 @@ def lasso_classification(dataset,
 
     See also
     --------
-    mlcolvar.utils.lasso.SparsityScoring
+    mlcolvar.explain.lasso.SparsityScoring
         Scoring function used in LASSO classification
 
     Returns
@@ -161,10 +171,6 @@ def lasso_classification(dataset,
         _ = plot_lasso_classification(classifier, feats, coeffs)
 
     return classifier, feats, coeffs
-
-import matplotlib 
-import matplotlib.pyplot as plt
-import mlcolvar.utils.plot
 
 def plot_lasso_classification(classifier, feats = None, coeffs = None, draw_labels='auto', axs = None):
     """Plot results of the LASSO classification."""
@@ -336,7 +342,6 @@ def lasso_regression(dataset,
         _ = plot_lasso_regression(regressor, selected_feature_names, selected_coeffs)
 
     return regressor, selected_feature_names, selected_coeffs
-
 
 def plot_lasso_regression(regressor, feats = None, coeffs = None, draw_labels='auto', axs = None):
     """Plot the results of the LASSO regression."""
