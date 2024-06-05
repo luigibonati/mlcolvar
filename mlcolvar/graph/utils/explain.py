@@ -18,7 +18,6 @@ def graph_node_sensitivity_analysis(
     model: gcvs.GraphBaseCV,
     dataset: gdata.GraphDataSet,
     node_indices: List[int] = None,
-    per_class: bool = False,
     device: str = 'cpu',
     batch_size: int = None,
     show_progress: bool = True
@@ -40,8 +39,6 @@ def graph_node_sensitivity_analysis(
         Dataset on which to compute the sensitivity analysis.
     node_indices: List[int]
         Indices of the nodes to analysis.
-    per_class: bool
-        If the dataset has labels, compute also the sensitivity per class.
     device: str
         Name of the device.
     batch_size:
