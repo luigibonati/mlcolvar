@@ -161,7 +161,7 @@ def plot_isolines_2D(
                 with torch.no_grad():
                     train_mode = function.training
                     function.eval()
-                    s = function(xy).numpy()
+                    s = function(xy.unsqueeze(0)).squeeze(0).numpy()
                     function.training = train_mode
                     if component is not None:
                         s = s[component]
