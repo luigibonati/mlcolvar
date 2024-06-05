@@ -3,8 +3,8 @@ import numpy as np
 from typing import List, Dict
 
 from .progress import pbar
-from mlcolvar.graph import data as gdata
 from mlcolvar.graph import cvs as gcvs
+from mlcolvar.graph import data as gdata
 
 """
 Metaphysics.
