@@ -383,6 +383,31 @@ def test_from_configuration() -> None:
     assert (data['n_receivers'] == torch.tensor([[2]])).all()
     assert (data['receiver_masks'] == torch.tensor([[0], [1], [1]])).all()
 
+    config = [atomic.Configuration(
+        atomic_numbers=numbers,
+        positions=positions,
+        cell=cell,
+        pbc=[True] * 3,
+        node_labels=node_labels,
+        graph_labels=np.array([[i]]),
+        edge_senders=[0],
+        edge_receivers=[1, 2],
+    ) for i in range(0, 10)]
+    dataset = create_dataset_from_configurations(
+        config, z_table, 0.1, show_progress=False
+    )
+
+    dataset_1 = dataset[range(0, 5, 2)]
+    assert dataset_1.atomic_numbers == [1, 8]
+    assert (dataset_1[0]['graph_labels'] == torch.tensor([[0.0]])).all()
+    assert (dataset_1[1]['graph_labels'] == torch.tensor([[2.0]])).all()
+    assert (dataset_1[2]['graph_labels'] == torch.tensor([[4.0]])).all()
+
+    dataset_1 = dataset[np.array([0, -1])]
+    assert dataset_1.atomic_numbers == [1, 8]
+    assert (dataset_1[0]['graph_labels'] == torch.tensor([[0.0]])).all()
+    assert (dataset_1[1]['graph_labels'] == torch.tensor([[9.0]])).all()
+
 
 if __name__ == '__main__':
     test_from_configuration()
