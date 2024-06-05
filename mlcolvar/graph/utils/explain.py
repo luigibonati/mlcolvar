@@ -1,3 +1,4 @@
+import copy
 import torch
 import numpy as np
 from typing import List, Dict
@@ -19,6 +20,7 @@ def graph_node_sensitivity_analysis(
     node_indices: List[int] = None,
     per_class: bool = False,
     device: str = 'cpu',
+    batch_size: int = None,
     show_progress: bool = True
 ) -> Dict[str, np.ndarray]:
     """
@@ -42,6 +44,8 @@ def graph_node_sensitivity_analysis(
         If the dataset has labels, compute also the sensitivity per class.
     device: str
         Name of the device.
+    batch_size:
+        Batch size used for evaluating the CV.
     show_progress: bool
         If show the progress bar.
 
@@ -54,43 +58,56 @@ def graph_node_sensitivity_analysis(
     if node_indices is None:
         n_nodes = [len(d.positions) for d in dataset]
         node_indices = list(range(max(n_nodes)))
+    n_nodes = len(node_indices)
+    if show_progress:
+        node_indices = pbar(
+            node_indices, frequency=0.0001, prefix='Sensitivity'
+        )
 
     sensitivities = []
     sensitivities_component = []
+    dataset_clone = copy.deepcopy(dataset)
     model = model.to(device)
 
     for node, i in enumerate(node_indices):
 
         node_results = []
-        n_nodes = len(node_indices)
-        if show_progress:
-            items = pbar(
-                dataset,
-                frequency=0.0001,
-                prefix='Node {:d}/{:d}'.format((i + 1), n_nodes)
-            )
-        else:
-            items = dataset
+
+        for j in range(len(dataset_clone)):
+            mask = dataset[j]['edge_index'] != node
+            mask = mask[0] & mask[1]
+            shifts_masked = dataset[j]['shifts'][mask.T]
+            edge_index_masked = dataset[j]['edge_index'][:, mask]
+            dataset_clone[j]['shifts'] = shifts_masked
+            dataset_clone[j]['edge_index'] = edge_index_masked
+
+        datamodule_org = gdata.GraphDataModule(
+            dataset,
+            lengths=(1.0,),
+            batch_size=batch_size,
+            random_split=False,
+            shuffle=False
+        )
+        datamodule_org.setup()
+
+        datamodule_masked = gdata.GraphDataModule(
+            dataset_clone,
+            lengths=(1.0,),
+            batch_size=batch_size,
+            random_split=False,
+            shuffle=False
+        )
+        datamodule_masked.setup()
+
+        loaders = zip(
+            datamodule_org.train_dataloader(),
+            datamodule_masked.train_dataloader()
+        )
 
         with torch.no_grad():
-            for data in items:
-                data = data.to(device)
-                data = data.to_dict()
-                batch_id = torch.tensor(
-                    [0] * len(data['positions']), dtype=torch.long
-                ).to(device)
-                data['batch'] = batch_id
-
-                cv_org = model(data)
-
-                mask = data['edge_index'] != node
-                mask = mask[0] & mask[1]
-                shifts_masked = data['shifts'][mask.T]
-                edge_index_masked = data['edge_index'][:, mask]
-                data['shifts'] = shifts_masked
-                data['edge_index'] = edge_index_masked
-
-                cv_masked = model(data)
+            for batchs in loaders:
+                cv_org = model(batchs[0].to(device).to_dict())
+                cv_masked = model(batchs[1].to(device).to_dict())
 
                 delta = (cv_org - cv_masked).cpu().numpy().tolist()
                 node_results.extend(delta)
