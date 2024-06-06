@@ -3,18 +3,18 @@ import torch
 import numpy as np
 from typing import List, Dict
 
-from .progress import pbar
 from mlcolvar.graph import cvs as gcvs
 from mlcolvar.graph import data as gdata
+from mlcolvar.graph import utils as gutils
 
 """
-Metaphysics.
+Sensitivity analysis.
 """
 
-__all__ = ['graph_node_sensitivity_analysis']
+__all__ = ['graph_node_sensitivity']
 
 
-def graph_node_sensitivity_analysis(
+def graph_node_sensitivity(
     model: gcvs.GraphBaseCV,
     dataset: gdata.GraphDataSet,
     node_indices: List[int] = None,
@@ -57,7 +57,7 @@ def graph_node_sensitivity_analysis(
         node_indices = list(range(max(n_nodes)))
     n_nodes = len(node_indices)
     if show_progress:
-        node_indices = pbar(
+        node_indices = gutils.progress.pbar(
             node_indices, frequency=0.0001, prefix='Sensitivity'
         )
 
