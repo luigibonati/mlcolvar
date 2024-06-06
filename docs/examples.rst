@@ -1,21 +1,24 @@
 Examples
 ========
 
-.. rubric:: Paper experiments
+.. rubric:: JCP paper experiments
 
-Experiments on the modified Muller-Brown potential (3 states) reported in the paper describing the library, describing different learning scenarios. 
+Experiments on the modified Muller-Brown potential (3 states) reported in the mlcolvar' [JCP paper](https://doi.org/10.1063/5.0156343), describing different learning scenarios. 
 
 .. toctree::
    :maxdepth: 2
 
    examples_experiments
  
-.. rubric:: Atomistic examples
+.. rubric:: Literature examples
 
-Examples of data-driven CVs applied to atomistic systems reported in the literature.
+Examples of usage of data-driven CVs or other tools from the mlcolvar library in the literature. 
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
-   examples_atomistic
- 
+   notebooks/examples/ex_DeepLDA.ipynb
+   notebooks/examples/ex_DeepTICA.ipynb
+   notebooks/examples/ex_TPI-DeepTDA.ipynb
+   notebooks/examples/ex_stateinterpreter.ipynb
+   notebooks/examples/ex_committor.ipynb
