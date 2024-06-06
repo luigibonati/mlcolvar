@@ -57,11 +57,16 @@ def graph_node_sensitivity(
     if node_indices is None:
         n_nodes = [len(d.positions) for d in dataset]
         node_indices = list(range(max(n_nodes)))
+    else:
+        node_indices = [i for i in node_indices]
     n_nodes = len(node_indices)
+
     if show_progress:
-        node_indices = gutils.progress.pbar(
+        items = gutils.progress.pbar(
             node_indices, frequency=0.0001, prefix='Sensitivity'
         )
+    else:
+        items = node_indices
 
     sensitivities = []
     sensitivities_components = []
@@ -72,7 +77,7 @@ def graph_node_sensitivity(
         model, dataset, batch_size, show_progress, 'Getting base data'
     )
 
-    for node in node_indices:
+    for node in items:
 
         for j in range(len(dataset_clone)):
             mask = dataset[j]['edge_index'] != node
