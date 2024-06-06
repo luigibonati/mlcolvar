@@ -1,11 +1,12 @@
 import copy
-import torch
 import numpy as np
 from typing import List, Dict
 
 from mlcolvar.graph import cvs as gcvs
 from mlcolvar.graph import data as gdata
 from mlcolvar.graph import utils as gutils
+
+from .utils import get_dataset_cv_values
 
 """
 Sensitivity analysis.
@@ -26,11 +27,6 @@ def graph_node_sensitivity(
     Perform a sensitivity analysis by masking nodes. This allows us to measure
     which atom is most important to the CV.
 
-    See also
-    --------
-    mlcolvar.utils.explain.sensitivity_analysis
-        Perform the sensitivity analysis of a feedforward model.
-
     Parameters
     ----------
     model: mlcolvar.graph.cvs.GraphBaseCV
@@ -49,8 +45,14 @@ def graph_node_sensitivity(
     Returns
     -------
     results: dictionary
-        Results of the sensitivity analysis, containing 'node_indices' and the
-        'sensitivity', ordered according to the node indices.
+        Results of the sensitivity analysis, containing 'node_indices',
+        'sensitivities', and 'sensitivities_components', ordered according to
+        the node indices.
+
+    See also
+    --------
+    mlcolvar.utils.explain.sensitivity_analysis
+        Perform the sensitivity analysis of a feedforward model.
     """
     if node_indices is None:
         n_nodes = [len(d.positions) for d in dataset]
@@ -62,61 +64,37 @@ def graph_node_sensitivity(
         )
 
     sensitivities = []
-    sensitivities_component = []
+    sensitivities_components = []
     dataset_clone = copy.deepcopy(dataset)
     model = model.to(device)
 
-    for node, i in enumerate(node_indices):
+    cv_org = get_dataset_cv_values(
+        model, dataset, batch_size, show_progress, 'Getting base data'
+    )
 
-        node_results = []
+    for node in node_indices:
 
         for j in range(len(dataset_clone)):
             mask = dataset[j]['edge_index'] != node
             mask = mask[0] & mask[1]
-            shifts_masked = dataset[j]['shifts'][mask.T]
+            shifts_masked = dataset[j]['shifts'][mask.transpose(-1, 0)]
             edge_index_masked = dataset[j]['edge_index'][:, mask]
             dataset_clone[j]['shifts'] = shifts_masked
             dataset_clone[j]['edge_index'] = edge_index_masked
 
-        datamodule_org = gdata.GraphDataModule(
-            dataset,
-            lengths=(1.0,),
-            batch_size=batch_size,
-            random_split=False,
-            shuffle=False
-        )
-        datamodule_org.setup()
-
-        datamodule_masked = gdata.GraphDataModule(
-            dataset_clone,
-            lengths=(1.0,),
-            batch_size=batch_size,
-            random_split=False,
-            shuffle=False
-        )
-        datamodule_masked.setup()
-
-        loaders = zip(
-            datamodule_org.train_dataloader(),
-            datamodule_masked.train_dataloader()
+        cv_masked = get_dataset_cv_values(
+            model, dataset_clone, batch_size, False,
         )
 
-        with torch.no_grad():
-            for batchs in loaders:
-                cv_org = model(batchs[0].to(device).to_dict())
-                cv_masked = model(batchs[1].to(device).to_dict())
-
-                delta = (cv_org - cv_masked).cpu().numpy().tolist()
-                node_results.extend(delta)
-
-        sensitivities_component.append(np.abs(node_results))
-        sensitivities.append(np.mean(np.abs(node_results), axis=0))
+        delta = cv_org - cv_masked
+        sensitivities_components.append(np.abs(delta))
+        sensitivities.append(np.mean(np.abs(delta), axis=0))
 
     results = {}
     results['node_indices'] = node_indices
     results['sensitivities'] = np.array(sensitivities)
     results['sensitivities_components'] = np.array(
-        sensitivities_component
+        sensitivities_components
     ).transpose(2, 1, 0)[0]
 
     return results
