@@ -113,6 +113,8 @@ def lasso_classification(dataset,
     if scale_inputs:
         scaler = StandardScaler(with_mean=True, with_std=True)
         descriptors = scaler.fit_transform(raw_descriptors)
+    else:
+        descriptors = raw_descriptors
 
     # Define cross-validation for LASSO, using
     #   a custom scoring function based on accuracy and number of features
@@ -162,13 +164,13 @@ def lasso_classification(dataset,
             print(f'- Accuracy       : {accuracy*100:.2f}%')
             print(f'- # features     : {len(selected_coeffs)}\n')
             print(f'Features: ')
-            for i,(f,c) in enumerate(zip(selected_feature_names, selected_coeffs)):
+            for j,(f,c) in enumerate(zip(selected_feature_names, selected_coeffs)):
                 print(f'({i+1}) {f:13s}: {c:.6f}')
             print('==================================\n')
 
     # plot results
     if plot:
-        _ = plot_lasso_classification(classifier, feats, coeffs)
+        plot_lasso_classification(classifier, feats, coeffs)
 
     return classifier, feats, coeffs
 
@@ -185,8 +187,11 @@ def plot_lasso_classification(classifier, feats = None, coeffs = None, draw_labe
 
     # define figure
     if axs is None:
-        fig, axs = plt.subplots(3, n_models, figsize=(6*n_models, 9), sharex=True)
+        init_axs = True
+        _, axs = plt.subplots(3, n_models, figsize=(6*n_models, 9), sharex=True)
         plt.suptitle('LASSO CLASSIFICATION')
+    else:
+        init_axs = False
 
     for i,key in enumerate(classifier.scores_.keys()):
 
@@ -252,9 +257,9 @@ def plot_lasso_classification(classifier, feats = None, coeffs = None, draw_labe
             ax.axvline(classifier.C_[i],color='gray',linestyle='dotted')
             ax.set_xmargin(0)
 
-    matplotlib.pyplot.tight_layout()
-    
-    return (fig, axs)
+    if init_axs:
+        matplotlib.pyplot.tight_layout()
+
 
 def lasso_regression(dataset,
                         alphas = None,
@@ -300,6 +305,8 @@ def lasso_regression(dataset,
     if scale_inputs:
         scaler = StandardScaler(with_mean=True, with_std=True)
         descriptors = scaler.fit_transform(raw_descriptors)
+    else:
+        descriptors = raw_descriptors
 
     # Define Cross-validation & fit
     _regressor = LassoCV(alphas=alphas)
@@ -355,6 +362,9 @@ def plot_lasso_regression(regressor, feats = None, coeffs = None, draw_labels='a
     if axs is None:
         fig, axs = plt.subplots(3, 1, figsize=(6, 9), sharex=True)
         plt.suptitle('LASSO REGRESSION')
+        init_axs = True
+    else:
+        init_axs = False
 
     # (1) COEFFICIENTS PATH
     ax = axs[0]
@@ -406,8 +416,8 @@ def plot_lasso_regression(regressor, feats = None, coeffs = None, draw_labels='a
     for ax in axs:
         ax.axvline(regressor.alpha_,color='gray',linestyle='dotted')
 
-    plt.tight_layout()
-    
-    return (fig, axs)
+    if init_axs:
+        matplotlib.pyplot.tight_layout()
+
 
 

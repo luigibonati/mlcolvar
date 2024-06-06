@@ -202,9 +202,6 @@ def plot_sensitivity(results, mode="violin", per_class=None, max_features = 100,
         fig = plt.figure(figsize=(5, 0.25 * n_inputs))
         ax = fig.add_subplot(111)
         ax.set_title("Sensitivity Analysis")
-        return_ax = True
-    else:
-        return_ax = False
 
     # define utils functions
     def _set_violin_attributes(violin_parts, color, alpha=0.5, label=None, zorder=None):
@@ -293,9 +290,6 @@ def plot_sensitivity(results, mode="violin", per_class=None, max_features = 100,
     else:
         ax.axvline(0,color='grey')
     ax.set_ylim(-1, in_num[-1] + 1)
-
-    if return_ax:
-        return ax
 
 def test_sensitivity_analysis():
     from mlcolvar.data import DictDataset
