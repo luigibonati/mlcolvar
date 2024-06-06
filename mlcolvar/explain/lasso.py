@@ -419,5 +419,49 @@ def plot_lasso_regression(regressor, feats = None, coeffs = None, draw_labels='a
     if init_axs:
         matplotlib.pyplot.tight_layout()
 
+def test_lasso_classification():
+    from mlcolvar.data import DictDataset
 
+    for n_states in [2,3]:
+        # create dataset
+        samples = 50
+        X = torch.randn((samples*2, 2))
+
+        # create labels
+        y = torch.zeros(samples*2)
+        for i in range(1, n_states):
+            y[samples * i :] += 1
+
+        dataset = DictDataset({"data": X, "labels": y})
+        dataset.feature_names = ['x1','x2']
+
+        for Cs in [ 40, [0.1], np.logspace(-4,0,10) ]:
+            for min_features in [0,1]:
+                _ = lasso_classification(dataset,
+                                min_features = min_features,
+                                Cs = Cs,
+                                scale_inputs = True,
+                                feature_names = None,
+                                print_info = False,
+                                plot = True )
+
+def test_lasso_regression():
+    from mlcolvar.data import DictDataset
+
+    for n_states in [2,3]:
+        # create dataset
+        samples = 50
+        X = torch.randn((samples, 2))
+        y = torch.randn(samples)
+
+        dataset = DictDataset({"data": X, "target": y})
+        dataset.feature_names = ['x1','x2']
+
+        for alphas in [ None, [0.1], np.logspace(-4,0,10) ]:
+            _ = lasso_regression(dataset,
+                    alphas = alphas,
+                    scale_inputs = True,
+                    print_info = False,
+                    plot = True)
+    
 
