@@ -165,7 +165,7 @@ def lasso_classification(dataset,
             print(f'- # features     : {len(selected_coeffs)}\n')
             print(f'Features: ')
             for j,(f,c) in enumerate(zip(selected_feature_names, selected_coeffs)):
-                print(f'({i+1}) {f:13s}: {c:.6f}')
+                print(f'({j+1}) {f:13s}: {c:.6f}')
             print('==================================\n')
 
     # plot results
@@ -346,7 +346,7 @@ def lasso_regression(dataset,
 
     # plot results
     if plot:
-        _ = plot_lasso_regression(regressor, selected_feature_names, selected_coeffs)
+        plot_lasso_regression(regressor, selected_feature_names, selected_coeffs)
 
     return regressor, selected_feature_names, selected_coeffs
 
@@ -448,20 +448,19 @@ def test_lasso_classification():
 def test_lasso_regression():
     from mlcolvar.data import DictDataset
 
-    for n_states in [2,3]:
-        # create dataset
-        samples = 50
-        X = torch.randn((samples, 2))
-        y = torch.randn(samples)
+    # create dataset
+    samples = 50
+    X = torch.randn((samples, 2))
+    y = torch.randn(samples)
 
-        dataset = DictDataset({"data": X, "target": y})
-        dataset.feature_names = ['x1','x2']
+    dataset = DictDataset({"data": X, "target": y})
+    dataset.feature_names = ['x1','x2']
 
-        for alphas in [ None, [0.1], np.logspace(-4,0,10) ]:
-            _ = lasso_regression(dataset,
-                    alphas = alphas,
-                    scale_inputs = True,
-                    print_info = False,
-                    plot = True)
+    for alphas in [ None, [0.1], np.logspace(-4,0,10) ]:
+        _ = lasso_regression(dataset,
+                alphas = alphas,
+                scale_inputs = True,
+                print_info = False,
+                plot = True)
     
 
