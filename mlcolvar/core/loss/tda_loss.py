@@ -119,7 +119,7 @@ def tda_loss(
     Parameters
     ----------
     H : torch.Tensor
-        Shape ``(n_batches, n_features)``. Output of the NN.
+        Shape ``(n_batches, n_cvs)``. Output of the NN.
     labels : torch.Tensor
         Shape ``(n_batches,)``. Labels of the dataset.
     n_states : int
