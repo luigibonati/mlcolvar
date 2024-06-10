@@ -68,13 +68,15 @@ class GraphBaseCV(lightning.LightningModule):
             'atomic_numbers', torch.tensor(atomic_numbers, dtype=torch.int64)
         )
 
-        for key in ['n_out', 'cutoff', 'atomic_numbers']:
+        for key in ['cutoff', 'atomic_numbers']:
             model_options.pop(key, None)
+        # For DeepTICA
+        n_out = model_options.pop('n_out', n_cvs)
 
         if not hasattr(models, model_name):
             raise RuntimeError(f'Unknown model: {model_name}')
         self._model = eval(f'models.{model_name}')(
-            n_out=n_cvs,
+            n_out=n_out,
             cutoff=cutoff,
             atomic_numbers=atomic_numbers,
             **model_options
