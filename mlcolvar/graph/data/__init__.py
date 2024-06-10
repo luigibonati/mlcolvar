@@ -6,4 +6,4 @@ from .dataset import (
     save_dataset,
     load_dataset
 )
-from .datamodule import GraphDataModule
+from .datamodule import GraphDataModule, GraphCombinedDataModule
