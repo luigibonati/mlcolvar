@@ -55,8 +55,12 @@ class TDALoss(torch.nn.Module):
         """
         super().__init__()
         self.n_states = n_states
-        self.target_centers = target_centers
-        self.target_sigmas = target_sigmas
+        if not isinstance(target_centers, torch.Tensor):
+            target_centers = torch.Tensor(target_centers)
+        if not isinstance(target_sigmas, torch.Tensor):
+            target_sigmas = torch.Tensor(target_sigmas)
+        self.register_buffer("target_centers", target_centers)
+        self.register_buffer("target_sigmas", target_sigmas)
         self.alpha = alpha
         self.beta = beta
 
@@ -115,7 +119,7 @@ def tda_loss(
     Parameters
     ----------
     H : torch.Tensor
-        Shape ``(n_batches, n_features)``. Output of the NN.
+        Shape ``(n_batches, n_cvs)``. Output of the NN.
     labels : torch.Tensor
         Shape ``(n_batches,)``. Labels of the dataset.
     n_states : int
