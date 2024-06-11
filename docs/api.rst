@@ -33,10 +33,18 @@ Here we provide PyTorch- and Lightning-compatible classes that simplify and impr
  
 .. rubric:: Utils
 
-Here one can find a set of miscellaneous tools and helper functions for a smoother workflow.
+Miscellaneous tools and helper functions:
 
 .. toctree::
    :maxdepth: 1
    :caption: API:
 
    api_utils
+
+Tools for inspecting & interpreting the models.
+
+.. toctree::
+   :maxdepth: 1
+   :caption: API:
+
+   api_explain

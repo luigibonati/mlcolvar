@@ -29,6 +29,15 @@ How to customize the CVs, either using the multitask framework or by creating ne
 
    tutorials_advanced
 
+.. rubric:: Interpreting CVs
+
+Some examples of how to interpret the CVs, using sensitivity analysis or sparse linear models. 
+
+.. toctree::
+   :maxdepth: 2
+
+   tutorials_explain
+
 
 
 

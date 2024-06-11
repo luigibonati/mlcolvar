@@ -23,6 +23,7 @@ dependencies:
   - nbsphinx
   - ipython
   - ipykernel
+  - scikit-learn
   - scipy
 
   # Pip-only installs

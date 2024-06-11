@@ -28,16 +28,6 @@ Create a dataset of pairs of time-lagged configurations.
 
 .. rubric:: FES
 
-Compute (and plot) the free energy surface along the CVs.
-
-.. currentmodule:: mlcolvar.utils.fes
-
-.. autosummary::
-   :toctree: autosummary
-   :template: custom-class-template.rst
-
-   compute_fes
-
 .. rubric:: Trainer
 
 Functions used in conjunction with the lightning Trainer (e.g. logging, metrics...).
@@ -49,3 +39,24 @@ Functions used in conjunction with the lightning Trainer (e.g. logging, metrics.
    :template: custom-class-template.rst
 
    MetricsCallback
+
+Compute (and plot) the free energy surface along the CVs.
+
+.. currentmodule:: mlcolvar.utils.fes
+
+.. autosummary::
+   :toctree: autosummary
+   :template: custom-class-template.rst
+
+   compute_fes
+
+Plotting utils
+
+.. currentmodule:: mlcolvar.utils.plot
+
+.. autosummary::
+   :toctree: autosummary
+   :template: custom-class-template.rst
+
+   plot_metrics
+   plot_features_distribution
