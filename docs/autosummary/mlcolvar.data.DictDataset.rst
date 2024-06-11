@@ -29,6 +29,7 @@
 
    .. autosummary::
    
+      ~DictDataset.feature_names
       ~DictDataset.keys
    
    

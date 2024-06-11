@@ -6,4 +6,3 @@ Interpreting CVs
 
    notebooks/tutorials/expl_features_relevances.ipynb
    notebooks/tutorials/expl_lasso.ipynb
-   notebooks/tutorials/expl_stateinterpreter.ipynb
