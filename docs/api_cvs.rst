@@ -71,6 +71,8 @@ General framework which allows to optimize a single model with different loss fu
 
 Framework for the numerical determination of the committor function based on its variational principle.
 
+.. rubric:: Committor 
+
 .. currentmodule:: mlcolvar.cvs
 
 .. autosummary::

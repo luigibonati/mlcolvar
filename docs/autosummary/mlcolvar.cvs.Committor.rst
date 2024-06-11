@@ -1,5 +1,5 @@
 ﻿mlcolvar.cvs.Committor
-====================
+======================
 
 .. currentmodule:: mlcolvar.cvs
 

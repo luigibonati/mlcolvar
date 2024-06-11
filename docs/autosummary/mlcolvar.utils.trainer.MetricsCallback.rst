@@ -17,7 +17,7 @@
    .. autosummary::
    
       ~MetricsCallback.__init__
-      ~MetricsCallback.on_validation_epoch_end
+      ~MetricsCallback.on_train_epoch_end
    
    
 
