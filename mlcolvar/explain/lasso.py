@@ -301,6 +301,10 @@ def lasso_regression(dataset,
         target = dataset['target'].numpy()
         feature_names = dataset.feature_names
 
+    # Check target shape
+    if (target.ndim > 1) and (target.shape[1] != 1):
+        raise ValueError(f'Lasso Regressor only accepts scalar targets, while an array of shape {target.shape} is given.')
+
     # Scaling inputs
     if scale_inputs:
         scaler = StandardScaler(with_mean=True, with_std=True)
