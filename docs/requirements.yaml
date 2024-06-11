@@ -14,7 +14,7 @@ dependencies:
   # Core dependencies
   - numpy
   - pandas
-  - pytorch
+  - pytorch<2.3
   - pydantic<2 # workaround to avoid clashes with lightning
   - lightning
 

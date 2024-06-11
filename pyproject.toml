@@ -29,7 +29,7 @@ requires-python = ">=3.8"
 # Declare any run-time dependencies that should be installed with the package.
 dependencies = [
     "lightning",
-    "torch",
+    "torch<2.3",
     "numpy",
     "pandas",
     "matplotlib",
