@@ -80,7 +80,7 @@ class GraphDeepTICA(GraphBaseCV):
             raise RuntimeError(
                 'The `n_out` key of parameter `model_options` is required!'
             )
-        model_options['drop_rate'] = 0
+        model_options['drop_rate'] = 0.0
         n_out = model_options['n_out']
 
         if optimizer_options != {}:
