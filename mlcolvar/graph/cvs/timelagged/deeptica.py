@@ -94,6 +94,27 @@ class GraphDeepTICA(GraphBaseCV):
 
         self.tica = TICA(n_out, n_cvs)
 
+    def forward_nn(
+        self,
+        data: Dict[str, torch.Tensor],
+        token: bool = False
+    ) -> torch.Tensor:
+        """
+        The forward pass for the NN.
+
+        Parameters
+        ----------
+        data: Dict[str, torch.Tensor]
+            The data dict. Usually came from the `to_dict` method of a
+            `torch_geometric.data.Batch` object.
+        token: bool
+            To be used.
+        """
+        data['positions'].requires_grad_(True)
+        data['node_attrs'].requires_grad_(True)
+
+        return self._model(data)
+
     def forward(self, data: Dict[str, torch.Tensor]) -> torch.Tensor:
         """
         The forward pass.
@@ -104,7 +125,7 @@ class GraphDeepTICA(GraphBaseCV):
             The data dict. Usually came from the `to_dict` method of a
             `torch_geometric.data.Batch` object.
         """
-        nn_outputs = super(GraphDeepTICA, self).forward(data)
+        nn_outputs = self.forward_nn(data)
         outputs = self.tica(nn_outputs)
 
         return outputs
@@ -126,8 +147,8 @@ class GraphDeepTICA(GraphBaseCV):
         data_t = train_batch['dataset_1'].to_dict()
         data_lag = train_batch['dataset_2'].to_dict()
 
-        nn_outputs_t = super(GraphDeepTICA, self).forward(data_t)
-        nn_outputs_lag = super(GraphDeepTICA, self).forward(data_lag)
+        nn_outputs_t = self.forward_nn(data_t)
+        nn_outputs_lag = self.forward_nn(data_lag)
 
         eigvals, _ = self.tica.compute(
             data=[nn_outputs_t, nn_outputs_lag],
