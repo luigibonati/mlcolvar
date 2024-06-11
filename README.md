@@ -1,20 +1,19 @@
 Machine Learning Collective Variables for Enhanced Sampling
 =================================================
 
+[<img src="https://raw.githubusercontent.com/luigibonati/mlcolvar/main/docs/images/logo_name_black_big.png" width="400" />](https://mlcolvar.readthedocs.io/en/stable/)
+
 [//]: # (Badges)
-**CODE**  [![Documentation Status](https://readthedocs.org/projects/mlcolvar/badge/?version=latest)](https://mlcolvar.readthedocs.io/en/latest/?badge=latest)
-[![GitHub Actions Build Status](https://github.com/luigibonati/mlcolvar/actions/workflows/CI.yaml/badge.svg?branch=main)](https://github.com/luigibonati/mlcolvar/actions?query=workflow%3ACI)
+**CODE**  [![Documentation Status](https://readthedocs.org/projects/mlcolvar/badge/?version=stable)](https://mlcolvar.readthedocs.io/en/stable/)  [![GitHub Actions Build Status](https://github.com/luigibonati/mlcolvar/actions/workflows/CI.yaml/badge.svg?branch=main)](https://github.com/luigibonati/mlcolvar/actions?query=workflow%3ACI)
 [![codecov](https://codecov.io/gh/luigibonati/mlcolvar/branch/main/graph/badge.svg?token=H01H68KNNG)](https://codecov.io/gh/luigibonati/mlcolvar)
 [![license](https://img.shields.io/github/license/luigibonati/mlcolvar)](https://github.com/luigibonati/mlcolvar/blob/main/LICENSE)
 
-**PAPER**  [![paper](https://img.shields.io/badge/doi-10.1063/5.0156343-blue)](https://doi.org/10.1063/5.0156343)
-[![preprint](https://img.shields.io/badge/arXiv-2305.19980-red)](https://arxiv.org/abs/2305.19980)
+**PAPER** [![paper](https://img.shields.io/badge/JCP-10.1063/5.0156343-blue)](https://doi.org/10.1063/5.0156343)
+[![preprint](https://img.shields.io/badge/arXiv-2305.19980-lightblue)](https://arxiv.org/abs/2305.19980)
+
+The documentation is available here: https://mlcolvar.readthedocs.io
 
 ---
-
-
-<img src="https://raw.githubusercontent.com/luigibonati/mlcolvar/main/docs/images/logo_name_black_big.png" width="400" />
-
 
 `mlcolvar` is a Python library aimed to help design data-driven collective-variables (CVs) for enhanced sampling simulations. The key features are:
 
@@ -31,7 +30,7 @@ Some of the **CVs** which are implemented, organized by learning setting:
 - _Supervised_: LDA [[3](http://dx.doi.org/10.1021/acs.jpclett.8b00733)], DeepLDA [[4](http://dx.doi.org/%2010.1021/acs.jpclett.0c00535)], DeepTDA [[5](http://dx.doi.org/%2010.1021/acs.jpclett.1c02317)]
 - _Time-informed_: TICA [[6](http://dx.doi.org/%2010.1063/1.4811489)], DeepTICA/SRVs [[7](http://dx.doi.org/10.1073/pnas.2113533118),[8](http://dx.doi.org/%2010.1063/1.5092521)], VDE [[9](http://dx.doi.org/10.1103/PhysRevE.97.062412)]
 
-And many others can be implemented based on the building blocks or with simple modifications. Check out the documentation and the examples section!
+And many others can be implemented based on the building blocks or with simple modifications. Check out the [tutorials](https://mlcolvar.readthedocs.io/en/stable/tutorials.html) and the [examples](https://mlcolvar.readthedocs.io/en/stable/examples.html) section of the documentation.
 
 ---
 
