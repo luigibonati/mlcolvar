@@ -1,10 +1,9 @@
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 
 __all__ = [ "plot_features_distribution" ]
 
-def plot_features_distribution(dataset, features, axs=None):
+def plot_features_distribution(dataset, features, titles=None, axs=None):
     """Plot distribution of the given features.
 
     Parameters
@@ -13,6 +12,8 @@ def plot_features_distribution(dataset, features, axs=None):
         dataset 
     features : list
         list of features names
+    titles : list,optional
+        list titles to be displayed, by default None 
     axs : optional
         matplotlib axs, by default None
 
@@ -24,7 +25,11 @@ def plot_features_distribution(dataset, features, axs=None):
     n_feat = len(features)
 
     if axs is None:
-        fig, axs = plt.subplots(n_feat, 1, figsize=(3.5, 2*n_feat))
+        if n_feat <=5 :
+            fig, axs = plt.subplots(1,n_feat,figsize=(3*n_feat+1,3))
+        else:
+            fig, axs = plt.subplots(n_feat, 1, figsize=(3, 3*n_feat))
+        
         plt.suptitle('Features distribution')
         init_ax = True
     else:
@@ -32,6 +37,8 @@ def plot_features_distribution(dataset, features, axs=None):
             raise ValueError(f'Number of features ({len(features)}) != number of axis ({len(axs)})')
         init_ax = False
         
+    axs[0].set_ylabel('Distribution')
+    
     if "labels" in dataset.keys:
         labels = sorted(dataset['labels'].unique().numpy())
         for l in labels:
@@ -44,10 +51,15 @@ def plot_features_distribution(dataset, features, axs=None):
                 x = data_label[:,id].numpy()
                 ax.hist(x,bins=50,label=f"State {int(l)}",histtype='step')
                 ax.set_yticks([])
+                ax.set_xlabel(feat)
                 if i == 0: 
-                    ax.legend(title=feat, loc='upper center',frameon=False)
+                    if titles is not None:
+                        ax.legend(title=titles[i], loc='upper center', framealpha=0.8, edgecolor='white')
+                    else:
+                        ax.legend(loc='upper center', framealpha=0.8, edgecolor='white')
                 else:
-                    ax.legend([],[],title=feat,loc='upper center',frameon=False)
+                    if titles is not None:
+                        ax.legend([],[],title=titles[i],loc='upper center', framealpha=0.8, edgecolor='white')
     else:
         for i,feat in enumerate(features):  
             ax = axs[i]
@@ -57,6 +69,3 @@ def plot_features_distribution(dataset, features, axs=None):
             ax.hist(x,bins=100,)
             ax.set_yticks([])
             ax.legend([],[],title=feat,loc='upper center',frameon=False)
-
-    if init_ax:
-        plt.tight_layout()
