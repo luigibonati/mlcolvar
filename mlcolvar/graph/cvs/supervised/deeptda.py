@@ -69,6 +69,10 @@ class GraphDeepTDA(GraphBaseCV):
         optimizer_options: Dict[Any, Any] = {},
         **kwargs,
     ) -> None:
+        if model_options.pop('n_out', None) is not None:
+            raise RuntimeError(
+                'The `n_out` key of parameter `model_options` will be ignored!'
+            )
         if optimizer_options != {}:
             kwargs['optimizer_options'] = optimizer_options
 
