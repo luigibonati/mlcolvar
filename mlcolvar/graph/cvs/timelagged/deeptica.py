@@ -115,7 +115,11 @@ class GraphDeepTICA(GraphBaseCV):
 
         return self._model(data)
 
-    def forward(self, data: Dict[str, torch.Tensor]) -> torch.Tensor:
+    def forward(
+        self,
+        data: Dict[str, torch.Tensor],
+        token: bool = False
+    ) -> torch.Tensor:
         """
         The forward pass.
 
@@ -124,6 +128,8 @@ class GraphDeepTICA(GraphBaseCV):
         data: Dict[str, torch.Tensor]
             The data dict. Usually came from the `to_dict` method of a
             `torch_geometric.data.Batch` object.
+        token: bool
+            To be used.
         """
         nn_outputs = self.forward_nn(data)
         outputs = self.tica(nn_outputs)
