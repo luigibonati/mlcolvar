@@ -126,13 +126,14 @@ class Committor(BaseCV, lightning.LightningModule):
 
 def test_committor():
     from mlcolvar.data import DictDataset, DictModule
-    from mlcolvar.cvs.committor.utils import initialize_committor_masses
+    from mlcolvar.cvs.committor.utils import initialize_committor_masses, KolmogorovBias
 
-    atomic_masses = initialize_committor_masses(atoms_map=[[1,1]], n_dims=2)
-    model = Committor(layers=[2, 4, 2, 1], mass=atomic_masses, alpha=1e-1, delta_f=0)
+    # create two fake atoms and use their fake positions
+    atomic_masses = initialize_committor_masses(atom_types=[0,1], masses=[15.999, 1.008])
+    model = Committor(layers=[6, 4, 2, 1], mass=atomic_masses, alpha=1e-1, delta_f=0)
     # create dataset
     samples = 50
-    X = torch.randn((2*samples, 2))
+    X = torch.randn((2*samples, 6))
     
     # create labels
     y = torch.zeros(X.shape[0])
@@ -149,6 +150,9 @@ def test_committor():
     trainer.fit(model, datamodule)
 
     model(X).sum().backward()
+
+    bias_model = KolmogorovBias(input_model=model, beta=1, epsilon=1e-6, lambd=1)
+    bias_model(X)
 
 if __name__ == "__main__":
     test_committor()
