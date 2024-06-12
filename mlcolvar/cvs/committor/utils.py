@@ -2,7 +2,45 @@ import torch
 import numpy as np
 from typing import List
 
-__all__ = ["compute_committor_weights", "initialize_committor_masses"]
+__all__ = ["KolmogorovBias", "compute_committor_weights", "initialize_committor_masses"]
+
+class KolmogorovBias(torch.nn.Module):
+    """Wrappper class to compute the Kolmogorov bias $$V_K = -$$ from a committor model"""
+
+    def __init__(self,
+                 input_model : torch.nn.Module,
+                 beta : float,
+                 epsilon : float = 1e-6,
+                 lambd : float = 1) -> None:
+        """Compute Kolmogorov bias from a committor model
+
+        Parameters
+        ----------
+        input_model : torch.nn.Module
+            Model to compute the bias from
+        beta: float
+            Inverse temperature in the right energy units, i.e. 1/(k_B*T)
+        epsilon : float, optional
+            Regularization term in the logarithm, by default 1e-6
+        lambd : float, optional
+            Multiplicative term for the whole bias, by default 1
+        """
+        super().__init__()
+        self.input_model = input_model
+        self.beta = beta
+        self.lambd = lambd
+        if type(epsilon) is not torch.Tensor:
+            epsilon = torch.Tensor([epsilon])
+        self.epsilon = epsilon
+
+    def forward(self, x):
+        x.requires_grad = True
+        q = self.input_model(x)
+        grad_outputs = torch.ones_like(q)
+        grads = torch.autograd.grad(q, x, grad_outputs, retain_graph=True)[0]
+        grads_squared = torch.sum(torch.pow(grads, 2), 1)
+        bias = - self.lambd*(1/self.beta)*(torch.log( grads_squared + self.epsilon ) - torch.log(self.epsilon))
+        return bias
 
 def compute_committor_weights(dataset, 
                               bias: torch.Tensor, 
