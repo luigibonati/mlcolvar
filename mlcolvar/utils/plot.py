@@ -141,6 +141,7 @@ def plot_isolines_2D(
     colorbar=None,
     max_value=None,
     ax=None,
+    allow_grad=False,
     **kwargs,
 ):
     """Plot isolines of a function/model in a 2D space."""
@@ -158,13 +159,16 @@ def plot_isolines_2D(
         for i in range(num_points[0]):
             for j in range(num_points[1]):
                 xy = torch.Tensor([xv[i, j], yv[i, j]])
-                with torch.no_grad():
-                    train_mode = function.training
-                    function.eval()
-                    s = function(xy.unsqueeze(0)).squeeze(0).numpy()
-                    function.training = train_mode
-                    if component is not None:
-                        s = s[component]
+                if allow_grad:
+                    s = function(xy.unsqueeze(0)).squeeze(0).detach().numpy()
+                else:
+                    with torch.no_grad():
+                        train_mode = function.training
+                        function.eval()
+                        s = function(xy.unsqueeze(0)).squeeze(0).numpy()
+                        function.training = train_mode
+                if component is not None:
+                    s = s[component]
                 z[i, j] = s
     # else apply function directly to grid points
     else:
