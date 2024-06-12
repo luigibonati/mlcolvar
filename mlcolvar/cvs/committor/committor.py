@@ -12,7 +12,6 @@ class Committor(BaseCV, lightning.LightningModule):
     """Base class for data-driven learning of committor function.
     The committor function q is expressed as the output of a neural network optimized with a self-consistent
     approach based on the Kolmogorov's variational principle for the committor and on the imposition of its boundary conditions. 
-    TODO: Add reference upon publication
 
     **Data**: for training it requires a DictDataset with the keys 'data', 'labels' and 'weights'
 
@@ -20,7 +19,7 @@ class Committor(BaseCV, lightning.LightningModule):
     
     References
     ----------
-    .. [*] P. Kang, E. Trizio, and M. Parrinello, "Computing the Committor using the Committor: an Anatomy of the Transition state Ensemble", xxxx yy, 20zz
+    .. [*] P. Kang, E. Trizio, and M. Parrinello, "Computing the committor using the committor to study the transition state ensemble", Nat. Comput. Sci., 2024, DOI: 10.1038/s43588-024-00645-0
 
     See also
     --------
