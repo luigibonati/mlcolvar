@@ -48,7 +48,7 @@ jobs:
         # conda setup requires this special shell
         shell: bash -l {0}
         run: |
-          python -m pip install mlcolvar
+          python -m pip install mlcolvar[test]
           pip list
 
       - name: Run tests
