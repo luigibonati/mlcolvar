@@ -1,4 +1,4 @@
-name: CI
+name: PyPI
 
 on:
   # GitHub has started calling new repo's first branch "main" https://github.com/github/renaming
