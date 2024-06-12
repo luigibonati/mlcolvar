@@ -48,7 +48,7 @@ class CommittorLoss(torch.nn.Module):
             State B is supposed to be higher in energy.
         """
         super().__init__()
-        self.mass = mass
+        self.register_buffer("mass", mass)
         self.alpha = alpha
         self.cell = cell
         self.gamma = gamma

@@ -2,7 +2,45 @@ import torch
 import numpy as np
 from typing import List
 
-__all__ = ["compute_committor_weights", "initialize_committor_masses"]
+__all__ = ["KolmogorovBias", "compute_committor_weights", "initialize_committor_masses"]
+
+class KolmogorovBias(torch.nn.Module):
+    """Wrappper class to compute the Kolmogorov bias $$V_K = -$$ from a committor model"""
+
+    def __init__(self,
+                 input_model : torch.nn.Module,
+                 beta : float,
+                 epsilon : float = 1e-6,
+                 lambd : float = 1) -> None:
+        """Compute Kolmogorov bias from a committor model
+
+        Parameters
+        ----------
+        input_model : torch.nn.Module
+            Model to compute the bias from
+        beta: float
+            Inverse temperature in the right energy units, i.e. 1/(k_B*T)
+        epsilon : float, optional
+            Regularization term in the logarithm, by default 1e-6
+        lambd : float, optional
+            Multiplicative term for the whole bias, by default 1
+        """
+        super().__init__()
+        self.input_model = input_model
+        self.beta = beta
+        self.lambd = lambd
+        if type(epsilon) is not torch.Tensor:
+            epsilon = torch.Tensor([epsilon])
+        self.epsilon = epsilon
+
+    def forward(self, x):
+        x.requires_grad = True
+        q = self.input_model(x)
+        grad_outputs = torch.ones_like(q)
+        grads = torch.autograd.grad(q, x, grad_outputs, retain_graph=True)[0]
+        grads_squared = torch.sum(torch.pow(grads, 2), 1)
+        bias = - self.lambd*(1/self.beta)*(torch.log( grads_squared + self.epsilon ) - torch.log(self.epsilon))
+        return bias
 
 def compute_committor_weights(dataset, 
                               bias: torch.Tensor, 
@@ -54,34 +92,36 @@ def compute_committor_weights(dataset,
 
     return dataset
 
-def initialize_committor_masses(atoms_map: list, n_dims: int = 3):
+def initialize_committor_masses(atom_types: list, masses: list, n_dims: int = 3):
     """Initialize the masses tensor with the right shape for committor learning
 
     Parameters
     ----------
-    atoms_map : list[int, float]
-        List of atoms in the system and the corresponing masses. Each entry should be [atom_type, atomic_mass]
+    atoms_map : list[int]
+        List to map the atoms in the system to the corresponing types, which are specified with the masses keyword. e.g, for water [0, 1, 1]
+    masses : list[float]
+        List of masses of the different atom types in the system, e.g., for water [15.999, 1.008]
     n_dims : int
-        Number of dimensions of the system, by default 3.
-
+        Number of spatial dimensions, by default, 3
     Returns
     -------
     atomic_masses
         Atomic masses tensor ready to be used for committor learning.
     """
-    # atomic masses of the atoms --> size N_atoms * n_dims
-
+    if n_dims > 3:
+        raise(ValueError(f"Number of dimension should be less than 3! Found {n_dims}"))
+    
     # put number of atoms for each type and the corresponding atomic mass
-    atoms_map = np.array(atoms_map)
+    atom_types = np.array(atom_types)
 
     atomic_masses = []
-    for i in range(len(atoms_map)):
-        # each mass has to be repeated for each dimension 
-        for n in range( int(atoms_map[i, 0] * n_dims) ):
-            atomic_masses.append(atoms_map[i, 1])
+    for i in range(len(atom_types)):
+        # each mass has to be repeated for the number of dimensions
+        for n in range(n_dims):
+            atomic_masses.append(masses[atom_types[i]])
 
     # make it a tensor
     atomic_masses = torch.Tensor(atomic_masses)
-    # atomic_masses = atomic_masses.to(device)
+
     return atomic_masses
-    
+  
