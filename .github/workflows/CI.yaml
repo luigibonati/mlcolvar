@@ -6,11 +6,9 @@ on:
   push:
     branches:
       - "main"
-      - "lightning"
   pull_request:
     branches:
       - "main"
-      - "lightning"
   schedule:
     # Weekly tests run on main by default:
     #   Scheduled workflows run on the latest commit on the default or base branch.
@@ -28,7 +26,7 @@ jobs:
         python-version: [3.8, 3.9, "3.10"]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Additional info about the build
         shell: bash
