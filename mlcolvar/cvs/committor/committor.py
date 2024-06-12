@@ -83,6 +83,9 @@ class Committor(BaseCV, lightning.LightningModule):
         # ======= BLOCKS =======
         # initialize NN turning
         o = "nn"
+        # set default activation to tanh
+        if "activation" not in options[o]: 
+            options[o]["activation"] = "tanh"
         self.nn = FeedForward(layers, **options[o])
 
         # separately add sigmoid activation on last layer, this way it can be deactived
@@ -127,7 +130,6 @@ def test_committor():
 
     atomic_masses = initialize_committor_masses(atoms_map=[[1,1]], n_dims=2)
     model = Committor(layers=[2, 4, 2, 1], mass=atomic_masses, alpha=1e-1, delta_f=0)
-
     # create dataset
     samples = 50
     X = torch.randn((2*samples, 2))
