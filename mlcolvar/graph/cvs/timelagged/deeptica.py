@@ -218,3 +218,45 @@ class GraphDeepTICA(GraphBaseCV):
         loader.setup()
 
         return next(iter(loader.train_dataloader()))
+
+
+def test_deep_tica():
+    torch.manual_seed(0)
+    torch_tools.set_default_dtype('float64')
+
+    cv = GraphDeepTICA(
+        2,
+        0.1,
+        [1, 8],
+        model_options={
+            'n_out': 6,
+            'n_bases': 6,
+            'n_polynomials': 6,
+            'n_layers': 2,
+            'n_messages': 2,
+            'n_feedforwards': 1,
+            'n_scalars_node': 16,
+            'n_vectors_node': 8,
+            'n_scalars_edge': 16,
+            'drop_rate': 0,
+            'activation': 'Tanh',
+        }
+    )
+
+    data = test_get_data()
+
+    assert (
+        torch.abs(
+            cv(data)
+            - torch.tensor([[0.4301124873647384, -0.3866279366944752]] * 6)
+        ) < 1E-12
+    ).all()
+
+    assert torch.abs(
+        cv.training_step({'dataset_1': data, 'dataset_2': data})
+        - torch.tensor(0)
+    ) < 1E-12
+
+
+if __name__ == '__main__':
+    test_deep_tica()
