@@ -1,6 +1,8 @@
 # The Graph Neural Network (GNN) Module in MLCOLVAR.
 
-<img src=".github/logo.png" width="50%" height="50%" align="center"/>
+<p align="center">
+    <img src=".github/logo.png" width="50%" height="50%"/>
+</p>
 
 ## INTRODUCTION
 
