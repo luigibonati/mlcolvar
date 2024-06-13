@@ -12,7 +12,6 @@ class Committor(BaseCV, lightning.LightningModule):
     """Base class for data-driven learning of committor function.
     The committor function q is expressed as the output of a neural network optimized with a self-consistent
     approach based on the Kolmogorov's variational principle for the committor and on the imposition of its boundary conditions. 
-    TODO: Add reference upon publication
 
     **Data**: for training it requires a DictDataset with the keys 'data', 'labels' and 'weights'
 
@@ -20,7 +19,7 @@ class Committor(BaseCV, lightning.LightningModule):
     
     References
     ----------
-    .. [*] P. Kang, E. Trizio, and M. Parrinello, "Computing the Committor using the Committor: an Anatomy of the Transition state Ensemble", xxxx yy, 20zz
+    .. [*] P. Kang, E. Trizio, and M. Parrinello, "Computing the committor using the committor to study the transition state ensemble", Nat. Comput. Sci., 2024, DOI: 10.1038/s43588-024-00645-0
 
     See also
     --------
@@ -84,6 +83,9 @@ class Committor(BaseCV, lightning.LightningModule):
         # ======= BLOCKS =======
         # initialize NN turning
         o = "nn"
+        # set default activation to tanh
+        if "activation" not in options[o]: 
+            options[o]["activation"] = "tanh"
         self.nn = FeedForward(layers, **options[o])
 
         # separately add sigmoid activation on last layer, this way it can be deactived
@@ -124,14 +126,14 @@ class Committor(BaseCV, lightning.LightningModule):
 
 def test_committor():
     from mlcolvar.data import DictDataset, DictModule
-    from mlcolvar.cvs.committor.utils import initialize_committor_masses
+    from mlcolvar.cvs.committor.utils import initialize_committor_masses, KolmogorovBias
 
-    atomic_masses = initialize_committor_masses(atoms_map=[[1,1]], n_dims=2)
-    model = Committor(layers=[2, 4, 2, 1], mass=atomic_masses, alpha=1e-1, delta_f=0)
-
+    # create two fake atoms and use their fake positions
+    atomic_masses = initialize_committor_masses(atom_types=[0,1], masses=[15.999, 1.008])
+    model = Committor(layers=[6, 4, 2, 1], mass=atomic_masses, alpha=1e-1, delta_f=0)
     # create dataset
     samples = 50
-    X = torch.randn((2*samples, 2))
+    X = torch.randn((2*samples, 6))
     
     # create labels
     y = torch.zeros(X.shape[0])
@@ -148,6 +150,9 @@ def test_committor():
     trainer.fit(model, datamodule)
 
     model(X).sum().backward()
+
+    bias_model = KolmogorovBias(input_model=model, beta=1, epsilon=1e-6, lambd=1)
+    bias_model(X)
 
 if __name__ == "__main__":
     test_committor()

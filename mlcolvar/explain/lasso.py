@@ -447,7 +447,7 @@ def test_lasso_classification():
                                 scale_inputs = True,
                                 feature_names = None,
                                 print_info = False,
-                                plot = True )
+                                plot = False )
 
 def test_lasso_regression():
     from mlcolvar.data import DictDataset
@@ -465,6 +465,6 @@ def test_lasso_regression():
                 alphas = alphas,
                 scale_inputs = True,
                 print_info = False,
-                plot = True)
+                plot = False)
     
 
