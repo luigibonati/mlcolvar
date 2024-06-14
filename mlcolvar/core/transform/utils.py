@@ -234,9 +234,3 @@ def test_statistics():
 
     for key in loader.keys:
         print(key,stats[key])
-
-
-if __name__ == "__main__":
-    test_sequential_transform()
-    test_inverse()
-    test_statistics()
