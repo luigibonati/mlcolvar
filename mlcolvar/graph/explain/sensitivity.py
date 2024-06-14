@@ -39,7 +39,7 @@ def graph_node_sensitivity(
     normalizing_method: str
         Method of calculating the normalizing constant of the sensitivit.
         - `None`: do not perform the normalization.
-        - `std`: normalize with six times of the standard deviation of the CV.
+        - `std`: normalize with four times of the standard deviation of the CV.
         - `range`: normalize with the range of the CV.
     device: str
         Name of the device.
@@ -85,7 +85,7 @@ def graph_node_sensitivity(
     if normalizing_method is None:
         normalizing_constant = 1
     elif normalizing_method == 'std':
-        normalizing_constant = cv_org.std() * 6
+        normalizing_constant = cv_org.std() * 4
     elif normalizing_method == 'range':
         normalizing_constant = cv_org.max() - cv_org.min()
     else:
