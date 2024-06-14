@@ -6,16 +6,14 @@ on:
   push:
     branches:
       - "main"
-      - "lightning"
   pull_request:
     branches:
       - "main"
-      - "lightning"
   schedule:
     # Weekly tests run on main by default:
     #   Scheduled workflows run on the latest commit on the default or base branch.
     #   (from https://help.github.com/en/actions/reference/events-that-trigger-workflows#scheduled-events-schedule)
-    - cron: "0 0 * * 0"
+    - cron: "0 2 * * 1"
 
 jobs:
   test:
@@ -28,7 +26,7 @@ jobs:
         python-version: [3.8, 3.9, "3.10"]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Additional info about the build
         shell: bash
