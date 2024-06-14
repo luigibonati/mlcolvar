@@ -10,6 +10,10 @@ class SequentialTransform(torch.nn.Sequential):
     @property
     def in_features(self):
       return next(self.modules())[0].in_features
+    
+    @property
+    def out_features(self):
+      return next(self.modules())[-1].out_features
 
 class Inverse(torch.nn.Module):
     "Wrapper to return the inverse method of a module as a torch.nn.Module"
