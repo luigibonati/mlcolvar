@@ -135,6 +135,9 @@ def test_sequential_transform():
     cont_seq = sequential(pos)
     cont_seq.sum().backward()
     assert(torch.allclose(cont_ref, cont_seq))
+    assert(sequential.in_features == compute_distances.in_features)
+    assert(sequential.out_features == apply_switch.out_features)
+
 
     # check the machinery in training, we use the committor as it applies preprocessing in the training as well
     from mlcolvar.cvs.committor import Committor
