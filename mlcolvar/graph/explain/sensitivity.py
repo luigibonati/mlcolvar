@@ -19,6 +19,7 @@ def graph_node_sensitivity(
     model: gcvs.GraphBaseCV,
     dataset: gdata.GraphDataSet,
     node_indices: List[int] = None,
+    normalizing_method: str = 'std',
     device: str = 'cpu',
     batch_size: int = None,
     show_progress: bool = True
@@ -35,6 +36,11 @@ def graph_node_sensitivity(
         Dataset on which to compute the sensitivity analysis.
     node_indices: List[int]
         Indices of the nodes to analysis.
+    normalizing_method: str
+        Method of calculating the normalizing constant of the sensitivit.
+        - `None`: do not perform the normalization.
+        - `std`: normalize with six times of the standard deviation of the CV.
+        - `range`: normalize with the range of the CV.
     device: str
         Name of the device.
     batch_size:
@@ -76,6 +82,18 @@ def graph_node_sensitivity(
     cv_org = get_dataset_cv_values(
         model, dataset, batch_size, show_progress, 'Getting base data'
     )
+    if normalizing_method is None:
+        normalizing_constant = 1
+    elif normalizing_method == 'std':
+        normalizing_constant = cv_org.std() * 6
+    elif normalizing_method == 'range':
+        normalizing_constant = cv_org.max() - cv_org.min()
+    else:
+        raise KeyError(
+            'Value of the `normalizing_method` parameter should be '
+            + '`std` or `range`!'
+        )
+    normalizing_constant = abs(normalizing_constant)
 
     for node in items:
 
@@ -92,6 +110,9 @@ def graph_node_sensitivity(
         )
 
         delta = cv_org - cv_masked
+        if normalizing_method is not None:
+            delta = delta / normalizing_constant
+
         sensitivities_components.append(np.abs(delta))
         sensitivities.append(np.mean(np.abs(delta), axis=0))
 
