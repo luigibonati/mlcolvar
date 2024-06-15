@@ -98,6 +98,8 @@ class Committor(BaseCV, lightning.LightningModule):
         """Compute and return the training loss and record metrics."""
         # =================get data===================
         x = train_batch["data"]
+        # check data are have shape (n_data, -1)
+        x = x.reshape((x.shape[0], -1))
         x.requires_grad = True
 
         labels = train_batch["labels"]
