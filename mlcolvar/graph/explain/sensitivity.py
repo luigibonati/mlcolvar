@@ -1,4 +1,5 @@
 import copy
+import torch
 import numpy as np
 from typing import List, Dict
 
@@ -104,6 +105,11 @@ def graph_node_sensitivity(
             edge_index_masked = dataset[j]['edge_index'][:, mask]
             dataset_clone[j]['shifts'] = shifts_masked
             dataset_clone[j]['edge_index'] = edge_index_masked
+            n_nodes = len(dataset_clone[j]['positions'])
+            node_masks = torch.ones((n_nodes, 1), dtype=torch.bool)
+            node_masks[node, 0] = False
+            dataset_clone[j]['receiver_masks'] = node_masks
+            dataset_clone[j]['n_receivers'][0, 0] = n_nodes - 1
 
         cv_masked = get_dataset_cv_values(
             model, dataset_clone, batch_size, False,
