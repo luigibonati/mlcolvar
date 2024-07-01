@@ -46,6 +46,8 @@ class GraphDeepTICA(GraphBaseCV):
     model_options: Dict[Any, Any]
         Model options. Note that the `n_out` key of this dict is REQUIRED,
         which stands for the dimension of the output of the network.
+    extra_loss_options: Dict[Any, Any]
+        Extra loss function options.
     optimizer_options: Dict[Any, Any]
         Optimizer options.
 
@@ -73,6 +75,7 @@ class GraphDeepTICA(GraphBaseCV):
         atomic_numbers: List[int],
         model_name: str = 'GVPModel',
         model_options: Dict[Any, Any] = {'n_out': 6},
+        extra_loss_options: Dict[Any, Any] = {'mode': 'sum2', 'n_eig': 0},
         optimizer_options: Dict[Any, Any] = {},
         **kwargs,
     ) -> None:
@@ -90,7 +93,7 @@ class GraphDeepTICA(GraphBaseCV):
             n_cvs, cutoff, atomic_numbers, model_name, model_options, **kwargs
         )
 
-        self.loss_fn = ReduceEigenvaluesLoss(mode='sum2')
+        self.loss_fn = ReduceEigenvaluesLoss(**extra_loss_options)
 
         self.tica = TICA(n_out, n_cvs)
 

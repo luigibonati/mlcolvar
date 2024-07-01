@@ -42,6 +42,8 @@ class GraphDeepTDA(GraphBaseCV):
         Name of the GNN model.
     model_options: Dict[Any, Any]
         Model options.
+    extra_loss_options: Dict[Any, Any]
+        Extra loss function options.
     optimizer_options: Dict[Any, Any]
         Optimizer options.
 
@@ -66,6 +68,7 @@ class GraphDeepTDA(GraphBaseCV):
         target_sigmas: Union[List[float], List[List[float]]],
         model_name: str = 'GVPModel',
         model_options: Dict[Any, Any] = {},
+        extra_loss_options: Dict[Any, Any] = {'alpha': 1.0, 'beta': 100.0},
         optimizer_options: Dict[Any, Any] = {},
         **kwargs,
     ) -> None:
@@ -115,6 +118,7 @@ class GraphDeepTDA(GraphBaseCV):
             n_states=target_centers.shape[0],
             target_centers=target_centers,
             target_sigmas=target_sigmas,
+            **extra_loss_options
         )
 
     def training_step(
