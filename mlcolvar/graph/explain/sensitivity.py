@@ -86,9 +86,9 @@ def graph_node_sensitivity(
     if normalizing_method is None:
         normalizing_constant = 1
     elif normalizing_method == 'std':
-        normalizing_constant = cv_org.std() * 4
+        normalizing_constant = cv_org.std(axis=0) * 4
     elif normalizing_method == 'range':
-        normalizing_constant = cv_org.max() - cv_org.min()
+        normalizing_constant = cv_org.max(axis=0) - cv_org.min(axis=0)
     else:
         raise KeyError(
             'Value of the `normalizing_method` parameter should be '
@@ -127,6 +127,6 @@ def graph_node_sensitivity(
     results['sensitivities'] = np.array(sensitivities)
     results['sensitivities_components'] = np.array(
         sensitivities_components
-    ).transpose(2, 1, 0)[0]
+    ).transpose(2, 1, 0)
 
     return results
