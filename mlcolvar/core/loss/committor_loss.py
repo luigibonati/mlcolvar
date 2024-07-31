@@ -8,7 +8,7 @@
 Committor function Loss Function and Utils.
 """
 
-__all__ = ["CommittorLoss", "committor_loss", "SmartDerivatives"]
+__all__ = ["CommittorLoss", "committor_loss", "SmartDerivatives", "compute_descriptors_derivatives"]
 
 # =============================================================================
 # GLOBAL IMPORTS
