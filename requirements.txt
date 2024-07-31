@@ -4,3 +4,4 @@ numpy
 pandas
 matplotlib
 kdepy
+torch-scatter
