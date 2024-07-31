@@ -5,10 +5,10 @@
 # =============================================================================
 
 """
-Committor function Loss Function.
+Committor function Loss Function and Utils.
 """
 
-__all__ = ["CommittorLoss", "committor_loss"]
+__all__ = ["CommittorLoss", "committor_loss", "SmartDerivatives"]
 
 # =============================================================================
 # GLOBAL IMPORTS
@@ -30,7 +30,9 @@ class CommittorLoss(torch.nn.Module):
                 alpha: float,
                 cell: float = None,
                 gamma: float = 10000,
-                delta_f: float = 0
+                delta_f: float = 0,
+                separate_boundary_dataset : bool = True,
+                descriptors_derivatives : torch.nn.Module = None
                  ):
         """Compute Kolmogorov's variational principle loss and impose boundary conditions on the metastable states
 
@@ -47,6 +49,12 @@ class CommittorLoss(torch.nn.Module):
         delta_f : float, optional
             Delta free energy between A (label 0) and B (label 1), units is kBT, by default 0. 
             State B is supposed to be higher in energy.
+        separate_boundary_dataset : bool, optional
+            Switch to exculde boundary condition labeled data from the variational loss, by default True
+        descriptors_derivatives : torch.nn.Module, optional
+            `SmartDerivatives` object to save memory and time when using descriptors.
+            See also mlcolvar.core.loss.committor_loss.SmartDerivatives
+
         """
         super().__init__()
         self.register_buffer("mass", mass)
@@ -54,6 +62,8 @@ class CommittorLoss(torch.nn.Module):
         self.cell = cell
         self.gamma = gamma
         self.delta_f = delta_f
+        self.descriptors_derivatives=descriptors_derivatives
+        self.separate_boundary_dataset = separate_boundary_dataset
 
     def forward(
         self, x: torch.Tensor, q: torch.Tensor, labels: torch.Tensor, w: torch.Tensor, create_graph: bool = True
@@ -67,7 +77,10 @@ class CommittorLoss(torch.nn.Module):
                                 gamma=self.gamma,
                                 delta_f=self.delta_f,
                                 create_graph=create_graph,
-                                cell=self.cell)
+                                cell=self.cell,
+                                separate_boundary_dataset=self.separate_boundary_dataset,
+                                descriptors_derivatives=self.descriptors_derivatives
+                            )
 
 
 def committor_loss(x: torch.Tensor, 
@@ -79,7 +92,10 @@ def committor_loss(x: torch.Tensor,
                   gamma: float = 10000,
                   delta_f: float = 0,
                   create_graph: bool = True,
-                  cell: float = None):
+                  cell: float = None,
+                  separate_boundary_dataset : bool = True,
+                  descriptors_derivatives : torch.nn.Module = None
+                  ):
     """Compute variational loss for committor optimization with boundary conditions
 
     Parameters
@@ -106,6 +122,11 @@ def committor_loss(x: torch.Tensor,
         Make loss backwardable, deactivate for validation to save memory, default True
     cell : float
         CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, default None 
+    separate_boundary_dataset : bool, optional
+            Switch to exculde boundary condition labeled data from the variational loss, by default True
+    descriptors_derivatives : torch.nn.Module, optional
+        `SmartDerivatives` object to save memory and time when using descriptors.
+        See also mlcolvar.core.loss.committor_loss.SmartDerivatives
 
     Returns
     -------
@@ -125,7 +146,11 @@ def committor_loss(x: torch.Tensor,
 
     # Create masks to access different states data
     mask_A = torch.nonzero(labels.squeeze() == 0, as_tuple=True) 
-    mask_B = torch.nonzero(labels.squeeze() == 1, as_tuple=True) 
+    mask_B = torch.nonzero(labels.squeeze() == 1, as_tuple=True)
+    if separate_boundary_dataset:
+        mask_var = torch.nonzero(labels.squeeze() > 1, as_tuple=True) 
+    else: 
+        mask_var = torch.ones(len(x), dtype=torch.bool)
     
     # Update weights of basin B using the information on the delta_f
     delta_f = torch.Tensor([delta_f])
@@ -138,21 +163,28 @@ def committor_loss(x: torch.Tensor,
     # Each loss contribution is scaled by the number of samples
     
     # We need the gradient of q(x)
-    grad_outputs = torch.ones_like(q)
-    grad = torch.autograd.grad(q, x, grad_outputs=grad_outputs, retain_graph=True, create_graph=create_graph)[0]
-
+    grad_outputs = torch.ones_like(q[mask_var])
+    grad = torch.autograd.grad(q[mask_var], x, grad_outputs=grad_outputs, retain_graph=True, create_graph=create_graph)[0]
+    grad = grad[mask_var]
+    
     # TODO this fixes cell size issue
     if cell is not None:
         grad = grad / cell
-
+    
+    if descriptors_derivatives is not None:
+        grad_square = descriptors_derivatives(grad)
+    else:
+        # we get the square of grad(q) and we multiply by the weight
+        grad_square = torch.pow(grad, 2)
+        
     # we sanitize the shapes of mass and weights tensors
     # mass should have size [1, n_atoms*spatial_dims]
     mass = mass.unsqueeze(0)
     # weights should have size [n_batch, 1]
     w = w.unsqueeze(-1)
 
-    # we get the square of grad(q) and we multiply by the weight
-    grad_square = torch.sum((torch.pow(grad, 2)*(1/mass)), axis=1, keepdim=True) * w
+    grad_square = torch.sum((grad_square * (1/mass)), axis=1, keepdim=True)    
+    grad_square = grad_square * w[mask_var]
 
     # variational contribution to loss: we sum over the batch
     loss_var = torch.mean(grad_square)
