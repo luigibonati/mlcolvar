@@ -217,6 +217,8 @@ class SmartDerivatives(torch.nn.Module):
         by the non-zero elements of the derivatives of the descriptors wrt the positions (left input, compute once at the beginning on the whole dataset).
         The multiplication are done using scatte functions and keepoing track of the indeces of the batches, descriptors, atoms and dimensions.
 
+        NB. It should be used with only training set and single batch with shuffle and random_split disabled.
+
         Parameters
         ----------
         der_desc_wrt_pos : torch.Tensor
@@ -376,7 +378,7 @@ def compute_descriptors_derivatives(dataset, descriptor_function, n_atoms, separ
         aux.append(aux_der)
 
     d_desc_d_pos = torch.stack(aux, axis=2)
-    return pos, desc, d_desc_d_pos
+    return pos, desc, d_desc_d_pos.squeeze(-1)
 
 
 def test_smart_derivatives():
