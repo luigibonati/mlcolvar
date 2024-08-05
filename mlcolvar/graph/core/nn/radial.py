@@ -40,7 +40,7 @@ class GaussianBasis(torch.nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         dist = x.view(-1, 1) - self.offset.view(1, -1)
-        return torch.exp(self.coeff * torch.pow(dist, 2))[0]
+        return torch.exp(self.coeff * torch.pow(dist, 2))
 
     def __repr__(self) -> str:
         result = 'GAUSSIANBASIS [ '
@@ -283,13 +283,13 @@ def test_gaussian_basis() -> None:
         [0.8750517756337902, 0.8897581848801761],
         [0.8352702114112720, 0.9231163463866358],
         [0.7917795893122607, 0.9510973184771084],
-        [0.7453593045429805, 0.9731449630580510],
+        [0.7453593045429805, 0.9731449630580510]
     ])
 
     rbf = GaussianBasis(6.0, 2)
 
     data_new = torch.stack(
-        [rbf(torch.ones(1) * i * 0.5 + 0.1) for i in range(0, 10)]
+        [rbf(torch.ones(1) * i * 0.5 + 0.1)[0] for i in range(0, 10)]
     )
 
     assert (torch.abs(data - data_new) < 1E-12).all()
