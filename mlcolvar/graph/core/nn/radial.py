@@ -209,10 +209,10 @@ class RadialEmbeddingBlock(torch.nn.Module):
         super().__init__()
         self.n_out = n_bases
         if basis_type == 'bessel':
-            self.basis_fn = BesselBasis(cutoff=cutoff, n_bases=n_bases)
+            self.bessel_fn = BesselBasis(cutoff=cutoff, n_bases=n_bases)
             self.cutoff_fn = PolynomialCutoff(cutoff=cutoff, p=n_polynomials)
         elif basis_type == 'gaussian':
-            self.basis_fn = GaussianBasis(cutoff=cutoff, n_bases=n_bases)
+            self.bessel_fn = GaussianBasis(cutoff=cutoff, n_bases=n_bases)
             self.cutoff_fn = None
         else:
             raise RuntimeError(
@@ -233,7 +233,7 @@ class RadialEmbeddingBlock(torch.nn.Module):
         edge_embedding: torch.Tensor (shape: [n_edges, n_bases])
             The radial edge embedding.
         """
-        r = self.basis_fn(edge_lengths)  # shape: [n_edges, n_bases]
+        r = self.bessel_fn(edge_lengths)  # shape: [n_edges, n_bases]
         if self.cutoff_fn is not None:
             c = self.cutoff_fn(edge_lengths)  # shape: [n_edges, 1]
             return r * c
