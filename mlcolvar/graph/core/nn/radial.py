@@ -9,6 +9,52 @@ https://github.com/ACEsuit/mace/blob/main/mace/modules/radial.py
 __all__ = ['RadialEmbeddingBlock']
 
 
+class GaussianBasis(torch.nn.Module):
+    """
+    The Gaussian basis functions.
+
+    Parameters
+    ----------
+    cutoff: float
+        The cutoff radius.
+    n_bases: int
+        Size of the basis set.
+    """
+    def __init__(self, cutoff: float, n_bases=32) -> None:
+        super().__init__()
+
+        offset = torch.linspace(
+            start=0.0,
+            end=cutoff,
+            steps=n_bases,
+            dtype=torch.get_default_dtype(),
+        )
+        coeff = -0.5 / (offset[1] - offset[0]).item() ** 2
+        self.register_buffer(
+            'cutoff', torch.tensor(cutoff, dtype=torch.get_default_dtype())
+        )
+        self.register_buffer(
+            'coeff', torch.tensor(coeff, dtype=torch.get_default_dtype())
+        )
+        self.register_buffer('offset', offset)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        dist = x.view(-1, 1) - self.offset.view(1, -1)
+        return torch.exp(self.coeff * torch.pow(dist, 2))[0]
+
+    def __repr__(self) -> str:
+        result = 'GAUSSIANBASIS [ '
+
+        data_string = '\033[32m{:d}\033[0m\033[36m 󰯰 \033[0m'
+        result = result + data_string.format(len(self.offset))
+        result = result + '| '
+        data_string = '\033[32m{:f}\033[0m\033[36m 󰳁 \033[0m'
+        result = result + data_string.format(self.cutoff)
+        result = result + ']'
+
+        return result
+
+
 class BesselBasis(torch.nn.Module):
     """
     The Bessel radial basis functions (equation (7) in [1]).
@@ -44,13 +90,13 @@ class BesselBasis(torch.nn.Module):
         if trainable:
             self.bessel_weights = torch.nn.Parameter(bessel_weights)
         else:
-            self.register_buffer("bessel_weights", bessel_weights)
+            self.register_buffer('bessel_weights', bessel_weights)
 
         self.register_buffer(
-            "cutoff", torch.tensor(cutoff, dtype=torch.get_default_dtype())
+            'cutoff', torch.tensor(cutoff, dtype=torch.get_default_dtype())
         )
         self.register_buffer(
-            "prefactor",
+            'prefactor',
             torch.tensor(
                 np.sqrt(2.0 / cutoff), dtype=torch.get_default_dtype()
             )
@@ -97,10 +143,10 @@ class PolynomialCutoff(torch.nn.Module):
     def __init__(self, cutoff: float, p: int = 6) -> None:
         super().__init__()
         self.register_buffer(
-            "p", torch.tensor(p, dtype=torch.get_default_dtype())
+            'p', torch.tensor(p, dtype=torch.get_default_dtype())
         )
         self.register_buffer(
-            "cutoff", torch.tensor(cutoff, dtype=torch.get_default_dtype())
+            'cutoff', torch.tensor(cutoff, dtype=torch.get_default_dtype())
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -134,8 +180,7 @@ class PolynomialCutoff(torch.nn.Module):
 
 class RadialEmbeddingBlock(torch.nn.Module):
     """
-    The radial embedding block using a Bessel basis set and a smooth cutoff
-    function [1].
+    The radial embedding block [1].
 
     Parameters
     ----------
@@ -145,6 +190,8 @@ class RadialEmbeddingBlock(torch.nn.Module):
         Size of the basis set.
     n_polynomials: bool
         Order of the polynomial.
+    basis_type: str
+        Type of the basis function.
 
     References
     ----------
@@ -157,11 +204,20 @@ class RadialEmbeddingBlock(torch.nn.Module):
         cutoff: float,
         n_bases: int = 8,
         n_polynomials: int = 6,
+        basis_type: str = 'bessel',
     ) -> None:
         super().__init__()
         self.n_out = n_bases
-        self.bessel_fn = BesselBasis(cutoff=cutoff, n_bases=n_bases)
-        self.cutoff_fn = PolynomialCutoff(cutoff=cutoff, p=n_polynomials)
+        if basis_type == 'bessel':
+            self.basis_fn = BesselBasis(cutoff=cutoff, n_bases=n_bases)
+            self.cutoff_fn = PolynomialCutoff(cutoff=cutoff, p=n_polynomials)
+        elif basis_type == 'gaussian':
+            self.basis_fn = GaussianBasis(cutoff=cutoff, n_bases=n_bases)
+            self.cutoff_fn = None
+        else:
+            raise RuntimeError(
+                'Unknown basis function type "{:s}" !'.format(basis_type)
+            )
 
     def forward(self, edge_lengths: torch.Tensor) -> torch.Tensor:
         """
@@ -177,9 +233,12 @@ class RadialEmbeddingBlock(torch.nn.Module):
         edge_embedding: torch.Tensor (shape: [n_edges, n_bases])
             The radial edge embedding.
         """
-        r = self.bessel_fn(edge_lengths)  # shape: [n_edges, n_bases]
-        c = self.cutoff_fn(edge_lengths)  # shape: [n_edges, 1]
-        return r * c
+        r = self.basis_fn(edge_lengths)  # shape: [n_edges, n_bases]
+        if self.cutoff_fn is not None:
+            c = self.cutoff_fn(edge_lengths)  # shape: [n_edges, 1]
+            return r * c
+        else:
+            return r
 
 
 def test_bessel_basis() -> None:
@@ -200,6 +259,34 @@ def test_bessel_basis() -> None:
     ])
 
     rbf = BesselBasis(6.0, 2)
+
+    data_new = torch.stack(
+        [rbf(torch.ones(1) * i * 0.5 + 0.1) for i in range(0, 10)]
+    )
+
+    assert (torch.abs(data - data_new) < 1E-12).all()
+
+    torch.set_default_dtype(dtype)
+
+
+def test_gaussian_basis() -> None:
+    dtype = torch.get_default_dtype()
+    torch.set_default_dtype(torch.float64)
+
+    data = torch.tensor([
+        [0.9998611207557263, 0.6166385641763439],
+        [0.9950124791926823, 0.6669768108584744],
+        [0.9833348700493460, 0.7164317992468783],
+        [0.9650691177896804, 0.7642281651714904],
+        [0.9405880633643421, 0.8095716486678869],
+        [0.9103839103891423, 0.8516705072294410],
+        [0.8750517756337902, 0.8897581848801761],
+        [0.8352702114112720, 0.9231163463866358],
+        [0.7917795893122607, 0.9510973184771084],
+        [0.7453593045429805, 0.9731449630580510],
+    ])
+
+    rbf = GaussianBasis(6.0, 2)
 
     data_new = torch.stack(
         [rbf(torch.ones(1) * i * 0.5 + 0.1) for i in range(0, 10)]
@@ -268,5 +355,6 @@ def test_radial_embedding_block():
 
 if __name__ == '__main__':
     test_bessel_basis()
+    test_gaussian_basis()
     test_polynomial_cutoff()
     test_radial_embedding_block()
