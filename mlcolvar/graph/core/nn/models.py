@@ -34,6 +34,8 @@ class BaseModel(torch.nn.Module):
         Size of the basis set.
     n_polynomials: bool
         Order of the polynomials in the basis functions.
+    basis_type: str
+        Type of the basis function.
     """
 
     def __init__(
@@ -43,11 +45,12 @@ class BaseModel(torch.nn.Module):
         atomic_numbers: List[int],
         n_bases: int = 6,
         n_polynomials: int = 6,
+        basis_type: str = 'bessel'
     ) -> None:
         super().__init__()
         self._n_out = n_out
         self._radial_embedding = radial.RadialEmbeddingBlock(
-            cutoff, n_bases, n_polynomials
+            cutoff, n_bases, n_polynomials, basis_type
         )
         self.register_buffer(
             'n_out', torch.tensor(n_out, dtype=torch.int64)
@@ -123,6 +126,8 @@ class GVPModel(BaseModel):
         Drop probability in all dropout layers.
     activation: str
         Name of the activation function to use in the GVPs (case sensitive).
+    basis_type: str
+        Type of the basis function.
 
     References
     ----------
@@ -148,8 +153,11 @@ class GVPModel(BaseModel):
         n_scalars_edge: int = 8,
         drop_rate: int = 0.1,
         activation: str = 'SiLU',
+        basis_type: str = 'bessel'
     ) -> None:
-        super().__init__(n_out, cutoff, atomic_numbers, n_bases, n_polynomials)
+        super().__init__(
+            n_out, cutoff, atomic_numbers, n_bases, n_polynomials, basis_type
+        )
 
         self.W_e = nn.ModuleList([
             gvp_layer.LayerNorm((n_bases, 1)),
