@@ -14,7 +14,7 @@ from mlcolvar.graph.core.nn import gvp_layer
 GNN models.
 """
 
-__all__ = ['BaseModel', 'GVPModel']
+__all__ = ['BaseModel', 'GVPModel', 'SchNetModel']
 
 
 class BaseModel(nn.Module):
