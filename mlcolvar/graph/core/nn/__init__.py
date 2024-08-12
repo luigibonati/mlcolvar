@@ -1,1 +1,1 @@
-from .models import BaseModel, GVPModel
+from .models import BaseModel, GVPModel, SchNetModel
