@@ -1,1 +1,1 @@
-from .nn import BaseModel, GVPModel
+from .nn import BaseModel, GVPModel, SchNetModel
