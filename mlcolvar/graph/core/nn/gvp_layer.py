@@ -5,8 +5,9 @@ from torch_geometric.nn import MessagePassing
 from typing import Tuple, Callable, Optional
 
 """
-The Geometric Vector Perceptron (GVP) layer. This module is taken from the
-orginal repo: https://github.com/drorlab/gvp-pytorch, and made compilable.
+The Geometric Vector Perceptron (GVP) layer. This module is taken from:
+https://github.com/chaitjo/geometric-gnn-dojo/blob/main/models/layers/gvp_layer.py,
+and made compilable.
 """
 
 __all__ = ['GVPConvLayer', 'LayerNorm', 'Dropout']
