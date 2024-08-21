@@ -146,42 +146,6 @@ class GraphDeepTDA(GraphBaseCV):
         self.log(f'{name}_loss_sigmas', loss_sigmas, on_epoch=True)
         return loss
 
-    @property
-    def example_input_array(self) -> Dict[str, torch.Tensor]:
-        """
-        Example data.
-        """
-        numbers = self._model.atomic_numbers.cpu().numpy().tolist()
-        positions = np.random.randn(2, len(numbers), 3)
-        cell = np.identity(3, dtype=float) * 0.2
-        graph_labels = np.array([[[0]], [[1]]])
-        node_labels = np.array([[0]] * len(numbers))
-        z_table = gdata.atomic.AtomicNumberTable.from_zs(numbers)
-
-        config = [
-            gdata.atomic.Configuration(
-                atomic_numbers=numbers,
-                positions=positions[i],
-                cell=cell,
-                pbc=[True] * 3,
-                node_labels=node_labels,
-                graph_labels=graph_labels[i],
-            ) for i in range(2)
-        ]
-        dataset = gdata.create_dataset_from_configurations(
-            config, z_table, 0.1, show_progress=False
-        )
-
-        loader = gdata.GraphDataModule(
-            dataset,
-            lengths=(1.0,),
-            batch_size=10,
-            shuffle=False,
-        )
-        loader.setup()
-
-        return next(iter(loader.train_dataloader()))
-
 
 def test_deep_tda():
     torch.manual_seed(0)
