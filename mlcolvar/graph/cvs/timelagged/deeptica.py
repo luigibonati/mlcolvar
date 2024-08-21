@@ -1,13 +1,11 @@
 import torch
 import torch_geometric as tg
-import numpy as np
 from typing import Dict, Any, List
 
 from mlcolvar.core.stats import TICA
 from mlcolvar.core.loss import ReduceEigenvaluesLoss
 from mlcolvar.graph.cvs import GraphBaseCV
 from mlcolvar.graph.cvs.cv import test_get_data
-from mlcolvar.graph import data as gdata
 from mlcolvar.graph.utils import torch_tools
 
 """
