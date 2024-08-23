@@ -95,9 +95,9 @@ class Configuration:
     pbc: Optional[tuple]                # shape: [3]
     node_labels: Optional[np.ndarray]   # shape: [n_atoms, n_node_labels]
     graph_labels: Optional[np.ndarray]  # shape: [n_graph_labels, 1]
-    edge_senders: Optional[np.ndarray] = None    # shape: [n_senders]
-    edge_receivers: Optional[np.ndarray] = None  # shape: [n_receivers]
-    weight: Optional[float] = 1.0                # shape: []
+    weight: Optional[float] = 1.0       # shape: []
+    system: Optional[np.ndarray] = None       # shape: [n_system_atoms]
+    environment: Optional[np.ndarray] = None  # shape: [n_environment_atoms]
 
 
 Configurations = List[Configuration]
