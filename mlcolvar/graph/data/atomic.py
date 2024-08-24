@@ -1,4 +1,5 @@
 import numpy as np
+import mdtraj as md
 from dataclasses import dataclass
 from typing import List, Iterable, Optional
 
@@ -44,6 +45,17 @@ class AtomicNumberTable:
             The encoding.
         """
         return self.zs[index]
+
+    def index_to_symbol(self, index: int) -> str:
+        """
+        Map the encoding to the atomic symbol.
+
+        Parameters
+        ----------
+        index: int
+            The encoding.
+        """
+        return md.element.Element.getByAtomicNumber(self.zs[index]).symbol
 
     def z_to_index(self, atomic_number: int) -> int:
         """

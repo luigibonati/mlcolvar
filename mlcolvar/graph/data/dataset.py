@@ -17,6 +17,7 @@ __all__ = [
     'GraphDataSet',
     'create_dataset_from_configurations',
     'save_dataset',
+    'save_dataset_as_exyz',
     'load_dataset'
 ]
 
@@ -249,6 +250,38 @@ def load_dataset(file_name: str) -> GraphDataSet:
     assert isinstance(dataset, GraphDataSet)
 
     return dataset
+
+
+def save_dataset_as_exyz(dataset: GraphDataSet, file_name: str) -> None:
+    """
+    Save a dataset to disk in the extxyz format.
+
+    Parameters
+    ----------
+    dataset: GraphDataSet
+        The dataset.
+    file_name: str
+        The filename.
+    """
+    z_table = atomic.AtomicNumberTable.from_zs(dataset.atomic_numbers)
+
+    fp = open(file_name, 'w')
+
+    for d in dataset:
+        print(len(d['positions']), file=fp)
+        line = (
+            'Lattice="{:s}" '.format((r'{:.5f} ' * 9).strip())
+            + 'Properties=species:S:1:pos:R:3 pbc="T T T"'
+        )
+        cell = [c.item() for c in d['cell'].flatten()]
+        print(line.format(*cell), file=fp)
+        for i in range(0, len(d['positions'])):
+            s = z_table.index_to_symbol(np.where(d['node_attrs'][i])[0][0])
+            print('{:2s}'.format(s), file=fp, end=' ')
+            positions = [p.item() for p in d['positions'][i]]
+            print('{:10.5f} {:10.5f} {:10.5f}'.format(*positions), file=fp)
+
+    fp.close()
 
 
 def test_from_configuration() -> None:
