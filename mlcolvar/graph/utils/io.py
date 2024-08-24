@@ -251,7 +251,7 @@ def _configures_from_trajectory(
 
     if system_selection is not None and environment_selection is not None:
         system_atoms = trajectory.top.select(system_selection)
-        assert len(system_selection) > 0, (
+        assert len(system_atoms) > 0, (
             'No atoms will be selected with `system_selection`: '
             + '"{:s}"!'.format(system_selection)
         )
