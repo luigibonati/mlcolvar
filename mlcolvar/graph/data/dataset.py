@@ -123,6 +123,10 @@ def _create_dataset_from_configuration(
 
     assert config.graph_labels is None or len(config.graph_labels.shape) == 2
 
+    # NOTE: here we do not take care about the nodes that are not taking part
+    # the graph, like, we don't even change the node indices in `edge_index`.
+    # Here we simply ignore them, and rely on the `RemoveIsolatedNodes` method
+    # that will be called later (in `create_dataset_from_configurations`).
     edge_index, shifts, unit_shifts = get_neighborhood(
         positions=config.positions,
         cutoff=cutoff,
@@ -212,8 +216,18 @@ def create_dataset_from_configurations(
     ]
 
     if remove_isolated_nodes:
+        # TODO: not the worst way to fake the `is_node_attr` method of
+        # `tg.data.storage.GlobalStorage` ...
+        # I mean, when there are exact three atoms in the graph, the
+        # `RemoveIsolatedNodes` method will remove the cell vectors that
+        # correspond to the isolated node ... This is a consequence of that
+        # pyg regarding the cell vectors as some kind of node features.
+        # So here we first remove the isolated nodes, then set the cell back.
+        cell_list = [d.cell.clone() for d in data_list]
         transform = tg.transforms.remove_isolated_nodes.RemoveIsolatedNodes()
         data_list = [transform(d) for d in data_list]
+        for i in range(len(data_list)):
+            data_list[i].cell = cell_list[i]
 
     dataset = GraphDataSet(data_list, z_table.zs, cutoff)
 
@@ -416,5 +430,119 @@ def test_from_configuration() -> None:
     assert (dataset_1[1]['graph_labels'] == torch.tensor([[9.0]])).all()
 
 
+def test_from_configurations() -> None:
+    numbers = [8, 1, 1]
+    positions = np.array(
+        [[0.0, 0.0, 0.0], [0.07, 0.07, 0.0], [0.07, -0.07, 0.0]],
+        dtype=float
+    )
+    cell = np.identity(3, dtype=float) * 0.2
+    graph_labels = np.array([[1]])
+    node_labels = np.array([[0], [1], [1]])
+    z_table = atomic.AtomicNumberTable.from_zs(numbers)
+
+    config = atomic.Configuration(
+        atomic_numbers=numbers,
+        positions=positions,
+        cell=cell,
+        pbc=[True] * 3,
+        node_labels=node_labels,
+        graph_labels=graph_labels,
+    )
+    data = create_dataset_from_configurations(
+        [config], z_table, 0.1, remove_isolated_nodes=True, show_progress=False
+    )[0]
+    assert (
+        data['edge_index'] == torch.tensor(
+            [[0, 0, 1, 1, 2, 2], [2, 1, 0, 2, 1, 0]]
+        )
+    ).all()
+    assert (
+        data['shifts'] == torch.tensor([
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.2, 0.0],
+            [0.0, -0.2, 0.0],
+            [0.0, 0.0, 0.0],
+        ])
+    ).all()
+    assert (
+        data['unit_shifts'] == torch.tensor([
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, -1.0, 0.0],
+            [0.0, 0.0, 0.0],
+        ])
+    ).all()
+    assert (
+        data['positions'] == torch.tensor([
+            [0.0, 0.0, 0.0],
+            [0.07, 0.07, 0.0],
+            [0.07, -0.07, 0.0],
+        ])
+    ).all()
+    assert (
+        data['cell'] == torch.tensor([
+            [0.2, 0.0, 0.0],
+            [0.0, 0.2, 0.0],
+            [0.0, 0.0, 0.2],
+        ])
+    ).all()
+    assert (
+        data['node_attrs'] == torch.tensor([
+            [0.0, 1.0], [1.0, 0.0], [1.0, 0.0]
+        ])
+    ).all()
+    assert (data['node_labels'] == torch.tensor([[0.0], [1.0], [1.0]])).all()
+    assert (data['graph_labels'] == torch.tensor([[1.0]])).all()
+    assert data['weight'] == 1.0
+
+    config = atomic.Configuration(
+        atomic_numbers=numbers,
+        positions=positions,
+        cell=cell,
+        pbc=[True] * 3,
+        node_labels=node_labels,
+        graph_labels=graph_labels,
+        system=[1],
+        environment=[2]
+    )
+    data = create_dataset_from_configurations(
+        [config], z_table, 0.1, remove_isolated_nodes=True, show_progress=False
+    )[0]
+    assert (
+        data['positions'] == torch.tensor([
+            [0.07, 0.07, 0.0], [0.07, -0.07, 0.0],
+        ])
+    ).all()
+    assert (
+        data['cell'] == torch.tensor([
+            [0.2, 0.0, 0.0],
+            [0.0, 0.2, 0.0],
+            [0.0, 0.0, 0.2],
+        ])
+    ).all()
+    assert (
+        data['node_attrs'] == torch.tensor([
+            [1.0, 0.0], [1.0, 0.0]
+        ])
+    ).all()
+    assert (
+        data['edge_index'] == torch.tensor([[0, 1], [1, 0]])
+    ).all()
+    assert (
+        data['shifts'] == torch.tensor([[0.0, 0.2, 0.0], [0.0, -0.2, 0.0]])
+    ).all()
+    assert (
+        data['unit_shifts'] == torch.tensor(
+            [[0.0, 1.0, 0.0], [0.0, -1.0, 0.0]]
+        )
+    ).all()
+
+
 if __name__ == '__main__':
     test_from_configuration()
+    test_from_configurations()
