@@ -16,6 +16,7 @@ def create_dataset_from_trajectories(
     trajectories: Union[List[List[str]], List[str], str],
     top: Union[List[List[str]], List[str], str],
     cutoff: float,
+    buffer: float = 0.0,
     z_table: gdata.atomic.AtomicNumberTable = None,
     folder: str = None,
     create_labels: bool = None,
@@ -42,6 +43,8 @@ def create_dataset_from_trajectories(
         Names of topology files.
     cutoff: float (units: Ang)
         The graph cutoff radius.
+    buffer: float
+        Buffer size used in finding active environment atoms.
     z_table: mlcolvar.graph.data.atomic.AtomicNumberTable
         The atomic number table used to build the node attributes. If not
         given, it will be created from the given trajectories.
@@ -100,6 +103,11 @@ def create_dataset_from_trajectories(
         selection = system_selection
     else:
         selection = None
+
+    if environment_selection is None:
+        assert buffer == 0, (
+            'Not `environment_selection` given! Cannot define buffer size!'
+        )
 
     # fmt: off
     assert type(trajectories) is type(top), (
@@ -194,7 +202,12 @@ def create_dataset_from_trajectories(
             configurations.extend(configuration)
 
     dataset = gdata.create_dataset_from_configurations(
-        configurations, z_table, cutoff, remove_isolated_nodes, show_progress
+        configurations,
+        z_table,
+        cutoff,
+        buffer,
+        remove_isolated_nodes,
+        show_progress
     )
 
     if return_trajectories:

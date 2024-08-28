@@ -107,6 +107,7 @@ def _create_dataset_from_configuration(
     config: atomic.Configuration,
     z_table: atomic.AtomicNumberTable,
     cutoff: float,
+    buffer: float = 0.0
 ) -> tg.data.Data:
     """
     Build the graph data object from a configuration.
@@ -119,6 +120,8 @@ def _create_dataset_from_configuration(
         The atomic number table used to build the node attributes.
     cutoff: float
         The graph cutoff radius.
+    buffer: float
+        Buffer size used in finding active environment atoms.
     """
 
     assert config.graph_labels is None or len(config.graph_labels.shape) == 2
@@ -134,6 +137,7 @@ def _create_dataset_from_configuration(
         pbc=config.pbc,
         system_indices=config.system,
         environment_indices=config.environment,
+        buffer=buffer
     )
     edge_index = torch.tensor(edge_index, dtype=torch.long)
     shifts = torch.tensor(shifts, dtype=torch.get_default_dtype())
@@ -187,6 +191,7 @@ def create_dataset_from_configurations(
     config: atomic.Configurations,
     z_table: atomic.AtomicNumberTable,
     cutoff: float,
+    buffer: float = 0.0,
     remove_isolated_nodes: bool = False,
     show_progress: bool = True
 ) -> GraphDataSet:
@@ -201,6 +206,8 @@ def create_dataset_from_configurations(
         The atomic number table used to build the node attributes.
     cutoff: float
         The graph cutoff radius.
+    buffer: float
+        Buffer size used in finding active environment atoms.
     remove_isolated_nodes: bool
         If remove isolated nodes from the dataset.
     show_progress: bool
@@ -212,7 +219,9 @@ def create_dataset_from_configurations(
         items = config
 
     data_list = [
-        _create_dataset_from_configuration(c, z_table, cutoff) for c in items
+        _create_dataset_from_configuration(
+            c, z_table, cutoff, buffer
+        ) for c in items
     ]
 
     if remove_isolated_nodes:
@@ -404,6 +413,53 @@ def test_from_configuration() -> None:
         data['edge_index'] == torch.tensor(
             [[0, 0, 1, 1, 2, 2], [2, 1, 0, 2, 1, 0]]
         )
+    ).all()
+
+    positions = np.array(
+        [[0.0, 0.0, 0.0], [0.07, 0.07, 0.0], [0.07, -0.08, 0.0]],
+        dtype=float
+    )
+    config = atomic.Configuration(
+        atomic_numbers=numbers,
+        positions=positions,
+        cell=cell,
+        pbc=[True] * 3,
+        node_labels=node_labels,
+        graph_labels=graph_labels,
+        system=[0],
+        environment=[1, 2]
+    )
+    data = _create_dataset_from_configuration(config, z_table, 0.1)
+    assert (
+        data['edge_index'] == torch.tensor([[0, 1], [1, 0]])
+    ).all()
+    data = _create_dataset_from_configuration(config, z_table, 0.11)
+    assert (
+        data['edge_index'] == torch.tensor(
+            [[0, 0, 1, 1, 2, 2], [2, 1, 0, 2, 1, 0]]
+        )
+    ).all()
+    data = _create_dataset_from_configuration(config, z_table, 0.1, 0.01)
+    assert (
+        data['edge_index'] == torch.tensor(
+            [[0, 1, 1, 2], [1, 0, 2, 1]]
+        )
+    ).all()
+    assert (
+        data['shifts'] == torch.tensor([
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.2, 0.0],
+            [0.0, -0.2, 0.0]
+        ])
+    ).all()
+    assert (
+        data['unit_shifts'] == torch.tensor([
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, -1.0, 0.0]
+        ])
     ).all()
 
     config = [atomic.Configuration(

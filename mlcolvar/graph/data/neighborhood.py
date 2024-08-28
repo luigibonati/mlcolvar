@@ -18,6 +18,7 @@ def get_neighborhood(
     true_self_interaction: Optional[bool] = False,
     system_indices: Optional[List[int]] = None,
     environment_indices: Optional[List[int]] = None,
+    buffer: float = 0.0
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Get the neighbor list of a given set atoms.
@@ -38,6 +39,8 @@ def get_neighborhood(
         Indices of the system atoms.
     environment_indices: List[int]
         Indices of the environment atoms.
+    buffer: float
+        Buffer size used in finding active environment atoms.
 
     Returns
     -------
@@ -63,6 +66,8 @@ def get_neighborhood(
         system_indices = np.array(system_indices)
         environment_indices = np.array(environment_indices)
         assert np.intersect1d(system_indices, environment_indices).size == 0
+    else:
+        assert buffer == 0.0
 
     if pbc is None:
         pbc = (False, False, False)
@@ -88,12 +93,12 @@ def get_neighborhood(
     if not pbc_z:
         cell[:, 2] = max_positions * 5 * cutoff * identity[:, 2]
 
-    sender, receiver, unit_shifts = neighbour_list(
-        quantities='ijS',
+    sender, receiver, unit_shifts, distances = neighbour_list(
+        quantities='ijSd',
         pbc=pbc,
         cell=cell,
         positions=positions,
-        cutoff=float(cutoff),
+        cutoff=float(cutoff + buffer),
         # self_interaction=True,  # we want edges from atom to itself in different periodic images
         # use_scaled_positions=False,  # positions are not scaled positions
     )
@@ -109,6 +114,7 @@ def get_neighborhood(
         sender = sender[keep_edge]
         receiver = receiver[keep_edge]
         unit_shifts = unit_shifts[keep_edge]
+        distances = distances[keep_edge]
 
     if system_indices is not None:
         # Get environment atoms that are neighbors of the system.
@@ -119,6 +125,8 @@ def get_neighborhood(
         keep_sender = np.where(np.in1d(sender, keep_atom))[0]
         keep_receiver = np.where(np.in1d(receiver, keep_atom))[0]
         keep_edge = np.intersect1d(keep_sender, keep_receiver)
+        keep_edge_distance = np.where(distances <= cutoff)[0]
+        keep_edge = np.intersect1d(keep_edge, keep_edge_distance)
         # Get the edges
         sender = sender[keep_edge]
         receiver = receiver[keep_edge]
