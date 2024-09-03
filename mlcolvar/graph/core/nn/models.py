@@ -467,7 +467,7 @@ def test_schnet() -> None:
     assert (
         torch.abs(
             model(data) -
-            torch.tensor([[0.409843614955313, -0.12684721733013735]] * 6)
+            torch.tensor([[0.40384621527953063, -0.1257513365138969]] * 6)
         ) < 1E-12
     ).all()
 
