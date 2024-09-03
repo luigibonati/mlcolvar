@@ -5,10 +5,10 @@ import torch_geometric as tg
 from typing import List, Dict, Tuple
 
 from mlcolvar.graph import data as gdata
-from mlcolvar.graph.utils import torch_tools
 from mlcolvar.graph.core.nn import radial
 from mlcolvar.graph.core.nn import schnet
 from mlcolvar.graph.core.nn import gvp_layer
+from mlcolvar.graph.utils import torch_tools
 
 """
 GNN models.
@@ -244,7 +244,12 @@ class GVPModel(BaseModel):
         out = h_V[0]
 
         if scatter_mean:
-            out = torch_tools.scatter_mean(out, batch_id, dim=0)
+            if 'system_masks' not in data.keys():
+                out = torch_tools.scatter_mean(out, batch_id, dim=0)
+            else:
+                out = out * data['system_masks']
+                out = torch_tools.scatter_sum(out, batch_id, dim=0)
+                out = out / data['n_system']
 
         return out
 
@@ -357,7 +362,12 @@ class SchNetModel(BaseModel):
         out = h_V
 
         if scatter_mean:
-            out = torch_tools.scatter_mean(out, batch_id, dim=0)
+            if 'system_masks' not in data.keys():
+                out = torch_tools.scatter_mean(out, batch_id, dim=0)
+            else:
+                out = out * data['system_masks']
+                out = torch_tools.scatter_sum(out, batch_id, dim=0)
+                out = out / data['n_system']
 
         return out
 

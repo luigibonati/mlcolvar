@@ -174,6 +174,21 @@ def _create_dataset_from_configuration(
         else 1
     )
 
+    n_system = (
+        torch.tensor(
+            [[len(config.system)]], dtype=torch.get_default_dtype()
+        ) if config.system is not None
+        else torch.tensor(
+            [[one_hot.shape[0]]], dtype=torch.get_default_dtype()
+        )
+    )
+
+    if config.system is not None:
+        system_masks = torch.zeros((one_hot.shape[0], 1), dtype=torch.bool)
+        system_masks[config.system, 0] = 1
+    else:
+        system_masks = None
+
     return tg.data.Data(
         edge_index=edge_index,
         shifts=shifts,
@@ -183,6 +198,8 @@ def _create_dataset_from_configuration(
         node_attrs=one_hot,
         node_labels=node_labels,
         graph_labels=graph_labels,
+        n_system=n_system,
+        system_masks=system_masks,
         weight=weight,
     )
 
