@@ -64,7 +64,7 @@ class CFConv(MessagePassing):
         network: nn.Sequential,
         cutoff: float,
     ) -> None:
-        super().__init__(aggr='add')
+        super().__init__(aggr='mean')
         self.lin1 = nn.Linear(in_channels, num_filters, bias=False)
         self.lin2 = nn.Linear(num_filters, out_channels)
         self.network = network

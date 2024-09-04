@@ -1,4 +1,5 @@
 import numpy as np
+import mdtraj as md
 from dataclasses import dataclass
 from typing import List, Iterable, Optional
 
@@ -44,6 +45,17 @@ class AtomicNumberTable:
             The encoding.
         """
         return self.zs[index]
+
+    def index_to_symbol(self, index: int) -> str:
+        """
+        Map the encoding to the atomic symbol.
+
+        Parameters
+        ----------
+        index: int
+            The encoding.
+        """
+        return md.element.Element.getByAtomicNumber(self.zs[index]).symbol
 
     def z_to_index(self, atomic_number: int) -> int:
         """
@@ -95,9 +107,9 @@ class Configuration:
     pbc: Optional[tuple]                # shape: [3]
     node_labels: Optional[np.ndarray]   # shape: [n_atoms, n_node_labels]
     graph_labels: Optional[np.ndarray]  # shape: [n_graph_labels, 1]
-    edge_senders: Optional[np.ndarray] = None    # shape: [n_senders]
-    edge_receivers: Optional[np.ndarray] = None  # shape: [n_receivers]
-    weight: Optional[float] = 1.0                # shape: []
+    weight: Optional[float] = 1.0       # shape: []
+    system: Optional[np.ndarray] = None       # shape: [n_system_atoms]
+    environment: Optional[np.ndarray] = None  # shape: [n_environment_atoms]
 
 
 Configurations = List[Configuration]

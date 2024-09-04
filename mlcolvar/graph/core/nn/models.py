@@ -5,10 +5,10 @@ import torch_geometric as tg
 from typing import List, Dict, Tuple
 
 from mlcolvar.graph import data as gdata
-from mlcolvar.graph.utils import torch_tools
 from mlcolvar.graph.core.nn import radial
 from mlcolvar.graph.core.nn import schnet
 from mlcolvar.graph.core.nn import gvp_layer
+from mlcolvar.graph.utils import torch_tools
 
 """
 GNN models.
@@ -235,30 +235,21 @@ class GVPModel(BaseModel):
         h_E = (h_E_1, h_E_2)
 
         batch_id = data['batch']
-        if data.get('receiver_masks') is not None:
-            receiver_masks = data['receiver_masks'].squeeze(-1)
-        else:
-            receiver_masks = None
 
         for layer in self.layers:
-            h_V = layer(
-                h_V,
-                data['edge_index'],
-                h_E,
-                node_mask=receiver_masks
-            )
+            h_V = layer(h_V, data['edge_index'], h_E)
 
         for w in self.W_out:
             h_V = w(h_V)
         out = h_V[0]
 
         if scatter_mean:
-            if receiver_masks is None:
+            if 'system_masks' not in data.keys():
                 out = torch_tools.scatter_mean(out, batch_id, dim=0)
             else:
-                out = out * data['receiver_masks']
+                out = out * data['system_masks']
                 out = torch_tools.scatter_sum(out, batch_id, dim=0)
-                out = out / data['n_receivers']
+                out = out / data['n_system']
 
         return out
 
@@ -362,10 +353,6 @@ class SchNetModel(BaseModel):
         h_V = self.W_v(data['node_attrs'])
 
         batch_id = data['batch']
-        if data.get('receiver_masks') is not None:
-            receiver_masks = data['receiver_masks'].squeeze(-1)
-        else:
-            receiver_masks = None
 
         for layer in self.layers:
             h_V = h_V + layer(h_V, data['edge_index'], h_E[0], h_E[1])
@@ -375,17 +362,17 @@ class SchNetModel(BaseModel):
         out = h_V
 
         if scatter_mean:
-            if receiver_masks is None:
+            if 'system_masks' not in data.keys():
                 out = torch_tools.scatter_mean(out, batch_id, dim=0)
             else:
-                out = out * data['receiver_masks']
+                out = out * data['system_masks']
                 out = torch_tools.scatter_sum(out, batch_id, dim=0)
-                out = out / data['n_receivers']
+                out = out / data['n_system']
 
         return out
 
 
-def test_get_data(receivers: List[int] = [0, 1, 2]) -> tg.data.Batch:
+def test_get_data() -> tg.data.Batch:
     # TODO: This is not a real test, but a helper function for other tests.
     # Maybe should change its name.
     torch.manual_seed(0)
@@ -416,7 +403,6 @@ def test_get_data(receivers: List[int] = [0, 1, 2]) -> tg.data.Batch:
             pbc=[True] * 3,
             node_labels=node_labels,
             graph_labels=graph_labels,
-            edge_receivers=receivers,
         ) for p in positions
     ]
     dataset = gdata.create_dataset_from_configurations(
@@ -462,14 +448,6 @@ def test_gvp() -> None:
         ) < 1E-12
     ).all()
 
-    data = test_get_data([0]).to_dict()
-    assert (
-        torch.abs(
-            model(data) -
-            torch.tensor([[0.6049081358540733, -0.2549507187584082]] * 6)
-        ) < 1E-12
-    ).all()
-
 
 def test_schnet() -> None:
     torch.manual_seed(0)
@@ -489,7 +467,7 @@ def test_schnet() -> None:
     assert (
         torch.abs(
             model(data) -
-            torch.tensor([[0.409843614955313, -0.12684721733013735]] * 6)
+            torch.tensor([[0.40384621527953063, -0.1257513365138969]] * 6)
         ) < 1E-12
     ).all()
 

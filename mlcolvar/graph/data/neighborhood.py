@@ -16,8 +16,9 @@ def get_neighborhood(
     pbc: Optional[Tuple[bool, bool, bool]] = None,
     cell: Optional[np.ndarray] = None,  # [3, 3]
     true_self_interaction: Optional[bool] = False,
-    sender_indices: Optional[List[int]] = None,
-    receiver_indices: Optional[List[int]] = None,
+    system_indices: Optional[List[int]] = None,
+    environment_indices: Optional[List[int]] = None,
+    buffer: float = 0.0
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Get the neighbor list of a given set atoms.
@@ -34,12 +35,12 @@ def get_neighborhood(
         The lattice vectors.
     true_self_interaction: bool
         If keep self-edges that don't cross periodic boundaries.
-    sender_indices: List[int]
-        Indices of senders. If given, only edges sent by these atoms will be
-        kept in the graph.
-    receiver_indices: List[int]
-        Indices of receiver. If given, only edges received by these atoms will
-        be kept in the graph.
+    system_indices: List[int]
+        Indices of the system atoms.
+    environment_indices: List[int]
+        Indices of the environment atoms.
+    buffer: float
+        Buffer size used in finding active environment atoms.
 
     Returns
     -------
@@ -49,7 +50,25 @@ def get_neighborhood(
         The shift vectors (unit_shifts * cell_lengths).
     unit_shifts: numpy.ndarray (shape: [n_edges, 3])
         The unit shift vectors (number of PBC croessed by the edges).
+
+    Notes
+    -----
+    Arguments `system_indices` and `environment_indices` must presnet at the
+    same time. When these arguments are given, only edges in the [subsystem]
+    formed by [the systems atoms] and [the environment atoms within the cutoff
+    radius of the systems atoms] will be kept.
+    Besides, these two lists could not contain common atoms.
     """
+
+    if system_indices is not None or environment_indices is not None:
+        assert system_indices is not None and environment_indices is not None
+
+        system_indices = np.array(system_indices)
+        environment_indices = np.array(environment_indices)
+        assert np.intersect1d(system_indices, environment_indices).size == 0
+    else:
+        assert buffer == 0.0
+
     if pbc is None:
         pbc = (False, False, False)
 
@@ -74,12 +93,12 @@ def get_neighborhood(
     if not pbc_z:
         cell[:, 2] = max_positions * 5 * cutoff * identity[:, 2]
 
-    sender, receiver, unit_shifts = neighbour_list(
-        quantities='ijS',
+    sender, receiver, unit_shifts, distances = neighbour_list(
+        quantities='ijSd',
         pbc=pbc,
         cell=cell,
         positions=positions,
-        cutoff=float(cutoff),
+        cutoff=float(cutoff + buffer),
         # self_interaction=True,  # we want edges from atom to itself in different periodic images
         # use_scaled_positions=False,  # positions are not scaled positions
     )
@@ -95,17 +114,20 @@ def get_neighborhood(
         sender = sender[keep_edge]
         receiver = receiver[keep_edge]
         unit_shifts = unit_shifts[keep_edge]
+        distances = distances[keep_edge]
 
-    if sender_indices is not None:
-        sender_indices = np.array(sender_indices, dtype=int)
-        keep_edge = np.where(np.in1d(sender, sender_indices))[0]
-        sender = sender[keep_edge]
-        receiver = receiver[keep_edge]
-        unit_shifts = unit_shifts[keep_edge]
-
-    if receiver_indices is not None:
-        receiver_indices = np.array(receiver_indices, dtype=int)
-        keep_edge = np.where(np.in1d(receiver, receiver_indices))[0]
+    if system_indices is not None:
+        # Get environment atoms that are neighbors of the system.
+        keep_edge = np.where(np.in1d(receiver, system_indices))[0]
+        keep_sender = np.intersect1d(sender[keep_edge], environment_indices)
+        keep_atom = np.concatenate((system_indices, np.unique(keep_sender)))
+        # Get the edges in the subsystem.
+        keep_sender = np.where(np.in1d(sender, keep_atom))[0]
+        keep_receiver = np.where(np.in1d(receiver, keep_atom))[0]
+        keep_edge = np.intersect1d(keep_sender, keep_receiver)
+        keep_edge_distance = np.where(distances <= cutoff)[0]
+        keep_edge = np.intersect1d(keep_edge, keep_edge_distance)
+        # Get the edges
         sender = sender[keep_edge]
         receiver = receiver[keep_edge]
         unit_shifts = unit_shifts[keep_edge]
@@ -125,7 +147,7 @@ def test_get_neighborhood() -> None:
     positions = np.array(
         [[0, 0, 0], [1, 1, 1], [2, 2, 2], [3, 3, 3]], dtype=float
     )
-    cell = np.array([[2, 0, 0], [0, 2, 0], [0, 0, 2]], dtype=float)
+    cell = np.array([[4, 0, 0], [0, 4, 0], [0, 0, 4]], dtype=float)
 
     n, s, u = get_neighborhood(positions, cutoff=5.0)
     assert (
@@ -135,53 +157,94 @@ def test_get_neighborhood() -> None:
         )
     ).all()
 
-    n, s, u = get_neighborhood(positions, cutoff=5.0, receiver_indices=[0, 1])
-    assert (
-        n == np.array([[0, 1, 2, 2, 3], [1, 0, 0, 1, 1]], dtype=int)
-    ).all()
-
-    n, s, u = get_neighborhood(positions, cutoff=5.0, sender_indices=[0, 1])
-    assert (
-        n == np.array([[0, 0, 1, 1, 1], [1, 2, 0, 2, 3]], dtype=int)
-    ).all()
-
     n, s, u = get_neighborhood(positions, cutoff=2.0)
     assert (
         n == np.array([[0, 1, 1, 2, 2, 3], [1, 0, 2, 1, 3, 2]], dtype=int)
     ).all()
 
     n, s, u = get_neighborhood(
-        positions, cutoff=1.0, pbc=[True] * 3, cell=cell
+        positions, cutoff=2.0, pbc=[True] * 3, cell=cell
     )
     assert (
-        n == np.array([[0, 1, 2, 3], [2, 3, 0, 1]], dtype=int)
+        n == np.array(
+            [[0, 0, 1, 1, 2, 2, 3, 3], [3, 1, 0, 2, 1, 3, 2, 0]], dtype=int
+        )
     ).all()
     assert (
         s == np.array(
-            [[-2, -2, -2], [-2, -2, -2], [2, 2, 2], [2, 2, 2]],
+            [
+                [-4.0, -4.0, -4.0],
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+                [4.0, 4.0, 4.0]
+            ],
             dtype=float
         )
     ).all()
     assert (
         u == np.array(
-            [[-1, -1, -1], [-1, -1, -1], [1, 1, 1], [1, 1, 1]],
+            [
+                [-1, -1, -1],
+                [0, 0, 0],
+                [0, 0, 0],
+                [0, 0, 0],
+                [0, 0, 0],
+                [0, 0, 0],
+                [0, 0, 0],
+                [1, 1, 1]
+            ],
             dtype=int
         )
     ).all()
 
     n, s, u = get_neighborhood(
-        positions, cutoff=1.0, pbc=[True] * 3, cell=cell, receiver_indices=[0]
+        positions,
+        cutoff=2.0,
+        pbc=[True] * 3,
+        cell=cell,
+        system_indices=[0, 1],
+        environment_indices=[2, 3]
     )
-    assert (n == np.array([[2], [0]], dtype=int)).all()
-    assert (s == np.array([[2, 2, 2]], dtype=float)).all()
-    assert (u == np.array([[1, 1, 1]], dtype=int)).all()
+    assert (
+        n == np.array(
+            [[0, 0, 1, 1, 2, 2, 3, 3], [3, 1, 0, 2, 1, 3, 2, 0]], dtype=int
+        )
+    ).all()
 
     n, s, u = get_neighborhood(
-        positions, cutoff=1.0, pbc=[True] * 3, cell=cell, sender_indices=[0]
+        positions,
+        cutoff=2.0,
+        pbc=[True] * 3,
+        cell=cell,
+        system_indices=[0],
+        environment_indices=[1, 2, 3]
     )
-    assert (n == np.array([[0], [2]], dtype=int)).all()
-    assert (s == np.array([[-2, -2, -2]], dtype=float)).all()
-    assert (u == np.array([[-1, -1, -1]], dtype=int)).all()
+    assert (
+        n == np.array(
+            [[0, 0, 1, 3], [3, 1, 0, 0]], dtype=int
+        )
+    ).all()
+    assert (
+        s == np.array(
+            [
+                [-4.0, -4.0, -4.0],
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+                [4.0, 4.0, 4.0]
+            ],
+            dtype=float
+        )
+    ).all()
+    assert (
+        u == np.array(
+            [[-1, -1, -1], [0, 0, 0], [0, 0, 0], [1, 1, 1]],
+            dtype=int
+        )
+    ).all()
 
 
 if __name__ == "__main__":

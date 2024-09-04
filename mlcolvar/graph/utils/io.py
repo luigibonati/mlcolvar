@@ -16,12 +16,12 @@ def create_dataset_from_trajectories(
     trajectories: Union[List[List[str]], List[str], str],
     top: Union[List[List[str]], List[str], str],
     cutoff: float,
+    buffer: float = 0.0,
     z_table: gdata.atomic.AtomicNumberTable = None,
     folder: str = None,
     create_labels: bool = None,
     system_selection: str = None,
-    edge_sender_selection: str = None,
-    edge_receiver_selection: str = None,
+    environment_selection: str = None,
     return_trajectories: bool = False,
     remove_isolated_nodes: bool = True,
     show_progress: bool = True
@@ -43,6 +43,8 @@ def create_dataset_from_trajectories(
         Names of topology files.
     cutoff: float (units: Ang)
         The graph cutoff radius.
+    buffer: float
+        Buffer size used in finding active environment atoms.
     z_table: mlcolvar.graph.data.atomic.AtomicNumberTable
         The atomic number table used to build the node attributes. If not
         given, it will be created from the given trajectories.
@@ -53,15 +55,13 @@ def create_dataset_from_trajectories(
         Assign a label to each file, default True if more than one set of files
         is given, otherwise False.
     system_selection: str
-        MDTraj style atom selections [1] of the edge senders. If given, only
+        MDTraj style atom selections [1] of the system atoms. If given, only
         selected atoms will be loaded from the trajectories. This option may
         increase the speed of building graphs.
-    edge_sender_selection: str
-        MDTraj style atom selections [1] of the edge senders. If given, only
-        edges sent by these atoms will be kept in the graph.
-    edge_receiver_selection: str
-        MDTraj style atom selections [1] of the edge receivers. If given, only
-        edges received by these atoms will be kept in the graph.
+    environment_selection: str
+        MDTraj style atom selections [1] of the environment atoms. If given,
+        only the system atoms and [the environment atoms within the cutoff
+        radius of the system atoms] will be kept in the graph.
     return_trajectories: bool
         If also return the loaded trajectory objects.
     remove_isolated_nodes: bool
@@ -78,15 +78,37 @@ def create_dataset_from_trajectories(
 
     Notes
     -----
-    The selections `edge_sender_selection` and `edge_receiver_selection`
-    will be made after the `system_selection` was made. Thus, absolute index
-    based edge selections may lead to unwanted results when `system_selection`
-    is given.
+    The login behind this method is like the follows:
+        1. If only `system_selection` is given, the method will only load atoms
+        selected by this selection, from the trajectories.
+        2. If both `system_selection` and `environment_selection` are given,
+        the method will load the atoms select by both selections, but will
+        build graphs using [the system atoms] and [the environment atoms within
+        the cutoff radius of the system atoms].
 
     References
     ----------
     .. [1] https://www.mdtraj.org/1.9.8.dev0/atom_selection.html
     """
+
+    if environment_selection is not None:
+        assert system_selection is not None, (
+            'the `environment_selection` argument requires the'
+            + '`system_selection` argument to be defined!'
+        )
+        selection = '({:s}) or ({:s})'.format(
+            system_selection, environment_selection
+        )
+    elif system_selection is not None:
+        selection = system_selection
+    else:
+        selection = None
+
+    if environment_selection is None:
+        assert buffer == 0, (
+            'Not `environment_selection` given! Cannot define buffer size!'
+        )
+
     # fmt: off
     assert type(trajectories) is type(top), (
         'The `trajectories` and `top` parameters should have the same type!'
@@ -133,12 +155,12 @@ def create_dataset_from_trajectories(
             ]
             for t in traj:
                 t.top = md.core.trajectory.load_topology(top[i][j])
-            if system_selection is not None:
+            if selection is not None:
                 for j in range(len(traj)):
-                    subset = traj[j].top.select(system_selection)
+                    subset = traj[j].top.select(selection)
                     assert len(subset) > 0, (
-                        'No atoms will be selected with system selection '
-                        + '"{:s}"!'.format(system_selection)
+                        'No atoms will be selected with selection string '
+                        + '"{:s}"!'.format(selection)
                     )
                     traj[j] = traj[j].atom_slice(subset)
             trajectories_in_memory.append(traj)
@@ -146,11 +168,11 @@ def create_dataset_from_trajectories(
         else:
             traj = md.load(trajectories[i], top=top[i])
             traj.top = md.core.trajectory.load_topology(top[i])
-            if system_selection is not None:
-                subset = traj.top.select(system_selection)
+            if selection is not None:
+                subset = traj.top.select(selection)
                 assert len(subset) > 0, (
-                    'No atoms will be selected with system selection '
-                    + '"{:s}"!'.format(system_selection)
+                    'No atoms will be selected with selection string '
+                    + '"{:s}"!'.format(selection)
                 )
                 traj = traj.atom_slice(subset)
             trajectories_in_memory.append(traj)
@@ -166,21 +188,26 @@ def create_dataset_from_trajectories(
                 configuration = _configures_from_trajectory(
                     trajectories_in_memory[i][j],
                     i,  # NOTE: all these configurations have a label `i`
-                    edge_sender_selection,
-                    edge_receiver_selection,
+                    system_selection,
+                    environment_selection,
                 )
                 configurations.extend(configuration)
         else:
             configuration = _configures_from_trajectory(
                 trajectories_in_memory[i],
                 i,
-                edge_sender_selection,
-                edge_receiver_selection,
+                system_selection,
+                environment_selection,
             )
             configurations.extend(configuration)
 
     dataset = gdata.create_dataset_from_configurations(
-        configurations, z_table, cutoff, remove_isolated_nodes, show_progress
+        configurations,
+        z_table,
+        cutoff,
+        buffer,
+        remove_isolated_nodes,
+        show_progress
     )
 
     if return_trajectories:
@@ -211,8 +238,8 @@ def _z_table_from_top(
 def _configures_from_trajectory(
     trajectory: md.Trajectory,
     label: int = None,
-    edge_sender_selection: str = None,
-    edge_receiver_selection: str = None,
+    system_selection: str = None,
+    environment_selection: str = None,
 ) -> gdata.atomic.Configurations:
     """
     Create configurations from one trajectory.
@@ -223,32 +250,32 @@ def _configures_from_trajectory(
         The MDTraj Trajectory object.
     label: int
         The graph label.
-    edge_sender_selection: str
-        MDTraj style atom selections [1] of the edge senders. If given, only
-        edges sent by these atoms will be kept in the graph.
-    edge_receiver_selection: str
-        MDTraj style atom selections [1] of the edge receivers. If given, only
-        edges received by these atoms will be kept in the graph.
+    system_selection: str
+        MDTraj style atom selections of the system atoms. If given, only
+        selected atoms will be loaded from the trajectories. This option may
+        increase the speed of building graphs.
+    environment_selection: str
+        MDTraj style atom selections of the environment atoms. If given,
+        only the system atoms and [the environment atoms within the cutoff
+        radius of the system atoms] will be kept in the graph.
     """
     if label is not None:
         label = np.array([[label]])
 
-    if edge_sender_selection is not None:
-        edge_senders = trajectory.top.select(edge_sender_selection)
-        assert len(edge_senders) > 0, (
-            'No atoms will be selected with edge_sender_selection selection '
-            + '"{:s}"!'.format(edge_sender_selection)
+    if system_selection is not None and environment_selection is not None:
+        system_atoms = trajectory.top.select(system_selection)
+        assert len(system_atoms) > 0, (
+            'No atoms will be selected with `system_selection`: '
+            + '"{:s}"!'.format(system_selection)
+        )
+        environment_atoms = trajectory.top.select(environment_selection)
+        assert len(environment_atoms) > 0, (
+            'No atoms will be selected with `environment_selection`: '
+            + '"{:s}"!'.format(environment_selection)
         )
     else:
-        edge_senders = None
-    if edge_receiver_selection is not None:
-        edge_receivers = trajectory.top.select(edge_receiver_selection)
-        assert len(edge_receivers) > 0, (
-            'No atoms will be selected with edge_receiver_selection selection '
-            + '"{:s}"!'.format(edge_receiver_selection)
-        )
-    else:
-        edge_receivers = None
+        system_atoms = None
+        environment_atoms = None
 
     atomic_numbers = [a.element.number for a in trajectory.top.atoms]
     if trajectory.unitcell_vectors is not None:
@@ -267,8 +294,8 @@ def _configures_from_trajectory(
             pbc=pbc,
             graph_labels=label,
             node_labels=None,  # TODO: Add supports for per-node labels.
-            edge_senders=edge_senders,
-            edge_receivers=edge_receivers,
+            system=system_atoms,
+            environment=environment_atoms
         )
         configurations.append(configuration)
 
@@ -351,81 +378,65 @@ def test_create_dataset_from_trajectories(
                 [0.0, 1.0], [1.0, 0.0], [1.0, 0.0]
             ])
         ).all()
-        assert (data['n_receivers'] == torch.tensor([[3]])).all()
 
     for i in range(6):
         check_data_1(dataset[i])
 
-    dataset = create_dataset_from_trajectories(
-        ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
-        ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
-        1.0,
-        system_selection=system_selection,
-        edge_sender_selection='element O',
-        show_progress=False
-    )
+    if system_selection is not None:
 
-    def check_data_2(data) -> None:
-        assert (data['edge_index'] == torch.tensor([[0, 0], [2, 1]])).all()
-        assert (
-            data['node_attrs'] == torch.tensor([
-                [0.0, 1.0], [1.0, 0.0], [1.0, 0.0]
-            ])
-        ).all()
-        # NOTE: This is a very bad testing case: as you can see, the oxygen
-        # is one of the receivers, however no edge is pointing to it.
-        # This is the risk when you have too few edge senders.
-        assert (data['n_receivers'] == torch.tensor([[3]])).all()
+        dataset = create_dataset_from_trajectories(
+            ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
+            ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
+            1.0,
+            system_selection='type O and {:s}'.format(system_selection),
+            environment_selection='type H and {:s}'.format(system_selection),
+            show_progress=False
+        )
 
-    for i in range(6):
-        check_data_2(dataset[i])
+        for i in range(6):
+            check_data_1(dataset[i])
 
-    dataset = create_dataset_from_trajectories(
-        ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
-        ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
-        1.0,
-        system_selection=system_selection,
-        edge_receiver_selection='element H',
-        show_progress=False
-    )
+        dataset = create_dataset_from_trajectories(
+            ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
+            ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
+            1.0,
+            system_selection='name H1 and {:s}'.format(system_selection),
+            environment_selection='name H2 and {:s}'.format(system_selection),
+            show_progress=False
+        )
 
-    def check_data_3(data) -> None:
-        assert (
-            data['edge_index'] == torch.tensor([[0, 0, 1, 2], [2, 1, 2, 1]])
-        ).all()
-        assert (
-            data['node_attrs'] == torch.tensor([
-                [0.0, 1.0], [1.0, 0.0], [1.0, 0.0]
-            ])
-        ).all()
-        assert (data['n_receivers'] == torch.tensor([[2]])).all()
-        assert (data['receiver_masks'] == torch.tensor([[0], [1], [1]])).all()
+        def check_data_2(data) -> None:
+            assert (data['edge_index'] == torch.tensor([[0, 1], [1, 0]])).all()
+            assert (
+                data['shifts'] == torch.tensor([
+                    [0.0, 2.0, 0.0], [0.0, -2.0, 0.0]
+                ])
+            ).all()
+            assert (
+                data['unit_shifts'] == torch.tensor([
+                    [0.0, 1.0, 0.0], [0.0, -1.0, 0.0],
+                ])
+            ).all()
+            assert (
+                data['positions'] == torch.tensor([
+                    [0.7, 0.7, 0.0], [0.7, -0.7, 0.0],
+                ])
+            ).all()
+            assert (
+                data['cell'] == torch.tensor([
+                    [2.0, 0.0, 0.0],
+                    [0.0, 2.0, 0.0],
+                    [0.0, 0.0, 2.0],
+                ])
+            ).all()
+            assert (
+                data['node_attrs'] == torch.tensor([
+                    [1.0], [1.0]
+                ])
+            ).all()
 
-    for i in range(6):
-        check_data_3(dataset[i])
-
-    dataset = create_dataset_from_trajectories(
-        ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
-        ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
-        1.0,
-        system_selection=system_selection,
-        edge_sender_selection='element O',
-        edge_receiver_selection='element H',
-        show_progress=False
-    )
-
-    def check_data_4(data) -> None:
-        assert (data['edge_index'] == torch.tensor([[0, 0], [2, 1]])).all()
-        assert (
-            data['node_attrs'] == torch.tensor([
-                [0.0, 1.0], [1.0, 0.0], [1.0, 0.0]
-            ])
-        ).all()
-        assert (data['n_receivers'] == torch.tensor([[2]])).all()
-        assert (data['receiver_masks'] == torch.tensor([[0], [1], [1]])).all()
-
-    for i in range(6):
-        check_data_4(dataset[i])
+        for i in range(6):
+            check_data_2(dataset[i])
 
     __import__('os').remove('test_dataset.pdb')
 
@@ -461,7 +472,7 @@ ATOM      5  H1  XXXXW   2       0.300   0.300   0.000  1.00  0.00      WT1  H
 ATOM      6  H2  XXXXW   2       0.300  -0.300   0.000  1.00  0.00      WT1  H
 END
 """
-    test_create_dataset_from_trajectories(text, "not resname XXXX")
+    test_create_dataset_from_trajectories(text, 'not resname XXXX')
 
     text = """
 CRYST1    2.000    2.000    2.000  90.00  90.00  90.00 P 1           1
@@ -480,4 +491,4 @@ ATOM      5  H2  XXXXW   1       0.300  -0.300   0.000  1.00  0.00      WT1  H
 ATOM      6  H2  TIP3W   2       0.700  -0.700   0.000  1.00  0.00      WT1  H
 END
 """
-    test_create_dataset_from_trajectories(text, "not resname XXXX")
+    test_create_dataset_from_trajectories(text, 'not resname XXXX')

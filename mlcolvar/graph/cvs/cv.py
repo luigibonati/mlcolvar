@@ -236,7 +236,7 @@ class GraphBaseCV(lightning.LightningModule):
         return next(iter(loader.train_dataloader()))
 
 
-def test_get_data(receivers: List[int] = [0, 1, 2]) -> tg.data.Batch:
+def test_get_data() -> tg.data.Batch:
     # TODO: This is not a real test, but a helper function for other tests.
     # Maybe should change its name.
 
@@ -265,7 +265,6 @@ def test_get_data(receivers: List[int] = [0, 1, 2]) -> tg.data.Batch:
             pbc=[True] * 3,
             node_labels=node_labels,
             graph_labels=graph_labels[i],
-            edge_receivers=receivers,
         ) for i in range(0, 6)
     ]
     dataset = gdata.create_dataset_from_configurations(
