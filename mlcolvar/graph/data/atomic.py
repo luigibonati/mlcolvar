@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 import mdtraj as md
 from dataclasses import dataclass
@@ -25,6 +26,15 @@ class AtomicNumberTable:
 
     def __init__(self, zs: List[int]) -> None:
         self.zs = zs
+        self.masses = [1.0] * len(zs)
+        for i in range(len(zs)):
+            try:
+                m = md.element.Element.getByAtomicNumber(zs[i]).mass
+                self.masses[i] = m
+            except Exception:
+                warnings.warn(
+                    'Can not assign mass for atom number: {:d}'.format(zs[i])
+                )
 
     def __len__(self) -> int:
         """
@@ -94,6 +104,18 @@ class AtomicNumberTable:
         for z in atomic_numbers:
             z_set.add(z)
         return cls(sorted(list(z_set)))
+
+
+def get_masses(atomic_numbers: Iterable[int]) -> List[float]:
+    """
+    Get atomic masses from atomic numbers.
+
+    Parameters
+    ----------
+    atomic_numbers: Iterable[int]
+        The atomic numbers.
+    """
+    return AtomicNumberTable.from_zs(atomic_numbers).masses.copy()
 
 
 @dataclass
