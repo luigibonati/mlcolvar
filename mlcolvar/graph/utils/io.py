@@ -19,7 +19,7 @@ def create_dataset_from_trajectories(
     buffer: float = 0.0,
     z_table: gdata.atomic.AtomicNumberTable = None,
     folder: str = None,
-    create_labels: bool = None,
+    create_labels: bool = True,
     system_selection: str = None,
     environment_selection: str = None,
     return_trajectories: bool = False,
@@ -52,8 +52,8 @@ def create_dataset_from_trajectories(
         Common path for the files to be imported. If set, filenames become
         `folder/file_name`.
     create_labels: bool
-        Assign a label to each file, default True if more than one set of files
-        is given, otherwise False.
+        Assign a label to each file according to the total number of files.
+        If False, labels of all files will be `-1`.
     system_selection: str
         MDTraj style atom selections [1] of the system atoms. If given, only
         selected atoms will be loaded from the trajectories. This option may
@@ -187,7 +187,7 @@ def create_dataset_from_trajectories(
             for j in range(len(trajectories_in_memory[i])):
                 configuration = _configures_from_trajectory(
                     trajectories_in_memory[i][j],
-                    i,  # NOTE: all these configurations have a label `i`
+                    i if create_labels else -1,  # NOTE: all these configurations have a label `i`
                     system_selection,
                     environment_selection,
                 )
@@ -195,7 +195,7 @@ def create_dataset_from_trajectories(
         else:
             configuration = _configures_from_trajectory(
                 trajectories_in_memory[i],
-                i,
+                i if create_labels else -1,
                 system_selection,
                 environment_selection,
             )
@@ -332,6 +332,23 @@ def test_create_dataset_from_trajectories(
     assert dataset[3]['graph_labels'] == torch.tensor([[1.0]])
     assert dataset[4]['graph_labels'] == torch.tensor([[1.0]])
     assert dataset[5]['graph_labels'] == torch.tensor([[1.0]])
+
+    dataset, trajectories = create_dataset_from_trajectories(
+        ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
+        ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
+        1.0,
+        create_labels=False,
+        system_selection=system_selection,
+        return_trajectories=True,
+        show_progress=False
+    )
+
+    assert dataset[0]['graph_labels'] == torch.tensor([[-1.0]])
+    assert dataset[1]['graph_labels'] == torch.tensor([[-1.0]])
+    assert dataset[2]['graph_labels'] == torch.tensor([[-1.0]])
+    assert dataset[3]['graph_labels'] == torch.tensor([[-1.0]])
+    assert dataset[4]['graph_labels'] == torch.tensor([[-1.0]])
+    assert dataset[5]['graph_labels'] == torch.tensor([[-1.0]])
 
     def check_data_1(data) -> None:
         assert (
