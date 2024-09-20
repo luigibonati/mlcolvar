@@ -357,6 +357,28 @@ class SmartDerivatives(torch.nn.Module):
 
 from mlcolvar.core.transform.descriptors.utils import sanitize_positions_shape
 def compute_descriptors_derivatives(dataset, descriptor_function, n_atoms, separate_boundary_dataset = True):
+    """Compute the derivatives of a set of descriptors wrt input positions in a dataset for committor optimization
+
+    Parameters
+    ----------
+    dataset :
+        DictDataset with the positions under the 'data' key
+    descriptor_function : torch.nn.Module
+        Transform module for the computation of the descriptors
+    n_atoms : int
+        Number of atoms in the system
+    separate_boundary_dataset : bool, optional
+            Switch to exculde boundary condition labeled data from the variational loss, by default True
+
+    Returns
+    -------
+    pos : torch.Tensor
+        Positions tensor
+    desc : torch.Tensor
+        Computed descriptors
+    d_desc_d_pos : torch.Tensor
+        Derivatives of desc wrt to pos
+    """
     pos = dataset['data']
     labels = dataset['labels']
     pos = sanitize_positions_shape(pos=pos, n_atoms=n_atoms)[0]
@@ -366,6 +388,8 @@ def compute_descriptors_derivatives(dataset, descriptor_function, n_atoms, separ
     if separate_boundary_dataset:
         mask_var = torch.nonzero(labels.squeeze() > 1, as_tuple=True)[0]
         der_desc = desc[mask_var]
+        if len(der_desc)==0:
+            raise(ValueError('No points left after separating boundary and variational datasets. \n If you are using only unbiased data set separate_boundary_dataset=False here and in Committor!'))
     else:
         der_desc = desc
 
@@ -420,6 +444,9 @@ def test_smart_derivatives():
                                                                 descriptor_function=ComputeDescriptors, 
                                                                 n_atoms=n_atoms, 
                                                                 separate_boundary_dataset=separate_boundary_dataset)
+        
+        assert(torch.allclose(desc, ref_distances, atol=1e-3))
+
 
         # apply simple NN
         NN = FeedForward(layers = [45, 2, 1])
