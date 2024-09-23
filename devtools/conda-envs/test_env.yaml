@@ -16,7 +16,7 @@ dependencies:
   - codecov
 
     # Package dependencies
-  - numpy
+  - numpy<2
   - pandas
   - pytorch
   - pydantic<2

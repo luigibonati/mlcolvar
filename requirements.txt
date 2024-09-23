@@ -1,6 +1,6 @@
 lightning
 torch
-numpy
+numpy<2
 pandas
 matplotlib
 kdepy
