@@ -187,15 +187,13 @@ def graph_committor_loss(
     loss_v = torch.mean((gradients_batch * weights)[mask_t])  # [,]
 
     # boundary conditions
-    q_a = q[mask_a]
-    q_b = q[mask_b]
-    loss_a = torch.mean(torch.pow(q_a, 2))
-    loss_b = torch.mean(torch.pow((q_b - 1.0), 2))
+    loss_a = torch.mean(torch.pow(q[mask_a], 2))
+    loss_b = torch.mean(torch.pow((q[mask_b] - 1.0), 2))
 
-    loss = gamma * (loss_v + alpha * (loss_a + loss_b))
+    loss = loss_v.log() + gamma * (alpha * (loss_a + loss_b))
 
     return (
-        loss, gamma * loss_v, alpha * gamma * loss_a, alpha * gamma * loss_b
+        loss, loss_v.log(), alpha * gamma * loss_a, alpha * gamma * loss_b
     )
 
 
