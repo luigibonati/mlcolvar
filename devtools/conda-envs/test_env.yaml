@@ -24,7 +24,7 @@ dependencies:
   - matplotlib
   - scikit-learn
   - scipy
-  - pytorch-scatter
+  - torch-scatter
    
     # Pip-only installs
   - pip:
