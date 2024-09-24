@@ -1,5 +1,5 @@
 import torch
-from typing import Union, List
+from typing import Union, List, Tuple
 
 def sanitize_positions_shape(pos: torch.Tensor,
                              n_atoms: int):
@@ -158,7 +158,7 @@ def compute_distances_pairs(pos: torch.Tensor,
                              n_atoms: int,
                              PBC: bool,
                              cell: Union[float, list],
-                             slicing_pairs: List[tuple[int, int]],
+                             slicing_pairs: List[Tuple[int, int]],
                              vector: bool = False,
                              scaled_coords: bool = False,
                             ) -> torch.Tensor:
