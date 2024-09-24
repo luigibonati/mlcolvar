@@ -3,7 +3,6 @@ channels:
 
   - pytorch
   - conda-forge
-  - pyg
 
   - defaults
 dependencies:
@@ -25,10 +24,10 @@ dependencies:
   - matplotlib
   - scikit-learn
   - scipy
-  - torch-scatter
    
     # Pip-only installs
   - pip:
     - KDEpy
     - nbmake
+    - torch-scatter
 
