@@ -79,11 +79,12 @@ class GraphCommittor(GraphBaseCV):
             raise RuntimeError(
                 'The `n_out` key of parameter `model_options` will be ignored!'
             )
+        model_options['n_out'] = 1
         if optimizer_options != {}:
             kwargs['optimizer_options'] = optimizer_options
 
         super().__init__(
-            1, cutoff, atomic_numbers, model_name, model_options, **kwargs
+            2, cutoff, atomic_numbers, model_name, model_options, **kwargs
         )
 
         atomic_masses = torch.tensor(
