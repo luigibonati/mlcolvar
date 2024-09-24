@@ -253,7 +253,7 @@ def get_dataset_kolmogorov_bias(
 
     for batchs in items:
         batch_dict = batchs.to(device).to_dict()
-        q = model(batch_dict)
+        q = model(batch_dict)[:, 1].unsqueeze(-1)
         grad_outputs: Optional[List[Optional[torch.Tensor]]] = [
             torch.ones_like(q, device=device)
         ]
