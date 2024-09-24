@@ -180,7 +180,7 @@ def compute_fes(
                 (X[:, i].min() - offset, X[:, i].max() + offset) for i in range(dim)
             ]
         grid_list = [np.linspace(b[0], b[1], num_samples) for b in bounds]
-        grid = np.meshgrid(*grid_list)
+        grid = list(np.meshgrid(*grid_list))
         positions = np.vstack([g.ravel() for g in grid]).T
 
     # divide in blocks
