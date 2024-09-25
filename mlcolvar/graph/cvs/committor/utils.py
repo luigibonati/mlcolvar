@@ -144,7 +144,6 @@ def graph_committor_loss(
     labels = data['graph_labels'].long().squeeze()
     mask_a = labels == 0
     mask_b = labels == 1
-    mask_t = labels > 1
 
     # Update weights of basin B using the information on the delta_f
     factor = torch.exp(torch.tensor([delta_f], dtype=dtype, device=device))
@@ -184,7 +183,7 @@ def graph_committor_loss(
         gradients_atomic, data['batch'], dim=0
     )  # [n_graphs, 1]
     # ensemble avg.
-    loss_v = torch.mean((gradients_batch * weights)[mask_t])  # [,]
+    loss_v = torch.mean((gradients_batch * weights))  # [,]
 
     # boundary conditions
     loss_a = torch.mean(torch.pow(q[mask_a], 2))
