@@ -68,6 +68,10 @@ def compute_committor_weights(dataset,
 
     if bias.isnan().any():
         raise(ValueError('Found Nan(s) in bias tensor. Check before proceeding! If no bias was applied replace Nan with zero!'))
+    
+    n_labels = len(torch.unique(dataset['labels']))
+    if n_labels != len(data_groups):
+        raise(ValueError(f'The number of labels ({n_labels}) and data groups ({len(data_groups)}) do not match! Ensure you are correctly mapping the data in your training set!'))
 
     # TODO sign if not from committor bias
     weights = torch.exp(beta * bias)

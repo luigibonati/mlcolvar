@@ -389,7 +389,7 @@ def compute_descriptors_derivatives(dataset, descriptor_function, n_atoms, separ
         mask_var = torch.nonzero(labels.squeeze() > 1, as_tuple=True)[0]
         der_desc = desc[mask_var]
         if len(der_desc)==0:
-            raise(ValueError('No points left after separating boundary and variational datasets. \n If you are using only unbiased data set separate_boundary_dataset=False here and in Committor!'))
+            raise(ValueError('No points left after separating boundary and variational datasets. \n If you are using only unbiased data set separate_boundary_dataset=False here and in Committor or don\'t use SmartDerivatives!!'))
     else:
         der_desc = desc
 
