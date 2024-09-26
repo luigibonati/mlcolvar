@@ -60,6 +60,23 @@ def sanitize_cell_shape(cell: Union[float, torch.Tensor, list]):
     
     return cell
 
+def _apply_pbc_distances(dist_components, pbc_cell):
+    shifts = torch.zeros_like(dist_components)
+    # avoid loop if cell is cubic
+    if pbc_cell[0]==pbc_cell[1] and pbc_cell[1]==pbc_cell[2]:
+        shifts = torch.div(dist_components, pbc_cell[0]/2, rounding_mode='trunc') 
+        shifts = torch.div(shifts + 1*torch.sign(shifts), 2, rounding_mode='trunc' )*pbc_cell[0]
+
+    else: 
+        # loop over dimensions of the pbc_cell
+        for d in range(3):
+            shifts[:, d, :, :] = torch.div(dist_components[:, d, :, :], pbc_cell[d]/2, rounding_mode='trunc')
+            shifts[:, d, :, :] = torch.div(shifts[:, d, :, :] + 1*torch.sign(shifts[:, d, :, :]), 2, rounding_mode='trunc' )*pbc_cell[d]/2
+
+    # apply shifts
+    dist_components = dist_components - shifts
+    return dist_components
+
 def compute_distances_matrix(pos: torch.Tensor,
                              n_atoms: int,
                              PBC: bool,
@@ -122,20 +139,7 @@ def compute_distances_matrix(pos: torch.Tensor,
 
     # get PBC shifts
     if PBC:
-        shifts = torch.zeros_like(dist_components)
-        # avoid loop if cell is cubic
-        if pbc_cell[0]==pbc_cell[1] and pbc_cell[1]==pbc_cell[2]:
-            shifts = torch.div(dist_components, pbc_cell[0]/2, rounding_mode='trunc') 
-            shifts = torch.div(shifts + 1*torch.sign(shifts), 2, rounding_mode='trunc' )*pbc_cell[0]
-
-        else: 
-            # loop over dimensions of the pbc_cell
-            for d in range(3):
-                shifts[:, d, :, :] = torch.div(dist_components[:, d, :, :], pbc_cell[d]/2, rounding_mode='trunc')
-                shifts[:, d, :, :] = torch.div(shifts[:, d, :, :] + 1*torch.sign(shifts[:, d, :, :]), 2, rounding_mode='trunc' )*pbc_cell[d]/2
-
-        # apply shifts
-        dist_components = dist_components - shifts
+        dist_components = _apply_pbc_distances(dist_components=dist_components, pbc_cell=pbc_cell)
 
     # if we used scaled coords we need to get back to real distances
     if scaled_coords:
@@ -220,21 +224,10 @@ def compute_distances_pairs(pos: torch.Tensor,
 
     # compute the distance components for all the pairs
     dist_components = pos_b - pos_a
+    
     # get PBC shifts
     if PBC:
-        shifts = torch.zeros_like(dist_components)
-        # avoid loop if cell is cubic
-        if pbc_cell[0] == pbc_cell[1] and pbc_cell[1] == pbc_cell[2]:
-            shifts = torch.div(dist_components, pbc_cell[0]/2, rounding_mode='trunc') 
-            shifts = torch.div(shifts + 1*torch.sign(shifts), 2, rounding_mode='trunc')*pbc_cell[0]
-        else: 
-            # loop over dimensions of the pbc_cell
-            for d in range(3):
-                shifts[:, d] = torch.div(dist_components[:, d], pbc_cell[d]/2, rounding_mode='trunc')
-                shifts[:, d] = torch.div(shifts[:, d] + 1*torch.sign(shifts[:, d]), 2, rounding_mode='trunc')*pbc_cell[d]/2
-
-        # apply shifts
-        dist_components = dist_components - shifts
+        dist_components = _apply_pbc_distances(dist_components=dist_components, pbc_cell=pbc_cell)
 
     # if we used scaled coords we need to get back to real distances
     if scaled_coords:
