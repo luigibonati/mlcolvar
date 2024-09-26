@@ -225,6 +225,8 @@ class SmartDerivatives(torch.nn.Module):
             Tensor containing the derivatives of the descriptors wrt the atomic positions
         n_atoms : int
             Number of atoms in the systems, all the atoms should be used in at least one of the descriptors
+        setup_device : str
+            Device on which to perform the expensive calculations. Either 'cpu' or 'cuda', by default 'cpu'
         """
         super().__init__()
         self.batch_size = len(der_desc_wrt_pos)
@@ -331,11 +333,6 @@ class SmartDerivatives(torch.nn.Module):
         # compute square modulus
         out = self._compute_square_modulus(x=src, indeces=self.scatter_indeces, n_atoms=self.n_atoms, batch_size=self.batch_size)
 
-        # delete useless variables
-        del(right)
-        del(left)
-        del(src)
-
         return out
         
     def _create_right(self, x : torch.Tensor, batch_ind : torch.Tensor, des_ind : torch.Tensor):
@@ -372,8 +369,6 @@ def compute_descriptors_derivatives(dataset, descriptor_function, n_atoms, separ
 
     Returns
     -------
-    pos : torch.Tensor
-        Positions tensor
     desc : torch.Tensor
         Computed descriptors
     d_desc_d_pos : torch.Tensor
