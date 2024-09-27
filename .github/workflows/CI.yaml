@@ -35,9 +35,10 @@ jobs:
           df -h
           ulimit -a
 
-      # More info on options: https://github.com/mamba-org/provision-with-micromamba#migration-to-setup-micromamba%60
-      - uses: mamba-org/setup-micromamba@main
+      # More info on options: https://github.com/mamba-org/setup-micromamba
+      - uses: mamba-org/setup-micromamba@v1
         with:
+          micromamba-version: '1.5.10-0'
           environment-file: devtools/conda-envs/test_env.yaml
           environment-name: test
           # channels: conda-forge,defaults

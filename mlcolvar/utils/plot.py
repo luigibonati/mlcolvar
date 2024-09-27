@@ -188,7 +188,8 @@ def plot_isolines_2D(
         if mode == "contourf":
             cmap = "fessa"
         elif mode == "contour":
-            cmap = "Greys_r"
+            if 'colors' not in kwargs:
+                cmap = "Greys_r"
 
     # Colorbar
     if colorbar is None:
