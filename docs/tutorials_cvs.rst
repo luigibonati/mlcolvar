@@ -19,3 +19,9 @@ Methods for CVs optimization
    :maxdepth: 1
 
    notebooks/tutorials/cvs_DeepTICA.ipynb
+
+.. toctree::
+   :caption: Committor-based setting
+   :maxdepth: 1
+
+   notebooks/tutorials/cvs_committor.ipynb

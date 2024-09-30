@@ -41,6 +41,8 @@ class Committor(BaseCV, lightning.LightningModule):
         gamma: float = 10000,
         delta_f: float = 0,
         cell: float = None,
+        separate_boundary_dataset : bool = True,
+        descriptors_derivatives : torch.nn.Module = None,
         options: dict = None,
         **kwargs,
     ):
@@ -62,6 +64,11 @@ class Committor(BaseCV, lightning.LightningModule):
             State B is supposed to be higher in energy.
         cell : float, optional
             CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, by default None
+        separate_boundary_dataset : bool, optional
+            Switch to exculde boundary condition labeled data from the variational loss, by default True
+        descriptors_derivatives : torch.nn.Module, optional
+            `SmartDerivatives` object to save memory and time when using descriptors.
+            See also mlcolvar.core.loss.committor_loss.SmartDerivatives
         options : dict[str, Any], optional
             Options for the building blocks of the model, by default {}.
             Available blocks: ['nn'] .
@@ -73,7 +80,9 @@ class Committor(BaseCV, lightning.LightningModule):
                                      alpha=alpha,
                                      gamma=gamma,
                                      delta_f=delta_f,
-                                     cell=cell
+                                     cell=cell,
+                                     separate_boundary_dataset=separate_boundary_dataset,
+                                     descriptors_derivatives=descriptors_derivatives
         )
 
         # ======= OPTIONS =======
@@ -132,14 +141,15 @@ def test_committor():
 
     # create two fake atoms and use their fake positions
     atomic_masses = initialize_committor_masses(atom_types=[0,1], masses=[15.999, 1.008])
-    model = Committor(layers=[6, 4, 2, 1], mass=atomic_masses, alpha=1e-1, delta_f=0)
     # create dataset
     samples = 50
-    X = torch.randn((2*samples, 6))
+    X = torch.randn((4*samples, 6))
     
     # create labels
     y = torch.zeros(X.shape[0])
     y[samples:] += 1
+    y[int(2*samples):] += 1
+    y[int(3*samples):] += 1
     
     # create weights
     w = torch.ones(X.shape[0])
@@ -149,12 +159,19 @@ def test_committor():
     
     # train model
     trainer = lightning.Trainer(max_epochs=5, logger=None, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0)
+    
+    # dataset separation
+    model = Committor(layers=[6, 4, 2, 1], mass=atomic_masses, alpha=1e-1, delta_f=0)
     trainer.fit(model, datamodule)
-
     model(X).sum().backward()
-
     bias_model = KolmogorovBias(input_model=model, beta=1, epsilon=1e-6, lambd=1)
     bias_model(X)
+
+    # naive whole dataset
+    trainer = lightning.Trainer(max_epochs=5, logger=None, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0)
+    model = Committor(layers=[6, 4, 2, 1], mass=atomic_masses, alpha=1e-1, delta_f=0, separate_boundary_dataset=False)
+    trainer.fit(model, datamodule)
+    model(X).sum().backward()
 
 if __name__ == "__main__":
     test_committor()

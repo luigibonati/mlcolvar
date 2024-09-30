@@ -29,4 +29,5 @@ dependencies:
   - pip:
     - KDEpy
     - nbmake
+    - torch-scatter
 
