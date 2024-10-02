@@ -157,7 +157,7 @@ def committor_loss(x: torch.Tensor,
     if delta_f < 0: # B higher in energy --> A-B < 0
         w[mask_B] = w[mask_B] * torch.exp(delta_f.to(device))
     elif delta_f > 0: # A higher in energy --> A-B > 0
-        w[mask_A] = w[mask_A] * torch.exp(delta_f.to(device)) 
+        w[mask_A] = w[mask_A] * torch.exp(-delta_f.to(device)) 
 
     ###### VARIATIONAL PRINICIPLE LOSS ######
     # Each loss contribution is scaled by the number of samples
