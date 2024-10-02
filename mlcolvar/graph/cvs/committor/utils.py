@@ -146,11 +146,16 @@ def graph_committor_loss(
     mask_b = labels == 1
 
     # Update weights of basin B using the information on the delta_f
-    factor = torch.exp(torch.tensor([delta_f], dtype=dtype, device=device))
     weights = data['weight'].clone()
     if delta_f < 0:  # B higher in energy --> A-B < 0
+        factor = torch.exp(
+            torch.tensor([delta_f], dtype=dtype, device=device)
+        )
         weights[mask_b] = weights[mask_b] * factor
     if delta_f > 0:  # A higher in energy --> A-B > 0
+        factor = torch.exp(
+            torch.tensor([delta_f], dtype=dtype, device=device) * -1
+        )
         weights[mask_a] = weights[mask_a] * factor
 
     # Each loss contribution is scaled by the number of samples
