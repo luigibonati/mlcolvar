@@ -11,7 +11,9 @@ Machine Learning Collective Variables for Enhanced Sampling
 **PAPER** [![paper](https://img.shields.io/badge/JCP-10.1063/5.0156343-blue)](https://doi.org/10.1063/5.0156343)
 [![preprint](https://img.shields.io/badge/arXiv-2305.19980-lightblue)](https://arxiv.org/abs/2305.19980)
 
-The documentation is available here: https://mlcolvar.readthedocs.io
+The documentation is available at:
+- **stable** version: https://mlcolvar.readthedocs.io
+- **latest** version: https://mlcolvar.readthedocs.io/en/latest/
 
 ---
 
