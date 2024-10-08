@@ -41,8 +41,8 @@ class DictModule(lightning.LightningDataModule):
     test sets.
 
     The class can also merge multiple :class:`~mlcolvar.data.dataset.DictDataset`s
-    that have different keys (see example below). The datasets must all have the
-    same number of samples.
+    that have different keys (see example below). The datasets can have different sizes but must all have the
+    same number of batches.
 
     Examples
     --------
