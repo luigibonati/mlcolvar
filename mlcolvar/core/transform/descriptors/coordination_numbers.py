@@ -196,6 +196,20 @@ def test_coordination_number():
     out_2.sum().backward()
     assert(torch.allclose(out, out_2))
 
+    # check using only subset of atoms
+    model = CoordinationNumbers(group_A=[2, 3],
+                                group_B=[0, 1, 4, 5, 6],
+                                cutoff=cutoff,
+                                n_atoms=n_atoms, 
+                                PBC=True,
+                                cell=cell,
+                                mode='continuous',
+                                scaled_coords=False,
+                                switching_function=switching_function)
+    
+    out = model(pos)
+    out.sum().backward()
+    
     # TODO add reference value for check
 
 if __name__ == "__main__":
