@@ -60,6 +60,7 @@ class CoordinationNumbers(Transform):
         self._group_A_size = len(group_A)
         self.group_B = group_B
         self._group_B_size = len(group_B)
+        self._n_used_atoms = self._group_A_size + self._group_B_size
         self._reordering = np.concatenate((self.group_A, self.group_B))
         self.cutoff = cutoff
         self.n_atoms = n_atoms
@@ -74,7 +75,7 @@ class CoordinationNumbers(Transform):
         pos, batch_size = sanitize_positions_shape(pos, self.n_atoms)
         pos = pos[:, self._reordering, :]
         dist = compute_distances_matrix(pos=pos,
-                                        n_atoms=self.n_atoms,
+                                        n_atoms=self._n_used_atoms,
                                         PBC=self.PBC,
                                         cell=self.cell,
                                         scaled_coords=self.scaled_coords)
@@ -195,6 +196,20 @@ def test_coordination_number():
     out_2.sum().backward()
     assert(torch.allclose(out, out_2))
 
+    # check using only subset of atoms
+    model = CoordinationNumbers(group_A=[2, 3],
+                                group_B=[0, 1, 4, 5, 6],
+                                cutoff=cutoff,
+                                n_atoms=n_atoms, 
+                                PBC=True,
+                                cell=cell,
+                                mode='continuous',
+                                scaled_coords=False,
+                                switching_function=switching_function)
+    
+    out = model(pos)
+    out.sum().backward()
+    
     # TODO add reference value for check
 
 if __name__ == "__main__":
