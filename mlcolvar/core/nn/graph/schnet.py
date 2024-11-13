@@ -4,7 +4,7 @@ import torch_scatter # TODO check this is equivalent in torch scatter
 from torch import nn
 from torch_geometric.nn import MessagePassing
 
-from mlcolvar.core.nn.graph.gnn import BaseModel
+from mlcolvar.core.nn.graph.gnn import BaseGNN
 
 from typing import List, Dict, Tuple
 
@@ -16,7 +16,7 @@ https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/nn/mod
 
 __all__ = ['InteractionBlock', 'ShiftedSoftplus']
 
-class SchNetModel(BaseModel):
+class SchNetModel(BaseGNN):
     """
     The SchNet [1] model. This implementation is taken from torch_geometric:
     https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/nn/models/schnet.py

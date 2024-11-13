@@ -15,10 +15,10 @@ from mlcolvar.core.nn.graph import radial
 GNN models.
 """
 
-__all__ = ['BaseModel', 'GVPModel', 'SchNetModel']
+__all__ = ['BaseGNN']
 
 
-class BaseModel(nn.Module):
+class BaseGNN(nn.Module):
     """
     The commen GNN interface for mlcolvar.
 
