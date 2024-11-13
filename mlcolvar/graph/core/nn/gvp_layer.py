@@ -1,5 +1,6 @@
 import functools
 import torch
+import math
 from torch import nn
 from torch_geometric.nn import MessagePassing
 from typing import Tuple, Callable, Optional
@@ -134,7 +135,8 @@ class GVPConv(MessagePassing):
         's': torch.Tensor,
         'v': torch.Tensor,
         'edge_attr_s': torch.Tensor,
-        'edge_attr_v': torch.Tensor
+        'edge_attr_v': torch.Tensor,
+        'edge_lengths': torch.Tensor,
     }
 
     def __init__(
@@ -146,11 +148,13 @@ class GVPConv(MessagePassing):
         aggr='mean',
         activations=(nn.functional.relu, torch.sigmoid),
         vector_gate=True,
+        cutoff: float = -1.0,
     ) -> None:
         super(GVPConv, self).__init__(aggr=aggr)
         self.si, self.vi = in_dims
         self.so, self.vo = out_dims
         self.se, self.ve = edge_dims
+        self.cutoff = cutoff
 
         GVP_ = functools.partial(
             GVP, activations=activations, vector_gate=vector_gate
@@ -182,7 +186,8 @@ class GVPConv(MessagePassing):
         self,
         x: Tuple[torch.Tensor, torch.Tensor],
         edge_index: torch.Tensor,
-        edge_attr: Tuple[torch.Tensor, torch.Tensor]
+        edge_attr: Tuple[torch.Tensor, torch.Tensor],
+        edge_lengths: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         :param x: tuple (s, V) of `torch.Tensor`
@@ -196,7 +201,8 @@ class GVPConv(MessagePassing):
             s=x_s,
             v=x_v.contiguous().view(x_v.shape[0], x_v.shape[1] * 3),
             edge_attr_s=edge_attr[0],
-            edge_attr_v=edge_attr[1]
+            edge_attr_v=edge_attr[1],
+            edge_lengths=edge_lengths,
         )
         return _split(message, self.vo)
 
@@ -207,7 +213,8 @@ class GVPConv(MessagePassing):
         s_j: torch.Tensor,
         v_j: torch.Tensor,
         edge_attr_s: torch.Tensor,
-        edge_attr_v: torch.Tensor
+        edge_attr_v: torch.Tensor,
+        edge_lengths: torch.Tensor,
     ) -> torch.Tensor:
         assert edge_attr_s is not None
         assert edge_attr_v is not None
@@ -217,7 +224,12 @@ class GVPConv(MessagePassing):
             (s_j, v_j), (edge_attr_s, edge_attr_v), (s_i, v_i)
         )
         message = self.message_func(message)
-        return _merge(*message)
+        message_merged = _merge(*message)
+        if self.cutoff > 0:
+            # apply SchNet-style cutoff function
+            c = 0.5 * (torch.cos(edge_lengths * math.pi / self.cutoff) + 1.0)
+            message_merged = message_merged * c.view(-1, 1)
+        return message_merged
 
     def message_func(
         self, x: Tuple[torch.Tensor, torch.Tensor]
@@ -259,6 +271,7 @@ class GVPConvLayer(nn.Module):
         activations=(nn.functional.relu, torch.sigmoid),
         vector_gate=True,
         residual=True,
+        cutoff: float = -1.0,
     ) -> None:
         super(GVPConvLayer, self).__init__()
         self.conv = GVPConv(
@@ -269,6 +282,7 @@ class GVPConvLayer(nn.Module):
             aggr='mean',
             activations=activations,
             vector_gate=vector_gate,
+            cutoff=cutoff,
         )
         GVP_ = functools.partial(
             GVP, activations=activations, vector_gate=vector_gate
@@ -297,7 +311,8 @@ class GVPConvLayer(nn.Module):
         x: Tuple[torch.Tensor, torch.Tensor],
         edge_index: torch.Tensor,
         edge_attr: Tuple[torch.Tensor, torch.Tensor],
-        node_mask: Optional[torch.Tensor] = None
+        edge_lengths: torch.Tensor,
+        node_mask: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         :param x: tuple (s, V) of `torch.Tensor`
@@ -308,7 +323,7 @@ class GVPConvLayer(nn.Module):
                these nodes will be updated.
         """
 
-        dh = self.conv(x, edge_index, edge_attr)
+        dh = self.conv(x, edge_index, edge_attr, edge_lengths)
 
         x_ = x
         if node_mask is not None:

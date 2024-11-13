@@ -131,6 +131,8 @@ class GVPModel(BaseModel):
         Name of the activation function to use in the GVPs (case sensitive).
     basis_type: str
         Type of the basis function.
+    smooth: bool
+        If use the smoothed GVPConv.
 
     References
     ----------
@@ -156,7 +158,8 @@ class GVPModel(BaseModel):
         n_scalars_edge: int = 8,
         drop_rate: int = 0.1,
         activation: str = 'SiLU',
-        basis_type: str = 'bessel'
+        basis_type: str = 'bessel',
+        smooth: bool = False,
     ) -> None:
         super().__init__(
             n_out, cutoff, atomic_numbers, n_bases, n_polynomials, basis_type
@@ -191,6 +194,7 @@ class GVPModel(BaseModel):
                 drop_rate=drop_rate,
                 activations=(eval(f'torch.nn.{activation}')(), None),
                 vector_gate=True,
+                cutoff=(cutoff if smooth else -1),
             )
             for _ in range(n_layers)
         )
@@ -227,6 +231,7 @@ class GVPModel(BaseModel):
         h_V = (h_V_1, h_V_2)
 
         h_E = self.embed_edge(data)
+        lengths = h_E[0]
         h_E = (h_E[1], h_E[2].unsqueeze(-2))
         for w in self.W_e:
             h_E = w(h_E)
@@ -237,7 +242,7 @@ class GVPModel(BaseModel):
         batch_id = data['batch']
 
         for layer in self.layers:
-            h_V = layer(h_V, data['edge_index'], h_E)
+            h_V = layer(h_V, data['edge_index'], h_E, lengths)
 
         for w in self.W_out:
             h_V = w(h_V)
