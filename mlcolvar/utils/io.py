@@ -10,7 +10,10 @@ import numpy as np
 import torch
 import os
 import urllib.request
-from typing import Union
+from typing import Union, List, Tuple
+import mdtraj
+
+from mlcolvar.data import graph as gdata
 
 from mlcolvar.data import DictDataset
 
@@ -258,6 +261,294 @@ def create_dataset_from_files(
     else:
         return dataset
 
+def create_dataset_from_trajectories(
+    trajectories: Union[List[List[str]], List[str], str],
+    top: Union[List[List[str]], List[str], str],
+    cutoff: float,
+    buffer: float = 0.0,
+    z_table: gdata.atomic.AtomicNumberTable = None,
+    folder: str = None,
+    create_labels: bool = True,
+    system_selection: str = None,
+    environment_selection: str = None,
+    return_trajectories: bool = False,
+    remove_isolated_nodes: bool = True,
+    show_progress: bool = True
+) -> Union[
+    DictDataset,
+    Tuple[
+        DictDataset,
+        Union[List[List[mdtraj.Trajectory]], List[mdtraj.Trajectory]]
+    ]
+]:
+    """
+    Create a dataset from a set of trajectory files.
+
+    Parameters
+    ----------
+    trajectories: Union[List[List[str]], List[str], str]
+        Names of trajectories files.
+    top: Union[List[List[str]], List[str], str]
+        Names of topology files.
+    cutoff: float (units: Ang)
+        The graph cutoff radius.
+    buffer: float
+        Buffer size used in finding active environment atoms.
+    z_table: mlcolvar.graph.data.atomic.AtomicNumberTable
+        The atomic number table used to build the node attributes. If not
+        given, it will be created from the given trajectories.
+    folder: str
+        Common path for the files to be imported. If set, filenames become
+        `folder/file_name`.
+    create_labels: bool
+        Assign a label to each file according to the total number of files.
+        If False, labels of all files will be `-1`.
+    system_selection: str
+        MDTraj style atom selections [1] of the system atoms. If given, only
+        selected atoms will be loaded from the trajectories. This option may
+        increase the speed of building graphs.
+    environment_selection: str
+        MDTraj style atom selections [1] of the environment atoms. If given,
+        only the system atoms and [the environment atoms within the cutoff
+        radius of the system atoms] will be kept in the graph.
+    return_trajectories: bool
+        If also return the loaded trajectory objects.
+    remove_isolated_nodes: bool
+        If remove isolated nodes from the dataset.
+    show_progress: bool
+        If show the progress bar.
+
+    Returns
+    -------
+    dataset: mlcolvar.graph.data.GraphDataSet
+        The graph dataset.
+    trajectories: Union[List[List[mdtraj.Trajectory]], List[mdtraj.Trajectory]]
+        The loaded trajectory objects.
+
+    Notes
+    -----
+    The login behind this method is like the follows:
+        1. If only `system_selection` is given, the method will only load atoms
+        selected by this selection, from the trajectories.
+        2. If both `system_selection` and `environment_selection` are given,
+        the method will load the atoms select by both selections, but will
+        build graphs using [the system atoms] and [the environment atoms within
+        the cutoff radius of the system atoms].
+
+    References
+    ----------
+    .. [1] https://www.mdtraj.org/1.9.8.dev0/atom_selection.html
+    """
+
+    if environment_selection is not None:
+        assert system_selection is not None, (
+            'the `environment_selection` argument requires the'
+            + '`system_selection` argument to be defined!'
+        )
+        selection = '({:s}) or ({:s})'.format(
+            system_selection, environment_selection
+        )
+    elif system_selection is not None:
+        selection = system_selection
+    else:
+        selection = None
+
+    if environment_selection is None:
+        assert buffer == 0, (
+            'Not `environment_selection` given! Cannot define buffer size!'
+        )
+
+    # fmt: off
+    assert type(trajectories) is type(top), (
+        'The `trajectories` and `top` parameters should have the same type!'
+    )
+    if isinstance(trajectories, str):
+        trajectories = [trajectories]
+        top = [top]
+    assert len(trajectories) == len(top), (
+        'Numbers of trajectories and topology files should be the same!'
+    )
+    # fmt: on
+
+    for i in range(len(trajectories)):
+        assert type(trajectories[i]) is type(top[i]), (
+            'Each element of `trajectories` and `top` parameters '
+            + 'should have the same type!'
+        )
+        if isinstance(trajectories[i], list):
+            assert len(trajectories[i]) == len(top[i]), (
+                'Numbers of trajectories and topology files should be '
+                + 'the same!'
+            )
+            for j in range(len(trajectories[i])):
+                if folder is not None:
+                    trajectories[i][j] = folder + '/' + trajectories[i][j]
+                    top[i][j] = folder + '/' + top[i][j]
+                assert isinstance(trajectories[i][j], str)
+                assert isinstance(top[i][j], str)
+        else:
+            if folder is not None:
+                trajectories[i] = folder + '/' + trajectories[i]
+                top[i] = folder + '/' + top[i]
+            assert isinstance(trajectories[i], str)
+            assert isinstance(top[i], str)
+
+    topologies = []
+    trajectories_in_memory = []
+
+    for i in range(len(trajectories)):
+        if isinstance(trajectories[i], list):
+            traj = [
+                mdtraj.load(trajectories[i][j], top=top[i][j])
+                for j in range(len(trajectories[i]))
+            ]
+            for t in traj:
+                t.top = mdtraj.core.trajectory.load_topology(top[i][j])
+            if selection is not None:
+                for j in range(len(traj)):
+                    subset = traj[j].top.select(selection)
+                    assert len(subset) > 0, (
+                        'No atoms will be selected with selection string '
+                        + '"{:s}"!'.format(selection)
+                    )
+                    traj[j] = traj[j].atom_slice(subset)
+            trajectories_in_memory.append(traj)
+            topologies.extend([t.top for t in traj])
+        else:
+            traj = mdtraj.load(trajectories[i], top=top[i])
+            traj.top = mdtraj.core.trajectory.load_topology(top[i])
+            if selection is not None:
+                subset = traj.top.select(selection)
+                assert len(subset) > 0, (
+                    'No atoms will be selected with selection string '
+                    + '"{:s}"!'.format(selection)
+                )
+                traj = traj.atom_slice(subset)
+            trajectories_in_memory.append(traj)
+            topologies.append(traj.top)
+
+    if z_table is None:
+        z_table = _z_table_from_top(topologies)
+
+    configurations = []
+    for i in range(len(trajectories_in_memory)):
+        if isinstance(trajectories_in_memory[i], list):
+            for j in range(len(trajectories_in_memory[i])):
+                configuration = _configures_from_trajectory(
+                    trajectories_in_memory[i][j],
+                    i if create_labels else -1,  # NOTE: all these configurations have a label `i`
+                    system_selection,
+                    environment_selection,
+                )
+                configurations.extend(configuration)
+        else:
+            configuration = _configures_from_trajectory(
+                trajectories_in_memory[i],
+                i if create_labels else -1,
+                system_selection,
+                environment_selection,
+            )
+            configurations.extend(configuration)
+
+    dataset = gdata.dataset.create_dataset_from_configurations(
+        configurations,
+        z_table,
+        cutoff,
+        buffer,
+        remove_isolated_nodes,
+        show_progress
+    )
+
+    if return_trajectories:
+        return dataset, trajectories_in_memory
+    else:
+        return dataset
+    
+
+def _z_table_from_top(
+    top: List[mdtraj.Topology]
+) -> gdata.atomic.AtomicNumberTable:
+    """
+    Create an atomic number table from the topologies.
+
+    Parameters
+    ----------
+    top: List[mdtraj.Topology]
+        The topology objects.
+    """
+    atomic_numbers = []
+    for t in top:
+        atomic_numbers.extend([a.element.number for a in t.atoms])
+    # atomic_numbers = np.array(atomic_numbers, dtype=int)
+    z_table = gdata.atomic.AtomicNumberTable.from_zs(atomic_numbers)
+    return z_table
+
+
+def _configures_from_trajectory(
+    trajectory: mdtraj.Trajectory,
+    label: int = None,
+    system_selection: str = None,
+    environment_selection: str = None,
+) -> gdata.atomic.Configurations:
+    """
+    Create configurations from one trajectory.
+
+    Parameters
+    ----------
+    trajectory: mdtraj.Trajectory
+        The MDTraj Trajectory object.
+    label: int
+        The graph label.
+    system_selection: str
+        MDTraj style atom selections of the system atoms. If given, only
+        selected atoms will be loaded from the trajectories. This option may
+        increase the speed of building graphs.
+    environment_selection: str
+        MDTraj style atom selections of the environment atoms. If given,
+        only the system atoms and [the environment atoms within the cutoff
+        radius of the system atoms] will be kept in the graph.
+    """
+    if label is not None:
+        label = np.array([[label]])
+
+    if system_selection is not None and environment_selection is not None:
+        system_atoms = trajectory.top.select(system_selection)
+        assert len(system_atoms) > 0, (
+            'No atoms will be selected with `system_selection`: '
+            + '"{:s}"!'.format(system_selection)
+        )
+        environment_atoms = trajectory.top.select(environment_selection)
+        assert len(environment_atoms) > 0, (
+            'No atoms will be selected with `environment_selection`: '
+            + '"{:s}"!'.format(environment_selection)
+        )
+    else:
+        system_atoms = None
+        environment_atoms = None
+
+    atomic_numbers = [a.element.number for a in trajectory.top.atoms]
+    if trajectory.unitcell_vectors is not None:
+        pbc = [True] * 3
+        cell = trajectory.unitcell_vectors
+    else:
+        pbc = [False] * 3
+        cell = [None] * len(trajectory)
+
+    configurations = []
+    for i in range(len(trajectory)):
+        configuration = gdata.atomic.Configuration(
+            atomic_numbers=atomic_numbers,
+            positions=trajectory.xyz[i] * 10,
+            cell=cell[i] * 10,
+            pbc=pbc,
+            graph_labels=label,
+            node_labels=None,  # TODO: Add supports for per-node labels.
+            system=system_atoms,
+            environment=environment_atoms
+        )
+        configurations.append(configuration)
+
+    return configurations
 
 def test_datasetFromFile():
     # Test with unlabeled dataset
