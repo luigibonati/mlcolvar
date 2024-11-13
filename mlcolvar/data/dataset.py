@@ -2,6 +2,8 @@ import torch
 import numpy as np
 from mlcolvar.core.transform.utils import Statistics
 from torch.utils.data import Dataset
+import torch_geometric
+from mlcolvar.data.graph.atomic import AtomicNumberTable
 
 __all__ = ["DictDataset"]
 
@@ -14,7 +16,7 @@ class DictDataset(Dataset):
            'weights' : np.asarray([0.5,1.5,1.5,0.5]) }
     """
 
-    def __init__(self, dictionary: dict = None, feature_names=None, **kwargs):
+    def __init__(self, dictionary: dict=None, feature_names = None, metadata: dict = None, **kwargs):
         """Create a Dataset from a dictionary or from a list of kwargs.
 
         Parameters
@@ -30,7 +32,12 @@ class DictDataset(Dataset):
             raise TypeError(
                 f"DictDataset requires a dictionary , not {type(dictionary)}."
             )
-
+        
+        if (metadata is not None) and (not isinstance(metadata, dict)):
+            raise TypeError(
+                f"DictDataset metadata requires a dictionary , not {type(metadata)}."
+            )
+        
         # Add kwargs to dict
         if dictionary is None:
             dictionary = {}
@@ -41,7 +48,10 @@ class DictDataset(Dataset):
         # convert to torch.Tensors
         for key, val in dictionary.items():
             if not isinstance(val, torch.Tensor):
-                dictionary[key] = torch.Tensor(val)
+                if key =="data_list":
+                    dictionary[key] = val
+                else:
+                    dictionary[key] = torch.Tensor(val)
 
         # save dictionary
         self._dictionary = dictionary
@@ -49,10 +59,13 @@ class DictDataset(Dataset):
         # save feature names
         self.feature_names = feature_names
 
+        # save metadata
+        self.metadata = metadata
+
         # check that all elements of dict have same length
         it = iter(dictionary.values())
         self.length = len(next(it))
-        if not all(len(l) == self.length for l in it):
+        if not all([len(l)==self.length for l in it]):
             raise ValueError("not all arrays in dictionary have same length!")
 
     def __getitem__(self, index):
@@ -70,7 +83,7 @@ class DictDataset(Dataset):
             # check lengths
             if len(value) != len(self):
                 raise ValueError(
-                    f"length of value ({len(value)}) != length of dataset ({len(self)})."
+                f"length of value ({len(value)}) != length of dataset ({len(self)})."
                 )
             self._dictionary[index] = value
         else:
@@ -98,7 +111,12 @@ class DictDataset(Dataset):
     def __repr__(self) -> str:
         string = "DictDataset("
         for key, val in self._dictionary.items():
-            string += f' "{key}": {list(val.shape)},'
+            if key=="data_list":
+                string += f' "{key}": {len(val)},'
+            else:
+                string += f' "{key}": {list(val.shape)},'
+        for key, val in self.metadata.items():
+            string += f' "{key}": {val},'
         string = string[:-1] + " )"
         return string
 
