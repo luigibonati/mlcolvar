@@ -8,6 +8,8 @@ from mlcolvar.data.graph.neighborhood import get_neighborhood
 # from mlcolvar.data.graph.utils import torch_tools # moved here one hot
 from mlcolvar.utils.plot import pbar # moved
 
+from mlcolvar.data.dataset import DictDataset
+
 """
 Build the graph data from a configuration. This module is taken from MACE:
 https://github.com/ACEsuit/mace/blob/main/mace/data/atomic_data.py
@@ -255,7 +257,10 @@ def create_dataset_from_configurations(
         for i in range(len(data_list)):
             data_list[i].cell = cell_list[i]
 
-    dataset = GraphDataSet(data_list, z_table.zs, cutoff)
+    # dataset = GraphDataSet(data_list, z_table.zs, cutoff)
+    dataset = DictDataset({'data_list' : data_list,
+                           'z_table' : z_table.zs,
+                           'cutoff' : cutoff})
 
     return dataset
 

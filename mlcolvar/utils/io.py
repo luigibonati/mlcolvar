@@ -275,9 +275,9 @@ def create_dataset_from_trajectories(
     remove_isolated_nodes: bool = True,
     show_progress: bool = True
 ) -> Union[
-    gdata.GraphDataSet,
+    DictDataset,
     Tuple[
-        gdata.GraphDataSet,
+        DictDataset,
         Union[List[List[mdtraj.Trajectory]], List[mdtraj.Trajectory]]
     ]
 ]:
@@ -450,7 +450,7 @@ def create_dataset_from_trajectories(
             )
             configurations.extend(configuration)
 
-    dataset = gdata.create_dataset_from_configurations(
+    dataset = gdata.dataset.create_dataset_from_configurations(
         configurations,
         z_table,
         cutoff,
@@ -479,7 +479,7 @@ def _z_table_from_top(
     atomic_numbers = []
     for t in top:
         atomic_numbers.extend([a.element.number for a in t.atoms])
-    atomic_numbers = np.array(atomic_numbers, dtype=int)
+    # atomic_numbers = np.array(atomic_numbers, dtype=int)
     z_table = gdata.atomic.AtomicNumberTable.from_zs(atomic_numbers)
     return z_table
 
