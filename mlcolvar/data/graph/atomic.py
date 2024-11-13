@@ -1,6 +1,6 @@
 import warnings
 import numpy as np
-import mdtraj as md
+import mdtraj as md # TODO re-write the two functions
 from dataclasses import dataclass
 from typing import List, Iterable, Optional
 
@@ -17,7 +17,6 @@ class AtomicNumberTable:
     """
     The atomic number table. Used to map between one hot encodings and a given
     set of actual atomic numbers.
-
     Parameters
     ----------
     zs: List[int]
@@ -48,7 +47,6 @@ class AtomicNumberTable:
     def index_to_z(self, index: int) -> int:
         """
         Map the encoding to the actual atomic number.
-
         Parameters
         ----------
         index: int
@@ -59,7 +57,6 @@ class AtomicNumberTable:
     def index_to_symbol(self, index: int) -> str:
         """
         Map the encoding to the atomic symbol.
-
         Parameters
         ----------
         index: int
@@ -70,7 +67,6 @@ class AtomicNumberTable:
     def z_to_index(self, atomic_number: int) -> int:
         """
         Map an atomic number to the encoding.
-
         Parameters
         ----------
         atomic_number: int
@@ -81,7 +77,6 @@ class AtomicNumberTable:
     def zs_to_indices(self, atomic_numbers: np.ndarray) -> np.ndarray:
         """
         Map an array of atomic number to the encodings.
-
         Parameters
         ----------
         atomic_numbers: numpy.ndarray
@@ -94,7 +89,6 @@ class AtomicNumberTable:
     def from_zs(cls, atomic_numbers: Iterable[int]) -> 'AtomicNumberTable':
         """
         Build the table from an array atomic numbers.
-
         Parameters
         ----------
         atomic_numbers: Iterable[int]
@@ -109,7 +103,6 @@ class AtomicNumberTable:
 def get_masses(atomic_numbers: Iterable[int]) -> List[float]:
     """
     Get atomic masses from atomic numbers.
-
     Parameters
     ----------
     atomic_numbers: Iterable[int]
