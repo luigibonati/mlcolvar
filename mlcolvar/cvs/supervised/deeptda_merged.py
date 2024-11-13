@@ -135,14 +135,15 @@ class DeepTDA(BaseCV, lightning.LightningModule):
                                                            return_loss_terms=True
                                                           )
         elif self.gnn_model._model_type is 'gnn':
-            data = train_batch.to_dict()
+            # data = train_batch.to_dict()
+            data = train_batch['data_list']
             data['positions'].requires_grad_(True)
             data['node_attrs'].requires_grad_(True)
 
             output = self.forward(data)
 
             loss, loss_centers, loss_sigmas = self.loss_fn(output,
-                                                           train_batch.graph_labels.squeeze(),
+                                                           data["graph_labels"].squeeze(),
                                                            return_loss_terms=True
                                                           )
 
