@@ -22,7 +22,6 @@ def get_neighborhood(
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Get the neighbor list of a given set atoms.
-
     Parameters
     ----------
     positions: numpy.ndarray (shape: [N, 3])
@@ -41,7 +40,6 @@ def get_neighborhood(
         Indices of the environment atoms.
     buffer: float
         Buffer size used in finding active environment atoms.
-
     Returns
     -------
     edge_index: numpy.ndarray (shape: [2, n_edges])
@@ -50,7 +48,6 @@ def get_neighborhood(
         The shift vectors (unit_shifts * cell_lengths).
     unit_shifts: numpy.ndarray (shape: [n_edges, 3])
         The unit shift vectors (number of PBC croessed by the edges).
-
     Notes
     -----
     Arguments `system_indices` and `environment_indices` must presnet at the

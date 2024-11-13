@@ -6,7 +6,8 @@ import numpy as np
 from typing import Sequence, Union, Optional, Tuple
 from lightning.pytorch.utilities import combined_loader
 
-from mlcolvar.graph.data import atomic, create_dataset_from_configurations
+from mlcolvar.data.graph import atomic 
+from mlcolvar.data.graph.dataset import create_dataset_from_configurations
 
 """
 The data module for lightning.
@@ -182,58 +183,68 @@ class GraphDataModule(lightning.LightningDataModule):
     def teardown(self, stage: str) -> None:
         pass
 
+    # def __repr__(self) -> str:
+    #     result = ''
+    #     n_digits = len(str(self._n_total))
+    #     data_string_1 = '[ \033[32m{{:{:d}d}}\033[0m\033[36m 󰡷 \033[0m'
+    #     data_string_2 = '| \033[32m{{:{:d}d}}\033[0m\033[36m  \033[0m'
+    #     shuffle_string_1 = '|\033[36m  \033[0m ]'
+    #     shuffle_string_2 = '|\033[36m  \033[0m ]'
+
+    #     prefix = '\033[1m\033[34m  BASEDATA  \033[0m: '
+    #     result += (
+    #         prefix + self._dataset.__repr__().split('GRAPHDATASET ')[1] + '\n'
+    #     )
+    #     prefix = '\033[1m\033[34m  TRAINING  \033[0m: '
+    #     string = prefix + data_string_1.format(n_digits)
+    #     result += string.format(
+    #         self._n_train, self._n_train / self._n_total * 100
+    #     )
+    #     string = data_string_2.format(n_digits)
+    #     result += string.format(self.batch_size[0])
+    #     if self.shuffle[0]:
+    #         result += shuffle_string_1
+    #     else:
+    #         result += shuffle_string_2
+
+    #     if self._n_validation > 0:
+    #         result += '\n'
+    #         prefix = '\033[1m\033[34m VALIDATION \033[0m: '
+    #         string = prefix + data_string_1.format(n_digits)
+    #         result += string.format(
+    #             self._n_validation, self._n_validation / self._n_total * 100
+    #         )
+    #         string = data_string_2.format(n_digits)
+    #         result += string.format(self.batch_size[1])
+    #         if self.shuffle[1]:
+    #             result += shuffle_string_1
+    #         else:
+    #             result += shuffle_string_2
+
+    #     if self._n_test > 0:
+    #         result += '\n'
+    #         prefix = '\033[1m\033[34m    TEST    \033[0m: '
+    #         string = prefix + data_string_1.format(n_digits)
+    #         result += string.format(
+    #             self._n_test, self._n_test / self._n_total * 100
+    #         )
+    #         string = data_string_2.format(n_digits)
+    #         result += string.format(self.batch_size[2])
+    #         if self.shuffle[2]:
+    #             result += shuffle_string_1
+    #         else:
+    #             result += shuffle_string_2
+    #     return result
+
     def __repr__(self) -> str:
-        result = ''
-        n_digits = len(str(self._n_total))
-        data_string_1 = '[ \033[32m{{:{:d}d}}\033[0m\033[36m 󰡷 \033[0m'
-        data_string_2 = '| \033[32m{{:{:d}d}}\033[0m\033[36m  \033[0m'
-        shuffle_string_1 = '|\033[36m  \033[0m ]'
-        shuffle_string_2 = '|\033[36m  \033[0m ]'
-
-        prefix = '\033[1m\033[34m  BASEDATA  \033[0m: '
-        result += (
-            prefix + self._dataset.__repr__().split('GRAPHDATASET ')[1] + '\n'
-        )
-        prefix = '\033[1m\033[34m  TRAINING  \033[0m: '
-        string = prefix + data_string_1.format(n_digits)
-        result += string.format(
-            self._n_train, self._n_train / self._n_total * 100
-        )
-        string = data_string_2.format(n_digits)
-        result += string.format(self.batch_size[0])
-        if self.shuffle[0]:
-            result += shuffle_string_1
-        else:
-            result += shuffle_string_2
-
-        if self._n_validation > 0:
-            result += '\n'
-            prefix = '\033[1m\033[34m VALIDATION \033[0m: '
-            string = prefix + data_string_1.format(n_digits)
-            result += string.format(
-                self._n_validation, self._n_validation / self._n_total * 100
-            )
-            string = data_string_2.format(n_digits)
-            result += string.format(self.batch_size[1])
-            if self.shuffle[1]:
-                result += shuffle_string_1
-            else:
-                result += shuffle_string_2
-
-        if self._n_test > 0:
-            result += '\n'
-            prefix = '\033[1m\033[34m    TEST    \033[0m: '
-            string = prefix + data_string_1.format(n_digits)
-            result += string.format(
-                self._n_test, self._n_test / self._n_total * 100
-            )
-            string = data_string_2.format(n_digits)
-            result += string.format(self.batch_size[2])
-            if self.shuffle[2]:
-                result += shuffle_string_1
-            else:
-                result += shuffle_string_2
-        return result
+        string = f"DictModule(dataset -> {self._dataset.__repr__()}"
+        string += f",\n\t\t     train_loader -> DictLoader(length={self._lengths[0]}, batch_size={self.batch_size[0]}, shuffle={self.shuffle[0]})"
+        if len(self._lengths) >= 2:
+            string += f",\n\t\t     valid_loader -> DictLoader(length={self._lengths[1]}, batch_size={self.batch_size[1]}, shuffle={self.shuffle[1]})"
+        if len(self._lengths) >= 3:
+            string += f",\n\t\t\ttest_loader =DictLoader(length={self._lengths[2]}, batch_size={self.batch_size[2]}, shuffle={self.shuffle[2]})"
+        string += f")"
+        return string
 
     def _check_setup(self) -> None:
         """

@@ -3,10 +3,12 @@ import torch_geometric as tg
 import numpy as np
 from typing import List, Union
 
-from mlcolvar.graph.data import atomic
-from mlcolvar.graph.data.neighborhood import get_neighborhood
-from mlcolvar.graph.utils import torch_tools
-from mlcolvar.graph.utils import progress
+from mlcolvar.data.graph import atomic
+from mlcolvar.data.graph.neighborhood import get_neighborhood
+# from mlcolvar.data.graph.utils import torch_tools # moved here one hot
+from mlcolvar.utils.plot import pbar # moved
+
+from mlcolvar.data.dataset import DictDataset
 
 """
 Build the graph data from a configuration. This module is taken from MACE:
@@ -151,7 +153,7 @@ def _create_dataset_from_configuration(
     cell = torch.tensor(config.cell, dtype=torch.get_default_dtype())
 
     indices = z_table.zs_to_indices(config.atomic_numbers)
-    one_hot = torch_tools.to_one_hot(
+    one_hot = to_one_hot(
         torch.tensor(indices, dtype=torch.long).unsqueeze(-1),
         n_classes=len(z_table),
     )
@@ -231,7 +233,7 @@ def create_dataset_from_configurations(
         If show the progress bar.
     """
     if show_progress:
-        items = progress.pbar(config, frequency=0.0001, prefix='Making graphs')
+        items = pbar(config, frequency=0.0001, prefix='Making graphs')
     else:
         items = config
 
@@ -255,7 +257,10 @@ def create_dataset_from_configurations(
         for i in range(len(data_list)):
             data_list[i].cell = cell_list[i]
 
-    dataset = GraphDataSet(data_list, z_table.zs, cutoff)
+    # dataset = GraphDataSet(data_list, z_table.zs, cutoff)
+    dataset = DictDataset(dictionary={'data_list' : data_list},
+                          metadata={'z_table' : z_table.zs,
+                                    'cutoff' : cutoff})
 
     return dataset
 
@@ -322,6 +327,30 @@ def save_dataset_as_exyz(dataset: GraphDataSet, file_name: str) -> None:
             print('{:10.5f} {:10.5f} {:10.5f}'.format(*positions), file=fp)
 
     fp.close()
+
+def to_one_hot(indices: torch.Tensor, n_classes: int) -> torch.Tensor:
+    """
+    Generates one-hot encoding with `n_classes` classes from `indices`
+
+    Parameters
+    ----------
+    indices: torch.Tensor (shape: [N, 1])
+        Node incices.
+    n_classes: int
+        Number of classes.
+
+    Returns
+    -------
+    encoding: torch.tensor (shape: [N, n_classes])
+        The one-hot encoding.
+    """
+    shape = indices.shape[:-1] + (n_classes,)
+    oh = torch.zeros(shape, device=indices.device).view(shape)
+
+    # scatter_ is the in-place version of scatter
+    oh.scatter_(dim=-1, index=indices, value=1)
+
+    return oh.view(*shape)
 
 
 def test_from_configuration() -> None:
