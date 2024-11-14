@@ -57,6 +57,10 @@ class Generator(BaseCV, lightning.LightningModule):
         x.requires_grad = True
 
         weights = train_batch["weights"]
+        if "derivatives" in train_batch.keys():
+            derivatives = train_batch["derivatives"]
+        else:
+            derivatives = None
 
         # =================forward====================
         # we use forward and not forward_cv to also apply the preprocessing (if present)
@@ -64,11 +68,11 @@ class Generator(BaseCV, lightning.LightningModule):
         # ===================loss=====================
         if self.training:
             loss, loss_ef, loss_ortho = self.loss_fn(
-                x, q, weights 
+                x, q, weights, derivatives 
             )
         else:
             loss, loss_ef, loss_ortho = self.loss_fn(
-                x, q, weights 
+                x, q, weights, derivatives 
             )
         # ====================log=====================+
         name = "train" if self.training else "valid"
