@@ -26,7 +26,6 @@ dependencies:
   - scikit-learn
   - scipy
   - pyg
-  - matscipy
 
     # Pip-only installs
   - pip:
@@ -34,4 +33,6 @@ dependencies:
     - nbmake
     - torch-scatter
     - mdtraj
+    - matscipy
+
 
