@@ -45,6 +45,10 @@ class DictDataset(Dataset):
         if len(dictionary) == 0:
             raise ValueError("Empty datasets are not supported")
 
+        # initialize metadata as dict
+        if metadata is None:
+            metadata = {}
+
         # convert to torch.Tensors
         for key, val in dictionary.items():
             if not isinstance(val, torch.Tensor):
