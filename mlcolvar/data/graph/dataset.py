@@ -260,7 +260,8 @@ def create_dataset_from_configurations(
     # dataset = GraphDataSet(data_list, z_table.zs, cutoff)
     dataset = DictDataset(dictionary={'data_list' : data_list},
                           metadata={'z_table' : z_table.zs,
-                                    'cutoff' : cutoff})
+                                    'cutoff' : cutoff},
+                          data_type='graphs')
 
     return dataset
 

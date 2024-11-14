@@ -16,7 +16,7 @@ class DictDataset(Dataset):
            'weights' : np.asarray([0.5,1.5,1.5,0.5]) }
     """
 
-    def __init__(self, dictionary: dict=None, feature_names = None, metadata: dict = None, **kwargs):
+    def __init__(self, dictionary: dict=None, feature_names = None, metadata: dict = None, data_type : str = 'descriptors', **kwargs):
         """Create a Dataset from a dictionary or from a list of kwargs.
 
         Parameters
@@ -38,6 +38,12 @@ class DictDataset(Dataset):
                 f"DictDataset metadata requires a dictionary , not {type(metadata)}."
             )
         
+        # assert data_type is 'descriptors' or 'graphs'
+        if not data_type in ['descriptors', 'graphs']:
+            raise TypeError(
+                f"data_type expected to be either 'descriptors' or 'graph', found {data_type}"
+            )
+        
         # Add kwargs to dict
         if dictionary is None:
             dictionary = {}
@@ -48,6 +54,7 @@ class DictDataset(Dataset):
         # initialize metadata as dict
         if metadata is None:
             metadata = {}
+        metadata['data_type'] = data_type
 
         # convert to torch.Tensors
         for key, val in dictionary.items():
