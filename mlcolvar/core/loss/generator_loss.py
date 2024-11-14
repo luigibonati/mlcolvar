@@ -23,11 +23,10 @@ class GeneratorLoss(torch.nn.Module):
   def compute_covariance(self,X,weights, centering=False):
     n = X.size(0)
     pre_factor = n / (n - 1)
-    mean = weights.mean()
     if X.ndim == 2:
-        return   pre_factor * (torch.einsum("ij,ik,i->jk",X,X,weights/mean)/n )#(X.T @ X / n - mean @ mean.T)
+        return   pre_factor * (torch.einsum("ij,ik,i->jk",X,X,weights)/n )#(X.T @ X / n - mean @ mean.T)
     else:
-        return pre_factor * (torch.einsum("ijk,ilk,i->jl",X,X,weights/mean) / n)
+        return pre_factor * (torch.einsum("ijk,ilk,i->jl",X,X,weights) / n)
   def get_parameter_dict(self,model):
     return dict(model.named_parameters()) 
   def forward(self, data, output, weights, gradient_descriptors=None):
