@@ -2,6 +2,7 @@ import pytest
 import urllib
 from mlcolvar.utils.io import load_dataframe
 from mlcolvar.utils.io import test_datasetFromFile
+from mlcolvar.utils.io import test_datasesetFromTrajectories
 
 example_files = {
     "str": "mlcolvar/tests/data/state_A.dat",
@@ -24,5 +25,5 @@ def test_loadDataframe(file_type):
 
 
 if __name__ == "__main__":
-    # test_loadDataframe()
     test_datasetFromFile()
+    test_datasesetFromTrajectories()
