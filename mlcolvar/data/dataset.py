@@ -2,8 +2,6 @@ import torch
 import numpy as np
 from mlcolvar.core.transform.utils import Statistics
 from torch.utils.data import Dataset
-import torch_geometric
-from mlcolvar.data.graph.atomic import AtomicNumberTable
 
 __all__ = ["DictDataset"]
 
@@ -148,13 +146,16 @@ class DictDataset(Dataset):
 
 
 def test_DictDataset():
+    # descriptors based
     # from list
     dataset_dict = {
         "data": torch.Tensor([[1.0], [2.0], [0.3], [0.4]]),
         "labels": [0, 0, 1, 1],
         "weights": np.asarray([0.5, 1.5, 1.5, 0.5]),
     }
-
+    
+    # this to have the right signature in asserts
+    from mlcolvar.data.dataset import DictDataset
     dataset = DictDataset(dataset_dict)
     print(len(dataset))
     print(dataset[0])
@@ -163,18 +164,44 @@ def test_DictDataset():
 
     # test with dataloader
     from torch.utils.data import DataLoader
-
     loader = DataLoader(dataset, batch_size=1)
     batch = next(iter(loader))
     print(batch["data"])
 
     # test with fastdataloader
-    from .dataloader import DictLoader
-
+    from mlcolvar.data import DictLoader
     loader = DictLoader(dataset, batch_size=1)
     batch = next(iter(loader))
     print(batch)
 
+    from mlcolvar.data.graph.atomic import AtomicNumberTable, Configuration
+    from mlcolvar.data.graph.utils import create_dataset_from_configurations
+    # graphs based
+    numbers = [8, 1, 1]
+    positions = np.array(
+        [[0.0, 0.0, 0.0], [0.07, 0.07, 0.0], [0.07, -0.07, 0.0]],
+        dtype=float
+    )
+    cell = np.identity(3, dtype=float) * 0.2
+    graph_labels = np.array([[1]])
+    node_labels = np.array([[0], [1], [1]])
+    z_table = AtomicNumberTable.from_zs(numbers)
+
+    config = [Configuration(
+        atomic_numbers=numbers,
+        positions=positions,
+        cell=cell,
+        pbc=[True] * 3,
+        node_labels=node_labels,
+        graph_labels=graph_labels,
+    )]
+    dataset = create_dataset_from_configurations(config, 
+                                              z_table, 
+                                              0.1, 
+                                              show_progress=False
+                                            )
+    print(dataset)
+    assert(isinstance(dataset, DictDataset))
 
 if __name__ == "__main__":
     test_DictDataset()
