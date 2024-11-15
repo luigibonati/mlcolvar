@@ -20,13 +20,13 @@ from typing import Sequence, Union, Optional
 import warnings
 
 import torch
+import torch_geometric
 import numpy as np
 import lightning
 from torch.utils.data import random_split, Subset
 from torch import default_generator, randperm
 
 from mlcolvar.data import DictLoader, DictDataset
-
 
 # =============================================================================
 # DICTIONARY DATAMODULE CLASS
@@ -122,7 +122,25 @@ class DictModule(lightning.LightningDataModule):
         """
         super().__init__()
         self.dataset = dataset
-        self.lengths = lengths
+
+        # check the type of data we have
+        if not isinstance(dataset, list):
+            self._dataset_type = dataset.metadata['data_type']
+        else:
+            it = iter(list(dataset))
+            self._dataset_type = next(it).metadata['data_type']
+            if not all(d.metadata['data_type'] for d in it):
+                raise ValueError("not all the dataset are of the same type!")
+
+
+        # decide which loader to use
+        if self._dataset_type == 'descriptors':
+            self.DataLoader = DictLoader
+        elif self._dataset_type == 'graphs':
+            self.DataLoader = torch_geometric.loader.DataLoader
+
+        self._lengths = lengths
+
         # Keeping this private for now. Changing it at runtime would
         # require changing dataset_split and the dataloaders.
         self._random_split = random_split
@@ -135,6 +153,9 @@ class DictModule(lightning.LightningDataModule):
             )
 
         # Make sure batch_size and shuffle are lists.
+        
+        if self._dataset_type == 'graphs' and batch_size == 0:
+            batch_size = len(dataset) # make this explicit for torch_geometric
         if isinstance(batch_size, int):
             self.batch_size = [batch_size for _ in lengths]
         else:
@@ -165,7 +186,7 @@ class DictModule(lightning.LightningDataModule):
         """Return training dataloader."""
         self._check_setup()
         if self.train_loader is None:
-            self.train_loader = DictLoader(
+            self.train_loader = self.DataLoader(
                 self._dataset_split[0],
                 batch_size=self.batch_size[0],
                 shuffle=self.shuffle[0],
@@ -175,12 +196,12 @@ class DictModule(lightning.LightningDataModule):
     def val_dataloader(self):
         """Return validation dataloader."""
         self._check_setup()
-        if len(self.lengths) < 2:
+        if len(self._lengths) < 2:
             raise NotImplementedError(
                 "Validation dataset not available, you need to pass two lengths to datamodule."
             )
         if self.valid_loader is None:
-            self.valid_loader = DictLoader(
+            self.valid_loader = self.DataLoader(
                 self._dataset_split[1],
                 batch_size=self.batch_size[1],
                 shuffle=self.shuffle[1],
@@ -190,12 +211,12 @@ class DictModule(lightning.LightningDataModule):
     def test_dataloader(self):
         """Return test dataloader."""
         self._check_setup()
-        if len(self.lengths) < 3:
+        if len(self._lengths) < 3:
             raise NotImplementedError(
                 "Test dataset not available, you need to pass three lengths to datamodule."
             )
         if self.test_loader is None:
-            self.test_loader = DictLoader(
+            self.test_loader = self.DataLoader(
                 self._dataset_split[2],
                 batch_size=self.batch_size[2],
                 shuffle=self.shuffle[2],
@@ -210,11 +231,11 @@ class DictModule(lightning.LightningDataModule):
 
     def __repr__(self) -> str:
         string = f"DictModule(dataset -> {self.dataset.__repr__()}"
-        string += f",\n\t\t     train_loader -> DictLoader(length={self.lengths[0]}, batch_size={self.batch_size[0]}, shuffle={self.shuffle[0]})"
-        if len(self.lengths) >= 2:
-            string += f",\n\t\t     valid_loader -> DictLoader(length={self.lengths[1]}, batch_size={self.batch_size[1]}, shuffle={self.shuffle[1]})"
-        if len(self.lengths) >= 3:
-            string += f",\n\t\t\ttest_loader =DictLoader(length={self.lengths[2]}, batch_size={self.batch_size[2]}, shuffle={self.shuffle[2]})"
+        string += f",\n\t\t     train_loader -> DictLoader(length={self._lengths[0]}, batch_size={self.batch_size[0]}, shuffle={self.shuffle[0]})"
+        if len(self._lengths) >= 2:
+            string += f",\n\t\t     valid_loader -> DictLoader(length={self._lengths[1]}, batch_size={self.batch_size[1]}, shuffle={self.shuffle[1]})"
+        if len(self._lengths) >= 3:
+            string += f",\n\t\t\ttest_loader =DictLoader(length={self._lengths[2]}, batch_size={self.batch_size[2]}, shuffle={self.shuffle[2]})"
         string += f")"
         return string
 
@@ -225,7 +246,7 @@ class DictModule(lightning.LightningDataModule):
         """
 
         dataset_split = split_dataset(
-            dataset, self.lengths, self._random_split, self.generator
+            dataset, self._lengths, self._random_split, self.generator
         )
         return dataset_split
 
