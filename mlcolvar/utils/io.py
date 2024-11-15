@@ -13,9 +13,10 @@ import urllib.request
 from typing import Union, List, Tuple
 import mdtraj
 
-from mlcolvar.data import graph as gdata
-
 from mlcolvar.data import DictDataset
+from mlcolvar.data.graph.atomic import AtomicNumberTable, Configuration, Configurations
+from mlcolvar.data.graph.utils import create_dataset_from_configurations
+
 
 __all__ = ["load_dataframe", "plumed_to_pandas", "create_dataset_from_files"]
 
@@ -266,7 +267,7 @@ def create_dataset_from_trajectories(
     top: Union[List[List[str]], List[str], str],
     cutoff: float,
     buffer: float = 0.0,
-    z_table: gdata.atomic.AtomicNumberTable = None,
+    z_table: AtomicNumberTable = None,
     folder: str = None,
     create_labels: bool = True,
     system_selection: str = None,
@@ -450,7 +451,7 @@ def create_dataset_from_trajectories(
             )
             configurations.extend(configuration)
 
-    dataset = gdata.dataset.create_dataset_from_configurations(
+    dataset = create_dataset_from_configurations(
         configurations,
         z_table,
         cutoff,
@@ -467,7 +468,7 @@ def create_dataset_from_trajectories(
 
 def _z_table_from_top(
     top: List[mdtraj.Topology]
-) -> gdata.atomic.AtomicNumberTable:
+) -> AtomicNumberTable:
     """
     Create an atomic number table from the topologies.
 
@@ -480,7 +481,7 @@ def _z_table_from_top(
     for t in top:
         atomic_numbers.extend([a.element.number for a in t.atoms])
     # atomic_numbers = np.array(atomic_numbers, dtype=int)
-    z_table = gdata.atomic.AtomicNumberTable.from_zs(atomic_numbers)
+    z_table = AtomicNumberTable.from_zs(atomic_numbers)
     return z_table
 
 
@@ -489,7 +490,7 @@ def _configures_from_trajectory(
     label: int = None,
     system_selection: str = None,
     environment_selection: str = None,
-) -> gdata.atomic.Configurations:
+) -> Configurations:
     """
     Create configurations from one trajectory.
 
@@ -536,7 +537,7 @@ def _configures_from_trajectory(
 
     configurations = []
     for i in range(len(trajectory)):
-        configuration = gdata.atomic.Configuration(
+        configuration = Configuration(
             atomic_numbers=atomic_numbers,
             positions=trajectory.xyz[i] * 10,
             cell=cell[i] * 10,
@@ -607,6 +608,19 @@ def test_datasetFromFile():
         stride=1,
     )
 
+def test_datasesetFromTrajectories():
+    create_dataset_from_trajectories(
+        trajectories=['r.dcd',
+                      'p.dcd'],
+        top=['r.pdb', 
+             'p.pdb'],
+        folder="mlcolvar/tests/data",
+        cutoff=8.0,  # Ang
+        create_labels=True,
+        system_selection='all and not type H',
+        show_progress=False
+    )
 
 if __name__ == "__main__":
     test_datasetFromFile()
+    test_datasesetFromTrajectories()
