@@ -4,6 +4,7 @@ channels:
   - conda-forge
   - pytorch
   - defaults
+  - pyg
 
 dependencies:
 
@@ -25,11 +26,10 @@ dependencies:
   - ipykernel
   - scikit-learn
   - scipy
+  - torch-scatter
 
   # Pip-only installs
   - pip:
     - sphinx-copybutton
     - furo
     - KDEpy
-    - torch-scatter
-
