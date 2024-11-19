@@ -4,6 +4,7 @@ channels:
   - conda-forge
   - pytorch
   - defaults
+  - pyg
 
 dependencies:
 
@@ -12,7 +13,7 @@ dependencies:
   - pip
 
   # Core dependencies
-  - numpy
+  - numpy<2
   - pandas
   - pytorch
   - pydantic<2 # workaround to avoid clashes with lightning
@@ -25,10 +26,10 @@ dependencies:
   - ipykernel
   - scikit-learn
   - scipy
+  - torch-scatter
 
   # Pip-only installs
   - pip:
     - sphinx-copybutton
     - furo
     - KDEpy
-
