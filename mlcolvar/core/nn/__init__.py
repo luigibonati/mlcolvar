@@ -1,3 +1,4 @@
-__all__ = ["FeedForward"]
+__all__ = ["FeedForward", "BaseGNN", "SchNetModel"]
 
 from .feedforward import *
+from .graph import *
