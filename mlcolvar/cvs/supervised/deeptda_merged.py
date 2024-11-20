@@ -64,7 +64,9 @@ class DeepTDA(BaseCV, lightning.LightningModule):
         """
 
         super().__init__(in_features=layers[0], out_features=layers[-1], **kwargs)
-        self.gnn_model = gnn_model
+        
+        # specify that the gnn_model should be handled with scripting
+        self.gnn_model = torch.jit.script_if_tracing(gnn_model)
 
         # =======   LOSS  =======
         self.loss_fn = TDALoss(
