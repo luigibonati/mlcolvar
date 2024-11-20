@@ -1,5 +1,7 @@
 import torch
 from mlcolvar.core.transform import Transform
+from typing import Union
+from mlcolvar.core.nn import FeedForward, BaseGNN
 
 
 class BaseCV:
@@ -8,6 +10,8 @@ class BaseCV:
 
     To inherit from this class, the class must define a BLOCKS class attribute.
     """
+
+    DEFAULT_BLOCKS = []
 
     def __init__(
         self,
@@ -66,6 +70,24 @@ class BaseCV:
             else self.preprocessing.in_features
         )
 
+    def parse_model(self, model: Union[list[int], FeedForward, BaseGNN]):
+        if isinstance(model, list):
+            self.layers = model
+            self.BLOCKS = self.DEFAULT_BLOCKS
+            self._override_model = False
+        elif isinstance(model, FeedForward) or isinstance(model, BaseGNN):
+            self.BLOCKS = ['nn']
+            self._override_model = True
+            if isinstance(model, FeedForward):
+                self.nn = model 
+            elif isinstance(model, BaseGNN):
+                # GNN models need to be scripted!
+                self.nn = torch.jit.script_if_tracing(model)
+        else:
+            raise ValueError(
+                "Ma belin se scemo?"
+            )
+
     def parse_options(self, options: dict = None):
         """
         Sanitize options and create defaults ({}) if not in options.
@@ -78,7 +100,13 @@ class BaseCV:
         """
         if options is None:
             options = {}
-
+        else:
+            for o in options.keys():
+                if o in self.DEFAULT_BLOCKS and self._override_model:
+                    raise ValueError(
+                        "Options on blocks are disabled if a model is provided!"
+                        )
+            
         for b in self.BLOCKS:
             options.setdefault(b, {})
 

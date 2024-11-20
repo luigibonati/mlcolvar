@@ -1,15 +1,12 @@
 import torch
 import lightning
 from mlcolvar.cvs import BaseCV
-from mlcolvar.core import FeedForward, Normalization
+from mlcolvar.core import FeedForward, BaseGNN, Normalization
 from mlcolvar.core.loss import TDALoss
 from mlcolvar.data import DictModule
-
-import torch_geometric
-
+from typing import Union
 
 __all__ = ["DeepTDA"]
-
 
 class DeepTDA(BaseCV, lightning.LightningModule):
     """
@@ -28,7 +25,7 @@ class DeepTDA(BaseCV, lightning.LightningModule):
         Distance from a simple Gaussian target distribution.
     """
 
-    BLOCKS = ["norm_in", "nn"]
+    DEFAULT_BLOCKS = ["norm_in", "nn"]
 
     # TODO n_states optional?
     def __init__(
@@ -37,8 +34,7 @@ class DeepTDA(BaseCV, lightning.LightningModule):
         n_cvs: int,
         target_centers: list,
         target_sigmas: list,
-        layers: list,
-        gnn_model=None,
+        model: Union[list[int], FeedForward, BaseGNN],
         options: dict = None,
         **kwargs,
     ):
@@ -62,11 +58,11 @@ class DeepTDA(BaseCV, lightning.LightningModule):
             Available blocks: ['norm_in', 'nn'].
             Set 'block_name' = None or False to turn off that block
         """
+        # check what model is
+        self.parse_model(model=model)
 
-        super().__init__(in_features=layers[0], out_features=layers[-1], **kwargs)
-        
-        # specify that the gnn_model should be handled with scripting
-        self.gnn_model = torch.jit.script_if_tracing(gnn_model)
+        # TODO in_features and out_features?? 
+        super().__init__(in_features=0, out_features=n_cvs, **kwargs)
 
         # =======   LOSS  =======
         self.loss_fn = TDALoss(
@@ -77,6 +73,7 @@ class DeepTDA(BaseCV, lightning.LightningModule):
 
         # ======= OPTIONS =======
         # parse and sanitize
+        # TODO make here the checks on options?
         options = self.parse_options(options)
         # Save n_states
         self.n_states = n_states
@@ -108,20 +105,20 @@ class DeepTDA(BaseCV, lightning.LightningModule):
                 )
 
         # ======= BLOCKS =======
-        # Initialize norm_in
-        o = "norm_in"
-        if (options[o] is not False) and (options[o] is not None and gnn_model is None):
-            self.norm_in = Normalization(self.in_features, **options[o])
+        if not self._override_model: 
+            # Initialize norm_in
+            o = "norm_in"
+            if (options[o] is not False) and (options[o] is not None):
+                self.norm_in = Normalization(self.in_features, **options[o])
 
-        # initialize NN
-        o = "nn"
-        if gnn_model is None:
-            self.nn = FeedForward(layers, **options[o])
-        else:
-            self.nn = gnn_model
+            # initialize NN
+            o = "nn"
+            self.nn = FeedForward(self.layers, **options[o])
+        elif self._override_model:
+            self.nn = model
 
     def training_step(self, train_batch, *args, **kwargs) -> torch.Tensor:
-        if self.gnn_model is None:
+        if isinstance(self.nn, FeedForward):
             # =================get data===================
             x = train_batch["data"]
             labels = train_batch["labels"]
@@ -132,7 +129,7 @@ class DeepTDA(BaseCV, lightning.LightningModule):
                                                            labels, 
                                                            return_loss_terms=True
                                                           )
-        elif self.gnn_model._model_type=='gnn':
+        elif isinstance(self.nn, BaseGNN):
             # data = train_batch.to_dict()
             data = train_batch['data_list']
             data['positions'].requires_grad_(True)
@@ -152,36 +149,6 @@ class DeepTDA(BaseCV, lightning.LightningModule):
         self.log(f"{name}_loss_sigmas", loss_sigmas, on_epoch=True)
 
         return loss
-
-    # def training_step(
-    #     self, train_batch: torch_geometric.data.Batch, *args, **kwargs
-    # ) -> torch.Tensor:
-    #     """
-    #     Compute and return the training loss and record metrics.
-
-    #     Parameters
-    #     ----------
-    #     train_batch: torch_geometric.data.Batch
-    #         The data batch.
-    #     """
-    #     data = train_batch.to_dict()
-    #     data['positions'].requires_grad_(True)
-    #     data['node_attrs'].requires_grad_(True)
-
-    #     output = self.forward(data)
-
-    #     loss, loss_centers, loss_sigmas = self.loss_fn(
-    #         output,
-    #         train_batch.graph_labels.squeeze(),
-    #         return_loss_terms=True
-    #     )
-
-    #     name = 'train' if self.training else 'valid'
-    #     self.log(f'{name}_loss', loss, on_epoch=True)
-    #     self.log(f'{name}_loss_centers', loss_centers, on_epoch=True)
-    #     self.log(f'{name}_loss_sigmas', loss_sigmas, on_epoch=True)
-    #     return loss
-
 
 # TODO signature of tests?
 import numpy as np
