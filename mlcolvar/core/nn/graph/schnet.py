@@ -6,14 +6,14 @@ from torch_geometric.nn import MessagePassing
 
 from mlcolvar.core.nn.graph.gnn import BaseGNN
 
-from typing import List, Dict, Tuple
+from typing import List, Dict
 
 """
 The SchNet components. This module is taken from the pgy package:
 https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/nn/models/schnet.py
 """
 
-__all__ = ['InteractionBlock', 'ShiftedSoftplus']
+__all__ = ["SchNetModel", "InteractionBlock", "ShiftedSoftplus"]
 
 class SchNetModel(BaseGNN):
     """

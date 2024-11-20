@@ -1,14 +1,8 @@
 import torch
 from torch import nn
-import numpy as np
-import torch_geometric as tg
 from typing import List, Dict, Tuple
 
-# from mlcolvar.graph import data as gdata
 from mlcolvar.core.nn.graph import radial
-# from mlcolvar.graph.core.nn import schnet
-# from mlcolvar.graph.core.nn import gvp_layer
-# from mlcolvar.graph.utils import torch_tools
 
 """
 GNN models.
