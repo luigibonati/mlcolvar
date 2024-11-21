@@ -1,7 +1,7 @@
 import torch
 import torch_geometric
 
-from mlcolvar.data import DictDataset
+from mlcolvar.data import DictDataset, DictModule
 from mlcolvar.data.graph import atomic
 from mlcolvar.data.graph.neighborhood import get_neighborhood
 from mlcolvar.utils.plot import pbar
@@ -189,7 +189,51 @@ def to_one_hot(indices: torch.Tensor, n_classes: int) -> torch.Tensor:
 
     return oh.view(*shape)
 
+def create_test_graph_input(get_example: bool = False) -> torch_geometric.data.Batch:
+    numbers = [8, 1, 1]
+    positions = np.array(
+        [
+            [[0.0, 0.0, 0.0], [0.07, 0.07, 0.0], [0.07, -0.07, 0.0]],
+            [[0.0, 0.0, 0.0], [-0.07, 0.07, 0.0], [0.07, 0.07, 0.0]],
+            [[0.0, 0.0, 0.0], [0.07, -0.07, 0.0], [0.07, 0.07, 0.0]],
+            [[0.0, 0.0, 0.0], [0.0, -0.07, 0.07], [0.0, 0.07, 0.07]],
+            [[0.0, 0.0, 0.0], [0.07, 0.0, 0.07], [-0.07, 0.0, 0.07]],
+            [[0.1, 0.0, 1.1], [0.17, 0.07, 1.1], [0.17, -0.07, 1.1]],
+        ],
+        dtype=np.float64
+    )
+    cell = np.identity(3, dtype=float) * 0.2
+    graph_labels = np.array([[[0]], [[1]]] * 3)
+    node_labels = np.array([[0], [1], [1]])
+    z_table = atomic.AtomicNumberTable.from_zs(numbers)
 
+    config = [
+        atomic.Configuration(
+            atomic_numbers=numbers,
+            positions=positions[i],
+            cell=cell,
+            pbc=[True] * 3,
+            node_labels=node_labels,
+            graph_labels=graph_labels[i],
+        ) for i in range(0, 6)
+    ]
+    dataset = create_dataset_from_configurations(
+        config, z_table, 0.1, show_progress=False
+    )
+
+    loader = DictModule(
+        dataset,
+        lengths=(1.0,),
+        batch_size=10,
+        shuffle=False,
+    )
+    loader.setup()
+    if get_example:
+        out = next(iter(loader.train_dataloader()))['data_list'].get_example(0)
+        out['batch'] = torch.tensor([0], dtype=torch.int64)
+        return out
+    else:
+        return next(iter(loader.train_dataloader()))
 
 
 # ===============================================================================
