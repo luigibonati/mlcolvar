@@ -4,7 +4,7 @@ from mlcolvar.cvs import BaseCV
 from mlcolvar.core import FeedForward, BaseGNN, Normalization
 from mlcolvar.core.loss import TDALoss
 from mlcolvar.data import DictModule
-from typing import Union
+from typing import Union, List
 
 __all__ = ["DeepTDA"]
 
@@ -34,7 +34,7 @@ class DeepTDA(BaseCV, lightning.LightningModule):
         n_cvs: int,
         target_centers: list,
         target_sigmas: list,
-        model: Union[list[int], FeedForward, BaseGNN],
+        model: Union[List[int], FeedForward, BaseGNN],
         options: dict = None,
         **kwargs,
     ):

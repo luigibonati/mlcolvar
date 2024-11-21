@@ -1,6 +1,6 @@
 import torch
 from mlcolvar.core.transform import Transform
-from typing import Union
+from typing import Union, List
 from mlcolvar.core.nn import FeedForward, BaseGNN
 
 
@@ -70,7 +70,7 @@ class BaseCV:
             else self.preprocessing.in_features
         )
 
-    def parse_model(self, model: Union[list[int], FeedForward, BaseGNN]):
+    def parse_model(self, model: Union[List[int], FeedForward, BaseGNN]):
         if isinstance(model, list):
             self.layers = model
             self.BLOCKS = self.DEFAULT_BLOCKS
