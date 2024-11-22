@@ -189,9 +189,12 @@ def to_one_hot(indices: torch.Tensor, n_classes: int) -> torch.Tensor:
 
     return oh.view(*shape)
 
-def create_test_graph_input(get_example: bool = False) -> torch_geometric.data.Batch:
+def create_test_graph_input(output_type: str,
+                            n_samples: int = 60, 
+                            n_states: int = 2) -> torch_geometric.data.Batch:
+    n_atoms = 3
     numbers = [8, 1, 1]
-    positions = np.array(
+    _ref_positions = np.array(
         [
             [[0.0, 0.0, 0.0], [0.07, 0.07, 0.0], [0.07, -0.07, 0.0]],
             [[0.0, 0.0, 0.0], [-0.07, 0.07, 0.0], [0.07, 0.07, 0.0]],
@@ -202,8 +205,14 @@ def create_test_graph_input(get_example: bool = False) -> torch_geometric.data.B
         ],
         dtype=np.float64
     )
+
+    idx = np.random.randint(low=0, high=6, size=(n_samples*n_states))
+    positions = _ref_positions[idx, :, :]
+
     cell = np.identity(3, dtype=float) * 0.2
-    graph_labels = np.array([[[0]], [[1]]] * 3)
+    graph_labels = torch.zeros((n_samples*n_states, 1, 1))
+    for i in range(1, n_states):
+            graph_labels[n_samples * i :] += 1
     node_labels = np.array([[0], [1], [1]])
     z_table = atomic.AtomicNumberTable.from_zs(numbers)
 
@@ -215,25 +224,41 @@ def create_test_graph_input(get_example: bool = False) -> torch_geometric.data.B
             pbc=[True] * 3,
             node_labels=node_labels,
             graph_labels=graph_labels[i],
-        ) for i in range(0, 6)
+        ) for i in range(0, n_samples*n_states)
     ]
+
+    if output_type == 'configuration':
+        return config[0]
+    if output_type == 'configurations':
+        return config
+
     dataset = create_dataset_from_configurations(
         config, z_table, 0.1, show_progress=False
     )
 
-    loader = DictModule(
+    if output_type == 'dataset':
+        return dataset
+    
+    datamodule = DictModule(
         dataset,
-        lengths=(1.0,),
-        batch_size=10,
+        lengths=(0.8, 0.2),
+        batch_size=0,
         shuffle=False,
     )
-    loader.setup()
-    if get_example:
-        out = next(iter(loader.train_dataloader()))['data_list'].get_example(0)
-        out['batch'] = torch.tensor([0], dtype=torch.int64)
-        return out
-    else:
-        return next(iter(loader.train_dataloader()))
+
+    if output_type == 'datamodule':
+        return datamodule
+    
+    datamodule.setup()
+    batch = next(iter(datamodule.train_dataloader()))
+    if output_type == 'batch':
+        return batch
+    example = batch['data_list'].get_example(0)
+    example['batch'] = torch.tensor([0], dtype=torch.int64)
+    if output_type == 'example':
+        return example
+    if output_type == 'tracing_example':
+        return example.to_dict()
 
 
 # ===============================================================================

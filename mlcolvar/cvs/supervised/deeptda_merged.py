@@ -59,10 +59,11 @@ class DeepTDA(BaseCV, lightning.LightningModule):
             Set 'block_name' = None or False to turn off that block
         """
         # check what model is
-        self.parse_model(model=model)
-
+        # self.parse_model(model=model)
+        
         # TODO in_features and out_features?? 
-        super().__init__(in_features=0, out_features=n_cvs, **kwargs)
+        super().__init__(model, in_features=2, out_features=n_cvs, **kwargs)
+        self.save_hyperparameters(ignore=['model'])
 
         # =======   LOSS  =======
         self.loss_fn = TDALoss(
@@ -157,7 +158,9 @@ import numpy as np
 def test_deeptda_cv():
     from mlcolvar.data import DictDataset
 
+    # feedforward with layers
     for states_and_cvs in [[2, 1], [3, 1], [3, 2], [5, 4]]:
+        print(states_and_cvs)
         # get the number of states and cvs for the test run
         n_states = states_and_cvs[0]
         n_cvs = states_and_cvs[1]
@@ -175,12 +178,9 @@ def test_deeptda_cv():
             n_cvs=n_cvs,
             target_centers=target_centers,
             target_sigmas=target_sigmas,
-            layers=layers,
+            model=layers,
             options=options,
         )
-
-        print("----------")
-        print(model)
 
         # create dataset
         samples = 100
@@ -195,7 +195,7 @@ def test_deeptda_cv():
         datamodule = DictModule(dataset, lengths=[0.75, 0.2, 0.05], batch_size=samples)
         # train model
         trainer = lightning.Trainer(
-            accelerator="cpu", max_epochs=2, logger=None, enable_checkpointing=False
+            accelerator="cpu", max_epochs=2, logger=None, enable_checkpointing=False,  enable_model_summary=False
         )
         trainer.fit(model, datamodule)
 
@@ -205,6 +205,60 @@ def test_deeptda_cv():
         )
         model.eval()
         assert torch.allclose(model(X), traced_model(X))
+
+
+        # feedforward external
+        ff_model = FeedForward(layers=layers)
+        model = DeepTDA(
+            n_states=n_states,
+            n_cvs=n_cvs,
+            target_centers=target_centers,
+            target_sigmas=target_sigmas,
+            model=ff_model
+        )
+
+        # train model
+        trainer = lightning.Trainer(
+            accelerator="cpu", max_epochs=2, logger=None, enable_checkpointing=False, enable_model_summary=False
+        )
+        trainer.fit(model, datamodule)
+
+        # trace model
+        traced_model = model.to_torchscript(
+            file_path=None, method="trace", example_inputs=X[0]
+        )
+        model.eval()
+        assert torch.allclose(model(X), traced_model(X))
+
+
+
+        # gnn external 
+        from mlcolvar.core.nn.graph.schnet import SchNetModel
+        from mlcolvar.data.graph.utils import create_test_graph_input
+        gnn_model = SchNetModel(1, 5, [1, 8])
+        model = DeepTDA(
+            n_states=n_states,
+            n_cvs=n_cvs,
+            target_centers=target_centers,
+            target_sigmas=target_sigmas,
+            model=gnn_model
+        )
+        datamodule = create_test_graph_input(output_type='datamodule', n_samples=100, n_states=n_states)
+
+        # train model
+        trainer = lightning.Trainer(
+            accelerator="cpu", max_epochs=2, logger=False, enable_checkpointing=False, enable_model_summary=False
+        )
+        trainer.fit(model, datamodule)
+
+        # trace model
+        example_input_graph = create_test_graph_input(output_type='tracing_example', n_samples=10, n_states=1)
+        traced_model = model.to_torchscript(
+            file_path=None, method="trace", example_inputs=example_input_graph
+        )
+        model.eval()
+        assert torch.allclose(model(X), traced_model(X))
+
 
 
 if __name__ == "__main__":

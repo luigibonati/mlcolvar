@@ -2,6 +2,7 @@ import torch
 from mlcolvar.core.transform import Transform
 from typing import Union, List
 from mlcolvar.core.nn import FeedForward, BaseGNN
+from mlcolvar.data.graph.utils import create_test_graph_input
 
 
 class BaseCV:
@@ -15,6 +16,7 @@ class BaseCV:
 
     def __init__(
         self,
+        model: Union[List[int], FeedForward, BaseGNN],
         in_features,
         out_features,
         preprocessing: torch.nn.Module = None,
@@ -43,8 +45,9 @@ class BaseCV:
         self.save_hyperparameters(ignore=['in_features', 'out_features'])
 
         # MODEL
+        self.parse_model(model=model)
         self.initialize_blocks()
-        self.in_features = in_features
+        # self.in_features = in_features
         self.out_features = out_features
 
         # OPTIM
@@ -63,29 +66,37 @@ class BaseCV:
 
     @property
     def example_input_array(self):
-        return torch.randn(
-            (1,self.in_features)
-            if self.preprocessing is None
-            or not hasattr(self.preprocessing, "in_features")
-            else self.preprocessing.in_features
-        )
+        if self.in_features is not None:
+            return torch.randn(
+                (1,self.in_features)
+                if self.preprocessing is None
+                or not hasattr(self.preprocessing, "in_features")
+                else self.preprocessing.in_features
+            )
+        else:
+            return create_test_graph_input(output_type='example', n_samples=1, n_states=1)
+
+
 
     def parse_model(self, model: Union[List[int], FeedForward, BaseGNN]):
         if isinstance(model, list):
             self.layers = model
             self.BLOCKS = self.DEFAULT_BLOCKS
             self._override_model = False
+            self.in_features = self.layers[0]
         elif isinstance(model, FeedForward) or isinstance(model, BaseGNN):
             self.BLOCKS = ['nn']
             self._override_model = True
             if isinstance(model, FeedForward):
-                self.nn = model 
+                self.nn = model
+                self.in_features = self.nn.in_features
             elif isinstance(model, BaseGNN):
                 # GNN models need to be scripted!
                 self.nn = torch.jit.script_if_tracing(model)
+                self.in_features = None
         else:
             raise ValueError(
-                "Ma belin se scemo?"
+                "Ma belin sei scemo?"
             )
 
     def parse_options(self, options: dict = None):

@@ -27,7 +27,7 @@ from mlcolvar.core.nn.utils import get_activation, parse_nn_options
 # =============================================================================
 
 
-class FeedForward(lightning.LightningModule):
+class FeedForward(torch.nn.Module):
     """Define a feedforward neural network given the list of layers.
 
     Optionally dropout and batchnorm can be applied (the order is activation -> dropout -> batchnorm).
