@@ -231,11 +231,10 @@ def test_deeptda_cv():
         assert torch.allclose(model(X), traced_model(X))
 
 
-
         # gnn external 
         from mlcolvar.core.nn.graph.schnet import SchNetModel
         from mlcolvar.data.graph.utils import create_test_graph_input
-        gnn_model = SchNetModel(1, 5, [1, 8])
+        gnn_model = SchNetModel(1, 0.1, [1, 8])
         model = DeepTDA(
             n_states=n_states,
             n_cvs=n_cvs,
@@ -252,14 +251,13 @@ def test_deeptda_cv():
         trainer.fit(model, datamodule)
 
         # trace model
-        example_input_graph = create_test_graph_input(output_type='tracing_example', n_samples=10, n_states=1)
+        example_input_graph = create_test_graph_input(output_type='tracing_example', n_samples=3, n_states=2)
+
         traced_model = model.to_torchscript(
             file_path=None, method="trace", example_inputs=example_input_graph
         )
         model.eval()
-        assert torch.allclose(model(X), traced_model(X))
-
-
+        assert torch.allclose(model(example_input_graph), traced_model(example_input_graph))
 
 if __name__ == "__main__":
     test_deeptda_cv()
