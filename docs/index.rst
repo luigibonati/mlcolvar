@@ -28,6 +28,7 @@ Some of the **CVs** which are implemented, organized by learning setting:
 * Unsupervised: PCA, (Variational) AutoEncoders [`1 <http://dx.doi.org/%2010.1002/jcc.25520>`_, `2 <http://dx.doi.org/2010.1021/acs.jctc.1c00415>`_ ]
 * Supervised: LDA [`3 <(http://dx.doi.org/10.1021/acs.jpclett.8b00733>`_], DeepLDA [`4 <(http://dx.doi.org/2010.1021/acs.jpclett.0c00535>`_], DeepTDA [`5 <(http://dx.doi.org/%2010.1021/acs.jpclett.1c02317>`_]
 * Time-informed: TICA [`6 <(http://dx.doi.org/%2010.1063/1.4811489>`_], DeepTICA/SRVs [`7 <(http://dx.doi.org/10.1073/pnas.2113533118>`_, `8 <(http://dx.doi.org/%2010.1063/1.5092521>`_ ], VDE [`9 <(http://dx.doi.org/10.1103/PhysRevE.97.062412>`_]
+* Committor-based [`8 <(https://dx.doi.org/10.48550/arXiv.2410.17029)>`_]
 
 And many others can be implemented based on the building blocks or with simple modifications. Check out the documentation and the examples section!
 
