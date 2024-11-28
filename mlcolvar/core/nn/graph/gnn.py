@@ -58,6 +58,10 @@ class BaseGNN(nn.Module):
             'atomic_numbers', torch.tensor(atomic_numbers, dtype=torch.int64)
         )
 
+    @property
+    def out_features(self):
+        return self._n_out
+    
     def embed_edge(
         self, data: Dict[str, torch.Tensor], normalize: bool = True
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
