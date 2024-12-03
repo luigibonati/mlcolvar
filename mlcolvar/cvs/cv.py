@@ -18,7 +18,6 @@ class BaseCV:
     def __init__(
         self,
         model: Union[List[int], FeedForward, BaseGNN],
-        out_features,
         preprocessing: torch.nn.Module = None,
         postprocessing: torch.nn.Module = None,
         *args,
@@ -47,7 +46,6 @@ class BaseCV:
         # MODEL
         self.parse_model(model=model)
         self.initialize_blocks()
-        self.out_features = out_features
 
         # OPTIM
         self._optimizer_name = "Adam"
@@ -83,17 +81,20 @@ class BaseCV:
             self.BLOCKS = self.DEFAULT_BLOCKS
             self._override_model = False
             self.in_features = self.layers[0]
+            self.out_features = self.layers[-1]
         elif isinstance(model, FeedForward) or isinstance(model, BaseGNN):
             self.BLOCKS = self.MODEL_BLOCKS
             self._override_model = True
             if isinstance(model, FeedForward):
                 # self.nn = model
                 self.in_features = model.in_features
+                self.out_features = model.out_features
             elif isinstance(model, BaseGNN):
                 # GNN models need to be scripted!
                 # self.nn = torch.jit.script_if_tracing(model)
                 # self.nn = model
                 self.in_features = None
+                self.out_features = model.out_features
         else:
             raise ValueError(
                 f"Keyword model can either accept type list, FeedForward or BaseGNN. Found {type(model)}"

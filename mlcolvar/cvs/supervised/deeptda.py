@@ -60,7 +60,7 @@ class DeepTDA(BaseCV, lightning.LightningModule):
             Available blocks: ['norm_in', 'nn'].
             Set 'block_name' = None or False to turn off that block
         """        
-        super().__init__(model, out_features=n_cvs, **kwargs)
+        super().__init__(model, **kwargs)
         self.save_hyperparameters(ignore=['model'])
 
         # =======   LOSS  =======
@@ -167,6 +167,9 @@ def test_deeptda_cv():
         # test initialize via dictionary
         options = {"nn": {"activation": "relu"}}
 
+        print()
+        print('NORMAL')
+        print()
         model = DeepTDA(
             n_states=n_states,
             n_cvs=n_cvs,
@@ -199,7 +202,9 @@ def test_deeptda_cv():
         model.eval()
         assert torch.allclose(model(X), traced_model(X))
 
-
+        print()
+        print('EXTERNAL FEEDFORWARD')
+        print()
         # feedforward external
         ff_model = FeedForward(layers=layers)
         model = DeepTDA(
@@ -222,11 +227,13 @@ def test_deeptda_cv():
         model.eval()
         assert torch.allclose(model(X), traced_model(X))
 
-
+        print()
+        print('EXTERNAL GNN')
+        print()
         # gnn external 
         from mlcolvar.core.nn.graph.schnet import SchNetModel
         from mlcolvar.data.graph.utils import create_test_graph_input
-        gnn_model = SchNetModel(1, 0.1, [1, 8])
+        gnn_model = SchNetModel(n_cvs, 0.1, [1, 8])
         model = DeepTDA(
             n_states=n_states,
             n_cvs=n_cvs,

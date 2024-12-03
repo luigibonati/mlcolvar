@@ -57,7 +57,7 @@ class DeepLDA(BaseCV, lightning.LightningModule):
             Available blocks: ['norm_in','nn','lda'] .
             Set 'block_name' = None or False to turn off that block
         """
-        super().__init__(model=model, out_features=n_states-1, **kwargs)
+        super().__init__(model=model, **kwargs)
         self.save_hyperparameters(ignore=['model'])
 
         # =======   LOSS  =======
