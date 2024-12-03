@@ -2,6 +2,8 @@ import torch
 import numpy as np
 from mlcolvar.core.transform.utils import Statistics
 from torch.utils.data import Dataset
+from typing import Union, List
+from operator import itemgetter
 
 __all__ = ["DictDataset"]
 
@@ -77,14 +79,20 @@ class DictDataset(Dataset):
         if not all([len(l)==self.length for l in it]):
             raise ValueError("not all arrays in dictionary have same length!")
 
-    def __getitem__(self, index):
+    def __getitem__(self, index : Union[str, int, slice, List, range, np.ndarray]):
         if isinstance(index, str):
             # raise TypeError(f'Index ("{index}") should be a slice, and not a string. To access the stored dictionary use .dictionary["{index}"] instead.')
             return self._dictionary[index]
-        else:
+        else: 
             slice_dict = {}
             for key, val in self._dictionary.items():
-                slice_dict[key] = val[index]
+                if self.metadata['data_type'] == 'graphs' and type(index) in [range, np.ndarray, list]:
+                    slice_dict[key] = list(itemgetter(*index)(val))
+                else:
+                    if type(index) in [int, slice]: 
+                        slice_dict[key] = val[index]
+                    elif type(index) in [range, np.ndarray, list]:
+                        slice_dict[key] = list(itemgetter(*index)(val))
             return slice_dict
 
     def __setitem__(self, index, value):
