@@ -190,30 +190,47 @@ def to_one_hot(indices: torch.Tensor, n_classes: int) -> torch.Tensor:
     return oh.view(*shape)
 
 def create_test_graph_input(output_type: str,
+                            n_atoms: int = 3,
                             n_samples: int = 60, 
                             n_states: int = 2) -> torch_geometric.data.Batch:
-    n_atoms = 3
-    numbers = [8, 1, 1]
-    _ref_positions = np.array(
-        [
-            [[0.0, 0.0, 0.0], [0.07, 0.07, 0.0], [0.07, -0.07, 0.0]],
-            [[0.0, 0.0, 0.0], [-0.07, 0.07, 0.0], [0.07, 0.07, 0.0]],
-            [[0.0, 0.0, 0.0], [0.07, -0.07, 0.0], [0.07, 0.07, 0.0]],
-            [[0.0, 0.0, 0.0], [0.0, -0.07, 0.07], [0.0, 0.07, 0.07]],
-            [[0.0, 0.0, 0.0], [0.07, 0.0, 0.07], [-0.07, 0.0, 0.07]],
-            [[0.1, 0.0, 1.1], [0.17, 0.07, 1.1], [0.17, -0.07, 1.1]],
-        ],
-        dtype=np.float64
-    )
+    if n_atoms == 3:
+        numbers = [8, 1, 1]
+        node_labels = np.array([[0], [1], [1]])
+        _ref_positions = np.array(
+            [
+                [[0.0, 0.0, 0.0], [0.07, 0.07, 0.0], [0.07, -0.07, 0.0]],
+                [[0.0, 0.0, 0.0], [-0.07, 0.07, 0.0], [0.07, 0.07, 0.0]],
+                [[0.0, 0.0, 0.0], [0.07, -0.07, 0.0], [0.07, 0.07, 0.0]],
+                [[0.0, 0.0, 0.0], [0.0, -0.07, 0.07], [0.0, 0.07, 0.07]],
+                [[0.0, 0.0, 0.0], [0.07, 0.0, 0.07], [-0.07, 0.0, 0.07]],
+                [[0.1, 0.0, 1.1], [0.17, 0.07, 1.1], [0.17, -0.07, 1.1]],
+            ],
+            dtype=np.float64
+        )
+
+    if n_atoms == 4:
+        numbers = [8, 1, 1, 8]
+        node_labels = np.array([[0], [1], [1], [0]])
+        _ref_positions = np.array(
+            [
+                [[0.0, 0.0, 0.0], [0.07, 0.07, 0.0] , [0.07, -0.07, 0.0], [0.05, -0.05, 0.0]],
+                [[0.0, 0.0, 0.0], [-0.07, 0.07, 0.0], [0.07, 0.07, 0.0], [0.05, 0.05, 0.0]],
+                [[0.0, 0.0, 0.0], [0.07, -0.07, 0.0], [0.07, 0.07, 0.0], [0.05, 0.05, 0.0]],
+                [[0.0, 0.0, 0.0], [0.0, -0.07, 0.07], [0.0, 0.07, 0.07], [0.0, 0.05, 0.05]],
+                [[0.0, 0.0, 0.0], [0.07, 0.0, 0.07] , [-0.07, 0.0, 0.07], [-0.05, 0.0, 0.05]],
+                [[0.1, 0.0, 1.1], [0.17, 0.07, 1.1] , [0.17, -0.07, 1.1], [0.15, -0.05, 1.1]],
+            ],
+            dtype=np.float64
+        )
+
 
     idx = np.random.randint(low=0, high=6, size=(n_samples*n_states))
     positions = _ref_positions[idx, :, :]
 
     cell = np.identity(3, dtype=float) * 0.2
-    graph_labels = torch.zeros((n_samples*n_states, 1, 1))
+    graph_labels = np.zeros((n_samples*n_states, 1, 1))
     for i in range(1, n_states):
             graph_labels[n_samples * i :] += 1
-    node_labels = np.array([[0], [1], [1]])
     z_table = atomic.AtomicNumberTable.from_zs(numbers)
 
     config = [
