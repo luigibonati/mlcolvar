@@ -1,10 +1,12 @@
 import torch
 import lightning
 from mlcolvar.cvs import BaseCV
-from mlcolvar.core import FeedForward, Normalization
+from mlcolvar.core import FeedForward, BaseGNN, Normalization
 from mlcolvar.data import DictModule
 from mlcolvar.core.stats import LDA
 from mlcolvar.core.loss import ReduceEigenvaluesLoss
+from typing import Union, List
+
 
 __all__ = ["DeepLDA"]
 
@@ -31,9 +33,14 @@ class DeepLDA(BaseCV, lightning.LightningModule):
         Eigenvalue reduction to a scalar quantity
     """
 
-    BLOCKS = ["norm_in", "nn", "lda"]
+    DEFAULT_BLOCKS = ["norm_in", "nn", "lda"]
+    MODEL_BLOCKS = ["nn", "lda"]
 
-    def __init__(self, layers: list, n_states: int, options: dict = None, **kwargs):
+    def __init__(self, 
+                 model: Union[List[int], FeedForward, BaseGNN],
+                 n_states: int, 
+                 options: dict = None, 
+                 **kwargs):
         """
         Define a Deep Linear Discriminant Analysis (Deep-LDA) CV composed by a
         neural network module and a LDA object.
@@ -50,7 +57,8 @@ class DeepLDA(BaseCV, lightning.LightningModule):
             Available blocks: ['norm_in','nn','lda'] .
             Set 'block_name' = None or False to turn off that block
         """
-        super().__init__(in_features=layers[0], out_features=layers[-1], **kwargs)
+        super().__init__(model=model, out_features=n_states-1, **kwargs)
+        self.save_hyperparameters(ignore=['model'])
 
         # =======   LOSS  =======
         # Maximize the sum of all the LDA eigenvalues.
@@ -66,25 +74,30 @@ class DeepLDA(BaseCV, lightning.LightningModule):
         # ======= BLOCKS =======
 
         # initialize norm_in
-        o = "norm_in"
-        if (options[o] is not False) and (options[o] is not None):
-            self.norm_in = Normalization(self.in_features, **options[o])
+        if not self._override_model:
+            o = "norm_in"
+            if (options[o] is not False) and (options[o] is not None):
+                self.norm_in = Normalization(self.in_features, **options[o])
 
-        # initialize nn
-        o = "nn"
-        self.nn = FeedForward(layers, **options[o])
+            # initialize nn
+            o = "nn"
+            self.nn = FeedForward(self.layers, **options[o])
+
+        elif self._override_model:
+            self.nn = model
 
         # initialize lda
         o = "lda"
-        self.lda = LDA(layers[-1], n_states, **options[o])
+        self.lda = LDA(self.nn.out_features, n_states, **options[o])
 
         # regularization
         self.lorentzian_reg = 40  # == 2/sw_reg, see set_regularization
         self.set_regularization(sw_reg=0.05)
 
     def forward_nn(self, x: torch.Tensor) -> torch.Tensor:
-        if self.norm_in is not None:
-            x = self.norm_in(x)
+        if not self._override_model:
+            if self.norm_in is not None:
+                x = self.norm_in(x)
         x = self.nn(x)
         return x
 
@@ -136,14 +149,21 @@ class DeepLDA(BaseCV, lightning.LightningModule):
 
     def training_step(self, train_batch, batch_idx):
         """Compute and return the training loss and record metrics."""
-        # =================get data===================
-        x = train_batch["data"]
-        y = train_batch["labels"]
-        # =================forward====================
-        h = self.forward_nn(x)
+        if isinstance(self.nn, FeedForward):
+            # =================get data===================
+            x = train_batch["data"]
+            labels = train_batch["labels"]
+            # =================forward====================
+            h = self.forward_nn(x)
+
+        elif isinstance(self.nn, BaseGNN):
+            data = self._setup_graph_data(train_batch)
+            labels = data['graph_labels'].squeeze()
+            h = self.forward_nn(data)
+
         # ===================lda======================
         eigvals, _ = self.lda.compute(
-            h, y, save_params=True if self.training else False
+            h, labels, save_params=True if self.training else False
         )
         # ===================loss=====================
         loss = self.loss_fn(eigvals)
@@ -151,6 +171,7 @@ class DeepLDA(BaseCV, lightning.LightningModule):
             s = self.lda(h)
             lorentzian_reg = self.regularization_lorentzian(s)
             loss += lorentzian_reg
+
         # ====================log=====================
         name = "train" if self.training else "valid"
         loss_dict = {f"{name}_loss": loss, f"{name}_lorentzian_reg": lorentzian_reg}
@@ -164,7 +185,7 @@ def test_deeplda(n_states=2):
 
     in_features, out_features = 2, n_states - 1
     layers = [in_features, 50, 50, out_features]
-
+    
     # create dataset
     n_points = 500
     X, y = [], []
@@ -187,6 +208,9 @@ def test_deeplda(n_states=2):
         "nn": {"activation": "relu"},
         "lda": {},
     }
+    print()
+    print('NORMAL')
+    print()
     model = DeepLDA(layers, n_states, options=opts)
 
     # create trainer and fit
@@ -199,6 +223,55 @@ def test_deeplda(n_states=2):
     model.eval()
     with torch.no_grad():
         s = model(X).numpy()
+
+    
+    # feedforward external
+    ff_model = FeedForward(layers=layers)
+    print()
+    print('EXTERNAL')
+    print()
+    model = DeepLDA(ff_model, n_states)
+
+    # create trainer and fit
+    trainer = lightning.Trainer(
+        max_epochs=1, log_every_n_steps=2, logger=None, enable_checkpointing=False
+    )
+    trainer.fit(model, datamodule)
+
+    # eval
+    model.eval()
+    with torch.no_grad():
+        s = model(X).numpy()
+
+
+    # gnn external
+    from mlcolvar.core.nn.graph.schnet import SchNetModel
+    from mlcolvar.data.graph.utils import create_test_graph_input
+    gnn_model = SchNetModel(2, 0.1, [1, 8])
+    print()
+    print('GNN')
+    print()
+    model = DeepLDA(gnn_model, n_states)
+
+    datamodule = create_test_graph_input(output_type='datamodule', n_samples=200, n_states=n_states)
+
+    # create trainer and fit
+    trainer = lightning.Trainer(
+        max_epochs=1, log_every_n_steps=2, logger=False, enable_checkpointing=False, enable_model_summary=False
+    )
+    trainer.fit(model, datamodule)
+
+    traced_model = model.to_torchscript(
+    file_path=None, method="trace")
+
+    example_input_graph_test = create_test_graph_input(output_type='example', n_atoms=4, n_samples=3, n_states=n_states)
+    assert torch.allclose(model(example_input_graph_test), traced_model(example_input_graph_test))
+
+    # eval
+    model.eval()
+    with torch.no_grad():
+        s = model(example_input_graph_test).numpy()
+
 
 
 if __name__ == "__main__":
