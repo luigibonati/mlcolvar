@@ -117,19 +117,16 @@ class DeepTDA(BaseCV, lightning.LightningModule):
 
     def training_step(self, train_batch, *args, **kwargs) -> torch.Tensor:
         """Compute and return the training loss and record metrics."""
+        # =================get data===================
         if isinstance(self.nn, FeedForward):
-            # =================get data===================
             x = train_batch["data"]
             labels = train_batch["labels"]
-            # =================forward====================
-            z = self.forward_cv(x)
-
         elif isinstance(self.nn, BaseGNN):
-            # =================get data===================
-            data = self._setup_graph_data(train_batch)
-            labels = data['graph_labels'].squeeze()
-            # =================forward====================
-            z = self.forward(data)
+            x = self._setup_graph_data(train_batch)
+            labels = x['graph_labels'].squeeze()
+        
+        # =================forward====================
+        z = self.forward_cv(x)
 
         # ===================loss=====================
         loss, loss_centers, loss_sigmas = self.loss_fn(z, 

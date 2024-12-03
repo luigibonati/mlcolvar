@@ -149,17 +149,16 @@ class DeepLDA(BaseCV, lightning.LightningModule):
 
     def training_step(self, train_batch, batch_idx):
         """Compute and return the training loss and record metrics."""
+        # =================get data===================
         if isinstance(self.nn, FeedForward):
-            # =================get data===================
             x = train_batch["data"]
             labels = train_batch["labels"]
-            # =================forward====================
-            h = self.forward_nn(x)
-
         elif isinstance(self.nn, BaseGNN):
-            data = self._setup_graph_data(train_batch)
-            labels = data['graph_labels'].squeeze()
-            h = self.forward_nn(data)
+            x = self._setup_graph_data(train_batch)
+            labels = x['graph_labels'].squeeze()
+        
+        # =================forward====================
+        h = self.forward_nn(x)
 
         # ===================lda======================
         eigvals, _ = self.lda.compute(
