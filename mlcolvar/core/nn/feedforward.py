@@ -15,10 +15,9 @@ __all__ = ["FeedForward"]
 # GLOBAL IMPORTS
 # =============================================================================
 
-from typing import Optional, Union
+from typing import Optional, Union, Any
 
 import torch
-import lightning
 from mlcolvar.core.nn.utils import get_activation, parse_nn_options
 
 
@@ -110,3 +109,6 @@ class FeedForward(torch.nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.nn(x)
+    
+    def backward(self, loss: torch.Tensor, *args: Any, **kwargs: Any):
+        return loss.backward()
