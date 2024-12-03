@@ -58,7 +58,7 @@ class VariationalAutoEncoderCV(BaseCV, lightning.LightningModule):
         Evidence Lower BOund loss function
     """
 
-    BLOCKS = ["norm_in", "encoder", "decoder"]
+    DEFAULT_BLOCKS = ["norm_in", "encoder", "decoder"]
 
     def __init__(
         self,
@@ -90,7 +90,13 @@ class VariationalAutoEncoderCV(BaseCV, lightning.LightningModule):
             Set ``'block_name' = None`` or ``False`` to turn off a block. Encoder
             and decoder cannot be turned off.
         """
-        super().__init__(in_features=encoder_layers[0], out_features=n_cvs, **kwargs)
+        if not isinstance(encoder_layers, list):
+            raise NotImplementedError(
+                f"Encoder layer must be a list. found {type(encoder_layers)}"
+                )
+        super().__init__(model=encoder_layers, **kwargs)
+        # here we need to override the self.out_features attribute
+        self.out_features = n_cvs
 
         # =======   LOSS  =======
         # ELBO loss function when latent space and reconstruction distributions are Gaussians.
