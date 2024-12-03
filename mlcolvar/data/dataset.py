@@ -59,7 +59,7 @@ class DictDataset(Dataset):
         # convert to torch.Tensors
         for key, val in dictionary.items():
             if not isinstance(val, torch.Tensor):
-                if key =="data_list":
+                if key in ["data_list", "data_list_lag"]:
                     dictionary[key] = val
                 else:
                     dictionary[key] = torch.Tensor(val)
@@ -128,7 +128,7 @@ class DictDataset(Dataset):
     def __repr__(self) -> str:
         string = "DictDataset("
         for key, val in self._dictionary.items():
-            if key=="data_list":
+            if key in ["data_list", "data_list_lag"]:
                 string += f' "{key}": {len(val)},'
             else:
                 string += f' "{key}": {list(val.shape)},'
