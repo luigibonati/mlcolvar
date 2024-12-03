@@ -13,11 +13,11 @@ class BaseCV:
     """
 
     DEFAULT_BLOCKS = []
+    MODEL_BLOCKS = []
 
     def __init__(
         self,
         model: Union[List[int], FeedForward, BaseGNN],
-        in_features,
         out_features,
         preprocessing: torch.nn.Module = None,
         postprocessing: torch.nn.Module = None,
@@ -47,7 +47,6 @@ class BaseCV:
         # MODEL
         self.parse_model(model=model)
         self.initialize_blocks()
-        # self.in_features = in_features
         self.out_features = out_features
 
         # OPTIM
@@ -74,10 +73,10 @@ class BaseCV:
                 else self.preprocessing.in_features
             )
         else:
-            return create_test_graph_input(output_type='example', n_samples=1, n_states=1)
+            return create_test_graph_input(output_type='tracing_example', n_atoms=3, n_samples=1, n_states=1)
 
 
-
+    # TODO add general torch.nn.Module
     def parse_model(self, model: Union[List[int], FeedForward, BaseGNN]):
         if isinstance(model, list):
             self.layers = model
@@ -85,18 +84,19 @@ class BaseCV:
             self._override_model = False
             self.in_features = self.layers[0]
         elif isinstance(model, FeedForward) or isinstance(model, BaseGNN):
-            self.BLOCKS = ['nn']
+            self.BLOCKS = self.MODEL_BLOCKS
             self._override_model = True
             if isinstance(model, FeedForward):
-                self.nn = model
-                self.in_features = self.nn.in_features
+                # self.nn = model
+                self.in_features = model.in_features
             elif isinstance(model, BaseGNN):
                 # GNN models need to be scripted!
-                self.nn = torch.jit.script_if_tracing(model)
+                # self.nn = torch.jit.script_if_tracing(model)
+                # self.nn = model
                 self.in_features = None
         else:
             raise ValueError(
-                "Ma belin sei scemo?"
+                f"Keyword model can either accept type list, FeedForward or BaseGNN. Found {type(model)}"
             )
 
     def parse_options(self, options: dict = None):
@@ -139,6 +139,7 @@ class BaseCV:
         Initialize the blocks as attributes of the CV class.
         """
         for b in self.BLOCKS:
+            #if not self._override_model and b!='nn':
             self.__setattr__(b, None)
 
     def setup(self, stage=None):
@@ -264,3 +265,9 @@ class BaseCV:
             if (key == "loss_fn") and ("cannot assign" in str(e)):
                 del self.loss_fn
                 super().__setattr__(key, value)
+
+    def _setup_graph_data(self, train_batch):
+            data = train_batch['data_list']
+            data['positions'].requires_grad_(True)
+            data['node_attrs'].requires_grad_(True)
+            return data
