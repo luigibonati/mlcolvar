@@ -192,7 +192,8 @@ def to_one_hot(indices: torch.Tensor, n_classes: int) -> torch.Tensor:
 def create_test_graph_input(output_type: str,
                             n_atoms: int = 3,
                             n_samples: int = 60, 
-                            n_states: int = 2) -> torch_geometric.data.Batch:
+                            n_states: int = 2,
+                            random_weights = False ) -> torch_geometric.data.Batch:
     if n_atoms == 3:
         numbers = [8, 1, 1]
         node_labels = np.array([[0], [1], [1]])
@@ -233,6 +234,10 @@ def create_test_graph_input(output_type: str,
             graph_labels[n_samples * i :] += 1
     z_table = atomic.AtomicNumberTable.from_zs(numbers)
 
+    if random_weights:
+        weights = np.random.random_sample((n_samples*n_states, 1, 1))
+    else:
+        weights = np.ones((n_samples*n_states, 1, 1))
     config = [
         atomic.Configuration(
             atomic_numbers=numbers,
@@ -241,6 +246,7 @@ def create_test_graph_input(output_type: str,
             pbc=[True] * 3,
             node_labels=node_labels,
             graph_labels=graph_labels[i],
+            weight=weights[i]
         ) for i in range(0, n_samples*n_states)
     ]
 
