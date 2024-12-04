@@ -267,8 +267,8 @@ class BaseCV:
                 del self.loss_fn
                 super().__setattr__(key, value)
 
-    def _setup_graph_data(self, train_batch):
-            data = train_batch['data_list']
+    def _setup_graph_data(self, train_batch, key : str='data_list'):
+            data = train_batch[key]
             data['positions'].requires_grad_(True)
             data['node_attrs'].requires_grad_(True)
             return data
