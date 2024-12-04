@@ -79,20 +79,17 @@ class DictDataset(Dataset):
         if not all([len(l)==self.length for l in it]):
             raise ValueError("not all arrays in dictionary have same length!")
 
-    def __getitem__(self, index : Union[str, int, slice, List, range, np.ndarray]):
+    def __getitem__(self, index : Union[str, int, slice, List, range, np.ndarray, torch.Tensor]):
         if isinstance(index, str):
-            # raise TypeError(f'Index ("{index}") should be a slice, and not a string. To access the stored dictionary use .dictionary["{index}"] instead.')
             return self._dictionary[index]
         else: 
             slice_dict = {}
             for key, val in self._dictionary.items():
-                if self.metadata['data_type'] == 'graphs' and type(index) in [range, np.ndarray, list]:
+                if self.metadata['data_type'] == 'graphs' and type(index) in [range, np.ndarray, list, torch.Tensor]:
                     slice_dict[key] = list(itemgetter(*index)(val))
                 else:
-                    if type(index) in [int, slice]: 
-                        slice_dict[key] = val[index]
-                    elif type(index) in [range, np.ndarray, list]:
-                        slice_dict[key] = list(itemgetter(*index)(val))
+                    slice_dict[key] = val[index]
+
             return slice_dict
 
     def __setitem__(self, index, value):
@@ -187,29 +184,64 @@ def test_DictDataset():
     # graphs based
     numbers = [8, 1, 1]
     positions = np.array(
+        [[[0.0, 0.0, 0.0], [0.07, 0.07, 0.0], [0.07, -0.07, 0.0]],
         [[0.0, 0.0, 0.0], [0.07, 0.07, 0.0], [0.07, -0.07, 0.0]],
+        [[0.0, 0.0, 0.0], [0.07, 0.07, 0.0], [0.07, -0.07, 0.0]]],
         dtype=float
     )
     cell = np.identity(3, dtype=float) * 0.2
-    graph_labels = np.array([[1]])
+    graph_labels = np.array([[1], [0], [1]])
     node_labels = np.array([[0], [1], [1]])
     z_table = AtomicNumberTable.from_zs(numbers)
 
     config = [Configuration(
         atomic_numbers=numbers,
-        positions=positions,
+        positions=positions[i],
         cell=cell,
         pbc=[True] * 3,
-        node_labels=node_labels,
+        node_labels=node_labels[i],
         graph_labels=graph_labels,
-    )]
-    dataset = create_dataset_from_configurations(config, 
+    ) for i in range(3)]
+    graph_dataset = create_dataset_from_configurations(config, 
                                               z_table, 
                                               0.1, 
                                               show_progress=False
                                             )
-    print(dataset)
-    assert(isinstance(dataset, DictDataset))
+    print(graph_dataset)
+    assert(isinstance(graph_dataset, DictDataset))
+
+    # check __getitem__
+    # string
+    print(dataset['data'])
+    print(graph_dataset['data_list']) 
+
+    # int
+    print(dataset[0])
+    print(graph_dataset[0]) 
+
+    # list
+    print(dataset[[0,1,2]])
+    print(graph_dataset[[0,1,2]]) 
+
+    # slice
+    print(dataset[0:2])
+    print(graph_dataset[0:2]) 
+
+    # range
+    print(dataset[range(0,2)])
+    print(graph_dataset[range(0,2)]) 
+
+    # np.ndarray
+    print(dataset[np.array([0])])
+    print(graph_dataset[np.array([0])]) 
+    print(dataset[np.array([0,1,2])])
+    print(graph_dataset[np.array([0,1,2])]) 
+
+    # torch.Tensor
+    print(dataset[torch.tensor([0], dtype=torch.long)])
+    print(graph_dataset[torch.tensor([0], dtype=torch.long)]) 
+    print(dataset[torch.tensor([0,1,2], dtype=torch.long)])
+    print(graph_dataset[torch.tensor([0,1,2], dtype=torch.long)]) 
 
 if __name__ == "__main__":
     test_DictDataset()
