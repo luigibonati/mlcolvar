@@ -17,7 +17,8 @@ class InteractionBlock(nn.Module):
         hidden_channels: int,
         num_gaussians: int,
         num_filters: int,
-        cutoff: float
+        cutoff: float,
+        aggr: str = 'mean'
     ) -> None:
         super().__init__()
         self.mlp = nn.Sequential(
@@ -26,7 +27,12 @@ class InteractionBlock(nn.Module):
             nn.Linear(num_filters, num_filters),
         )
         self.conv = CFConv(
-            hidden_channels, hidden_channels, num_filters, self.mlp, cutoff
+            hidden_channels,
+            hidden_channels,
+            num_filters,
+            self.mlp,
+            cutoff,
+            aggr
         )
         self.act = ShiftedSoftplus()
         self.lin = nn.Linear(hidden_channels, hidden_channels)
@@ -63,8 +69,9 @@ class CFConv(MessagePassing):
         num_filters: int,
         network: nn.Sequential,
         cutoff: float,
+        aggr: str = 'mean'
     ) -> None:
-        super().__init__(aggr='mean')
+        super().__init__(aggr=aggr)
         self.lin1 = nn.Linear(in_channels, num_filters, bias=False)
         self.lin2 = nn.Linear(num_filters, out_channels)
         self.network = network

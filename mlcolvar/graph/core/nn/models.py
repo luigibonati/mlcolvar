@@ -131,6 +131,8 @@ class GVPModel(BaseModel):
         Name of the activation function to use in the GVPs (case sensitive).
     basis_type: str
         Type of the basis function.
+    smooth: bool
+        If use the smoothed GVPConv.
 
     References
     ----------
@@ -156,7 +158,8 @@ class GVPModel(BaseModel):
         n_scalars_edge: int = 8,
         drop_rate: int = 0.1,
         activation: str = 'SiLU',
-        basis_type: str = 'bessel'
+        basis_type: str = 'bessel',
+        smooth: bool = False,
     ) -> None:
         super().__init__(
             n_out, cutoff, atomic_numbers, n_bases, n_polynomials, basis_type
@@ -191,6 +194,7 @@ class GVPModel(BaseModel):
                 drop_rate=drop_rate,
                 activations=(eval(f'torch.nn.{activation}')(), None),
                 vector_gate=True,
+                cutoff=(cutoff if smooth else -1),
             )
             for _ in range(n_layers)
         )
@@ -227,6 +231,7 @@ class GVPModel(BaseModel):
         h_V = (h_V_1, h_V_2)
 
         h_E = self.embed_edge(data)
+        lengths = h_E[0]
         h_E = (h_E[1], h_E[2].unsqueeze(-2))
         for w in self.W_e:
             h_E = w(h_E)
@@ -237,7 +242,7 @@ class GVPModel(BaseModel):
         batch_id = data['batch']
 
         for layer in self.layers:
-            h_V = layer(h_V, data['edge_index'], h_E)
+            h_V = layer(h_V, data['edge_index'], h_E, lengths)
 
         for w in self.W_out:
             h_V = w(h_V)
@@ -277,6 +282,10 @@ class SchNetModel(BaseModel):
         Number of filters.
     n_hidden_channels: int
         Size of hidden embeddings.
+    aggr: str
+        Type of the GNN aggr function.
+    w_out_after_sum: bool
+        If apply the readout MLP layer after the scatter sum.
 
     References
     ----------
@@ -294,7 +303,9 @@ class SchNetModel(BaseModel):
         n_layers: int = 2,
         n_filters: int = 16,
         n_hidden_channels: int = 16,
-        drop_rate: int = 0
+        drop_rate: int = 0,
+        aggr: str = 'mean',
+        w_out_after_sum: bool = False
     ) -> None:
 
         super().__init__(
@@ -307,7 +318,7 @@ class SchNetModel(BaseModel):
 
         self.layers = nn.ModuleList([
             schnet.InteractionBlock(
-                n_hidden_channels, n_bases, n_filters, cutoff
+                n_hidden_channels, n_bases, n_filters, cutoff, aggr
             )
             for _ in range(n_layers)
         ])
@@ -317,6 +328,8 @@ class SchNetModel(BaseModel):
             schnet.ShiftedSoftplus(),
             nn.Linear(n_hidden_channels // 2, n_out)
         ])
+
+        self._w_out_after_sum = w_out_after_sum
 
         self.reset_parameters()
 
@@ -357,8 +370,9 @@ class SchNetModel(BaseModel):
         for layer in self.layers:
             h_V = h_V + layer(h_V, data['edge_index'], h_E[0], h_E[1])
 
-        for w in self.W_out:
-            h_V = w(h_V)
+        if not self._w_out_after_sum:
+            for w in self.W_out:
+                h_V = w(h_V)
         out = h_V
 
         if scatter_mean:
@@ -368,6 +382,10 @@ class SchNetModel(BaseModel):
                 out = out * data['system_masks']
                 out = torch_tools.scatter_sum(out, batch_id, dim=0)
                 out = out / data['n_system']
+
+        if self._w_out_after_sum:
+            for w in self.W_out:
+                out = w(out)
 
         return out
 
@@ -449,7 +467,7 @@ def test_gvp() -> None:
     ).all()
 
 
-def test_schnet() -> None:
+def test_schnet_1() -> None:
     torch.manual_seed(0)
     torch_tools.set_default_dtype('float64')
 
@@ -472,6 +490,32 @@ def test_schnet() -> None:
     ).all()
 
 
+def test_schnet_2() -> None:
+    torch.manual_seed(0)
+    torch_tools.set_default_dtype('float64')
+
+    model = SchNetModel(
+        n_out=2,
+        cutoff=0.1,
+        atomic_numbers=[1, 8],
+        n_bases=6,
+        n_layers=2,
+        n_filters=16,
+        n_hidden_channels=16,
+        aggr='min',
+        w_out_after_sum=True
+    )
+
+    data = test_get_data().to_dict()
+    assert (
+        torch.abs(
+            model(data) -
+            torch.tensor([[0.3654537816221449, -0.0748265132499575]] * 6)
+        ) < 1E-12
+    ).all()
+
+
 if __name__ == '__main__':
     test_gvp()
-    test_schnet()
+    test_schnet_1()
+    test_schnet_2()
