@@ -19,6 +19,7 @@ from typing import Optional, Sequence
 import torch
 
 from mlcolvar.cvs.cv import BaseCV
+from mlcolvar.core.nn import BaseGNN
 
 
 # =============================================================================
@@ -98,6 +99,10 @@ class MultiTaskCV:
             has always coefficient 1).
 
         """
+        # check if model is GNN, not implemented yet TODO
+        if isinstance(main_cv.nn, BaseGNN):
+            raise NotImplementedError('Multitask not supported (yet) for GNN-based CVs')
+        
         # This changes dynamically the class of this object to inherit both from
         # MultiTaskCV and main_cv.__class__ so that we can access all members of
         # main_cv and still be able to override some of them.
