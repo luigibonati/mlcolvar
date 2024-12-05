@@ -73,8 +73,8 @@ class DeepLDA(BaseCV, lightning.LightningModule):
 
         # ======= BLOCKS =======
 
-        # initialize norm_in
         if not self._override_model:
+            # initialize norm_in
             o = "norm_in"
             if (options[o] is not False) and (options[o] is not None):
                 self.norm_in = Normalization(self.in_features, **options[o])
@@ -225,10 +225,10 @@ def test_deeplda(n_states=2):
 
     
     # feedforward external
-    ff_model = FeedForward(layers=layers)
     print()
     print('EXTERNAL')
     print()
+    ff_model = FeedForward(layers=layers)
     model = DeepLDA(ff_model, n_states)
 
     # create trainer and fit
@@ -244,12 +244,12 @@ def test_deeplda(n_states=2):
 
 
     # gnn external
-    from mlcolvar.core.nn.graph.schnet import SchNetModel
-    from mlcolvar.data.graph.utils import create_test_graph_input
-    gnn_model = SchNetModel(2, 0.1, [1, 8])
     print()
     print('GNN')
     print()
+    from mlcolvar.core.nn.graph.schnet import SchNetModel
+    from mlcolvar.data.graph.utils import create_test_graph_input
+    gnn_model = SchNetModel(2, 0.1, [1, 8])
     model = DeepLDA(gnn_model, n_states)
 
     datamodule = create_test_graph_input(output_type='datamodule', n_samples=200, n_states=n_states)
