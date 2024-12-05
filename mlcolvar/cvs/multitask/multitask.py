@@ -100,7 +100,7 @@ class MultiTaskCV:
 
         """
         # check if model is GNN, not implemented yet TODO
-        if isinstance(main_cv.nn, BaseGNN):
+        if hasattr(main_cv, "nn") and isinstance(main_cv.nn, BaseGNN):
             raise NotImplementedError('Multitask not supported (yet) for GNN-based CVs')
         
         # This changes dynamically the class of this object to inherit both from
