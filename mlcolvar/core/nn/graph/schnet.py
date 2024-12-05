@@ -37,6 +37,10 @@ class SchNetModel(BaseGNN):
         Number of filters.
     n_hidden_channels: int
         Size of hidden embeddings.
+    aggr: str
+        Type of the GNN aggr function.
+    w_out_after_sum: bool
+        If apply the readout MLP layer after the scatter sum.
     References
     ----------
     .. [1] Schütt, Kristof T., et al. "Schnet–a deep learning architecture for
@@ -53,7 +57,9 @@ class SchNetModel(BaseGNN):
         n_layers: int = 2,
         n_filters: int = 16,
         n_hidden_channels: int = 16,
-        drop_rate: int = 0
+        drop_rate: int = 0,
+        aggr: str = 'mean',
+        w_out_after_sum: bool = False
     ) -> None:
 
         super().__init__(
@@ -66,7 +72,7 @@ class SchNetModel(BaseGNN):
 
         self.layers = nn.ModuleList([
             InteractionBlock(
-                n_hidden_channels, n_bases, n_filters, cutoff
+                n_hidden_channels, n_bases, n_filters, cutoff, aggr
             )
             for _ in range(n_layers)
         ])
@@ -76,6 +82,8 @@ class SchNetModel(BaseGNN):
             ShiftedSoftplus(),
             nn.Linear(n_hidden_channels // 2, n_out)
         ])
+
+        self._w_out_after_sum = w_out_after_sum
 
         self.reset_parameters()
 
@@ -115,8 +123,9 @@ class SchNetModel(BaseGNN):
         for layer in self.layers:
             h_V = h_V + layer(h_V, data['edge_index'], h_E[0], h_E[1])
 
-        for w in self.W_out:
-            h_V = w(h_V)
+        if not self._w_out_after_sum:
+            for w in self.W_out:
+                h_V = w(h_V)
         out = h_V
 
         if scatter_mean:
@@ -128,6 +137,10 @@ class SchNetModel(BaseGNN):
                 # TODO check this is equivalent in torch scatter
                 out = torch_scatter.scatter_sum(out, batch_id, dim=0)
                 out = out / data['n_system']
+        
+        if self._w_out_after_sum:
+            for w in self.W_out:
+                out = w(out)
 
         return out
 
