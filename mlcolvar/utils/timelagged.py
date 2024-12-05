@@ -4,6 +4,7 @@ from bisect import bisect_left
 from mlcolvar.data import DictDataset
 import warnings
 from typing import Union
+import copy
 
 # optional packages
 # pandas
@@ -318,15 +319,22 @@ def create_timelagged_dataset(
         x_t, x_lag, w_t, w_lag = data
 
     if isinstance(X, torch.Tensor):
-        dataset = DictDataset(
-            {"data": x_t, "data_lag": x_lag, "weights": w_t, "weights_lag": w_lag}
-        )
+        dataset = DictDataset({"data": x_t, 
+                               "data_lag": x_lag, 
+                               "weights": w_t, 
+                               "weights_lag": w_lag})
     elif isinstance(X, DictDataset):
-        dataset = DictDataset(dictionary={'data_list' : X[x_t.numpy().tolist()]['data_list'],
-                                         'data_list_lag' : X[x_lag.numpy().tolist()]['data_list']},
-                                metadata={'z_table' : X.metadata['z_table'],
-                                        'cutoff' : X.metadata['cutoff']},
-                                data_type='graphs')
+        # we use deepcopy to avoid editing the original dataset
+        dataset = DictDataset(dictionary={"data_list" : copy.deepcopy(X[x_t.numpy().tolist()]["data_list"]),
+                                         "data_list_lag" : copy.deepcopy(X[x_lag.numpy().tolist()]["data_list"])},
+                                metadata={"z_table" : X.metadata["z_table"],
+                                        "cutoff" : X.metadata["cutoff"]},
+                                data_type="graphs")
+        # update weights
+        for i in range(len(dataset)):
+            dataset['data_list'][i]['weight'] = w_t[i]
+            dataset['data_list_lag'][i]['weight'] = w_lag[i]
+            
     return dataset
 
 
@@ -351,6 +359,13 @@ def test_create_timelagged_dataset():
         X, t, logweights=logweights, reweight_mode="weights_t"
     )
     print(len(dataset))
+
+    # graph data
+    from mlcolvar.data.graph.utils import create_test_graph_input
+    dataset = create_test_graph_input('dataset')
+    lagged_dataset = create_timelagged_dataset(dataset, logweights=torch.randn(len(dataset)))
+    print(len(dataset))
+
 
 
 if __name__ == "__main__":
