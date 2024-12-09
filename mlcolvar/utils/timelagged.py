@@ -3,6 +3,8 @@ import numpy as np
 from bisect import bisect_left
 from mlcolvar.data import DictDataset
 import warnings
+from typing import Union
+import copy
 
 # optional packages
 # pandas
@@ -193,7 +195,7 @@ def find_timelagged_configurations(
 
 
 def create_timelagged_dataset(
-    X: torch.Tensor,
+    X: Union[torch.Tensor, DictDataset],
     t: torch.Tensor = None,
     lag_time: float = 1,
     reweight_mode: str = None,
@@ -287,13 +289,23 @@ def create_timelagged_dataset(
         tprime = t
 
     # find pairs of configurations separated by lag_time
-    x_t, x_lag, w_t, w_lag = find_timelagged_configurations(
-        X,
-        tprime,
-        lag_time=lag_time,
-        logweights=logweights if reweight_mode == "weights_t" else None,
-        progress_bar=progress_bar,
-    )
+    if isinstance(X, torch.Tensor):
+        x_t, x_lag, w_t, w_lag = find_timelagged_configurations(
+            X,
+            tprime,
+            lag_time=lag_time,
+            logweights=logweights if reweight_mode == "weights_t" else None,
+            progress_bar=progress_bar,
+        )
+    elif isinstance(X, DictDataset):
+        index = torch.arange(len(X), dtype=torch.long)
+        x_t, x_lag, w_t, w_lag = find_timelagged_configurations(
+            index,
+            tprime,
+            lag_time=lag_time,
+            logweights=logweights if reweight_mode == "weights_t" else None,
+            progress_bar=progress_bar,
+        )
 
     # return only a slice of the data (N. Pedrani)
     if interval is not None:
@@ -306,10 +318,23 @@ def create_timelagged_dataset(
             data[i] = data[i][interval[0] : interval[1]]
         x_t, x_lag, w_t, w_lag = data
 
-    dataset = DictDataset(
-        {"data": x_t, "data_lag": x_lag, "weights": w_t, "weights_lag": w_lag}
-    )
-
+    if isinstance(X, torch.Tensor):
+        dataset = DictDataset({"data": x_t, 
+                               "data_lag": x_lag, 
+                               "weights": w_t, 
+                               "weights_lag": w_lag})
+    elif isinstance(X, DictDataset):
+        # we use deepcopy to avoid editing the original dataset
+        dataset = DictDataset(dictionary={"data_list" : copy.deepcopy(X[x_t.numpy().tolist()]["data_list"]),
+                                         "data_list_lag" : copy.deepcopy(X[x_lag.numpy().tolist()]["data_list"])},
+                                metadata={"z_table" : X.metadata["z_table"],
+                                        "cutoff" : X.metadata["cutoff"]},
+                                data_type="graphs")
+        # update weights
+        for i in range(len(dataset)):
+            dataset['data_list'][i]['weight'] = w_t[i]
+            dataset['data_list_lag'][i]['weight'] = w_lag[i]
+            
     return dataset
 
 
@@ -334,6 +359,13 @@ def test_create_timelagged_dataset():
         X, t, logweights=logweights, reweight_mode="weights_t"
     )
     print(len(dataset))
+
+    # graph data
+    from mlcolvar.data.graph.utils import create_test_graph_input
+    dataset = create_test_graph_input('dataset')
+    lagged_dataset = create_timelagged_dataset(dataset, logweights=torch.randn(len(dataset)))
+    print(len(dataset))
+
 
 
 if __name__ == "__main__":
