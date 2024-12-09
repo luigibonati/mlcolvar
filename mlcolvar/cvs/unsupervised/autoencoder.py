@@ -73,6 +73,10 @@ class AutoEncoderCV(BaseCV, lightning.LightningModule):
                 f"Encoder layer must be a list. found {type(encoder_layers)}"
                 )
         super().__init__(model=encoder_layers, **kwargs)
+        # this makes checkpointing safe, to avoid double model keys
+        self.save_hyperparameters(ignore=['model'])
+        self.hparams.pop('model')
+
 
         # =======   LOSS  =======
         # Reconstruction (MSE) loss

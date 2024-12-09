@@ -95,6 +95,10 @@ class VariationalAutoEncoderCV(BaseCV, lightning.LightningModule):
                 f"Encoder layer must be a list. found {type(encoder_layers)}"
                 )
         super().__init__(model=encoder_layers, **kwargs)
+        # this makes checkpointing safe, to avoid double model keys
+        self.save_hyperparameters(ignore=['model'])
+        self.hparams.pop('model')
+
         # here we need to override the self.out_features attribute
         self.out_features = n_cvs
 
