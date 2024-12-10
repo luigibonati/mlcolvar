@@ -195,7 +195,7 @@ def find_timelagged_configurations(
 
 
 def create_timelagged_dataset(
-    X: Union[torch.Tensor, DictDataset],
+    X: Union[torch.Tensor, np.ndarray, DictDataset],
     t: torch.Tensor = None,
     lag_time: float = 1,
     reweight_mode: str = None,
@@ -289,7 +289,7 @@ def create_timelagged_dataset(
         tprime = t
 
     # find pairs of configurations separated by lag_time
-    if isinstance(X, torch.Tensor):
+    if isinstance(X, torch.Tensor) or isinstance(X, np.ndarray):
         x_t, x_lag, w_t, w_lag = find_timelagged_configurations(
             X,
             tprime,
@@ -318,11 +318,14 @@ def create_timelagged_dataset(
             data[i] = data[i][interval[0] : interval[1]]
         x_t, x_lag, w_t, w_lag = data
 
-    if isinstance(X, torch.Tensor):
+    if isinstance(X, torch.Tensor) or isinstance(X, np.ndarray):
         dataset = DictDataset({"data": x_t, 
                                "data_lag": x_lag, 
                                "weights": w_t, 
-                               "weights_lag": w_lag})
+                               "weights_lag": w_lag},
+                               data_type='descriptors')
+        return dataset 
+    
     elif isinstance(X, DictDataset):
         # we use deepcopy to avoid editing the original dataset
         dataset = DictDataset(dictionary={"data_list" : copy.deepcopy(X[x_t.numpy().tolist()]["data_list"]),
@@ -335,7 +338,7 @@ def create_timelagged_dataset(
             dataset['data_list'][i]['weight'] = w_t[i]
             dataset['data_list_lag'][i]['weight'] = w_lag[i]
             
-    return dataset
+        return dataset
 
 
 def test_create_timelagged_dataset():
