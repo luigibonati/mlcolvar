@@ -159,10 +159,9 @@ def committor_loss(x: torch.Tensor,
     device = x.device 
     dtype = x.dtype
 
-
     # Create masks to access different states data
-    mask_A = torch.nonzero(labels.squeeze() == 0) 
-    mask_B = torch.nonzero(labels.squeeze() == 1)
+    mask_A = torch.nonzero(labels.squeeze() == 0, as_tuple=True) 
+    mask_B = torch.nonzero(labels.squeeze() == 1, as_tuple=True)
     if separate_boundary_dataset:
         if _is_graph_data: 
             # this needs to be on the batch index, not only the labels
@@ -171,24 +170,23 @@ def committor_loss(x: torch.Tensor,
             mask_var_batches = torch.isin(batch, aux)
             mask_var_batches = (batch[mask_var_batches])
         else:
-            mask_var = torch.nonzero(labels.squeeze() > 1)
+            mask_var = torch.nonzero(labels.squeeze() > 1, as_tuple=True)
             mask_var_batches = mask_var 
     else: 
             mask_var = torch.ones(len(x), dtype=torch.bool)
             mask_var_batches = mask_var
 
     # setup atomic masses
-    atomic_masses = atomic_masses.to(dtype).to(device)
+    atomic_masses = atomic_masses.to(device)
+
     # mass should have size [1, n_atoms*spatial_dims]
     if _is_graph_data:
-
         atomic_masses = atomic_masses[node_types[mask_var_batches]].unsqueeze(-1)
-
     else:
         atomic_masses = atomic_masses.unsqueeze(0)
 
     # Update weights for bc confs using the information on the delta_f
-    delta_f = torch.Tensor([delta_f])
+    delta_f = torch.Tensor([delta_f]) #.to(device)
     # B higher in energy --> A-B < 0
     if delta_f < 0: 
         w[mask_B] = w[mask_B] * torch.exp(delta_f.to(device))
@@ -200,7 +198,7 @@ def committor_loss(x: torch.Tensor,
     w = w.unsqueeze(-1)
     # ==============================  LOSS ==============================
     # Each loss contribution is scaled by the number of samples
-    
+
     # 1. VARIATIONAL LOSS
     # Compute gradients of q(x) wrt x
     grad_outputs = torch.ones_like(q[mask_var])
@@ -219,7 +217,6 @@ def committor_loss(x: torch.Tensor,
         grad_square = scatter_sum(grad_square, mask_var_batches, dim=0)
 
     grad_square = grad_square * w[mask_var]
-
     # variational contribution to loss: we sum over the batch
     loss_var = torch.mean(grad_square)
     if False:
@@ -236,7 +233,6 @@ def committor_loss(x: torch.Tensor,
     
     # TODO maybe there is no need to detach them for logging
     return loss, gamma*loss_var.detach(), alpha*gamma*loss_A.detach(), alpha*gamma*loss_B.detach()
-
 
 class SmartDerivatives(torch.nn.Module):
     """
