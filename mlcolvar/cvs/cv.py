@@ -1,5 +1,8 @@
 import torch
 from mlcolvar.core.transform import Transform
+from typing import Union, List
+from mlcolvar.core.nn import FeedForward, BaseGNN
+from mlcolvar.data.graph.utils import create_test_graph_input
 
 
 class BaseCV:
@@ -9,10 +12,12 @@ class BaseCV:
     To inherit from this class, the class must define a BLOCKS class attribute.
     """
 
+    DEFAULT_BLOCKS = []
+    MODEL_BLOCKS = []
+
     def __init__(
         self,
-        in_features,
-        out_features,
+        model: Union[List[int], FeedForward, BaseGNN],
         preprocessing: torch.nn.Module = None,
         postprocessing: torch.nn.Module = None,
         *args,
@@ -39,9 +44,8 @@ class BaseCV:
         self.save_hyperparameters(ignore=['in_features', 'out_features'])
 
         # MODEL
+        self.parse_model(model=model)
         self.initialize_blocks()
-        self.in_features = in_features
-        self.out_features = out_features
 
         # OPTIM
         self._optimizer_name = "Adam"
@@ -59,12 +63,42 @@ class BaseCV:
 
     @property
     def example_input_array(self):
-        return torch.randn(
-            (1,self.in_features)
-            if self.preprocessing is None
-            or not hasattr(self.preprocessing, "in_features")
-            else self.preprocessing.in_features
-        )
+        if self.in_features is not None:
+            return torch.randn(
+                (1,self.in_features)
+                if self.preprocessing is None
+                or not hasattr(self.preprocessing, "in_features")
+                else self.preprocessing.in_features
+            )
+        else:
+            return create_test_graph_input(output_type='tracing_example', n_atoms=3, n_samples=1, n_states=1)
+
+
+    # TODO add general torch.nn.Module
+    def parse_model(self, model: Union[List[int], FeedForward, BaseGNN]):
+        if isinstance(model, list):
+            self.layers = model
+            self.BLOCKS = self.DEFAULT_BLOCKS
+            self._override_model = False
+            self.in_features = self.layers[0]
+            self.out_features = self.layers[-1]
+        elif isinstance(model, FeedForward) or isinstance(model, BaseGNN):
+            self.BLOCKS = self.MODEL_BLOCKS
+            self._override_model = True
+            if isinstance(model, FeedForward):
+                # self.nn = model
+                self.in_features = model.in_features
+                self.out_features = model.out_features
+            elif isinstance(model, BaseGNN):
+                # GNN models need to be scripted!
+                # self.nn = torch.jit.script_if_tracing(model)
+                # self.nn = model
+                self.in_features = None
+                self.out_features = model.out_features
+        else:
+            raise ValueError(
+                f"Keyword model can either accept type list, FeedForward or BaseGNN. Found {type(model)}"
+            )
 
     def parse_options(self, options: dict = None):
         """
@@ -78,7 +112,13 @@ class BaseCV:
         """
         if options is None:
             options = {}
-
+        else:
+            for o in options.keys():
+                if o in self.DEFAULT_BLOCKS and self._override_model:
+                    raise ValueError(
+                        "Options on blocks are disabled if a model is provided!"
+                        )
+            
         for b in self.BLOCKS:
             options.setdefault(b, {})
 
@@ -100,6 +140,7 @@ class BaseCV:
         Initialize the blocks as attributes of the CV class.
         """
         for b in self.BLOCKS:
+            #if not self._override_model and b!='nn':
             self.__setattr__(b, None)
 
     def setup(self, stage=None):
@@ -225,3 +266,9 @@ class BaseCV:
             if (key == "loss_fn") and ("cannot assign" in str(e)):
                 del self.loss_fn
                 super().__setattr__(key, value)
+
+    def _setup_graph_data(self, train_batch, key : str='data_list'):
+            data = train_batch[key]
+            data['positions'].requires_grad_(True)
+            data['node_attrs'].requires_grad_(True)
+            return data

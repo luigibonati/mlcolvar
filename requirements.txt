@@ -5,3 +5,6 @@ pandas
 matplotlib
 kdepy
 torch-scatter
+torch_geometric
+matscipy
+mdtraj
