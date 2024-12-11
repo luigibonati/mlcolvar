@@ -42,7 +42,6 @@ class BaseGNN(nn.Module):
         basis_type: str = 'bessel'
     ) -> None:
         super().__init__()
-        self._model_type = 'gnn'
 
         self._n_out = n_out
         self._radial_embedding = radial.RadialEmbeddingBlock(
@@ -62,6 +61,10 @@ class BaseGNN(nn.Module):
     def out_features(self):
         return self._n_out
     
+    @property
+    def in_features(self):
+        return None
+
     def embed_edge(
         self, data: Dict[str, torch.Tensor], normalize: bool = True
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -125,52 +128,3 @@ def get_edge_vectors_and_lengths(
         vectors = torch.nan_to_num(torch.div(vectors, lengths))
 
     return vectors, lengths
-
-
-# def test_get_data() -> tg.data.Batch:
-#     # TODO: This is not a real test, but a helper function for other tests.
-#     # Maybe should change its name.
-#     torch.manual_seed(0)
-#     torch_tools.set_default_dtype('float64')
-
-#     numbers = [8, 1, 1]
-#     positions = np.array(
-#         [
-#             [[0.0, 0.0, 0.0], [0.07, 0.07, 0.0], [0.07, -0.07, 0.0]],
-#             [[0.0, 0.0, 0.0], [-0.07, 0.07, 0.0], [0.07, 0.07, 0.0]],
-#             [[0.0, 0.0, 0.0], [0.07, -0.07, 0.0], [0.07, 0.07, 0.0]],
-#             [[0.0, 0.0, 0.0], [0.0, -0.07, 0.07], [0.0, 0.07, 0.07]],
-#             [[0.0, 0.0, 0.0], [0.07, 0.0, 0.07], [-0.07, 0.0, 0.07]],
-#             [[0.1, 0.0, 1.1], [0.17, 0.07, 1.1], [0.17, -0.07, 1.1]],
-#         ],
-#         dtype=np.float64
-#     )
-#     cell = np.identity(3, dtype=float) * 0.2
-#     graph_labels = np.array([[1]])
-#     node_labels = np.array([[0], [1], [1]])
-#     z_table = gdata.atomic.AtomicNumberTable.from_zs(numbers)
-
-#     config = [
-#         gdata.atomic.Configuration(
-#             atomic_numbers=numbers,
-#             positions=p,
-#             cell=cell,
-#             pbc=[True] * 3,
-#             node_labels=node_labels,
-#             graph_labels=graph_labels,
-#         ) for p in positions
-#     ]
-#     dataset = gdata.create_dataset_from_configurations(
-#         config, z_table, 0.1, show_progress=False
-#     )
-
-#     loader = gdata.GraphDataModule(
-#         dataset,
-#         lengths=(1.0,),
-#         batch_size=10,
-#         shuffle=False,
-#     )
-#     loader.setup()
-
-#     return next(iter(loader.train_dataloader()))
-
