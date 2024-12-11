@@ -6,6 +6,8 @@ from mlcolvar.data.graph import atomic
 from mlcolvar.data.graph.neighborhood import get_neighborhood
 from mlcolvar.utils.plot import pbar
 
+__all__ = ["create_dataset_from_configurations", "create_test_graph_input"]
+
 def _create_dataset_from_configuration(
     config: atomic.Configuration,
     z_table: atomic.AtomicNumberTable,
