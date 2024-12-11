@@ -243,3 +243,54 @@ class ShiftedSoftplus(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return nn.functional.softplus(x) - self.shift
+    
+
+
+from mlcolvar.core.nn.graph.utils import _test_get_data
+
+def test_schnet_1() -> None:
+    torch.manual_seed(0)
+    torch.set_default_dtype(torch.float64)
+
+    model = SchNetModel(
+        n_out=2,
+        cutoff=0.1,
+        atomic_numbers=[1, 8],
+        n_bases=6,
+        n_layers=2,
+        n_filters=16,
+        n_hidden_channels=16
+    )
+
+    data = _test_get_data()
+    assert (
+        torch.abs(
+            model(data) -
+            torch.tensor([[0.40384621527953063, -0.1257513365138969]] * 6)
+        ) < 1E-12
+    ).all()
+
+
+def test_schnet_2() -> None:
+    torch.manual_seed(0)
+    torch.set_default_dtype(torch.float64)
+
+    model = SchNetModel(
+        n_out=2,
+        cutoff=0.1,
+        atomic_numbers=[1, 8],
+        n_bases=6,
+        n_layers=2,
+        n_filters=16,
+        n_hidden_channels=16,
+        aggr='min',
+        w_out_after_sum=True
+    )
+
+    data = _test_get_data()
+    assert (
+        torch.abs(
+            model(data) -
+            torch.tensor([[0.3654537816221449, -0.0748265132499575]] * 6)
+        ) < 1E-12
+    ).all()

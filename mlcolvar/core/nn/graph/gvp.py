@@ -698,3 +698,36 @@ def _merge(s: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
     """
     v = v.contiguous().view(v.shape[0], v.shape[1] * 3)
     return torch.cat([s, v], -1)
+
+
+def test_gvp() -> None:
+    from mlcolvar.core.nn.graph.utils import _test_get_data
+    torch.manual_seed(0)
+    torch.set_default_dtype(torch.float64)
+
+    model = GVPModel(
+        n_out=2,
+        cutoff=0.1,
+        atomic_numbers=[1, 8],
+        n_bases=6,
+        n_polynomials=6,
+        n_layers=2,
+        n_messages=2,
+        n_feedforwards=1,
+        n_scalars_node=16,
+        n_vectors_node=8,
+        n_scalars_edge=16,
+        drop_rate=0,
+        activation='SiLU',
+    )
+
+    data = _test_get_data()
+    assert (
+        torch.abs(
+            model(data) -
+            torch.tensor([[0.6100070244145421, -0.2559670171962067]] * 6)
+        ) < 1E-12
+    ).all()
+
+if __name__ == '__main__':
+    test_gvp()
