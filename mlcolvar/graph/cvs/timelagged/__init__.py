@@ -1,1 +1,0 @@
-from .deeptica import GraphDeepTICA
