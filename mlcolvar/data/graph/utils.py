@@ -277,7 +277,7 @@ def create_test_graph_input(output_type: str,
     if output_type == 'batch':
         return batch
     example = batch['data_list'].get_example(0)
-    example['batch'] = torch.tensor([0], dtype=torch.int64)
+    example['batch'] = torch.zeros(len(example['positions']), dtype=torch.int64)
     if output_type == 'example':
         return example
     if output_type == 'tracing_example':
