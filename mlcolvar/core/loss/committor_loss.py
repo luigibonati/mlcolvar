@@ -163,18 +163,17 @@ def committor_loss(x: torch.Tensor,
     mask_A = torch.nonzero(labels.squeeze() == 0, as_tuple=True) 
     mask_B = torch.nonzero(labels.squeeze() == 1, as_tuple=True)
     if separate_boundary_dataset:
-        if _is_graph_data: 
-            # this needs to be on the batch index, not only the labels
-            mask_var = torch.nonzero(labels.squeeze() > 1)
-            aux = torch.where(mask_var)[0]
-            mask_var_batches = torch.isin(batch, aux)
-            mask_var_batches = (batch[mask_var_batches])
-        else:
-            mask_var = torch.nonzero(labels.squeeze() > 1, as_tuple=True)
-            mask_var_batches = mask_var 
+        mask_var = torch.nonzero(labels.squeeze() > 1, as_tuple=not(_is_graph_data))
     else: 
-            mask_var = torch.ones(len(x), dtype=torch.bool)
-            mask_var_batches = mask_var
+        mask_var = torch.ones(len(x), dtype=torch.bool)
+
+    if _is_graph_data and separate_boundary_dataset: 
+        # this needs to be on the batch index, not only the labels
+        aux = torch.where(mask_var)[0]
+        mask_var_batches = torch.isin(batch, aux)
+        mask_var_batches = (batch[mask_var_batches])
+    else:
+        mask_var_batches = mask_var
 
     # setup atomic masses
     atomic_masses = atomic_masses.to(device)
