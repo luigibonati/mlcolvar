@@ -41,6 +41,8 @@ class BaseCV:
 
         # The parent class sets in_features and out_features based on their own
         # init arguments so we don't need to save them here (see #103).
+        
+        # TODO check if need
         self.save_hyperparameters(ignore=['in_features', 'out_features'])
 
         # MODEL
@@ -74,7 +76,7 @@ class BaseCV:
             return create_test_graph_input(output_type='tracing_example', n_atoms=3, n_samples=1, n_states=1)
 
 
-    # TODO add general torch.nn.Module
+    # TODO add general torch.nn.Module TODO TODO TODO TODO
     def parse_model(self, model: Union[List[int], FeedForward, BaseGNN]):
         if isinstance(model, list):
             self.layers = model
@@ -85,16 +87,16 @@ class BaseCV:
         elif isinstance(model, FeedForward) or isinstance(model, BaseGNN):
             self.BLOCKS = self.MODEL_BLOCKS
             self._override_model = True
-            if isinstance(model, FeedForward):
-                # self.nn = model
-                self.in_features = model.in_features
-                self.out_features = model.out_features
-            elif isinstance(model, BaseGNN):
-                # GNN models need to be scripted!
-                # self.nn = torch.jit.script_if_tracing(model)
-                # self.nn = model
-                self.in_features = None
-                self.out_features = model.out_features
+            self.in_features = model.in_features
+            self.out_features = model.out_features
+            # if isinstance(model, FeedForward):
+            #     # self.nn = model
+            # elif isinstance(model, BaseGNN):
+            #     # GNN models need to be scripted!
+            #     # self.nn = torch.jit.script_if_tracing(model)
+            #     # self.nn = model
+            #     self.in_features = None
+            #     self.out_features = model.out_features
         else:
             raise ValueError(
                 f"Keyword model can either accept type list, FeedForward or BaseGNN. Found {type(model)}"
