@@ -61,8 +61,8 @@ def save_dataset_configurations_as_extyz(dataset: DictDataset, file_name: str) -
     # create file
     fp = open(file_name, 'w')
 
-    for d in dataset:
-        d = d['data_list']
+    for i in range(len(dataset)):
+        d = dataset[i]['data_list']
 
         # print number of atoms
         print(len(d['positions']), file=fp)
