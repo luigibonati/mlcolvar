@@ -128,3 +128,67 @@ def get_edge_vectors_and_lengths(
         vectors = torch.nan_to_num(torch.div(vectors, lengths))
 
     return vectors, lengths
+
+
+def test_get_edge_vectors_and_lengths() -> None:
+    dtype = torch.get_default_dtype()
+    torch.set_default_dtype(torch.float64)
+
+    data = dict()
+    data['positions'] = torch.tensor(
+        [[0.0, 0.0, 0.0], [0.07, 0.07, 0.0], [0.07, -0.07, 0.0]],
+        dtype=torch.float64
+    )
+    data['edge_index'] = torch.tensor(
+        [[0, 0, 1, 1, 2, 2], [2, 1, 0, 2, 1, 0]]
+    )
+    data['shifts'] = torch.tensor([
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0],
+        [0.0, 0.2, 0.0],
+        [0.0, -0.2, 0.0],
+        [0.0, 0.0, 0.0],
+    ])
+
+    vectors, distances = get_edge_vectors_and_lengths(**data, normalize=False)
+    assert(torch.allclose(vectors, torch.tensor([[0.0700, -0.0700, 0.0000],
+                                                 [0.0700,  0.0700, 0.0000],
+                                                 [-0.070, -0.0700, 0.0000],
+                                                 [0.0000,  0.0600, 0.0000],
+                                                 [0.0000, -0.0600, 0.0000],
+                                                 [-0.070,  0.0700, 0.0000]])
+                        )
+            )
+    assert(torch.allclose(distances,torch.tensor([[0.09899494936611666],
+                                                  [0.09899494936611666],
+                                                  [0.09899494936611666],
+                                                  [0.06000000000000000],
+                                                  [0.06000000000000000],
+                                                  [0.09899494936611666]]) 
+                        )
+            )
+    
+    vectors, distances = get_edge_vectors_and_lengths(**data, normalize=True)
+    assert(torch.allclose(vectors, torch.tensor([[0.70710678118654757, -0.70710678118654757, 0.0],
+                                                 [0.70710678118654757,  0.70710678118654757, 0.0],
+                                                 [-0.7071067811865476, -0.70710678118654757, 0.0],
+                                                 [0.00000000000000000,  1.00000000000000000, 0.0],
+                                                 [0.00000000000000000, -1.00000000000000000, 0.0],
+                                                 [-0.7071067811865476,  0.70710678118654757, 0.0]])
+                        )  
+        )
+
+    assert(torch.allclose(distances, torch.tensor([[0.09899494936611666],
+                                                   [0.09899494936611666],
+                                                   [0.09899494936611666],
+                                                   [0.06000000000000000],
+                                                   [0.06000000000000000],
+                                                   [0.09899494936611666]])
+                        )
+        )
+
+    torch.set_default_dtype(dtype)
+
+if __name__ == "__main__":
+    test_get_edge_vectors_and_lengths()

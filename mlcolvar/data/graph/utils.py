@@ -294,6 +294,15 @@ def create_test_graph_input(output_type: str,
 
 import numpy as np
 
+def test_to_one_hot() -> None:
+    i = torch.tensor([[0], [2], [1]], dtype=torch.int64)
+    e = to_one_hot(i, 4)
+    assert (
+        e == torch.tensor(
+            [[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0]], dtype=torch.int64
+        )
+    ).all()
+
 def test_from_configuration() -> None:
     # fake atomic numbers, positions, cell, graph label, node labels
     numbers = [8, 1, 1]
@@ -609,5 +618,6 @@ def test_from_configurations() -> None:
         ).all()
 
 if __name__ == '__main__':
+    test_to_one_hot()
     test_from_configuration()
     test_from_configurations()

@@ -551,6 +551,10 @@ def _configures_from_trajectory(
 
     return configurations
 
+# =================================================================================================
+# ============================================= TESTS =============================================
+# =================================================================================================
+
 def test_datasetFromFile():
     # Test with unlabeled dataset
     torch_dataset, pd_dataframe = create_dataset_from_files(
@@ -621,6 +625,196 @@ def test_datasesetFromTrajectories():
         show_progress=False
     )
 
+def test_create_dataset_from_trajectories(text: str, system_selection: str) -> None:
+    with open('test_dataset.pdb', 'w') as fp:
+        print(text, file=fp)
+
+    dataset, trajectories = create_dataset_from_trajectories(
+        ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
+        ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
+        1.0,
+        system_selection=system_selection,
+        return_trajectories=True,
+        show_progress=False
+    )
+
+    assert len(dataset) == 6
+    assert dataset.metadata["cutoff"] == 1.0
+    assert dataset.metadata["z_table"] == [1, 8]
+    assert len(trajectories) == 2
+    assert len(trajectories[0]) == 2
+    assert len(trajectories[1]) == 2
+    assert len(trajectories[1][0]) == 2
+    assert len(trajectories[1][1]) == 2
+
+    assert dataset[0]["data_list"]['graph_labels'] == torch.tensor([[0.0]])
+    assert dataset[1]["data_list"]['graph_labels'] == torch.tensor([[0.0]])
+    assert dataset[2]["data_list"]['graph_labels'] == torch.tensor([[1.0]])
+    assert dataset[3]["data_list"]['graph_labels'] == torch.tensor([[1.0]])
+    assert dataset[4]["data_list"]['graph_labels'] == torch.tensor([[1.0]])
+    assert dataset[5]["data_list"]['graph_labels'] == torch.tensor([[1.0]])
+
+    dataset, trajectories = create_dataset_from_trajectories(
+        ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
+        ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
+        1.0,
+        create_labels=False,
+        system_selection=system_selection,
+        return_trajectories=True,
+        show_progress=False
+    )
+
+    assert dataset[0]["data_list"]['graph_labels'] == torch.tensor([[-1.0]])
+    assert dataset[1]["data_list"]['graph_labels'] == torch.tensor([[-1.0]])
+    assert dataset[2]["data_list"]['graph_labels'] == torch.tensor([[-1.0]])
+    assert dataset[3]["data_list"]['graph_labels'] == torch.tensor([[-1.0]])
+    assert dataset[4]["data_list"]['graph_labels'] == torch.tensor([[-1.0]])
+    assert dataset[5]["data_list"]['graph_labels'] == torch.tensor([[-1.0]])
+
+    def check_data_1(data) -> None:
+        assert(torch.allclose(data["data_list"]['edge_index'], torch.tensor([[0, 0, 1, 1, 2, 2],
+                                                                             [2, 1, 0, 2, 1, 0]])
+                                )
+                )
+        assert(torch.allclose(data["data_list"]['shifts'], torch.tensor([[0.0, 0.0, 0.0],
+                                                                         [0.0, 0.0, 0.0],
+                                                                         [0.0, 0.0, 0.0],
+                                                                         [0.0, 2.0, 0.0],
+                                                                         [0.0, -2.0, 0.0],
+                                                                         [0.0, 0.0, 0.0]])
+                                    )
+                )
+        assert(torch.allclose(data["data_list"]['unit_shifts'], torch.tensor([[0.0, 0.0, 0.0],
+                                                                              [0.0, 0.0, 0.0],
+                                                                              [0.0, 0.0, 0.0],
+                                                                              [0.0, 1.0, 0.0],
+                                                                              [0.0, -1.0, 0.0],
+                                                                              [0.0, 0.0, 0.0]])
+                               )
+                )
+        assert(torch.allclose(data["data_list"]['positions'], torch.tensor([[0.0, 0.0, 0.0],
+                                                                            [0.7, 0.7, 0.0],
+                                                                            [0.7, -0.7, 0.0]])
+                            )
+                )
+        assert(torch.allclose(data["data_list"]['cell'], torch.tensor([[2.0, 0.0, 0.0],
+                                                                       [0.0, 2.0, 0.0],
+                                                                       [0.0, 0.0, 2.0]])
+                         )
+                )
+        assert(torch.allclose(data["data_list"]['node_attrs'], torch.tensor([[0.0, 1.0], 
+                                                                             [1.0, 0.0], 
+                                                                             [1.0, 0.0]])
+                        )
+                )
+
+    for i in range(6):
+        check_data_1(dataset[i])
+
+    if system_selection is not None:
+
+        dataset = create_dataset_from_trajectories(
+            ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
+            ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
+            1.0,
+            system_selection='type O and {:s}'.format(system_selection),
+            environment_selection='type H and {:s}'.format(system_selection),
+            show_progress=False
+        )
+
+        for i in range(6):
+            check_data_1(dataset[i])
+
+        dataset = create_dataset_from_trajectories(
+            ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
+            ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
+            1.0,
+            system_selection='name H1 and {:s}'.format(system_selection),
+            environment_selection='name H2 and {:s}'.format(system_selection),
+            show_progress=False
+        )
+
+        def check_data_2(data) -> None:
+            assert(torch.allclose(data["data_list"]['edge_index'], torch.tensor([[0, 1], [1, 0]])))
+            assert(torch.allclose(data["data_list"]['shifts'], torch.tensor([[0.0, 2.0, 0.0], 
+                                                                             [0.0, -2.0, 0.0]])
+                                    )
+                    )
+            assert(torch.allclose(data["data_list"]['unit_shifts'], torch.tensor([[0.0, 1.0, 0.0], 
+                                                                                  [0.0, -1.0, 0.0]])
+                                )
+                    )
+            assert(torch.allclose(data["data_list"]['positions'], torch.tensor([[0.7, 0.7, 0.0], 
+                                                                                [0.7, -0.7, 0.0]])
+                                )
+                    )
+            assert(torch.allclose(data["data_list"]['cell'], torch.tensor([[2.0, 0.0, 0.0],
+                                                                           [0.0, 2.0, 0.0],
+                                                                           [0.0, 0.0, 2.0]])
+                                )
+                    )
+            assert(torch.allclose(data["data_list"]['node_attrs'], torch.tensor([[1.0], 
+                                                                                 [1.0]])
+                                )
+                    )
+
+        for i in range(6):
+            check_data_2(dataset[i])
+
+    __import__('os').remove('test_dataset.pdb')
+
+
 if __name__ == "__main__":
-    test_datasetFromFile()
-    test_datasesetFromTrajectories()
+    # test_datasetFromFile()
+    # test_datasesetFromTrajectories()
+    text = """
+CRYST1    2.000    2.000    2.000  90.00  90.00  90.00 P 1           1
+ATOM      1  OH2 TIP3W   1       0.000   0.000   0.000  1.00  0.00      WT1  O
+ATOM      2  H1  TIP3W   1       0.700   0.700   0.000  1.00  0.00      WT1  H
+ATOM      3  H2  TIP3W   1       0.700  -0.700   0.000  1.00  0.00      WT1  H
+ENDMODEL
+ATOM      1  OH2 TIP3W   1       0.000   0.000   0.000  1.00  0.00      WT1  O
+ATOM      2  H1  TIP3W   1       0.700   0.700   0.000  1.00  0.00      WT1  H
+ATOM      3  H2  TIP3W   1       0.700  -0.700   0.000  1.00  0.00      WT1  H
+END
+"""
+    test_create_dataset_from_trajectories(text, None)
+
+    text = """
+CRYST1    2.000    2.000    2.000  90.00  90.00  90.00 P 1           1
+ATOM      1  OH2 TIP3W   1       0.000   0.000   0.000  1.00  0.00      WT1  O
+ATOM      2  H1  TIP3W   1       0.700   0.700   0.000  1.00  0.00      WT1  H
+ATOM      3  H2  TIP3W   1       0.700  -0.700   0.000  1.00  0.00      WT1  H
+ATOM      4  OH2 XXXXW   2       0.000   0.000   0.000  1.00  0.00      WT1  O
+ATOM      5  H1  XXXXW   2       0.300   0.300   0.000  1.00  0.00      WT1  H
+ATOM      6  H2  XXXXW   2       0.300  -0.300   0.000  1.00  0.00      WT1  H
+ENDMODEL
+ATOM      1  OH2 TIP3W   1       0.000   0.000   0.000  1.00  0.00      WT1  O
+ATOM      2  H1  TIP3W   1       0.700   0.700   0.000  1.00  0.00      WT1  H
+ATOM      3  H2  TIP3W   1       0.700  -0.700   0.000  1.00  0.00      WT1  H
+ATOM      4  OH2 XXXXW   2       0.000   0.000   0.000  1.00  0.00      WT1  O
+ATOM      5  H1  XXXXW   2       0.300   0.300   0.000  1.00  0.00      WT1  H
+ATOM      6  H2  XXXXW   2       0.300  -0.300   0.000  1.00  0.00      WT1  H
+END
+"""
+    test_create_dataset_from_trajectories(text, 'not resname XXXX')
+
+    text = """
+CRYST1    2.000    2.000    2.000  90.00  90.00  90.00 P 1           1
+ATOM      1  OH2 XXXXW   1       0.000   0.000   0.000  1.00  0.00      WT1  O
+ATOM      2  OH2 TIP3W   2       0.000   0.000   0.000  1.00  0.00      WT1  O
+ATOM      3  H1  XXXXW   1       0.300   0.300   0.000  1.00  0.00      WT1  H
+ATOM      4  H1  TIP3W   2       0.700   0.700   0.000  1.00  0.00      WT1  H
+ATOM      5  H2  XXXXW   1       0.300  -0.300   0.000  1.00  0.00      WT1  H
+ATOM      6  H2  TIP3W   2       0.700  -0.700   0.000  1.00  0.00      WT1  H
+ENDMODEL
+ATOM      1  OH2 XXXXW   1       0.000   0.000   0.000  1.00  0.00      WT1  O
+ATOM      2  OH2 TIP3W   2       0.000   0.000   0.000  1.00  0.00      WT1  O
+ATOM      3  H1  XXXXW   1       0.300   0.300   0.000  1.00  0.00      WT1  H
+ATOM      4  H1  TIP3W   2       0.700   0.700   0.000  1.00  0.00      WT1  H
+ATOM      5  H2  XXXXW   1       0.300  -0.300   0.000  1.00  0.00      WT1  H
+ATOM      6  H2  TIP3W   2       0.700  -0.700   0.000  1.00  0.00      WT1  H
+END
+"""
+    test_create_dataset_from_trajectories(text, 'not resname XXXX')
+
