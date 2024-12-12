@@ -294,3 +294,5 @@ def test_schnet_2() -> None:
             torch.tensor([[0.3654537816221449, -0.0748265132499575]] * 6)
         ) < 1E-12
     ).all()
+
+    torch.set_default_dtype(torch.float32)

@@ -728,6 +728,7 @@ def test_gvp() -> None:
             torch.tensor([[0.6100070244145421, -0.2559670171962067]] * 6)
         ) < 1E-12
     ).all()
+    torch.set_default_dtype(torch.float32)
 
 if __name__ == '__main__':
     test_gvp()
