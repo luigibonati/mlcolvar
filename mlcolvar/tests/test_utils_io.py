@@ -27,7 +27,7 @@ def test_loadDataframe(file_type):
 if __name__ == "__main__":
     test_datasetFromFile()
     test_datasesetFromTrajectories()
-   text = """
+    text = """
 CRYST1    2.000    2.000    2.000  90.00  90.00  90.00 P 1           1
 ATOM      1  OH2 TIP3W   1       0.000   0.000   0.000  1.00  0.00      WT1  O
 ATOM      2  H1  TIP3W   1       0.700   0.700   0.000  1.00  0.00      WT1  H
