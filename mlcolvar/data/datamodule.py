@@ -122,22 +122,7 @@ class DictModule(lightning.LightningDataModule):
         """
         super().__init__()
         self.dataset = dataset
-
-        # check the type of data we have
-        if not isinstance(dataset, list):
-            self._dataset_type = dataset.metadata['data_type']
-        else:
-            it = iter(list(dataset))
-            self._dataset_type = next(it).metadata['data_type']
-            if not all(d.metadata['data_type'] for d in it):
-                raise ValueError("not all the dataset are of the same type!")
-
-
-        # decide which loader to use
-        if self._dataset_type == 'descriptors':
-            self.DataLoader = DictLoader
-        elif self._dataset_type == 'graphs':
-            self.DataLoader = torch_geometric.loader.DataLoader
+        self.DataLoader = self._get_dataloader()
 
         self._lengths = lengths
 
@@ -172,6 +157,25 @@ class DictModule(lightning.LightningDataModule):
         self.train_loader = None
         self.valid_loader = None
         self.test_loader = None
+
+    @property
+    def _dataset_type(self):
+        if not isinstance(self.dataset, list):
+            _dataset_type = self.dataset.metadata['data_type']
+        else:
+            it = iter(list(self.dataset))
+            _dataset_type = next(it).metadata['data_type']
+            if not all(d.metadata['data_type'] for d in it):
+                raise ValueError("not all the dataset are of the same type!")
+        return _dataset_type
+            
+    def _get_dataloader(self):
+        # decide which loader to use
+        if self._dataset_type == 'descriptors':
+            DataLoader = DictLoader
+        elif self._dataset_type == 'graphs':
+            DataLoader = torch_geometric.loader.DataLoader
+        return DataLoader
 
     def setup(self, stage: Optional[str] = None):
         if self._dataset_split is None:

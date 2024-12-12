@@ -54,7 +54,12 @@ class DictDataset(Dataset):
         # initialize metadata as dict
         if metadata is None:
             metadata = {}
-        metadata['data_type'] = data_type
+        
+        if 'data_type' in metadata.keys():
+            if not metadata['data_type'] == metadata:
+                raise ValueError(f"Two different data_type specified. Found {metadata['data_type']} in metadata and {data_type} as keyword")
+        else:
+            metadata['data_type'] = data_type
 
         # convert to torch.Tensors
         for key, val in dictionary.items():
@@ -76,20 +81,19 @@ class DictDataset(Dataset):
         # check that all elements of dict have same length
         it = iter(dictionary.values())
         self.length = len(next(it))
-        if not all([len(l)==self.length for l in it]):
+        if not all([len(l) == self.length for l in it]):
             raise ValueError("not all arrays in dictionary have same length!")
 
-    def __getitem__(self, index : Union[str, int, slice, List, range, np.ndarray, torch.Tensor]):
+    def __getitem__(self, index):
         if isinstance(index, str):
             return self._dictionary[index]
         else: 
             slice_dict = {}
             for key, val in self._dictionary.items():
-                if self.metadata['data_type'] == 'graphs' and type(index) in [range, np.ndarray, list, torch.Tensor]:
-                    slice_dict[key] = list(itemgetter(*index)(val))
-                else:
+                try:
                     slice_dict[key] = val[index]
-
+                except:
+                    slice_dict[key] = list(itemgetter(*index)(val))
             return slice_dict
 
     def __setitem__(self, index, value):
@@ -97,7 +101,7 @@ class DictDataset(Dataset):
             # check lengths
             if len(value) != len(self):
                 raise ValueError(
-                f"length of value ({len(value)}) != length of dataset ({len(self)})."
+                    f"length of value ({len(value)}) != length of dataset ({len(self)})."
                 )
             self._dictionary[index] = value
         else:
@@ -153,10 +157,13 @@ class DictDataset(Dataset):
 def test_DictDataset():
     # descriptors based
     # from list
+    data = torch.Tensor([[1.0], [2.0], [0.3], [0.4]])
+    labels = [0, 0, 1, 1]
+    weights = np.asarray([0.5, 1.5, 1.5, 0.5])
     dataset_dict = {
-        "data": torch.Tensor([[1.0], [2.0], [0.3], [0.4]]),
-        "labels": [0, 0, 1, 1],
-        "weights": np.asarray([0.5, 1.5, 1.5, 0.5]),
+        "data": data,
+        "labels": labels,
+        "weights": weights,
     }
     
     # this to have the right signature in asserts
@@ -196,7 +203,7 @@ def test_DictDataset():
 
     config = [Configuration(
         atomic_numbers=numbers,
-        positions=positions[i],
+        positions=positions[i] + 0.1*i,
         cell=cell,
         pbc=[True] * 3,
         node_labels=node_labels[i],
@@ -212,36 +219,63 @@ def test_DictDataset():
 
     # check __getitem__
     # string
-    print(dataset['data'])
-    print(graph_dataset['data_list']) 
-
+    out = dataset['data']
+    assert( torch.allclose(out, data) ) 
+    out = graph_dataset['data_list']
+    assert( torch.allclose(out[1]['positions'], torch.Tensor(positions+0.1))) 
+    
     # int
-    print(dataset[0])
-    print(graph_dataset[0]) 
+    out = dataset[1]
+    assert( torch.allclose(out['data'], data[1]) ) 
+    out = graph_dataset[1]
+    assert( torch.allclose(out['data_list']['positions'], torch.Tensor(positions+0.1))) 
+
 
     # list
-    print(dataset[[0,1,2]])
-    print(graph_dataset[[0,1,2]]) 
+    out = dataset[[0,1,2]]
+    assert( torch.allclose(out['data'], data[[0,1,2]]) ) 
+    out = graph_dataset[[0,1,2]]
+    for i in [0,1,2]: 
+        assert( torch.allclose(out['data_list'][i]['positions'], torch.Tensor(positions+0.1*i))) 
 
     # slice
-    print(dataset[0:2])
-    print(graph_dataset[0:2]) 
+    out = dataset[0:2]
+    assert( torch.allclose(out['data'], data[[0,1]]) ) 
+    out = graph_dataset[0:2]
+    for i in [0,1]: 
+        assert( torch.allclose(out['data_list'][i]['positions'], torch.Tensor(positions+0.1*i))) 
 
     # range
-    print(dataset[range(0,2)])
-    print(graph_dataset[range(0,2)]) 
+    out = dataset[range(0,2)]
+    assert( torch.allclose(out['data'], data[[0,1]]) ) 
+    out = graph_dataset[range(0,2)]
+    for i in [0,1]: 
+        assert( torch.allclose(out['data_list'][i]['positions'], torch.Tensor(positions+0.1*i))) 
 
     # np.ndarray
-    print(dataset[np.array([0])])
-    print(graph_dataset[np.array([0])]) 
-    print(dataset[np.array([0,1,2])])
-    print(graph_dataset[np.array([0,1,2])]) 
+    out = dataset[np.array(1)]
+    assert( torch.allclose(out['data'], data[1]) ) 
+    out = graph_dataset[np.array(1)]
+    assert( torch.allclose(out['data_list']['positions'], torch.Tensor(positions+0.1))) 
+    
+    out = dataset[np.array([0,1,2])]
+    assert( torch.allclose(out['data'], data[[0,1,2]]) ) 
+    out = graph_dataset[np.array([0,1,2])]
+    for i in [0,1,2]:
+        assert( torch.allclose(out['data_list'][i]['positions'], torch.Tensor(positions+0.1*i))) 
 
     # torch.Tensor
-    print(dataset[torch.tensor([0], dtype=torch.long)])
-    print(graph_dataset[torch.tensor([0], dtype=torch.long)]) 
-    print(dataset[torch.tensor([0,1,2], dtype=torch.long)])
-    print(graph_dataset[torch.tensor([0,1,2], dtype=torch.long)]) 
+    out = dataset[torch.tensor([1], dtype=torch.long)]
+    assert( torch.allclose(out['data'], data[1]) ) 
+    out = graph_dataset[torch.tensor([1], dtype=torch.long)]
+    assert( torch.allclose(out['data_list']['positions'], torch.Tensor(positions+0.1))) 
+
+    out = dataset[torch.tensor([0,1,2], dtype=torch.long)]
+    assert( torch.allclose(out['data'], data[[0,1,2]]) ) 
+    out = graph_dataset[torch.tensor([0,1,2], dtype=torch.long)]
+    for i in [0,1,2]:
+        assert( torch.allclose(out['data_list'][i]['positions'], torch.Tensor(positions+0.1*i))) 
+
 
 if __name__ == "__main__":
     test_DictDataset()
