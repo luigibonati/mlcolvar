@@ -67,23 +67,30 @@ def compute_committor_weights(dataset,
     -------
         Updated dataset with weights and updated labels
     """
+    if len(dataset) != len(bias):
+        raise ValueError('Dataset and bias have different lenghts!')
 
     if bias.isnan().any():
         raise(ValueError('Found Nan(s) in bias tensor. Check before proceeding! If no bias was applied replace Nan with zero!'))
     
-    n_labels = len(torch.unique(dataset['labels']))
+    if dataset.metadata['data_type'] == 'descriptors':
+        original_labels = dataset['labels']
+    else:
+        original_labels = torch.Tensor([dataset['data_list'][i]['graph_labels'] for i in range(len(dataset))])
+    
+    n_labels = len(torch.unique(original_labels))
     if n_labels != len(data_groups):
         raise(ValueError(f'The number of labels ({n_labels}) and data groups ({len(data_groups)}) do not match! Ensure you are correctly mapping the data in your training set!'))
 
     # TODO sign if not from committor bias
     weights = torch.exp(beta * bias)
-    new_labels = torch.zeros_like(dataset['labels'])
+    new_labels = torch.zeros_like(original_labels)
 
     data_groups = torch.Tensor(data_groups)
 
     # correct data labels according to iteration
     for j,index in enumerate(data_groups):
-        new_labels[torch.nonzero(dataset['labels'] == j, as_tuple=True)] = index
+        new_labels[torch.nonzero(original_labels == j, as_tuple=True)] = index
 
     for i in np.unique(data_groups):
         # compute average of exp(beta*V) on this simualtions
@@ -93,8 +100,13 @@ def compute_committor_weights(dataset,
         weights[torch.nonzero(new_labels == i, as_tuple=True)] = coeff * weights[torch.nonzero(new_labels == i, as_tuple=True)]
     
     # update dataset
-    dataset['weights'] = weights
-    dataset['labels'] = new_labels
+    if dataset.metadata['data_type'] == 'descriptors':
+        dataset['weights'] = weights
+        dataset['labels'] = new_labels
+    else:
+        for i in range(len(dataset)):    
+            dataset[i]['weight'] = weights[i]
+            dataset[i]['graph_labels'] = new_labels[i]
 
     return dataset
 
