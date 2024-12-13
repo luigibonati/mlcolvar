@@ -218,20 +218,22 @@ def committor_loss(x: torch.Tensor,
     grad_square = grad_square * w[mask_var]
     # variational contribution to loss: we sum over the batch
     loss_var = torch.mean(grad_square)
-    if False:
+    if log_var:
         loss_var = loss_var.log()
+    else:
+        loss_var = gamma*loss_var
 
 
     # 2. BOUNDARY LOSS
-    loss_A = torch.mean( torch.pow(q[mask_A], 2))
-    loss_B = torch.mean( torch.pow( (q[mask_B] - 1) , 2))
+    loss_A = gamma * torch.mean( torch.pow(q[mask_A], 2))
+    loss_B = gamma * torch.mean( torch.pow( (q[mask_B] - 1) , 2))
 
 
     # 3. TOTAL LOSS
-    loss = gamma*( loss_var + alpha*(loss_A + loss_B) )
+    loss = loss_var + alpha*(loss_A + loss_B)
     
     # TODO maybe there is no need to detach them for logging
-    return loss, gamma*loss_var.detach(), alpha*gamma*loss_A.detach(), alpha*gamma*loss_B.detach()
+    return loss, loss_var.detach(), alpha*loss_A.detach(), alpha*loss_B.detach()
 
 class SmartDerivatives(torch.nn.Module):
     """
