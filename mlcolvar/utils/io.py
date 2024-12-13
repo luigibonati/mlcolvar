@@ -268,13 +268,14 @@ def create_dataset_from_trajectories(
     cutoff: float,
     buffer: float = 0.0,
     z_table: AtomicNumberTable = None,
+    load_args: list = None,
     folder: str = None,
     create_labels: bool = True,
     system_selection: str = None,
     environment_selection: str = None,
     return_trajectories: bool = False,
     remove_isolated_nodes: bool = True,
-    show_progress: bool = True
+    show_progress: bool = True,
 ) -> Union[
     DictDataset,
     Tuple[
@@ -394,6 +395,13 @@ def create_dataset_from_trajectories(
             assert isinstance(trajectories[i], str)
             assert isinstance(top[i], str)
 
+    # check if per file args are given, otherwise set to {}
+    if load_args is not None:
+        if (not isinstance(load_args, list)) or (len(trajectories) != len(load_args)):
+            raise TypeError(
+                "load_args should be a list of dictionaries of arguments of same length as trajectories. If you want to use the same args for all file pass them directly as **kwargs."
+            )
+
     topologies = []
     trajectories_in_memory = []
 
@@ -436,18 +444,24 @@ def create_dataset_from_trajectories(
         if isinstance(trajectories_in_memory[i], list):
             for j in range(len(trajectories_in_memory[i])):
                 configuration = _configures_from_trajectory(
-                    trajectories_in_memory[i][j],
-                    i if create_labels else -1,  # NOTE: all these configurations have a label `i`
-                    system_selection,
-                    environment_selection,
+                    trajectory=trajectories_in_memory[i][j],
+                    label=i if create_labels else -1,  # NOTE: all these configurations have a label `i`
+                    system_selection=system_selection,
+                    environment_selection=environment_selection,
+                    start=load_args[i][j]['start'] if load_args is not None else 0,
+                    stop=load_args[i][j]['stop']  if load_args is not None else None,
+                    stride=load_args[i][j]['stride']  if load_args is not None else 1,
                 )
                 configurations.extend(configuration)
         else:
             configuration = _configures_from_trajectory(
-                trajectories_in_memory[i],
-                i if create_labels else -1,
-                system_selection,
-                environment_selection,
+                trajectory=trajectories_in_memory[i],
+                label=i if create_labels else -1,
+                system_selection=system_selection,
+                environment_selection=environment_selection,
+                start=load_args[i]['start'] if load_args is not None else 0,
+                stop=load_args[i]['stop']  if load_args is not None else None,
+                stride=load_args[i]['stride']  if load_args is not None else 1,
             )
             configurations.extend(configuration)
 
@@ -490,7 +504,9 @@ def _configures_from_trajectory(
     label: int = None,
     system_selection: str = None,
     environment_selection: str = None,
-) -> Configurations:
+    start: int = 0,
+    stop: int = None,
+    stride: int = 1) -> Configurations:
     """
     Create configurations from one trajectory.
 
@@ -535,8 +551,12 @@ def _configures_from_trajectory(
         pbc = [False] * 3
         cell = [None] * len(trajectory)
 
+    if stop is None:
+        stop = len(trajectory)
+
     configurations = []
-    for i in range(len(trajectory)):
+
+    for i in range(start,stop,stride):
         configuration = Configuration(
             atomic_numbers=atomic_numbers,
             positions=trajectory.xyz[i] * 10,
@@ -622,10 +642,53 @@ def test_datasesetFromTrajectories():
         cutoff=8.0,  # Ang
         create_labels=True,
         system_selection='all and not type H',
-        show_progress=False
+        show_progress=False,
     )
 
-def test_create_dataset_from_trajectories(text: str, system_selection: str) -> None:
+    dataset = create_dataset_from_trajectories(
+                trajectories=['r.dcd',
+                            'p.dcd'],
+                top=['r.pdb', 
+                    'p.pdb'],
+                folder="mlcolvar/tests/data",
+                cutoff=8.0,  # Ang
+                create_labels=True,
+                system_selection='all and not type H',
+                show_progress=False,
+                load_args=[{'start' : 0, 'stop' : 10, 'stride' : 1},
+                           {'start' : 6, 'stop' : 10, 'stride' : 2}]
+            )
+    assert(len(dataset)==12)
+
+    dataset = create_dataset_from_trajectories(
+                trajectories=[['r.dcd', 'r.dcd'],
+                              ['p.dcd', 'p.dcd']],
+                top=[['r.pdb', 'r.pdb'], 
+                     ['p.pdb', 'p.pdb']],
+                folder="mlcolvar/tests/data",
+                cutoff=8.0,  # Ang
+                create_labels=True,
+                system_selection='all and not type H',
+                show_progress=False,
+                load_args=[[{'start' : 0, 'stop' : 10, 'stride' : 1}, {'start' : 0, 'stop' : 10, 'stride' : 1}],
+                           [{'start' : 6, 'stop' : 10, 'stride' : 2}, {'start' : 6, 'stop' : 10, 'stride' : 2}]]
+            )
+    assert(len(dataset)==24)
+
+
+def test_create_dataset_from_trajectories(text: str = """
+CRYST1    2.000    2.000    2.000  90.00  90.00  90.00 P 1           1
+ATOM      1  OH2 TIP3W   1       0.000   0.000   0.000  1.00  0.00      WT1  O
+ATOM      2  H1  TIP3W   1       0.700   0.700   0.000  1.00  0.00      WT1  H
+ATOM      3  H2  TIP3W   1       0.700  -0.700   0.000  1.00  0.00      WT1  H
+ENDMODEL
+ATOM      1  OH2 TIP3W   1       0.000   0.000   0.000  1.00  0.00      WT1  O
+ATOM      2  H1  TIP3W   1       0.700   0.700   0.000  1.00  0.00      WT1  H
+ATOM      3  H2  TIP3W   1       0.700  -0.700   0.000  1.00  0.00      WT1  H
+END
+""", 
+system_selection: str = None
+) -> None:
     with open('test_dataset.pdb', 'w') as fp:
         print(text, file=fp)
 
