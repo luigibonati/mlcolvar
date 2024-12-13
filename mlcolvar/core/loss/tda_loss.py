@@ -149,10 +149,8 @@ def tda_loss(
     """
     if not isinstance(target_centers, torch.Tensor):
         target_centers = torch.tensor(target_centers, dtype=H.dtype)
-        target_centers.requires_grad_(True)
     if not isinstance(target_sigmas, torch.Tensor):
         target_sigmas = torch.tensor(target_sigmas, dtype=H.dtype)
-        target_sigmas.requires_grad_(True)
 
     device = H.device
     target_centers = target_centers.to(device)
@@ -191,3 +189,18 @@ def tda_loss(
     if return_loss_terms:
         return loss, loss_centers, loss_sigmas
     return loss
+
+def test_tda_loss():
+    H = torch.randn(100)
+    H.requires_grad = True
+    labels = torch.zeros_like(H)
+    labels[-50:] = 1
+
+    Loss = TDALoss(n_states=2, target_centers=[-1, 1], target_sigmas=[0.1, 0.1])
+
+    loss = Loss(H=H, labels=labels, return_loss_terms=True)
+
+    loss[0].backward()
+
+if __name__ == '__main__':
+    test_tda_loss()

@@ -187,3 +187,31 @@ def get_descriptors_and_derivatives(dataset,
                                 'weights' : torch.clone(dataset['weights'])})
     
     return smart_dataset, smart_derivatives
+
+def test_Kolmogorov_bias():
+    from mlcolvar.core.nn import FeedForward
+    model = FeedForward(layers=[4,2,1], activation='tanh')
+    inp = torch.randn((10, 4))
+    model_bias = KolmogorovBias(input_model=model, beta=1.0)
+    model_bias(inp)
+
+def test_compute_committor_weights():
+    # descriptors
+    # create dataset
+    samples = 50
+    X = torch.randn((3*samples, 6))
+    
+    # create labels, bias and weights
+    y = torch.zeros(X.shape[0])
+    y[samples:] += 1
+    y[int(2*samples):] += 1
+    bias = torch.ones_like(X)
+    w = torch.zeros(X.shape[0])
+
+    # create and edit dataset
+    dataset = DictDataset({"data": X, "labels": y, "weights": w})
+    dataset = compute_committor_weights(dataset=dataset, bias=bias, data_groups=[0,1,2], beta=1.0)
+    
+if __name__ == '__main__':
+    test_Kolmogorov_bias()
+    test_compute_committor_weights()
