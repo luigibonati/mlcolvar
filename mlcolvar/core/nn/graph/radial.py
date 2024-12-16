@@ -267,6 +267,8 @@ def test_bessel_basis() -> None:
     assert (torch.abs(data - data_new) < 1E-12).all()
 
     torch.set_default_dtype(dtype)
+    
+    rbf
 
 
 def test_gaussian_basis() -> None:
@@ -296,6 +298,8 @@ def test_gaussian_basis() -> None:
 
     torch.set_default_dtype(dtype)
 
+    rbf
+
 
 def test_polynomial_cutoff() -> None:
     dtype = torch.get_default_dtype()
@@ -324,6 +328,7 @@ def test_polynomial_cutoff() -> None:
 
     torch.set_default_dtype(dtype)
 
+    cutoff_function
 
 def test_radial_embedding_block():
     dtype = torch.get_default_dtype()

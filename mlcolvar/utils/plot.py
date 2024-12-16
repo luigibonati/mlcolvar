@@ -410,3 +410,10 @@ def test_utils_plot():
     cmap = matplotlib.colors.Colormap("fessa_r", 2)
     cmap = matplotlib.colors.Colormap("cortina80", 2)
     cmap = matplotlib.colors.Colormap("cortina80_r", 2)
+
+    import time    
+    for i in pbar(range(15), "Computing: ", 40):
+        time.sleep(0.1)
+
+    for i in pbar(range(15), "Computing: ", 40, use_unicode=False):
+        time.sleep(0.1)
