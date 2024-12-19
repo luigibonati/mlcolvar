@@ -5,7 +5,7 @@ __all__ = ["GeneratorLoss", "compute_eigenfunctions","compute_covariance"]
 # GLOBAL IMPORTS
 # =============================================================================
 ###TODO: write the loss as a function
-###TODO: implement separated  computation of descriptors and derivatives
+###TODO: Try to use vmap + jacfwd instead of autograd or jacobian, it might more efficient
 
 import torch
 from torch_scatter import scatter
@@ -70,6 +70,7 @@ class GeneratorLoss(torch.nn.Module):
     mean_weights_x = weights_X.mean()
     mean_weights_y = weights_Y.mean()
     loss_ef = torch.trace( ((cov_X@diag_lamb) @ W2 + (cov_Y@diag_lamb)@W1)/2 - cov_X@diag_lamb - cov_Y@diag_lamb)
+
     # Compute loss_ortho
     loss_ortho = self.gamma * (torch.trace((torch.eye(output.shape[1], device=output.device) - cov_X).T @ (torch.eye(output.shape[1], device=output.device) - cov_X)))
     #loss_ortho = penalty

@@ -1,3 +1,3 @@
-__all__ = ["Generator"]
+__all__ = ["Generator","Generator_singleNN"]
 
 from .generator import *
