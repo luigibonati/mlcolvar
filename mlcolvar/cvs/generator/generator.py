@@ -6,7 +6,14 @@ from mlcolvar.core.loss import GeneratorLoss
 
 __all__ = ["Generator", "Generator_singleNN"]
 class Generator(BaseCV, lightning.LightningModule):
-
+    """
+    Baseclass for learning a representation for the eigenfunctions of the generator. 
+    The representation is expressed as a concatenation of the output of r neural networks.
+    **Data**: for training it requires a DictDataset with the keys 'data', and 'weights' 
+              and optionally 'derivatives' which should contain the descriptors derivatives
+    **Loss**: Minimize the representation loss and the orthonormalization loss
+    
+    """
     BLOCKS = ["nn"]
 
     def __init__(
@@ -14,20 +21,39 @@ class Generator(BaseCV, lightning.LightningModule):
         layers: list,
         eta: float,
         r: int,
-        gamma: float = 10000,
+        alpha: float,
         cell: float = None,
         friction = None,
         options: dict = None,
 
         **kwargs,
     ):
+        """Define a NN-based generator model
 
+        Parameters
+        ----------
+        layers : list
+            Number of neurons per layer
+        eta : float
+            Hyperparameter for the shift to define the resolvent. $(\eta I-_mathcal{L})^{-1}$
+        r : int
+            Hyperparamer for the number of eigenfunctions wanted
+        alpha : float
+            Hyperparamer that scales the orthonormality loss
+        cell : float, optional
+            CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, by default None
+        friction: torch.tensor, optional 
+            Langevin friction which should contain \sqrt{k_B*T/(gamma*m_i)}
+        options : dict[str, Any], optional
+            Options for the building blocks of the model, by default {}.
+            Available blocks: ['nn'] .
+        """
         super().__init__(in_features=layers[0], out_features=layers[-1], **kwargs) 
         
         # =======  LOSS  =======
         self.loss_fn = GeneratorLoss(self.forward,
                                      eta=eta,
-                                     gamma=gamma,
+                                     alpha=alpha,
                                      cell=cell,
                                      friction=friction,
                                      n_cvs=r
@@ -88,7 +114,15 @@ class Generator(BaseCV, lightning.LightningModule):
 
 
 class Generator_singleNN(BaseCV, lightning.LightningModule):
-
+    """
+    This is just a test to see how the model perform when using a single NN instead of concatenated ones
+    Baseclass for learning a representation for the eigenfunctions of the generator. 
+    The representation is expressed as a concatenation of the output of r neural networks.
+    **Data**: for training it requires a DictDataset with the keys 'data', and 'weights' 
+              and optionally 'derivatives' which should contain the descriptors derivatives
+    **Loss**: Minimize the representation loss and the orthonormalization loss
+    
+    """
     BLOCKS = ["nn"]
 
     def __init__(
@@ -96,19 +130,39 @@ class Generator_singleNN(BaseCV, lightning.LightningModule):
         layers: list,
         eta: float,
         r: int,
-        gamma: float = 10000,
+        alpha: float,
         cell: float = None,
         friction = None,
         options: dict = None,
+
         **kwargs,
     ):
+        """Define a NN-based generator model
 
+        Parameters
+        ----------
+        layers : list
+            Number of neurons per layer
+        eta : float
+            Hyperparameter for the shift to define the resolvent. $(\eta I-_mathcal{L})^{-1}$
+        r : int
+            Hyperparamer for the number of eigenfunctions wanted
+        alpha : float
+            Hyperparamer that scales the orthonormality loss
+        cell : float, optional
+            CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, by default None
+        friction: torch.tensor, optional 
+            Langevin friction which should contain \sqrt{k_B*T/(gamma*m_i)}
+        options : dict[str, Any], optional
+            Options for the building blocks of the model, by default {}.
+            Available blocks: ['nn'] .
+        """
         super().__init__(in_features=layers[0], out_features=layers[-1], **kwargs) 
         
         # =======  LOSS  =======
         self.loss_fn = GeneratorLoss(self.forward,
                                      eta=eta,
-                                     gamma=gamma,
+                                     alpha=alpha,
                                      cell=cell,
                                      friction=friction,
                                      n_cvs=r
