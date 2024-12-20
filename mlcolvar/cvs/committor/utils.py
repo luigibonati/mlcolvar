@@ -67,23 +67,30 @@ def compute_committor_weights(dataset,
     -------
         Updated dataset with weights and updated labels
     """
+    if len(dataset) != len(bias):
+        raise ValueError('Dataset and bias have different lenghts!')
 
     if bias.isnan().any():
         raise(ValueError('Found Nan(s) in bias tensor. Check before proceeding! If no bias was applied replace Nan with zero!'))
     
-    n_labels = len(torch.unique(dataset['labels']))
+    if dataset.metadata['data_type'] == 'descriptors':
+        original_labels = dataset['labels']
+    else:
+        original_labels = torch.Tensor([dataset['data_list'][i]['graph_labels'] for i in range(len(dataset))])
+    
+    n_labels = len(torch.unique(original_labels))
     if n_labels != len(data_groups):
         raise(ValueError(f'The number of labels ({n_labels}) and data groups ({len(data_groups)}) do not match! Ensure you are correctly mapping the data in your training set!'))
 
     # TODO sign if not from committor bias
     weights = torch.exp(beta * bias)
-    new_labels = torch.zeros_like(dataset['labels'])
+    new_labels = torch.zeros_like(original_labels)
 
     data_groups = torch.Tensor(data_groups)
 
     # correct data labels according to iteration
     for j,index in enumerate(data_groups):
-        new_labels[torch.nonzero(dataset['labels'] == j, as_tuple=True)] = index
+        new_labels[torch.nonzero(original_labels == j, as_tuple=True)] = index
 
     for i in np.unique(data_groups):
         # compute average of exp(beta*V) on this simualtions
@@ -93,8 +100,13 @@ def compute_committor_weights(dataset,
         weights[torch.nonzero(new_labels == i, as_tuple=True)] = coeff * weights[torch.nonzero(new_labels == i, as_tuple=True)]
     
     # update dataset
-    dataset['weights'] = weights
-    dataset['labels'] = new_labels
+    if dataset.metadata['data_type'] == 'descriptors':
+        dataset['weights'] = weights
+        dataset['labels'] = new_labels
+    else:
+        for i in range(len(dataset)):    
+            dataset[i]['weight'] = weights[i]
+            dataset[i]['graph_labels'] = new_labels[i]
 
     return dataset
 
@@ -175,3 +187,31 @@ def get_descriptors_and_derivatives(dataset,
                                 'weights' : torch.clone(dataset['weights'])})
     
     return smart_dataset, smart_derivatives
+
+def test_Kolmogorov_bias():
+    from mlcolvar.core.nn import FeedForward
+    model = FeedForward(layers=[4,2,1], activation='tanh')
+    inp = torch.randn((10, 4))
+    model_bias = KolmogorovBias(input_model=model, beta=1.0)
+    model_bias(inp)
+
+def test_compute_committor_weights():
+    # descriptors
+    # create dataset
+    samples = 50
+    X = torch.randn((3*samples, 6))
+    
+    # create labels, bias and weights
+    y = torch.zeros(X.shape[0])
+    y[samples:] += 1
+    y[int(2*samples):] += 1
+    bias = torch.ones_like(X)
+    w = torch.zeros(X.shape[0])
+
+    # create and edit dataset
+    dataset = DictDataset({"data": X, "labels": y, "weights": w})
+    dataset = compute_committor_weights(dataset=dataset, bias=bias, data_groups=[0,1,2], beta=1.0)
+    
+if __name__ == '__main__':
+    test_Kolmogorov_bias()
+    test_compute_committor_weights()
