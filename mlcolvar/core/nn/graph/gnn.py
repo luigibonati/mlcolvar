@@ -43,7 +43,6 @@ class BaseGNN(nn.Module):
     ) -> None:
         super().__init__()
 
-        self._n_out = n_out
         self._radial_embedding = radial.RadialEmbeddingBlock(
             cutoff, n_bases, n_polynomials, basis_type
         )
@@ -59,7 +58,7 @@ class BaseGNN(nn.Module):
 
     @property
     def out_features(self):
-        return self._n_out
+        return self.n_out
     
     @property
     def in_features(self):
