@@ -42,10 +42,10 @@ class Committor(BaseCV, lightning.LightningModule):
         alpha: float,
         gamma: float = 10000,
         delta_f: float = 0,
-        cell: float = None,
         separate_boundary_dataset: bool = True,
         descriptors_derivatives: torch.nn.Module = None,
         log_var: bool = True,
+        z_regularization: float = 0.0,
         options: dict = None,
         **kwargs,
     ):
@@ -77,6 +77,8 @@ class Committor(BaseCV, lightning.LightningModule):
             Available blocks: ['nn'] .
         """
         super().__init__(model, **kwargs) 
+
+        self.register_buffer('is_committor', torch.tensor(1, dtype=int))
         
         # =======  LOSS  =======
         self.loss_fn = CommittorLoss(atomic_masses=mass,
@@ -85,7 +87,8 @@ class Committor(BaseCV, lightning.LightningModule):
                                      delta_f=delta_f,
                                      separate_boundary_dataset=separate_boundary_dataset,
                                      descriptors_derivatives=descriptors_derivatives,
-                                     log_var=True
+                                     log_var=log_var,
+                                     z_regularization=z_regularization
         )
 
         # ======= OPTIONS =======
@@ -111,6 +114,13 @@ class Committor(BaseCV, lightning.LightningModule):
         if (options[o] is not False) and (options[o] is not None):
             self.sigmoid = Custom_Sigmoid(**options[o])
 
+    def forward(self, x):
+        if self.preprocessing is not None:
+            x = self.preprocessing(x)
+        z = self.nn(x)
+        q = self.sigmoid(z)
+
+        return torch.hstack([z, q])
 
     def training_step(self, train_batch, batch_idx):
         """Compute and return the training loss and record metrics."""
@@ -129,16 +139,18 @@ class Committor(BaseCV, lightning.LightningModule):
             weights = x['weight'].clone()
 
         # =================forward====================
-        # we use forward and not forward_cv to also apply the preprocessing (if present)
-        q = self.forward(x)
+        out = self.forward(x)
+        z = out[:, 0]
+        q = out[:, 1]
+
         # ===================loss=====================
         if self.training:
             loss, loss_var, loss_bound_A, loss_bound_B = self.loss_fn(
-                x, q, labels, weights 
+                x, z, q, labels, weights 
             )
         else:
             loss, loss_var, loss_bound_A, loss_bound_B = self.loss_fn(
-                x, q, labels, weights 
+                x, z, q, labels, weights 
             )
         # ====================log=====================+
         name = "train" if self.training else "valid"
@@ -150,6 +162,7 @@ class Committor(BaseCV, lightning.LightningModule):
 
 
 def test_committor():
+    import os
     from mlcolvar.data import DictDataset, DictModule
     from mlcolvar.cvs.committor.utils import initialize_committor_masses, KolmogorovBias
 
@@ -228,8 +241,6 @@ def test_committor():
     example_input_graph_test = create_test_graph_input(output_type='example', n_atoms=4, n_samples=3, n_states=2)
 
     model(example_input_graph_test).sum().backward()
-    # bias_model = KolmogorovBias(input_model=model, beta=1, epsilon=1e-6, lambd=1)
-    # bias_model(X)
 
 
 if __name__ == "__main__":

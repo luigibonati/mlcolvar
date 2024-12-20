@@ -18,7 +18,7 @@ import torch
 from torch_scatter import scatter, scatter_sum
 from typing import Union
 import torch_geometric
-
+import warnings
 # =============================================================================
 # LOSS FUNCTIONS
 # =============================================================================
@@ -34,7 +34,8 @@ class CommittorLoss(torch.nn.Module):
                 delta_f: float = 0.0,
                 separate_boundary_dataset : bool = True,
                 descriptors_derivatives : torch.nn.Module = None,
-                log_var: bool = True
+                log_var: bool = True,
+                z_regularization: float = 0.0
                  ):
         """Compute Kolmogorov's variational principle loss and impose boundary conditions on the metastable states
 
@@ -66,41 +67,47 @@ class CommittorLoss(torch.nn.Module):
         self.descriptors_derivatives = descriptors_derivatives
         self.separate_boundary_dataset = separate_boundary_dataset
         self.log_var = log_var
+        self.z_regularization = z_regularization
 
     def forward(self, 
                 x: Union[torch.Tensor, torch_geometric.data.Batch], 
+                z: torch.Tensor,
                 q: torch.Tensor, 
                 labels: torch.Tensor, 
                 w: torch.Tensor, 
                 create_graph: bool = True
     ) -> torch.Tensor:
         return committor_loss(x=x,
-                                q=q,
-                                labels=labels,
-                                w=w,
-                                atomic_masses=self.atomic_masses,
-                                alpha=self.alpha,
-                                gamma=self.gamma,
-                                delta_f=self.delta_f,
-                                create_graph=create_graph,
-                                separate_boundary_dataset=self.separate_boundary_dataset,
-                                descriptors_derivatives=self.descriptors_derivatives,
-                                log_var = self.log_var
+                              z=z,
+                              q=q,
+                              labels=labels,
+                              w=w,
+                              atomic_masses=self.atomic_masses,
+                              alpha=self.alpha,
+                              gamma=self.gamma,
+                              delta_f=self.delta_f,
+                              create_graph=create_graph,
+                              separate_boundary_dataset=self.separate_boundary_dataset,
+                              descriptors_derivatives=self.descriptors_derivatives,
+                              log_var=self.log_var,
+                              z_regularization=self.z_regularization
                             )
 
 
 def committor_loss(x: torch.Tensor, 
-                  q: torch.Tensor, 
-                  labels: torch.Tensor, 
-                  w: torch.Tensor,
-                  atomic_masses: torch.Tensor,
-                  alpha: float,
-                  gamma: float = 10000,
-                  delta_f: float = 0,
-                  create_graph: bool = True,
-                  separate_boundary_dataset: bool = True,
-                  descriptors_derivatives: torch.nn.Module = None,
-                  log_var: bool = True
+                   z: torch.Tensor,
+                   q: torch.Tensor, 
+                   labels: torch.Tensor, 
+                   w: torch.Tensor,
+                   atomic_masses: torch.Tensor,
+                   alpha: float,
+                   gamma: float = 10000,
+                   delta_f: float = 0,
+                   create_graph: bool = True,
+                   separate_boundary_dataset: bool = True,
+                   descriptors_derivatives: torch.nn.Module = None,
+                   log_var: bool = True,
+                   z_regularization: float = 0.0
                   ):
     """Compute variational loss for committor optimization with boundary conditions
 
@@ -153,8 +160,14 @@ def committor_loss(x: torch.Tensor,
         node_types = torch.where(x['node_attrs'])[1]
         x = x['positions']
         _is_graph_data = True
-    
 
+    # checks and warnings
+    if _is_graph_data and descriptors_derivatives is not None:
+        raise ValueError("The descriptors_derivatives key cannot be used with GNN-based models!")
+    
+    if _is_graph_data and separate_boundary_dataset:
+        warnings.warn("Using GNN-based models it may be better to set separate_boundary_dataset to False")
+    
     # inherit right device
     device = x.device 
     dtype = x.dtype
@@ -165,13 +178,13 @@ def committor_loss(x: torch.Tensor,
     if separate_boundary_dataset:
         mask_var = torch.nonzero(labels.squeeze() > 1, as_tuple=not(_is_graph_data))
     else: 
-        mask_var = torch.ones(len(x), dtype=torch.bool)
+        mask_var = torch.ones(len(labels), dtype=torch.bool)
 
-    if _is_graph_data and separate_boundary_dataset: 
+    if _is_graph_data:
         # this needs to be on the batch index, not only the labels
-        aux = torch.where(mask_var)[0]
+        aux = torch.where(mask_var)[0].to(device)
         mask_var_batches = torch.isin(batch, aux)
-        mask_var_batches = (batch[mask_var_batches])
+        mask_var_batches = batch[mask_var_batches]
     else:
         mask_var_batches = mask_var
 
@@ -219,7 +232,7 @@ def committor_loss(x: torch.Tensor,
     # variational contribution to loss: we sum over the batch
     loss_var = torch.mean(grad_square)
     if log_var:
-        loss_var = loss_var.log()
+        loss_var = torch.log(loss_var + 1)
     else:
         loss_var = gamma*loss_var
 
@@ -229,8 +242,14 @@ def committor_loss(x: torch.Tensor,
     loss_B = gamma * torch.mean( torch.pow( (q[mask_B] - 1) , 2))
 
 
-    # 3. TOTAL LOSS
-    loss = loss_var + alpha*(loss_A + loss_B)
+    # 3. OPTIONAL regularization on z
+    if z_regularization != 0.0:
+        loss_z_diff = z_regularization * (z.mean().abs() - z.mean().abs()).pow(2)
+    else:
+        loss_z_diff = 0
+
+    # 4. TOTAL LOSS
+    loss = loss_var + alpha*(loss_A + loss_B) + loss_z_diff
     
     # TODO maybe there is no need to detach them for logging
     return loss, loss_var.detach(), alpha*loss_A.detach(), alpha*loss_B.detach()
