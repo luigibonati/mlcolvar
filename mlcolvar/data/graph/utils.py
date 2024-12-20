@@ -6,13 +6,15 @@ from mlcolvar.data.graph import atomic
 from mlcolvar.data.graph.neighborhood import get_neighborhood
 from mlcolvar.utils.plot import pbar
 
+from typing import List
+
 __all__ = ["create_dataset_from_configurations", "create_test_graph_input"]
 
 def _create_dataset_from_configuration(
     config: atomic.Configuration,
     z_table: atomic.AtomicNumberTable,
     cutoff: float,
-    buffer: float = 0.0
+    buffer: float = 0.0,
 ) -> torch_geometric.data.Data:
     """
     Build the graph data object from a configuration.
@@ -114,6 +116,7 @@ def create_dataset_from_configurations(
     z_table: atomic.AtomicNumberTable,
     cutoff: float,
     buffer: float = 0.0,
+    atom_names: List = None,
     remove_isolated_nodes: bool = False,
     show_progress: bool = True
 ) -> DictDataset:
@@ -139,13 +142,23 @@ def create_dataset_from_configurations(
         items = pbar(config, frequency=0.0001, prefix='Making graphs')
     else:
         items = config
-
+    
     data_list = [
         _create_dataset_from_configuration(
-            c, z_table, cutoff, buffer
+            config=c, 
+            z_table=z_table, 
+            cutoff=cutoff, 
+            buffer=buffer, 
         ) for c in items
     ]
 
+    if atom_names is None:
+        atom_names = [f"X{i}" for i in range(data_list[0]['n_system'].to(torch.int64).item())]
+    
+    print(atom_names)
+
+    # this is only to check what isolated nodes have been removed
+    _aux_pos = torch.Tensor((np.array([d['positions'].numpy() for d in data_list])))
     if remove_isolated_nodes:
         # TODO: not the worst way to fake the `is_node_attr` method of
         # `torch_geometric.data.storage.GlobalStorage` ...
@@ -157,12 +170,38 @@ def create_dataset_from_configurations(
         cell_list = [d.cell.clone() for d in data_list]
         transform = torch_geometric.transforms.remove_isolated_nodes.RemoveIsolatedNodes()
         data_list = [transform(d) for d in data_list]
+        
+        # check what have been removed and restore cell
+        unique_idx = [] # store the indeces of the atoms that have been used at least once
         for i in range(len(data_list)):
             data_list[i].cell = cell_list[i]
+            # get and save the original index before removing isolated nodes for each entry
+            original_idx = torch.unique( torch.where(torch.isin(_aux_pos[i], data_list[i]['positions']))[0] )
+            data_list[i]['names_idx'] = original_idx.to(torch.int64)
+            
+            # update if needed the overall list
+            check = np.isin(original_idx.numpy(), unique_idx, invert=True)
+            if check.any():
+                aux = np.where(check)[0]
+                unique_idx.extend(original_idx[aux].tolist())
+        
+        unique_idx.sort()
+        unique_idx = torch.Tensor(unique_idx).to(torch.int64)
+    # here we simply have to take all the atoms
+    else:
+        unique_idx = torch.arange(data_list[0]['n_system'].item()).to(torch.int64)
+        for i in range(len(data_list)):
+            data_list[i]['names_idx'] = unique_idx
+    
+    # we also save the names of the atoms that have been actually used
+    unique_names = np.array(atom_names)[unique_idx]
+    unique_names = unique_names.tolist()
 
     dataset = DictDataset(dictionary={'data_list' : data_list},
                           metadata={'z_table' : z_table.zs,
-                                    'cutoff' : cutoff},
+                                    'cutoff' : cutoff,
+                                    'used_idx' : unique_idx,
+                                    'used_names' : unique_names},
                           data_type='graphs')
 
     return dataset

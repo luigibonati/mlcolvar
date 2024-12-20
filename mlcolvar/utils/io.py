@@ -276,6 +276,7 @@ def create_dataset_from_trajectories(
     return_trajectories: bool = False,
     remove_isolated_nodes: bool = True,
     show_progress: bool = True,
+    save_names=True
 ) -> Union[
     DictDataset,
     Tuple[
@@ -439,6 +440,12 @@ def create_dataset_from_trajectories(
     if z_table is None:
         z_table = _z_table_from_top(topologies)
 
+    if save_names:
+        atom_names = _names_from_top(topologies)
+    else:
+        atom_names = None
+
+
     configurations = []
     for i in range(len(trajectories_in_memory)):
         if isinstance(trajectories_in_memory[i], list):
@@ -470,6 +477,7 @@ def create_dataset_from_trajectories(
         z_table,
         cutoff,
         buffer,
+        atom_names,
         remove_isolated_nodes,
         show_progress
     )
@@ -479,6 +487,17 @@ def create_dataset_from_trajectories(
     else:
         return dataset
     
+
+def _names_from_top(top: List[mdtraj.Topology] ):
+    it = iter(top)
+    atom_names = list(next(it).atoms)
+    if not all([atom_names == list(n.atoms) for n in it]):
+        raise ValueError(
+            "The atoms names or their order are different in the topology files. Check or deactivate save_names"
+        )
+    
+    return atom_names
+
 
 def _z_table_from_top(
     top: List[mdtraj.Topology]

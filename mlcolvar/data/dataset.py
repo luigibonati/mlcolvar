@@ -2,7 +2,6 @@ import torch
 import numpy as np
 from mlcolvar.core.transform.utils import Statistics
 from torch.utils.data import Dataset
-from typing import Union, List
 from operator import itemgetter
 
 __all__ = ["DictDataset"]
@@ -16,7 +15,12 @@ class DictDataset(Dataset):
            'weights' : np.asarray([0.5,1.5,1.5,0.5]) }
     """
 
-    def __init__(self, dictionary: dict=None, feature_names = None, metadata: dict = None, data_type : str = 'descriptors', **kwargs):
+    def __init__(self, 
+                 dictionary: dict=None, 
+                 feature_names = None, 
+                 metadata: dict = None, 
+                 data_type : str = 'descriptors', 
+                 **kwargs):
         """Create a Dataset from a dictionary or from a list of kwargs.
 
         Parameters
