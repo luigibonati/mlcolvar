@@ -90,6 +90,12 @@ def _create_dataset_from_configuration(
         )
     )
 
+    n_env = (
+        torch.tensor(
+            [[one_hot.shape[0] - n_system.to(torch.int).item()]], dtype=torch.get_default_dtype()
+        )
+    )
+
     if config.system is not None:
         system_masks = torch.zeros((one_hot.shape[0], 1), dtype=torch.bool)
         system_masks[config.system, 0] = 1
@@ -106,6 +112,7 @@ def _create_dataset_from_configuration(
         node_labels=node_labels,
         graph_labels=graph_labels,
         n_system=n_system,
+        n_env=n_env,
         system_masks=system_masks,
         weight=weight,
     )
@@ -153,8 +160,10 @@ def create_dataset_from_configurations(
     ]
 
     if atom_names is None:
-        atom_names = [f"X{i}" for i in range(data_list[0]['n_system'].to(torch.int64).item())]
-    
+        atom_names_system = [f"X{i}" for i in range(data_list[0]['n_system'].to(torch.int64).item())]
+        atom_names_env = [f"Y{i}" for i in range(data_list[0]['n_env'].to(torch.int64).item())]
+        atom_names = atom_names_system + atom_names_env
+
     print(atom_names)
 
     # this is only to check what isolated nodes have been removed
