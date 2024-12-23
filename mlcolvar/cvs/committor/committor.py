@@ -114,13 +114,12 @@ class Committor(BaseCV, lightning.LightningModule):
         if (options[o] is not False) and (options[o] is not None):
             self.sigmoid = Custom_Sigmoid(**options[o])
 
-    def forward(self, x):
+    def forward_nn(self, x):
         if self.preprocessing is not None:
             x = self.preprocessing(x)
         z = self.nn(x)
-        q = self.sigmoid(z)
 
-        return torch.hstack([z, q])
+        return z
 
     def training_step(self, train_batch, batch_idx):
         """Compute and return the training loss and record metrics."""
@@ -139,9 +138,11 @@ class Committor(BaseCV, lightning.LightningModule):
             weights = x['weight'].clone()
 
         # =================forward====================
-        out = self.forward(x)
-        z = out[:, 0]
-        q = out[:, 1]
+        z = self.forward_nn(x)
+        if self.sigmoid is not None:
+            q = self.sigmoid(z)
+        else:
+            q = z
 
         # ===================loss=====================
         if self.training:
