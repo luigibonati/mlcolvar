@@ -21,41 +21,6 @@ class GVPModel(BaseGNN):
     """
     The Geometric Vector Perceptron (GVP) model [1, 2] with vector gate [2].
 
-    Parameters
-    ----------
-    n_out: int
-        Size of the output node features.
-    cutoff: float
-        Cutoff radius of the basis functions. Should be the same as the cutoff
-        radius used to build the graphs.
-    atomic_numbers: List[int]
-        The atomic numbers mapping, e.g. the `atomic_numbers` attribute of a
-        `mlcolvar.graph.data.GraphDataSet` instance.
-    n_bases: int
-        Size of the basis set.
-    n_polynomials: bool
-        Order of the polynomials in the basis functions.
-    n_layers: int
-        Number of the graph convolution layers.
-    n_messages: int
-        Number of GVPs to use in the message functions.
-    n_feedforwards: int
-        Number of GVPs to use in the feedforward functions.
-    n_scalars_node: int
-        Size of the scalar channel of the node embedding in hidden layers.
-    n_vectors_node: int
-        Size of the vector channel of the node embedding in hidden layers.
-    n_scalars_edge: int
-        Size of the scalar channel of the edge embedding in hidden layers.
-    drop_rate: int
-        Drop probability in all dropout layers.
-    activation: str
-        Name of the activation function to use in the GVPs (case sensitive).
-    basis_type: str
-        Type of the basis function.
-    smooth: bool
-        If use the smoothed GVPConv.
-
     References
     ----------
     .. [1] Jing, Bowen, et al.
@@ -83,6 +48,42 @@ class GVPModel(BaseGNN):
         basis_type: str = 'bessel',
         smooth: bool = False,
     ) -> None:
+        """Initializes a Geometric Vector Perceptron (GVP) model.
+
+        Parameters
+        ----------
+        n_out: int
+            Number of the output scalar node features.
+        cutoff: float
+            Cutoff radius of the basis functions. Should be the same as the cutoff
+            radius used to build the graphs.
+        atomic_numbers: List[int]
+            The atomic numbers mapping
+        n_bases: int
+            Size of the basis set used for the embedding, by default 8.
+        n_polynomials: bool
+            Order of the polynomials in the basis functions, by default 6.
+        n_layers: int
+            Number of the graph convolution layers, by default 1.
+        n_messages: int
+            Number of GVP layers to be used in the message functions, by default 2.
+        n_feedforwards: int
+            Number of GVP layers to be used in the feedforward functions, by default 2.
+        n_scalars_node: int
+            Size of the scalar channel of the node embedding in hidden layers, by default 8.
+        n_vectors_node: int
+            Size of the vector channel of the node embedding in hidden layers, by default 8.
+        n_scalars_edge: int
+            Size of the scalar channel of the edge embedding in hidden layers, by default 8.
+        drop_rate: int
+            Drop probability in all dropout layers, by default 0.1.
+        activation: str
+            Name of the activation function to be used in the GVPs (case sensitive), by default SiLU.
+        basis_type: str
+            Type of the basis function, by default bessel.
+        smooth: bool
+            If use the smoothed GVPConv, by default False.
+        """
         super().__init__(
             n_out, cutoff, atomic_numbers, n_bases, n_polynomials, basis_type
         )
@@ -129,8 +130,7 @@ class GVPModel(BaseGNN):
     def forward(
         self, data: Dict[str, torch.Tensor], scatter_mean: bool = True
     ) -> torch.Tensor:
-        """
-        The forward pass.
+        """The forward pass.
 
         Parameters
         ----------
@@ -138,7 +138,7 @@ class GVPModel(BaseGNN):
             The data dict. Usually came from the `to_dict` method of a
             `torch_geometric.data.Batch` object.
         scatter_mean: bool
-            If perform the scatter mean to the model output.
+            If perform the scatter mean to the model output, by default True.
         """
         h_V = (data['node_attrs'], None)
         for w in self.W_v:
@@ -178,15 +178,16 @@ class GVPModel(BaseGNN):
 
 class GVP(nn.Module):
     """
-    Geometric Vector Perceptron. See manuscript and README.md
-    for more details.
+    Geometric Vector Perceptron (GVP) layer from [1, 2] with vector gate [2].
 
-    :param in_dims: tuple (n_scalar, n_vector)
-    :param out_dims: tuple (n_scalar, n_vector)
-    :param h_dim: intermediate number of vector channels, optional
-    :param activations: tuple of functions (scalar_act, vector_act)
-    :param vector_gate: whether to use vector gating.
-           (vector_act will be used as sigma^+ in vector gating if `True`)
+    References
+    ----------
+    .. [1] Jing, Bowen, et al.
+           "Learning from protein structure with geometric vector perceptrons."
+           International Conference on Learning Representations. 2020.
+    .. [2] Jing, Bowen, et al.
+           "Equivariant graph neural networks for 3d macromolecular structure."
+           arXiv preprint arXiv:2106.03843 (2021).
     """
 
     def __init__(
@@ -199,6 +200,27 @@ class GVP(nn.Module):
         ] = (nn.functional.relu, torch.sigmoid),
         vector_gate: bool = True,
     ) -> None:
+        r"""Geometric Vector Perceptron layer.
+
+        Updates the scalar node feature s as:
+        .. math:: bm{s}^n \leftarrow \sigma \left(\bm{s}'\right) \quad\text{with}\quad  \bm{s}' \coloneq \bm{W}_m \left[{\|\bm{W}_h\vec{\bm{v}}^o\|_2 \atop \bm{s}^o}\right] + \bm{b}
+        
+        And the vector nore features as:
+        .. math:: \vec{\bm{v}}^n \leftarrow \sigma_g \left(\bm{W}_g\left(\sigma^+ \left(\bm{s}'\right)\right) + \bm{b}_g \right) \odot \bm{W}_\mu\bm{W}_h\vec{\bm{v}}^o
+
+        Parameters
+        ----------
+        in_dims : Tuple[int, Optional[int]]
+            Dimension of inputs
+        out_dims : Tuple[int, Optional[int]]
+            Dimension of outputs
+        h_dim : Tuple[int, Optional[int]], optional
+            Intermidiate number of vector channels, by default None
+        activations : Tuple[ Optional[Callable], Optional[Callable] ], optional
+            Scalar and vector activation functions (scalar_act, vector_act), by default (nn.functional.relu, torch.sigmoid)
+        vector_gate : bool, optional
+            Whether to use vector gating, by default True. The vector activation will be used as sigma^+ in vector gating if `True`
+        """
         super(GVP, self).__init__()
         self.si, self.vi = in_dims
         self.so, self.vo = out_dims
@@ -227,12 +249,19 @@ class GVP(nn.Module):
         self,
         x: Tuple[torch.Tensor, Optional[torch.Tensor]]
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        """Forward pass of GVP
+
+        Parameters
+        ----------
+        x : Tuple[torch.Tensor, Optional[torch.Tensor]]
+            Input scalar and vector node embeddings
+
+        Returns
+        -------
+        Tuple[torch.Tensor, Optional[torch.Tensor]]
+            Input scalar and vector node embeddings
         """
-        :param x: tuple (s, V) of `torch.Tensor`,
-               or (if vectors_in is 0), a single `torch.Tensor`
-        :return: tuple (s, V) of `torch.Tensor`,
-               or (if vectors_out is 0), a single `torch.Tensor`
-        """
+        
         s, v = x
         if v is not None:
             assert self.wh is not None
@@ -278,20 +307,6 @@ class GVP(nn.Module):
 class GVPConv(MessagePassing):
     """
     Graph convolution / message passing with Geometric Vector Perceptrons.
-    Takes in a graph with node and edge embeddings,
-    and returns new node embeddings.
-
-    This does NOT do residual updates and pointwise feedforward layers
-    --- see `GVPConvLayer`.
-
-    :param in_dims: input node embedding dimensions (n_scalar, n_vector)
-    :param out_dims: output node embedding dimensions (n_scalar, n_vector)
-    :param edge_dims: input edge embedding dimensions (n_scalar, n_vector)
-    :param n_layers: number of GVPs in the message function
-    :param activations:
-           tuple of functions (scalar_act, vector_act) to use in GVPs
-    :param vector_gate: whether to use vector gating.
-           (vector_act will be used as sigma^+ in vector gating if `True`)
     """
     propagate_type = {
         's': torch.Tensor,
@@ -312,6 +327,32 @@ class GVPConv(MessagePassing):
         vector_gate=True,
         cutoff: float = -1.0,
     ) -> None:
+        """Graph convolution / message passing with Geometric Vector Perceptrons.
+        Takes in a graph with node and edge embeddings,
+        and returns new node embeddings.
+
+        This does NOT do residual updates and pointwise feedforward layers
+        --- see `GVPConvLayer` instead.
+
+        Parameters
+        ----------
+        in_dims :
+            input node embedding dimensions (n_scalar, n_vector)
+        out_dims :
+            output node embedding dimensions (n_scalar, n_vector)
+        edge_dims :
+            input edge embedding dimensions (n_scalar, n_vector)
+        n_layers : int, optional
+            number of GVPs in the message function, by default 3
+        aggr : str, optional
+            Type of message aggregate function, by default 'mean'
+        activations : tuple, optional
+            activation functions (scalar_act, vector_act) to be used use in GVPs, by default (nn.functional.relu, torch.sigmoid)
+        vector_gate : bool, optional
+            Whether to use vector gating, by default True. The vector activation will be used as sigma^+ in vector gating if `True`
+        cutoff : float, optional
+            Radial cutoff, by default -1.0
+        """
         super(GVPConv, self).__init__(aggr=aggr)
         self.si, self.vi = in_dims
         self.so, self.vo = out_dims
@@ -349,10 +390,23 @@ class GVPConv(MessagePassing):
         edge_attr: Tuple[torch.Tensor, torch.Tensor],
         edge_lengths: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        :param x: tuple (s, V) of `torch.Tensor`
-        :param edge_index: array of shape [2, n_edges]
-        :param edge_attr: tuple (s, V) of `torch.Tensor`
+        """Forward pass of GVPConv
+
+        Parameters
+        ----------
+        x : Tuple[torch.Tensor, torch.Tensor]
+            Input scalar and vector node embeddings
+        edge_index : torch.Tensor
+            Index of edge sources and destinations
+        edge_attr : Tuple[torch.Tensor, torch.Tensor]
+            Edge attributes
+        edge_lengths : torch.Tensor
+            Edge lengths
+
+        Returns
+        -------
+        Tuple[torch.Tensor, torch.Tensor]
+            Output scalar and vector node embeddings
         """
         x_s, x_v = x
         assert x_v is not None
@@ -404,7 +458,8 @@ class GVPConv(MessagePassing):
 class GVPConvLayer(nn.Module):
     """
     Full graph convolution / message passing layer with
-    Geometric Vector Perceptrons. Residually updates node embeddings with
+    Geometric Vector Perceptrons. 
+    Residually updates node embeddings with
     aggregated incoming messages, applies a pointwise feedforward
     network to node embeddings, and returns updated node embeddings.
 
@@ -433,6 +488,35 @@ class GVPConvLayer(nn.Module):
         residual=True,
         cutoff: float = -1.0,
     ) -> None:
+        """Full graph convolution / message passing layer with
+        Geometric Vector Perceptrons. 
+        Residually updates node embeddings with
+        aggregated incoming messages, applies a pointwise feedforward
+        network to node embeddings, and returns updated node embeddings.
+
+        To only compute the aggregated messages see `GVPConv` instead.
+
+        Parameters
+        ----------
+        node_dims : 
+            node embedding dimensions (n_scalar, n_vector)
+        edge_dims : 
+            input edge embedding dimensions (n_scalar, n_vector)
+        n_message : int, optional
+            number of GVP layers to be used in message function, by default 3
+        n_feedforward : int, optional
+            number of GVPs to be used use in feedforward function, by default 2
+        drop_rate : float, optional
+            drop probability in all dropout layers, by default 0.1
+        activations : tuple, optional
+            activation functions (scalar_act, vector_act) to be used use in GVPs, by default (nn.functional.relu, torch.sigmoid)
+        vector_gate : bool, optional
+            whether to use vector gating, by default True. The vector activation will be used as sigma^+ in vector gating if `True`
+        residual : bool, optional
+            whether to perform the update residually, by default True
+        cutoff : float, optional
+            radial cutoff, by default -1.0
+        """
         super(GVPConvLayer, self).__init__()
         self.conv = GVPConv(
             node_dims,
@@ -476,13 +560,27 @@ class GVPConvLayer(nn.Module):
         edge_lengths: torch.Tensor,
         node_mask: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        :param x: tuple (s, V) of `torch.Tensor`
-        :param edge_index: array of shape [2, n_edges]
-        :param edge_attr: tuple (s, V) of `torch.Tensor`
-        :param node_mask: array of type `bool` to index into the first
-               dim of node embeddings (s, V). If not `None`, only
-               these nodes will be updated.
+        """Forward pass of GVPConvLayer
+    
+        Parameters
+        ----------
+        x : Tuple[torch.Tensor, torch.Tensor]
+            Input scalar and vector node embeddings
+        edge_index : torch.Tensor
+            Index of edge sources and destinations
+        edge_attr : Tuple[torch.Tensor, torch.Tensor]
+            Edge attributes
+        edge_lengths : torch.Tensor
+            Edge lengths
+        node_mask : Optional[torch.Tensor], optional
+            Mask to restrict the node update to a subset. 
+            It should be a tensor of type `bool` to index the first dim of node embeddings (s, V), by default None. 
+            If not `None`, only the selected nodes will be updated.
+
+        Returns
+        -------
+        Tuple[torch.Tensor, torch.Tensor]
+            Output scalar and vector node embeddings
         """
 
         dh = self.conv(x, edge_index, edge_attr, edge_lengths)
@@ -545,11 +643,19 @@ class LayerNorm(nn.Module):
         self,
         x: Tuple[torch.Tensor, Optional[torch.Tensor]]
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        """Forward pass of LayerNorm
+
+        Parameters
+        ----------
+        x : Tuple[torch.Tensor, Optional[torch.Tensor]]
+            Input channels, if a single tensor is provided it assumes it to be the scalar channel
+
+        Returns
+        -------
+        Tuple[torch.Tensor, Optional[torch.Tensor]]
+            Normalized channels
         """
-        :param x: tuple (s, V) of `torch.Tensor`,
-               or single `torch.Tensor`
-               (will be assumed to be scalar channels)
-        """
+
         s, v = x
         if not self.v:
             return self.scalar_norm(s), None
@@ -575,10 +681,17 @@ class Dropout(nn.Module):
         self,
         x: Tuple[torch.Tensor, Optional[torch.Tensor]]
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        """
-        :param x: tuple (s, V) of `torch.Tensor`,
-               or single `torch.Tensor`
-               (will be assumed to be scalar channels)
+        """Forward pass of Dropout
+
+        Parameters
+        ----------
+        x : Tuple[torch.Tensor, Optional[torch.Tensor]]
+            Input channels, if a single tensor is provided it assumes it to be the scalar channel
+
+        Returns
+        -------
+        Tuple[torch.Tensor, Optional[torch.Tensor]]
+            Dropped out channels
         """
         s, v = x
         if v is None:
@@ -599,9 +712,18 @@ class _VDropout(nn.Module):
         self.drop_rate = drop_rate
         self.dummy_param = nn.Parameter(torch.empty(0))
 
-    def forward(self, x) -> torch.Tensor:
-        """
-        :param x: `torch.Tensor` corresponding to vector channels
+    def forward(self, x : torch.Tensor) -> torch.Tensor:
+        """Forward pass of _VDropout
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Vector channel
+
+        Returns
+        -------
+        torch.Tensor
+            Dropped out vector channel
         """
         device = self.dummy_param.device
         if not self.training:
@@ -631,14 +753,28 @@ def _tuple_cat(
     input_3: Tuple[torch.Tensor, torch.Tensor],
     dim: int = -1
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Concatenates any number of tuples (s, V) elementwise.
+    """Concatenates any number of tuples (s, V) elementwise.
 
-    :param dim: dimension along which to concatenate when viewed
-           as the `dim` index for the scalar-channel tensors.
-           This means that `dim=-1` will be applied as
-           `dim=-2` for the vector-channel tensors.
+    Parameters
+    ----------
+    input_1 : Tuple[torch.Tensor, torch.Tensor]
+        First input to concatenate
+    input_2 : Tuple[torch.Tensor, torch.Tensor]
+        Second input to concatenate
+    input_3 : Tuple[torch.Tensor, torch.Tensor]
+        Third input to concatenate
+    dim : int, optional
+        dimension along which to concatenate when viewed
+        as the `dim` index for the scalar-channel tensors, by default -1.
+        This means that `dim=-1` will be applied as
+        `dim=-2` for the vector-channel tensors.
+
+    Returns
+    -------
+    Tuple[torch.Tensor, torch.Tensor]
+        Concatenated tuple
     """
+
     dim = int(dim % len(input_1[0].shape))
     s_args, v_args = list(zip(input_1, input_2, input_3))
     return torch.cat(s_args, dim=dim), torch.cat(v_args, dim=dim)
@@ -648,10 +784,19 @@ def _tuple_cat(
 def _tuple_index(
     x: Tuple[torch.Tensor, torch.Tensor], idx: torch.Tensor
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Indexes into a tuple (s, V) along the first dimension.
+    """Indexes a tuple (s, V) along the first dimension at a given index.
 
-    :param idx: any object which can be used to index into a `torch.Tensor`
+    Parameters
+    ----------
+    x : Tuple[torch.Tensor, torch.Tensor]
+        Tuple to be indexed
+    idx : torch.Tensor
+        any object which can be used to index a `torch.Tensor`
+
+    Returns
+    -------
+    Tuple[torch.Tensor, torch.Tensor]
+        Tuple with the element at the given index
     """
     return x[0][idx], x[1][idx]
 
@@ -664,10 +809,26 @@ def _norm_no_nan(
     eps: float = 1e-8,
     sqrt: bool = True
 ) -> torch.Tensor:
-    """
-    L2 norm of tensor clamped above a minimum value `eps`.
+    """L2 norm of tensor clamped above a minimum value `eps`.
 
-    :param sqrt: if `False`, returns the square of the L2 norm
+    Parameters
+    ----------
+    x : torch.Tensor
+        Input tensor
+    axis : int, optional
+        Axis along which to compute the norm, by default -1
+    keepdims : bool, optional
+        Whether to keep the original dimensions, by default False
+    eps : float, optional
+        Lowest threshold for clamping the norm, by default 1e-8
+    sqrt : bool, optional
+        Compute the sqaure root in L2 norm, by default True. 
+        If `False`, returns the square of the L2 norm
+
+    Returns
+    -------
+    torch.Tensor
+        Normed tensor
     """
     out = torch.clamp(torch.sum(torch.square(x), axis, keepdims), min=eps)
     return torch.sqrt(out) if sqrt else out
@@ -675,13 +836,22 @@ def _norm_no_nan(
 
 @torch.jit.script
 def _split(x: torch.Tensor, nv: int) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Splits a merged representation of (s, V) back into a tuple.
+    """Splits a merged representation of (s, V) back into a tuple.
     Should be used only with `_merge(s, V)` and only if the tuple
     representation cannot be used.
 
-    :param x: the `torch.Tensor` returned from `_merge`
-    :param nv: the number of vector channels in the input to `_merge`
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        the `torch.Tensor` returned from `_merge`
+    nv : int
+        the number of vector channels in the input to `_merge`
+
+    Returns
+    -------
+    Tuple[torch.Tensor, torch.Tensor]
+        split representation
     """
     s = x[..., :-3 * nv]
     v = x[..., -3 * nv:].contiguous().view(x.shape[0], nv, 3)
@@ -690,8 +860,7 @@ def _split(x: torch.Tensor, nv: int) -> Tuple[torch.Tensor, torch.Tensor]:
 
 @torch.jit.script
 def _merge(s: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
-    """
-    Merges a tuple (s, V) into a single `torch.Tensor`, where the
+    """Merges a tuple (s, V) into a single `torch.Tensor`, where the
     vector channels are flattened and appended to the scalar channels.
     Should be used only if the tuple representation cannot be used.
     Use `_split(x, nv)` to reverse.

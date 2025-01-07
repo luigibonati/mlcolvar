@@ -13,23 +13,7 @@ __all__ = ['BaseGNN']
 
 class BaseGNN(nn.Module):
     """
-    The commen GNN interface for mlcolvar.
-    Parameters
-    ----------
-    n_out: int
-        Size of the output node features.
-    cutoff: float
-        Cutoff radius of the basis functions. Should be the same as the cutoff
-        radius used to build the graphs.
-    atomic_numbers: List[int]
-        The atomic numbers mapping, e.g. the `atomic_numbers` attribute of a
-        `mlcolvar.graph.data.GraphDataSet` instance.
-    n_bases: int
-        Size of the basis set.
-    n_polynomials: bool
-        Order of the polynomials in the basis functions.
-    basis_type: str
-        Type of the basis function.
+    Base class for Graph Neural Network (GNN) models
     """
 
     def __init__(
@@ -41,11 +25,31 @@ class BaseGNN(nn.Module):
         n_polynomials: int = 6,
         basis_type: str = 'bessel'
     ) -> None:
+        """Initializes the core of a GNN model, taking care of edge embeddings.
+
+        Parameters
+        ----------
+        n_out : int
+            Number of the output scalar node features.
+        cutoff : float
+            Cutoff radius of the basis functions. Should be the same as the cutoff
+            radius used to build the graphs.
+        atomic_numbers : List[int]
+            The atomic numbers mapping.
+        n_bases : int, optional
+            Size of the basis set used for the embedding, by default 6
+        n_polynomials : int, optional
+            Order of the polynomials in the basis functions, by default 6
+        basis_type : str, optional
+            Type of the basis function, by default 'bessel'
+        """
         super().__init__()
 
-        self._radial_embedding = radial.RadialEmbeddingBlock(
-            cutoff, n_bases, n_polynomials, basis_type
-        )
+        self._radial_embedding = radial.RadialEmbeddingBlock(cutoff=cutoff, 
+                                                             n_bases=n_bases, 
+                                                             n_polynomials=n_polynomials, 
+                                                             basis_type=basis_type
+                                                            )
         self.register_buffer(
             'n_out', torch.tensor(n_out, dtype=torch.int64)
         )
@@ -68,14 +72,16 @@ class BaseGNN(nn.Module):
         self, data: Dict[str, torch.Tensor], normalize: bool = True
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
-        Perform the edge embedding.
+        Performs the model edge embedding form `torch_geometric.data.Batch` object.
+
         Parameters
         ----------
         data: Dict[str, torch.Tensor]
-            The data dict. Usually came from the `to_dict` method of a
+            The data dict. Usually from the `to_dict` method of a
             `torch_geometric.data.Batch` object.
         normalize: bool
-            If return the normalized distance vectors.
+            If to return the normalized distance vectors, by default True.
+        
         Returns
         -------
         edge_lengths: torch.Tensor (shape: [n_edges, 1])
@@ -100,23 +106,25 @@ def get_edge_vectors_and_lengths(
     normalize: bool = True,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
-    Calculate edge vectors and lengths by indices and shift vectors.
+    Calculates edge vectors and lengths by indices and shift vectors.
+
     Parameters
     ----------
-    position: torch.Tensor (shape: [n_atoms, 3])
-        The position vector.
+    positions: torch.Tensor (shape: [n_atoms, 3])
+        The positions tensor.
     edge_index: torch.Tensor (shape: [2, n_edges])
         The edge indices.
     shifts: torch.Tensor (shape: [n_edges, 3])
-        The shift vector.
+        The shifts vector.
     normalize: bool
-        If return the normalized distance vectors.
+        If to return the normalized distance vectors, by default True.
+    
     Returns
     -------
     vectors: torch.Tensor (shape: [n_edges, 3])
-        The distance vectors.
+        The distances vectors.
     lengths: torch.Tensor (shape: [n_edges, 1])
-        The edge lengths.
+        The edges lengths.
     """
     sender = edge_index[0]
     receiver = edge_index[1]

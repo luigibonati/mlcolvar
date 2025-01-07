@@ -173,7 +173,7 @@ def tda_loss(
                 warn(
                     f"There is only one sample for state {i} in this batch! Std is set to 0, this may affect the training! Either use bigger batch_size or a more equilibrated dataset composition!"
                 )
-                sigma = torch.tensor(0)
+                sigma = torch.Tensor(0)
             else:
                 sigma = torch.std(H_red, 0)
 

@@ -19,6 +19,7 @@ class SchNetModel(BaseGNN):
     """
     The SchNet [1] model. This implementation is taken from torch_geometric:
     https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/nn/models/schnet.py
+    
     Parameters
     ----------
     n_out: int
@@ -57,17 +58,43 @@ class SchNetModel(BaseGNN):
         n_layers: int = 2,
         n_filters: int = 16,
         n_hidden_channels: int = 16,
-        drop_rate: int = 0,
         aggr: str = 'mean',
         w_out_after_sum: bool = False
     ) -> None:
+        """The SchNet model. This implementation is taken from torch_geometric:
+        https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/nn/models/schnet.py
+
+        Parameters
+        ----------
+        n_out : int
+            Size of the output node features.
+        cutoff : float
+            Cutoff radius of the basis functions. Should be the same as the cutoff
+            radius used to build the graphs.
+        atomic_numbers : List[int]
+            The atomic numbers mapping.
+        n_bases : int, optional
+            Size of the basis set used for the embedding, by default 16
+        n_layers : int, optional
+            Number of the graph convolution layers, by default 2
+        n_filters : int, optional
+            Number of filters, by default 16
+        n_hidden_channels : int, optional
+            Size of hidden embeddings, by default 16
+        aggr : str, optional
+            Type of the GNN aggregation function, by default 'mean'
+        w_out_after_sum : bool, optional
+            Whether to apply the last linear transformation after the sum, by default False
+        """
 
         super().__init__(
-            n_out, cutoff, atomic_numbers, n_bases, 0, 'gaussian'
+            n_out=n_out, cutoff=cutoff, atomic_numbers=atomic_numbers, n_bases=n_bases, n_polynomials=0, basis_type='gaussian'
         )
 
         self.W_v = nn.Linear(
-            len(atomic_numbers), n_hidden_channels, bias=False
+            in_features=len(atomic_numbers), 
+            out_features=n_hidden_channels, 
+            bias=False
         )
 
         self.layers = nn.ModuleList([
@@ -112,7 +139,7 @@ class SchNetModel(BaseGNN):
             The data dict. Usually came from the `to_dict` method of a
             `torch_geometric.data.Batch` object.
         scatter_mean: bool
-            If perform the scatter mean to the model output.
+            If to perform the scatter mean to the model output.
         """
 
         h_E = self.embed_edge(data)
@@ -153,6 +180,21 @@ class InteractionBlock(nn.Module):
         cutoff: float,
         aggr: str = 'mean'
     ) -> None:
+        """SchNet interaction block
+
+        Parameters
+        ----------
+        hidden_channels : int
+            Size of hidden embeddings
+        num_gaussians : int
+            Number of Gaussians for the embedding
+        num_filters : int
+            Number of filters
+        cutoff : float
+            Radial cutoff
+        aggr : str, optional
+            Aggregation function, by default 'mean'
+        """
         super().__init__()
         self.mlp = nn.Sequential(
             nn.Linear(num_gaussians, num_filters),
@@ -173,6 +215,9 @@ class InteractionBlock(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
+        """
+        Resets all learnable parameters of the module.
+        """
         nn.init.xavier_uniform_(self.mlp[0].weight)
         self.mlp[0].bias.data.fill_(0)
         nn.init.xavier_uniform_(self.mlp[2].weight)
@@ -195,6 +240,7 @@ class InteractionBlock(nn.Module):
 
 
 class CFConv(MessagePassing):
+    """Continuos-filter convolution from SchNet"""
     def __init__(
         self,
         in_channels: int,
@@ -204,6 +250,23 @@ class CFConv(MessagePassing):
         cutoff: float,
         aggr: str = 'mean'
     ) -> None:
+        """_summary_
+
+        Parameters
+        ----------
+        in_channels : int
+            Number of input channels
+        out_channels : int
+            Number of output channels
+        num_filters : int
+            Number of filters
+        network : nn.Sequential
+            Neural network
+        cutoff : float
+            Radial cutoff
+        aggr : str, optional
+            Aggregation function, by default 'mean'
+        """
         super().__init__(aggr=aggr)
         self.lin1 = nn.Linear(in_channels, num_filters, bias=False)
         self.lin2 = nn.Linear(num_filters, out_channels)
