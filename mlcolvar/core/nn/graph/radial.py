@@ -11,16 +11,18 @@ __all__ = ['RadialEmbeddingBlock']
 
 class GaussianBasis(torch.nn.Module):
     """
-    The Gaussian basis functions.
-
-    Parameters
-    ----------
-    cutoff: float
-        The cutoff radius.
-    n_bases: int
-        Size of the basis set.
+    Gaussian basis functions.
     """
     def __init__(self, cutoff: float, n_bases=32) -> None:
+        """Initialize a Gaussian basis function
+
+        Parameters
+        ----------
+        cutoff : float
+            Cutoff radius of the basis set
+        n_bases : int, optional
+            Size of the basis set, by default 32
+        """
         super().__init__()
 
         offset = torch.linspace(
@@ -56,25 +58,29 @@ class GaussianBasis(torch.nn.Module):
 
 
 class BesselBasis(torch.nn.Module):
-    """
-    The Bessel radial basis functions (equation (7) in [1]).
+    r"""
+    Bessel radial basis functions (equation (7) in [1])
 
-    Parameters
-    ----------
-    cutoff: float
-        The cutoff radius.
-    n_bases: int
-        Size of the basis set.
-    trainable: bool
-        If use trainable basis set parameters.
+    .. math:: RBF_n(d) = \sqrt{\frac{2}{c}\frac{sin(\frac{n\pi}{c}d)}{d}}
 
     References
     ----------
-    .. [1] Klicpera, J.; Groß, J.; Günnemann, S. Directional Message Passing
+    .. [1] Gasteiger, J.; Groß, J.; Günnemann, S. Directional Message Passing
     for Molecular Graphs; ICLR 2020.
     """
 
     def __init__(self, cutoff: float, n_bases=8, trainable=False) -> None:
+        """Initializes Bessel radial basis function
+
+        Parameters
+        ----------
+        cutoff: float
+            Cutoff radius of the basis set
+        n_bases: int
+            Size of the basis set, by default 8
+        trainable: bool
+            If to use trainable basis set parameters
+        """
         super().__init__()
 
         bessel_weights = (
@@ -122,25 +128,28 @@ class BesselBasis(torch.nn.Module):
 
 
 class PolynomialCutoff(torch.nn.Module):
-    """
-    The Continuous cutoff function (equation (8) in [1]).
+    r"""Continuous cutoff function (equation (8) in [1])
 
-    Parameters
-    ----------
-    cutoff: float
-        The cutoff radius.
-    p: int
-        Order of the polynomial.
+    .. math:: u(d) = 1 - \frac{(p+1)(p+2)}{2}d^p + p(p+2)d^{p+1} - \frac{p(p+1)}{2}d^{p+2}
 
     References
     ----------
-    .. [1] Klicpera, J.; Groß, J.; Günnemann, S. Directional Message Passing
+    .. [1] Gasteiger, J.; Groß, J.; Günnemann, S. Directional Message Passing
            for Molecular Graphs; ICLR 2020.
     """
     p: torch.Tensor
     cutoff: torch.Tensor
 
     def __init__(self, cutoff: float, p: int = 6) -> None:
+        """initilalizes a polynomial cutoff function.
+
+        Parameters
+        ----------
+        cutoff: float
+            The cutoff radius.
+        p: int
+            Order of the polynomial, by default 6
+        """
         super().__init__()
         self.register_buffer(
             'p', torch.tensor(p, dtype=torch.get_default_dtype())
@@ -180,22 +189,11 @@ class PolynomialCutoff(torch.nn.Module):
 
 class RadialEmbeddingBlock(torch.nn.Module):
     """
-    The radial embedding block [1].
-
-    Parameters
-    ----------
-    cutoff: float
-        The cutoff radius.
-    n_bases: int
-        Size of the basis set.
-    n_polynomials: bool
-        Order of the polynomial.
-    basis_type: str
-        Type of the basis function.
+    Radial embedding block [1]
 
     References
     ----------
-    .. [1] Klicpera, J.; Groß, J.; Günnemann, S. Directional Message Passing
+    .. [1] Gasteiger, J.; Groß, J.; Günnemann, S. Directional Message Passing
     for Molecular Graphs; ICLR 2020.
     """
 
@@ -206,6 +204,24 @@ class RadialEmbeddingBlock(torch.nn.Module):
         n_polynomials: int = 6,
         basis_type: str = 'bessel',
     ) -> None:
+        """Initializes a radial embedding block
+
+        Parameters
+        ----------
+        cutoff : float
+            Cutoff radius.
+        n_bases : int, optional
+            Size of the basis set, by default 8
+        n_polynomials : int, optional
+            Order of the polynomial for the polynomial cutoff, by default 6
+        basis_type : str, optional
+            Type fo the basis function, by default 'bessel'
+
+        Raises
+        ------
+        RuntimeError
+            _description_
+        """
         super().__init__()
         self.n_out = n_bases
         if basis_type == 'bessel':
@@ -221,7 +237,7 @@ class RadialEmbeddingBlock(torch.nn.Module):
 
     def forward(self, edge_lengths: torch.Tensor) -> torch.Tensor:
         """
-        The forward pass.
+        The forward pass of RadialEmbeddingBlock
 
         Parameters
         ----------

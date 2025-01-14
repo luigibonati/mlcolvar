@@ -14,16 +14,18 @@ __all__ = ['AtomicNumberTable', 'Configuration', 'Configurations']
 
 
 class AtomicNumberTable:
-    """
-    The atomic number table. Used to map between one hot encodings and a given
-    set of actual atomic numbers.
-    Parameters
-    ----------
-    zs: List[int]
-        The atomic numbers in this table.
+    """The atomic number table. 
+    Used to map between one hot encodings and a given set of actual atomic numbers.
     """
 
     def __init__(self, zs: List[int]) -> None:
+        """Initializes an atomi number table object
+
+        Parameters
+        ----------
+        zs: List[int]
+            The atomic numbers in this table
+        """
         self.zs = zs
         self.masses = [1.0] * len(zs)
         for i in range(len(zs)):
@@ -36,63 +38,61 @@ class AtomicNumberTable:
                 )
 
     def __len__(self) -> int:
-        """
-        Number of elements in this table.
-        """
+        """Number of elements in the table"""
         return len(self.zs)
 
     def __str__(self) -> str:
         return f'AtomicNumberTable: {tuple(s for s in self.zs)}'
 
     def index_to_z(self, index: int) -> int:
-        """
-        Map the encoding to the actual atomic number.
+        """Maps the encoding to the actual atomic number
+        
         Parameters
         ----------
         index: int
-            The encoding.
+            Index of the encoding to be mapped
         """
         return self.zs[index]
 
     def index_to_symbol(self, index: int) -> str:
-        """
-        Map the encoding to the atomic symbol.
+        """Map the encoding to the atomic symbol
+
         Parameters
         ----------
         index: int
-            The encoding.
+            Index of the encoding to be mapped
         """
         return md.element.Element.getByAtomicNumber(self.zs[index]).symbol
 
     def z_to_index(self, atomic_number: int) -> int:
-        """
-        Map an atomic number to the encoding.
+        """Maps an atomic number to the encoding.
+
         Parameters
         ----------
         atomic_number: int
-            The atomic number.
+            The atomic number to be mapped
         """
         return self.zs.index(atomic_number)
 
     def zs_to_indices(self, atomic_numbers: np.ndarray) -> np.ndarray:
-        """
-        Map an array of atomic number to the encodings.
+        """Maps an array of atomic number to the encodings.
+        
         Parameters
         ----------
         atomic_numbers: numpy.ndarray
-            The atomic numbers.
+            The atomic numbers to be mapped
         """
         to_index_fn = np.vectorize(self.z_to_index)
         return to_index_fn(atomic_numbers)
 
     @classmethod
     def from_zs(cls, atomic_numbers: Iterable[int]) -> 'AtomicNumberTable':
-        """
-        Build the table from an array atomic numbers.
+        """Build the table from an array atomic numbers.
+
         Parameters
         ----------
         atomic_numbers: Iterable[int]
-            The atomic numbers.
+            The atomic numbers to be used for building the table
         """
         z_set = set()
         for z in atomic_numbers:
@@ -101,12 +101,12 @@ class AtomicNumberTable:
 
 
 def get_masses(atomic_numbers: Iterable[int]) -> List[float]:
-    """
-    Get atomic masses from atomic numbers.
+    """Get atomic masses from atomic numbers.
+
     Parameters
     ----------
     atomic_numbers: Iterable[int]
-        The atomic numbers.
+        The atomic numbers for which to return the atomic masses
     """
     return AtomicNumberTable.from_zs(atomic_numbers).masses.copy()
 

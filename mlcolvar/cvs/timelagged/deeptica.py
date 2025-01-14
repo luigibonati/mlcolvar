@@ -17,10 +17,12 @@ class DeepTICA(BaseCV, lightning.LightningModule):
     approximated by TICA. The method is described in [1]_. Note that from the point of view
     of the architecture DeepTICA is similar to the SRV [2] method.
 
-    **Data**: for training it requires a DictDataset with the keys 'data' (input at time t)
-    and 'data_lag' (input at time t+lag), as well as the corresponding 'weights' and
-    'weights_lag' which will be used to weight the time correlation functions.
-    This can be created with the helper function `create_timelagged_dataset`.
+    **Data**: for training it requires a DictDataset containing:
+        - If using descriptors as input, the keys 'data' (input at time t)
+        and 'data_lag' (input at time t+lag), as well as the corresponding 'weights' and
+        'weights_lag' which will be used to weight the time correlation functions.
+        - If using graphs as input, the keys 'data_list' and 'data_list_lag', each containing the respective 'weight'
+    This can be created in both cases with the helper function `create_timelagged_dataset`.
 
     **Loss**: maximize TICA eigenvalues (ReduceEigenvaluesLoss)
 
@@ -54,8 +56,13 @@ class DeepTICA(BaseCV, lightning.LightningModule):
 
         Parameters
         ----------
-        layers : list
-            Number of neurons per layer
+        model : list or FeedForward or BaseGNN
+            Determines the underlying machine-learning model. One can pass:
+            1. A list of integers corresponding to the number of neurons per layer of a feed-forward NN.
+               The model Will be automatically intialized using a `mlcolvar.core.nn.feedforward.FeedForward` object.
+               The CV class will be initialized according to the DEFAULT_BLOCKS.
+            2. An externally intialized model (either `mlcolvar.core.nn.feedforward.FeedForward` or `mlcolvar.core.nn.graph.BaseGNN` object).
+               The CV class will be initialized according to the MODEL_BLOCKS.
         n_cvs : int, optional
             Number of cvs to optimize, default None (= last layer)
         options : dict[str, Any], optional

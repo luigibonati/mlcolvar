@@ -4,10 +4,8 @@ import torch
 
 from mlcolvar.data import DictModule
 from mlcolvar.utils.plot import pbar
+from mlcolvar.core.nn import BaseGNN
 
-"""
-Sensitivity analysis.
-"""
 
 __all__ = ['graph_node_sensitivity']
 
@@ -20,23 +18,22 @@ def graph_node_sensitivity(
     batch_size: int = None,
     show_progress: bool = True
 ) -> Dict[str, np.ndarray]:
-    """
-    Perform a sensitivity analysis by calculating CV gradient w.r.t. nodes'
-    positions. This allows us to measure which atom is most important to the
-    CV.
+    """Performs a sensitivity analysis on a GNN-based CV model by calculating 
+    the CV gradient w.r.t. nodes' positions. 
+    This allows us to measure which atom is most important to the CV model.
 
     Parameters
     ----------
-    model: mlcolvar.graph.cvs.GraphBaseCV
-        Collective variable model.
-    dataset: mlcovar.graph.data.GraphDataSet
-        Dataset on which to compute the sensitivity analysis.
+    model: mlcolvar.cvs.BaseCV
+        Collective variable model based on GNN
+    dataset: mlcovar.data.DictDataset
+        Graph-based dataset on which to compute the sensitivity analysis
     device: str
-        Name of the device.
+        Name of the device on which to perform the computation
     batch_size:
-        Batch size used for evaluating the CV.
+        Batch size used for evaluating the CV
     show_progress: bool
-        If show the progress bar.
+        If to show the progress bar
 
     Returns
     -------
@@ -50,15 +47,21 @@ def graph_node_sensitivity(
     mlcolvar.utils.explain.sensitivity_analysis
         Perform the sensitivity analysis of a feedforward model.
     """
+    # check model is GNN-based
+    if not isinstance(model.nn, BaseGNN):
+        raise ValueError (
+                "The CV model is not based on GNN! Maybe you should use the feedforward sensitivity_analysis from  mlcolvar.utils.explain.sensitivity!"
+            )
+
     model = model.to(device)
 
     gradients = get_dataset_cv_gradients(
-        model,
-        dataset,
-        component,
-        batch_size,
-        show_progress,
-        'Getting gradients'
+        model=model,
+        dataset=dataset,
+        component=component,
+        batch_size=batch_size,
+        show_progress=show_progress,
+        progress_prefix='Getting gradients'
     )
     sensitivities_components = np.linalg.norm(gradients, axis=-1)
 
@@ -78,23 +81,22 @@ def get_dataset_cv_values(
     show_progress: bool = True,
     progress_prefix: str = 'Calculating CV values'
 ) -> np.ndarray:
-    """
-    Get CV values of a given dataset. The calculation will run on the device
-    where the model is on.
+    """Gets the values of a CV model on a given dataset. 
+    The calculation will run on the device where the model is on.
 
     Parameters
     ----------
-    model: mlcolvar.graph.cvs.GraphBaseCV
-        Collective variable model.
-    dataset: mlcovar.graph.data.GraphDataSet
-        Dataset on which to compute the sensitivity analysis.
+    model: mlcolvar.cvs.BaseCV
+        Collective variable model
+    dataset: mlcovar.data.DictDataset
+        Dataset on which to compute the sensitivity analysis
     batch_size:
-        Batch size used for evaluating the CV.
+        Batch size used for evaluating the CV
     show_progress: bool
-        If show the progress bar.
+        If to show the progress bar
     """
     datamodule = DictModule(
-        dataset,
+        dataset=dataset,
         lengths=(1.0,),
         batch_size=batch_size,
         random_split=False,
@@ -131,25 +133,24 @@ def get_dataset_cv_gradients(
     show_progress: bool = True,
     progress_prefix: str = 'Calculating CV gradients'
 ) -> np.ndarray:
-    """
-    Get gradients of the CV w.r.t. node positions in a given dataset. The
-    calculation will run on the device where the model is on.
+    """Get gradients of a GNN-based CV w.r.t. node positions in a given dataset. 
+    The calculation will run on the device where the model is on.
 
     Parameters
     ----------
-    model: mlcolvar.graph.cvs.GraphBaseCV
-        Collective variable model.
-    dataset: mlcovar.graph.data.GraphDataSet
-        Dataset on which to compute the sensitivity analysis.
+    model: mlcolvar.cvs.BaseCV
+        Collective variable model based on GNN
+    dataset: mlcovar.data.DictDataset
+        Graph-based dataset on which to compute the sensitivity analysis
     component: int
-        Component of the CV to analysis.
+        Component of the CV to analyse
     batch_size:
-        Batch size used for evaluating the CV.
+        Batch size used for evaluating the CV
     show_progress: bool
-        If show the progress bar.
+        If to show the progress bar
     """
     datamodule = DictModule(
-        dataset,
+        dataset=dataset,
         lengths=(1.0,),
         batch_size=batch_size,
         random_split=False,

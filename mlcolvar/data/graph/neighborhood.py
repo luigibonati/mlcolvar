@@ -20,8 +20,8 @@ def get_neighborhood(
     environment_indices: Optional[List[int]] = None,
     buffer: float = 0.0
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Get the neighbor list of a given set atoms.
+    """Get the neighbor list of a given set atoms.
+
     Parameters
     ----------
     positions: numpy.ndarray (shape: [N, 3])
@@ -29,32 +29,38 @@ def get_neighborhood(
     cutoff: float
         The cutoff radius.
     pbc: Tuple[bool, bool, bool] (shape: [3])
-        If enable PBC in the directions of the three lattice vectors.
+        If to enable PBC in the directions of the three lattice vectors.
     cell: numpy.ndarray (shape: [3, 3])
         The lattice vectors.
     true_self_interaction: bool
-        If keep self-edges that don't cross periodic boundaries.
+        If to keep self-edges that don't cross periodic boundaries.
     system_indices: List[int]
-        Indices of the system atoms.
+        Indices of the atoms to be considered as the 'system' if 
+        restricting the neighborhood to a subsystem (i.e., system + environment), see also Notes section.
     environment_indices: List[int]
-        Indices of the environment atoms.
+        Indices of the atoms to be considered as the 'environment' if 
+        restricting the neighborhood to a subsystem (i.e., system + environment), see also Notes section.
+        Only atoms within the cutoff will be included as active enviroment atoms
     buffer: float
-        Buffer size used in finding active environment atoms.
+        Buffer size used in finding active environment atoms, if 
+        restricting the neighborhood to a subsystem (i.e., system + environment), see also Notes section.
+    
     Returns
     -------
     edge_index: numpy.ndarray (shape: [2, n_edges])
-        The edge indices in the graph.
+        The edge indices (i.e., source and destination) in the graph.
     shifts: numpy.ndarray (shape: [n_edges, 3])
         The shift vectors (unit_shifts * cell_lengths).
     unit_shifts: numpy.ndarray (shape: [n_edges, 3])
-        The unit shift vectors (number of PBC croessed by the edges).
+        The unit shift vectors (number of PBC crossed by the edges).
+   
     Notes
     -----
-    Arguments `system_indices` and `environment_indices` must presnet at the
+    Arguments `system_indices` and `environment_indices` must present at the
     same time. When these arguments are given, only edges in the [subsystem]
     formed by [the systems atoms] and [the environment atoms within the cutoff
     radius of the systems atoms] will be kept.
-    Besides, these two lists could not contain common atoms.
+    These two lists could not contain common atoms.
     """
 
     if system_indices is not None or environment_indices is not None:

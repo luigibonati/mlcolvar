@@ -14,8 +14,10 @@ class RegressionCV(BaseCV, lightning.LightningModule):
     Example of collective variable obtained with a regression task.
     Combine the inputs with a neural-network and optimize it to match a target function.
 
-    **Data**: for training it requires a DictDataset with the keys 'data' and 'target' and optionally 'weights'.
-
+    **Data**: for training it requires a DictDataset containing:
+        - If using descriptors as input, the keys 'data', 'target' and optionally 'weights'.
+        - If using graphs as input, `torch_geometric.data` with 'graph_labels' with the target values and 'weight' in their 'data_list'.
+    
     **Loss**: least squares (MSELoss).
 
     See also
@@ -37,8 +39,13 @@ class RegressionCV(BaseCV, lightning.LightningModule):
 
         Parameters
         ----------
-        layers : list
-            Number of neurons per layer
+        model : list or FeedForward or BaseGNN
+            Determines the underlying machine-learning model. One can pass:
+            1. A list of integers corresponding to the number of neurons per layer of a feed-forward NN.
+               The model Will be automatically intialized using a `mlcolvar.core.nn.feedforward.FeedForward` object.
+               The CV class will be initialized according to the DEFAULT_BLOCKS.
+            2. An externally intialized model (either `mlcolvar.core.nn.feedforward.FeedForward` or `mlcolvar.core.nn.graph.BaseGNN` object).
+               The CV class will be initialized according to the MODEL_BLOCKS.
         options : dict[str, Any], optional
             Options for the building blocks of the model, by default None.
             Available blocks: ['norm_in', 'nn'].

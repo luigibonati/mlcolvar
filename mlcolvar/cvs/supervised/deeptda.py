@@ -13,7 +13,10 @@ class DeepTDA(BaseCV, lightning.LightningModule):
     Deep Targeted Discriminant Analysis (Deep-TDA) CV.
     Combine the inputs with a neural-network and optimize it in a way such that
     the data are distributed accordingly to a mixture of Gaussians. The method is described in [1]_.
-    **Data**: for training it requires a DictDataset with the keys 'data' and 'labels'.
+    **Data**: for training it requires a DictDataset containing:
+        - If using descriptors as input, the keys 'data' and 'labels'.
+        - If using graphs as input, `torch_geometric.data` with 'graph_labels' in their 'data_list'.
+            
     **Loss**: distance of the samples of each class from a set of Gaussians (TDALoss)
     References
     ----------
@@ -53,8 +56,13 @@ class DeepTDA(BaseCV, lightning.LightningModule):
             Centers of the Gaussian targets
         target_sigmas : list
             Standard deviations of the Gaussian targets
-        layers : list
-            Number of neurons per layer
+        model : list or FeedForward or BaseGNN
+            Determines the underlying machine-learning model. One can pass:
+            1. A list of integers corresponding to the number of neurons per layer of a feed-forward NN.
+               The model Will be automatically intialized using a `mlcolvar.core.nn.feedforward.FeedForward` object.
+               The CV class will be initialized according to the DEFAULT_BLOCKS.
+            2. An externally intialized model (either `mlcolvar.core.nn.feedforward.FeedForward` or `mlcolvar.core.nn.graph.BaseGNN` object).
+               The CV class will be initialized according to the MODEL_BLOCKS.
         options : dict[str, Any], optional
             Options for the building blocks of the model, by default {}.
             Available blocks: ['norm_in', 'nn'].

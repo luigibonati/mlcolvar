@@ -29,6 +29,12 @@ class DictDataset(Dataset):
             Dictionary with names and tensors
         feature_names : array-like
             List or numpy array with feature names
+        metadata : dict
+            Dictionary with metadata quantities shared across the whole dataset.
+        data_type : str
+            Type of data stored in the dataset, either 'descriptors' or 'graphs', by default 'descriptors'.
+            This will be stored in the dataset.metadata dictionary.
+
 
         """
         # assert type dict
@@ -125,6 +131,10 @@ class DictDataset(Dataset):
         stats
             dictionary of dictionaries with statistics
         """
+        if self.metadata is 'graph':
+            raise ValueError (
+                "Method get_stats not supported for graph-based dataset!"
+            )
         stats = {}
         for k in self.keys:
             stats[k] = Statistics(self._dictionary[k]).to_dict()

@@ -464,16 +464,6 @@ class GVPConvLayer(nn.Module):
     network to node embeddings, and returns updated node embeddings.
 
     To only compute the aggregated messages, see `GVPConv`.
-
-    :param node_dims: node embedding dimensions (n_scalar, n_vector)
-    :param edge_dims: input edge embedding dimensions (n_scalar, n_vector)
-    :param n_message: number of GVPs to use in message function
-    :param n_feedforward: number of GVPs to use in feedforward function
-    :param drop_rate: drop probability in all dropout layers
-    :param activations:
-           tuple of functions (scalar_act, vector_act) to use in GVPs
-    :param vector_gate: whether to use vector gating.
-           (vector_act will be used as sigma^+ in vector gating if `True`)
     """
 
     def __init__(

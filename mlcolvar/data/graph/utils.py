@@ -16,19 +16,20 @@ def _create_dataset_from_configuration(
     cutoff: float,
     buffer: float = 0.0,
 ) -> torch_geometric.data.Data:
-    """
-    Build the graph data object from a configuration.
+    """Build the torch_geometric graph data object from a configuration.
 
     Parameters
     ----------
-    config: mlcolvar.graph.utils.atomic.Configuration
-        The configuration.
-    z_table: mlcolvar.graph.utils.atomic.AtomicNumberTable
-        The atomic number table used to build the node attributes.
+    config: mlcolvar.data.graph.atomic.Configuration
+        The configuration from which to generate the graph data
+    z_table: mlcolvar.data.graph.atomic.AtomicNumberTable
+        The atomic number table used to build the node attributes
     cutoff: float
-        The graph cutoff radius.
+        The graph cutoff radius
     buffer: float
-        Buffer size used in finding active environment atoms.
+        Buffer size used in finding active environment atoms if 
+        restricting the neighborhood to a subsystem (i.e., system + environment), 
+        `see also mlcolvar.data.grap.neighborhood.get_neighborhood`
     """
 
     assert config.graph_labels is None or len(config.graph_labels.shape) == 2
@@ -127,23 +128,24 @@ def create_dataset_from_configurations(
     remove_isolated_nodes: bool = False,
     show_progress: bool = True
 ) -> DictDataset:
-    """
-    Build graph data objects from configurations.
+    """Build DictDataset object containing torch_geometric graph data objects from configurations.
 
     Parameters
     ----------
     config: mlcolvar.graph.utils.atomic.Configurations
-        The configurations.
+        The configurations from whihc to generate the dataset
     z_table: mlcolvar.graph.utils.atomic.AtomicNumberTable
-        The atomic number table used to build the node attributes.
+        The atomic number table used to build the node attributes
     cutoff: float
-        The graph cutoff radius.
+        The graph cutoff radius
     buffer: float
-        Buffer size used in finding active environment atoms.
+        Buffer size used in finding active environment atoms if 
+        restricting the neighborhood to a subsystem (i.e., system + environment), 
+        `see also mlcolvar.data.grap.neighborhood.get_neighborhood`
     remove_isolated_nodes: bool
-        If remove isolated nodes from the dataset.
+        If to remove isolated nodes from the dataset
     show_progress: bool
-        If show the progress bar.
+        If to show the progress bar
     """
     if show_progress:
         items = pbar(config, frequency=0.0001, prefix='Making graphs')
@@ -216,20 +218,19 @@ def create_dataset_from_configurations(
     return dataset
 
 def to_one_hot(indices: torch.Tensor, n_classes: int) -> torch.Tensor:
-    """
-    Generates one-hot encoding with `n_classes` classes from `indices`
+    """Generates one-hot encoding with `n_classes` classes from `indices`
 
     Parameters
     ----------
     indices: torch.Tensor (shape: [N, 1])
-        Node incices.
+        Node indices
     n_classes: int
-        Number of classes.
+        Number of classes
 
     Returns
     -------
     encoding: torch.tensor (shape: [N, n_classes])
-        The one-hot encoding.
+        The one-hot encoding
     """
     shape = indices.shape[:-1] + (n_classes,)
     oh = torch.zeros(shape, device=indices.device).view(shape)

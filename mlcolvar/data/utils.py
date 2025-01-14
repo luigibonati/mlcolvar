@@ -7,8 +7,7 @@ from mlcolvar.data.graph.atomic import AtomicNumberTable
 __all__ = ["save_dataset", "load_dataset", "save_dataset_configurations_as_extyz"]
 
 def save_dataset(dataset: DictDataset, file_name: str) -> None:
-    """
-    Save a dataset to disk.
+    """Save a dataset to disk.
 
     Parameters
     ----------
@@ -23,8 +22,7 @@ def save_dataset(dataset: DictDataset, file_name: str) -> None:
 
 
 def load_dataset(file_name: str) -> DictDataset:
-    """
-    Load a dataset from disk.
+    """Load a dataset from disk.
 
     Parameters
     ----------
@@ -39,8 +37,7 @@ def load_dataset(file_name: str) -> DictDataset:
 
 
 def save_dataset_configurations_as_extyz(dataset: DictDataset, file_name: str) -> None:
-    """
-    Save a dataset to disk in the extxyz format.
+    """Save a dataset to disk in the extxyz format.
 
     Parameters
     ----------

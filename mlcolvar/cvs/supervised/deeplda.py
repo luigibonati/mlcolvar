@@ -16,7 +16,9 @@ class DeepLDA(BaseCV, lightning.LightningModule):
     Non-linear generalization of LDA in which a feature map is learned by a neural network optimized
     as to maximize the classes separation. The method is described in [1]_.
 
-    **Data**: for training it requires a DictDataset with the keys 'data' and 'labels'.
+    **Data**: for training it requires a DictDataset containing:
+        - If using descriptors as input, the keys 'data' and 'labels'
+        - If using graphs as input, `torch_geometric.data` with 'graph_labels' in their 'data_list'.
 
     **Loss**: maximize LDA eigenvalues (ReduceEigenvaluesLoss)
 
@@ -48,8 +50,13 @@ class DeepLDA(BaseCV, lightning.LightningModule):
 
         Parameters
         ----------
-        layers : list
-            Number of neurons per layer
+        model : list or FeedForward or BaseGNN
+            Determines the underlying machine-learning model. One can pass:
+            1. A list of integers corresponding to the number of neurons per layer of a feed-forward NN.
+               The model Will be automatically intialized using a `mlcolvar.core.nn.feedforward.FeedForward` object.
+               The CV class will be initialized according to the DEFAULT_BLOCKS.
+            2. An externally intialized model (either `mlcolvar.core.nn.feedforward.FeedForward` or `mlcolvar.core.nn.graph.BaseGNN` object).
+               The CV class will be initialized according to the MODEL_BLOCKS.
         n_states : int
             Number of states for the training
         options : dict[str, Any], optional

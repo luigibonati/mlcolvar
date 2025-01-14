@@ -14,8 +14,10 @@ class Committor(BaseCV, lightning.LightningModule):
     The committor function q is expressed as the output of a neural network optimized with a self-consistent
     approach based on the Kolmogorov's variational principle for the committor and on the imposition of its boundary conditions. 
 
-    **Data**: for training it requires a DictDataset with the keys 'data', 'labels' and 'weights'
-
+    **Data**: for training it requires a DictDataset containing:
+        - If using descriptors as input, the keys 'data', 'labels' and 'weights'.
+        - If using graphs as input, `torch_geometric.data` with 'graph_labels' and 'weight' in their 'data_list'.
+        
     **Loss**: Minimize Kolmogorov's variational functional of q and impose boundary condition on the metastable states (CommittorLoss)
     
     References
@@ -70,11 +72,16 @@ class Committor(BaseCV, lightning.LightningModule):
         separate_boundary_dataset : bool, optional
             Switch to exculde boundary condition labeled data from the variational loss, by default True
         descriptors_derivatives : torch.nn.Module, optional
-            `SmartDerivatives` object to save memory and time when using descriptors.
+            `SmartDerivatives` object to save memory and time when using descriptors. Cannot be used with GNN models.
             See also mlcolvar.core.loss.committor_loss.SmartDerivatives
+        log_var : bool, optional
+            Switch to minimize the log of the variational functional, by default True.
+        z_regularization : float, optional
+            Introduces a regularization on the learned z space avoiding too large absolute values.
+            The magnitude of the regularization is scaled by the given number, by default 0.0
         options : dict[str, Any], optional
             Options for the building blocks of the model, by default {}.
-            Available blocks: ['nn'] .
+            Available blocks: ['nn'].
         """
         super().__init__(model, **kwargs) 
 

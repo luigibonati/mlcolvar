@@ -55,9 +55,13 @@ class CommittorLoss(torch.nn.Module):
         separate_boundary_dataset : bool, optional
             Switch to exculde boundary condition labeled data from the variational loss, by default True
         descriptors_derivatives : torch.nn.Module, optional
-            `SmartDerivatives` object to save memory and time when using descriptors.
+            `SmartDerivatives` object to save memory and time when using descriptors, by default None. Cannot be used with GNN models.
             See also mlcolvar.core.loss.committor_loss.SmartDerivatives
-
+        log_var : bool, optional
+            Switch to minimize the log of the variational functional, by default True.
+        z_regularization : float, optional
+            Introduces a regularization on the learned z space avoiding too large absolute values.
+            The magnitude of the regularization is scaled by the given number, by default 0.0
         """
         super().__init__()
         self.register_buffer("atomic_masses", atomic_masses)
@@ -138,9 +142,14 @@ def committor_loss(x: torch.Tensor,
     separate_boundary_dataset : bool, optional
             Switch to exculde boundary condition labeled data from the variational loss, by default True
     descriptors_derivatives : torch.nn.Module, optional
-        `SmartDerivatives` object to save memory and time when using descriptors.
-        See also mlcolvar.core.loss.committor_loss.SmartDerivatives
-
+        `SmartDerivatives` object to save memory and time when using descriptors. Cannot be used with GNN models.
+            See also mlcolvar.core.loss.committor_loss.SmartDerivatives
+    log_var : bool, optional
+        Switch to minimize the log of the variational functional, by default True.
+    z_regularization : float, optional
+        Introduces a regularization on the learned z space avoiding too large absolute values.
+        The magnitude of the regularization is scaled by the given number, by default 0.0
+        
     Returns
     -------
     loss : torch.Tensor

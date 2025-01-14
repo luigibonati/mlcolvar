@@ -27,10 +27,6 @@ class BaseCV:
 
         Parameters
         ----------
-        in_features : int
-            Number of inputs of the CV model
-        out_features : int
-            Number of outputs of the CV model, should be the number of CVs
         preprocessing : torch.nn.Module, optional
             Preprocessing module, default None
         postprocessing : torch.nn.Module, optional
@@ -89,14 +85,6 @@ class BaseCV:
             self._override_model = True
             self.in_features = model.in_features
             self.out_features = model.out_features
-            # if isinstance(model, FeedForward):
-            #     # self.nn = model
-            # elif isinstance(model, BaseGNN):
-            #     # GNN models need to be scripted!
-            #     # self.nn = torch.jit.script_if_tracing(model)
-            #     # self.nn = model
-            #     self.in_features = None
-            #     self.out_features = model.out_features
         else:
             raise ValueError(
                 f"Keyword model can either accept type list, FeedForward or BaseGNN. Found {type(model)}"
@@ -142,7 +130,6 @@ class BaseCV:
         Initialize the blocks as attributes of the CV class.
         """
         for b in self.BLOCKS:
-            #if not self._override_model and b!='nn':
             self.__setattr__(b, None)
 
     def setup(self, stage=None):
