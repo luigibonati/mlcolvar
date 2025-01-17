@@ -17,6 +17,7 @@
    .. autosummary::
    
       ~Committor.__init__
+      ~Committor.forward_nn
       ~Committor.training_step
    
    
@@ -29,10 +30,11 @@
 
    .. autosummary::
    
-      ~Committor.BLOCKS
       ~Committor.CHECKPOINT_HYPER_PARAMS_KEY
       ~Committor.CHECKPOINT_HYPER_PARAMS_NAME
       ~Committor.CHECKPOINT_HYPER_PARAMS_TYPE
+      ~Committor.DEFAULT_BLOCKS
+      ~Committor.MODEL_BLOCKS
       ~Committor.T_destination
       ~Committor.automatic_optimization
       ~Committor.call_super_init

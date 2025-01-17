@@ -31,10 +31,11 @@
 
    .. autosummary::
    
-      ~DeepTICA.BLOCKS
       ~DeepTICA.CHECKPOINT_HYPER_PARAMS_KEY
       ~DeepTICA.CHECKPOINT_HYPER_PARAMS_NAME
       ~DeepTICA.CHECKPOINT_HYPER_PARAMS_TYPE
+      ~DeepTICA.DEFAULT_BLOCKS
+      ~DeepTICA.MODEL_BLOCKS
       ~DeepTICA.T_destination
       ~DeepTICA.automatic_optimization
       ~DeepTICA.call_super_init

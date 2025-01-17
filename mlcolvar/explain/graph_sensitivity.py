@@ -18,8 +18,8 @@ def graph_node_sensitivity(
     batch_size: int = None,
     show_progress: bool = True
 ) -> Dict[str, np.ndarray]:
-    """Performs a sensitivity analysis on a GNN-based CV model by calculating 
-    the CV gradient w.r.t. nodes' positions. 
+    """Performs a sensitivity analysis on a GNN-based CV model using
+    partial derivatives w.r.t. nodes' positions. 
     This allows us to measure which atom is most important to the CV model.
 
     Parameters

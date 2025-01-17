@@ -32,10 +32,11 @@
 
    .. autosummary::
    
-      ~AutoEncoderCV.BLOCKS
       ~AutoEncoderCV.CHECKPOINT_HYPER_PARAMS_KEY
       ~AutoEncoderCV.CHECKPOINT_HYPER_PARAMS_NAME
       ~AutoEncoderCV.CHECKPOINT_HYPER_PARAMS_TYPE
+      ~AutoEncoderCV.DEFAULT_BLOCKS
+      ~AutoEncoderCV.MODEL_BLOCKS
       ~AutoEncoderCV.T_destination
       ~AutoEncoderCV.automatic_optimization
       ~AutoEncoderCV.call_super_init
