@@ -79,14 +79,10 @@ class GeneratorLoss(torch.nn.Module):
   
 
 
-def compute_covariance(X,weights, centering=False):
+def compute_covariance(X,weights):
     n = X.size(0)
     pre_factor = 1.0
     if X.ndim == 2:
-        if centering==True:
-          mean =  torch.einsum("ij,i->j",X,weights) / n
-        else:
-          mean = torch.zeros_like(X[0])
         return   pre_factor * (torch.einsum("ij,ik,i->jk",X,X,weights)/n)#(X.T @ X / n - mean @ mean.T)
     else:
         return pre_factor * (torch.einsum("ijk,ilk,i->jl",X,X,weights) / n)
@@ -105,7 +101,7 @@ def compute_eigenfunctions(model, dataset, friction, eta, r,gradient_descriptors
        gradient_positions = torch.einsum("ijk,imkl->ijml", gradient_X, gradient_descriptors) 
        gradient_positions = gradient_positions.reshape(-1,psi_X.shape[1],gradient_descriptors.shape[1]*3)* torch.sqrt(friction)
     weights_X = dataset["weights"]
-    cov_X =  compute_covariance(psi_X, weights_X, centering=True) 
+    cov_X =  compute_covariance(psi_X, weights_X) 
 
   
 
