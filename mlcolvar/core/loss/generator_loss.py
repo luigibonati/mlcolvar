@@ -118,21 +118,6 @@ class GeneratorLoss(torch.nn.Module):
 
 
 def compute_covariance(X,weights):
-<<<<<<< HEAD
-=======
-    """
-    Computes the loss to learn the representation
-    data: torch.tensor
-      input of the NN
-    output: torch.tensor
-      output of the NN
-    weights: torch.tensor
-      Statistical weights
-    gradient_descriptors: torch.tensor, optional
-      Gradient of the descriptors with respect to the atomic positions.  
-      Used for the chain rule to compute the full gradients
-    """
->>>>>>> 37dfd5a7c1b80b5888516623abc5e7a58c6cfa50
     n = X.size(0)
     pre_factor = 1.0
     if X.ndim == 2:
@@ -172,12 +157,9 @@ def compute_eigenfunctions(model, dataset, friction, eta, r,gradient_descriptors
        gradient_positions = torch.einsum("ijk,imkl->ijml", gradient_X, gradient_descriptors) 
        gradient_positions = gradient_positions.reshape(-1,psi_X.shape[1],gradient_descriptors.shape[1]*3)* torch.sqrt(friction)
     weights_X = dataset["weights"]
-<<<<<<< HEAD
     cov_X =  compute_covariance(psi_X, weights_X) 
 
   
-=======
->>>>>>> 37dfd5a7c1b80b5888516623abc5e7a58c6cfa50
 
     cov_X =  compute_covariance(psi_X, weights_X, centering=True) 
     dcov_X =  compute_covariance(gradient_positions, weights_X) 
