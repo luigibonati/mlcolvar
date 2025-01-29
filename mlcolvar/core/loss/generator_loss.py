@@ -110,7 +110,7 @@ class GeneratorLoss(torch.nn.Module):
     loss_ef = torch.trace( ((cov_X@diag_lamb) @ W2 + (cov_Y@diag_lamb)@W1)/2 - cov_X@diag_lamb - cov_Y@diag_lamb)
 
     # Compute loss_ortho
-    loss_ortho = self.gamma * (torch.trace((torch.eye(output.shape[1], device=output.device) - cov_X).T @ (torch.eye(output.shape[1], device=output.device) - cov_X)))
+    loss_ortho = self.alpha * (torch.trace((torch.eye(output.shape[1], device=output.device) - cov_X).T @ (torch.eye(output.shape[1], device=output.device) - cov_X)))
     #loss_ortho = penalty
     loss = loss_ef + loss_ortho#loss_ortho
     return loss, loss_ef, loss_ortho
@@ -158,10 +158,6 @@ def compute_eigenfunctions(model, dataset, friction, eta, r,gradient_descriptors
        gradient_positions = gradient_positions.reshape(-1,psi_X.shape[1],gradient_descriptors.shape[1]*3)* torch.sqrt(friction)
     weights_X = dataset["weights"]
     cov_X =  compute_covariance(psi_X, weights_X) 
-
-  
-
-    cov_X =  compute_covariance(psi_X, weights_X, centering=True) 
     dcov_X =  compute_covariance(gradient_positions, weights_X) 
 
     W = eta *cov_X + dcov_X
