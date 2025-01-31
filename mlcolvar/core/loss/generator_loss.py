@@ -10,7 +10,7 @@ __all__ = ["GeneratorLoss", "compute_eigenfunctions","compute_covariance"]
 
 import torch
 from torch_scatter import scatter
-
+import functorch
 class GeneratorLoss(torch.nn.Module):
   """
   Computes the loss to learn a representation for the generator
@@ -78,6 +78,8 @@ class GeneratorLoss(torch.nn.Module):
 
 
     gradient = torch.stack([torch.autograd.grad(outputs=output[:,idx].sum(), inputs=data, retain_graph=True, create_graph=True)[0] for idx in range(r)], dim=2).swapaxes(2,1) 
+    compute_batch_jacobian = functorch.vmap(functorch.jacrev(self.model,argnums=0),in_dims=(0))
+    gradient_X = compute_batch_jacobian(data.unsqueeze(1))
     gradient = gradient.reshape(weights.shape[0],output.shape[1],-1)
 
     if self.cell is not None:
