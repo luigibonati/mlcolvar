@@ -82,14 +82,14 @@ class GeneratorLoss(torch.nn.Module):
     gradient_X = compute_batch_jacobian(data.unsqueeze(1))
     gradient = gradient.reshape(weights.shape[0],output.shape[1],-1)
 
-    if self.cell is not None:
-       gradient /= (self.cell)
+    
     if gradient_descriptors is None:
        gradient_positions = gradient * self.friction
     else:
        gradient_positions = torch.einsum("ijk,imkl->ijml", gradient, gradient_descriptors) 
        gradient_positions = gradient_positions.reshape(-1,output.shape[1],gradient_descriptors.shape[1]*3)* self.friction 
-    
+    if self.cell is not None:
+       gradient /= (self.cell)
     weights_X, weights_Y = weights[:sample_size], weights[sample_size:]
     gradient_X, gradient_Y = gradient_positions[:sample_size], gradient_positions[sample_size:]
     psi_X, psi_Y = output[:sample_size], output[sample_size:]
