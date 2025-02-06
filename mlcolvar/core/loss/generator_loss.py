@@ -127,7 +127,7 @@ def compute_covariance(X,weights):
     else:
         return pre_factor * (torch.einsum("ijk,ilk,i->jl",X,X,weights) / n)
 
-def compute_eigenfunctions(model, dataset, friction, eta, r,gradient_descriptors=None):
+def compute_eigenfunctions(model, dataset, friction, eta, r,gradient_descriptors=None, cell=None):
     """
     Computes eigenfunctions and eigenvalues given a representation learnt with model.
     outputs evals and evecs. Evals relates to the eigenvalues of the generator by eta - 1/evals. 
@@ -158,6 +158,9 @@ def compute_eigenfunctions(model, dataset, friction, eta, r,gradient_descriptors
     else:
        gradient_positions = torch.einsum("ijk,imkl->ijml", gradient_X, gradient_descriptors) 
        gradient_positions = gradient_positions.reshape(-1,psi_X.shape[1],gradient_descriptors.shape[1]*3)* torch.sqrt(friction)
+    if cell is not None:
+       gradient_positions /= cell
+      
     weights_X = dataset["weights"]
     cov_X =  compute_covariance(psi_X, weights_X) 
     dcov_X =  compute_covariance(gradient_positions, weights_X) 
