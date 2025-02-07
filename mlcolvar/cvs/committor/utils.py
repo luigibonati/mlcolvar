@@ -98,15 +98,15 @@ def compute_committor_weights(dataset,
         
         # update the weights
         weights[torch.nonzero(new_labels == i, as_tuple=True)] = coeff * weights[torch.nonzero(new_labels == i, as_tuple=True)]
-    
+    print(weights)
     # update dataset
     if dataset.metadata['data_type'] == 'descriptors':
         dataset['weights'] = weights
         dataset['labels'] = new_labels
     else:
         for i in range(len(dataset)):    
-            dataset[i]['weight'] = weights[i]
-            dataset[i]['graph_labels'] = new_labels[i]
+            dataset['data_list'][i]['weight'] = weights[i]
+            dataset['data_list'][i]['graph_labels'] = new_labels[i]
 
     return dataset
 
