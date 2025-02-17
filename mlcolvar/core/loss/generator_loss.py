@@ -1,5 +1,5 @@
 
-__all__ = ["GeneratorLoss", "compute_eigenfunctions","compute_covariance"]
+__all__ = ["GeneratorLoss", "compute_eigenfunctions","compute_covariance", "evaluate_eigenfunctions"]
 
 # =============================================================================
 # GLOBAL IMPORTS
@@ -84,10 +84,10 @@ class GeneratorLoss(torch.nn.Module):
 
     
     if gradient_descriptors is None:
-       gradient_positions = gradient * self.friction
+       gradient_positions = gradient * torch.sqrt(self.friction)
     else:
        gradient_positions = torch.einsum("ijk,imkl->ijml", gradient, gradient_descriptors) 
-       gradient_positions = gradient_positions.reshape(-1,output.shape[1],gradient_descriptors.shape[1]*3)* self.friction 
+       gradient_positions = gradient_positions.reshape(-1,output.shape[1],gradient_descriptors.shape[1]*3)* torch.sqrt(self.friction) 
     if self.cell is not None:
        gradient_positions /= (self.cell)
     weights_X, weights_Y = weights[:sample_size], weights[sample_size:]
@@ -127,37 +127,63 @@ def compute_covariance(X,weights):
     else:
         return pre_factor * (torch.einsum("ijk,ilk,i->jl",X,X,weights) / n)
 
-def compute_eigenfunctions(model, dataset, friction, eta, r,gradient_descriptors=None, cell=None):
+
+def compute_eigenfunctions(model, dataset, friction, eta, r, cell=None, tikhonov_reg=1e-4):
     """
-    Computes eigenfunctions and eigenvalues given a representation learnt with model.
-    outputs evals and evecs. Evals relates to the eigenvalues of the generator by eta - 1/evals. 
-    The eigenfunctions can be computed by doing: output@evecs
+    Computes eigenfunctions and eigenvalues from a learned representation.
+
+    This function estimates the eigenfunctions and eigenvalues of the infinitesimal generator 
+    associated with the Langevin process. The eigenvalues are computed using a resolvent approach, 
+    where `evals` relate to the generator's eigenvalues as: `lambda = eta - 1/evals`.
+
     Parameters:
     ----------
-    model: module.nn
-      model to compute the representation
-    dataset: DictDataset
-      should contain 'data', 'weights' 
-    friction: torch.tensor
-      Langevin friction
-    eta: float
-      Hyperparameter for the computation of the resolvent
-    r: int
-      number of eigenfunctions
-    gradient_descriptors: torch.tensor
-      derivatives of descriptors with respect to atomic positions
+    model : torch.nn.Module
+        The neural network model used to compute the representation of input data.
+    dataset : dict
+        Dictionary containing:
+            - 'data' (torch.Tensor, shape (N, d)): Input configurations.
+            - 'weights' (torch.Tensor, shape (N,)): Probability weights associated with the data points.
+    friction : torch.Tensor, shape (N,)
+        Langevin friction values for each data point.
+    eta : float
+        Hyperparameter for the resolvent approach.
+    r : int
+        Number of eigenfunctions to compute.
+    gradient_descriptors : torch.Tensor, optional, shape (N, d, M, 3)
+        Derivatives of descriptors with respect to atomic positions. If `None`, 
+        the function uses direct gradients of `model(X)`.
+    cell : torch.Tensor, optional, shape (3,3)
+        If provided, used to normalize the gradients when periodic boundary conditions apply.
+
+    Returns:
+    --------
+    g : torch.Tensor, shape (N, r)
+        The computed eigenfunctions evaluated at each data point.
+    lambdas : torch.Tensor, shape (r,)
+        The eigenvalues associated with the generator, sorted in descending order.
+    evecs : torch.Tensor, shape (r, r)
+        The eigenvectors of the operator.
+
+    Notes:
+    ------
+    - Eigenfunctions are normalized using the dataset weights.
+    - If `gradient_descriptors` is provided, the function projects the gradients onto it.
+    - The operator matrix is regularized to improve numerical stability.
     """
     #friction=friction.to("cuda")
     dataset["data"].requires_grad = True
     X= dataset["data"]
+    
     d=dataset["data"].shape[1]
     psi_X = model(X)
     gradient_X = torch.stack([torch.autograd.grad(outputs=psi_X[:,idx].sum(), inputs=X, retain_graph=True, create_graph=True)[0].reshape((-1,d)) for idx in range(r)], dim=2).swapaxes(2,1) 
-    if gradient_descriptors is None:
-       gradient_positions = gradient_X * torch.sqrt(friction)
+    if "derivatives" in dataset.keys:
+       gradient_positions = torch.einsum("ijk,imkl->ijml", gradient_X, dataset["derivatives"]) 
+       gradient_positions = gradient_positions.reshape(-1,psi_X.shape[1],dataset["derivatives"].shape[1]*3)* torch.sqrt(friction)
+       
     else:
-       gradient_positions = torch.einsum("ijk,imkl->ijml", gradient_X, gradient_descriptors) 
-       gradient_positions = gradient_positions.reshape(-1,psi_X.shape[1],gradient_descriptors.shape[1]*3)* torch.sqrt(friction)
+       gradient_positions = gradient_X * torch.sqrt(friction)
     if cell is not None:
        gradient_positions /= cell
       
@@ -167,6 +193,107 @@ def compute_eigenfunctions(model, dataset, friction, eta, r,gradient_descriptors
 
     W = eta *cov_X + dcov_X
 
-    operator = torch.linalg.inv(W + 1e-5*torch.eye(psi_X.size(1),device=psi_X.device))@cov_X
+    operator = torch.linalg.inv(W + tikhonov_reg*torch.eye(psi_X.size(1),device=psi_X.device))@cov_X
     evals, evecs = torch.linalg.eig(operator)
-    return evals.detach(), evecs.detach()
+    g = psi_X @ evecs.real
+    lambdas = eta - 1 / evals
+    sorting = torch.argsort(-lambdas.real) 
+    # Ensure normalization of eigenfunctions
+    evecs.detach()[:,sorting] /= torch.sqrt(torch.mean(dataset["weights"].unsqueeze(1)*g**2,axis=0))
+    g /= torch.sqrt(torch.mean(dataset["weights"].unsqueeze(1)*g**2,axis=0))
+    return g[:,sorting], lambdas.detach()[sorting], evecs.detach()[:,sorting]
+
+def evaluate_eigenfunctions(model, dataset, evecs):
+    """
+    Evaluates the eigenfunctions of a generator model.
+
+    Parameters:
+    -----------
+    model : torch.nn.Module or callable
+        A model that computes a representation of the input data.
+    dataset : dict
+        A dataset object.
+    evecs : torch.Tensor
+        A matrix of eigenvectors, that is the result from the function compute_eigenfunctions.
+        If complex, only the real part is used.
+
+    Returns:
+    --------
+    torch.Tensor
+        The projected eigenfunctions, obtained by computing the dot product of the model's output 
+        and the real part of `evecs`.
+    """
+    
+    X = dataset["data"]
+    psi_X = model(X)
+    g = psi_X @ evecs.real
+    return g
+
+def forecast_state_occupation(eigenfunctions: torch.Tensor, 
+                              eigenvalues: torch.Tensor,
+                              times: torch.Tensor, 
+                              classification: torch.Tensor,
+                              weights: torch.Tensor, 
+                              n_states: torch.Tensor):
+
+    """
+    Computes the time evolution of state occupation probabilities in a dynamical system.
+
+    This function estimates the probability of being in a state, starting in another state 
+    over time using eigenfunctions and eigenvalues of the system's generator.
+
+    Parameters:
+    -----------
+    eigenfunctions : torch.Tensor, shape (N, r)
+        The eigenfunctions evaluated at each sample point, where N is the number of samples 
+        and r is the number of eigenfunctions.
+
+    eigenvalues : torch.Tensor, shape (r,)
+        The eigenvalues associated with the eigenfunctions.
+
+    times : torch.Tensor, shape (n_times,)
+        A 1D tensor containing the time points at which to evaluate the occupation probabilities.
+
+    classification : torch.Tensor, shape (N,)
+        A tensor assigning each sample point to a discrete state, with integer values in {0, ..., n_states-1}.
+
+    weights : torch.Tensor, shape (N,)
+        A weight associated with each sample point, used for proper normalization.
+
+    n_states : int
+        The total number of discrete states in the system.
+
+    Returns:
+    --------
+    occupations : torch.Tensor, shape (n_states, n_states, n_times)
+        A tensor where `occupations[i, j, t]` represents the probability of transitioning 
+        from state `i` to state `j` at time `times[t]`.
+
+    """
+    
+    # Number of samples
+    N = classification.shape[0]
+
+    # Create masks for each state
+    state_masks = torch.arange(n_states, device=classification.device).view(-1, 1) == classification.unsqueeze(0)  # (n_states, N)
+
+    # Compute initial state occupations
+    inv_u_0 = (state_masks * weights).mean(dim=1, keepdim=True)  # (n_states, 1)
+    u_0 = (state_masks / inv_u_0) 
+    # Project onto eigenfunctions
+    initial_state_on_basis = ((u_0 * weights) @ eigenfunctions) / N # (n_states, n_eigen)
+    final_state_on_basis = ((state_masks * weights) @ eigenfunctions) / N  # Ensure proper mean normalization
+
+    # Ensure eigenvalues are correctly shaped
+    eigenvalues = eigenvalues.view(1, -1)  # (1, n_eigen)
+
+    # Compute time evolution
+    time_evolution = torch.exp(times.view(-1, 1) * eigenvalues)  # (n_times, n_eigen)
+
+    # Compute occupation over time
+    occupation_over_time = (
+        (initial_state_on_basis[:, None, :] * final_state_on_basis[None, :, :])  # (n_states, n_states, n_eigen)
+        @ time_evolution.T.real  # Matrix multiplication over n_eigen -> (n_states, n_states, n_times)
+    )
+
+    return occupation_over_time  # Shape: (n_states, n_states, n_times)

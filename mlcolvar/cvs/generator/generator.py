@@ -2,7 +2,7 @@ import torch
 import lightning
 from mlcolvar.cvs import BaseCV
 from mlcolvar.core import FeedForward
-from mlcolvar.core.loss import GeneratorLoss
+from mlcolvar.core.loss import GeneratorLoss, compute_eigenfunctions, evaluate_eigenfunctions
 
 __all__ = ["Generator", "Generator_singleNN"]
 class Generator(BaseCV, lightning.LightningModule):
@@ -58,7 +58,12 @@ class Generator(BaseCV, lightning.LightningModule):
                                      friction=friction,
                                      n_cvs=r
         )
-
+        self.r = r
+        self.eta = eta
+        self.friction = friction
+        self.cell = cell
+        self.evecs = None
+        self.evals = None 
         # ======= OPTIONS =======
         # parse and sanitize
         options = self.parse_options(options)
@@ -70,7 +75,24 @@ class Generator(BaseCV, lightning.LightningModule):
         if "activation" not in options[o]: 
             options[o]["activation"] = "tanh"
         self.nn = torch.nn.ModuleList([FeedForward(layers, **options[o]) for idx in range(r)])
-
+    
+    def compute_eigenfunctions(self, dataset, friction=None, eta=None, r=None,cell=None, tikhonov_reg=1e-4):
+        if friction is None:
+            friction = self.friction
+        if eta is None:
+            eta = self.eta
+        if r is None:
+            r = self.r
+        if cell is None:
+            cell = self.cell
+        if self.evecs is None:
+            eigenfunctions, evals, evecs = compute_eigenfunctions(self.forward, dataset, friction, eta, r, cell)
+            self.evals = evals
+            self.evecs = evecs
+            return eigenfunctions, evals, evecs
+        else:
+            eigenfunctions = evaluate_eigenfunctions(self.forward, dataset,self.evecs)
+            return eigenfunctions, self.evals, self.evecs
 
     def forward_cv(self, x: torch.Tensor) -> (torch.Tensor):
 
