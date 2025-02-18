@@ -27,9 +27,12 @@ dependencies:
   - scikit-learn
   - scipy
   - torch-scatter
+  - pyg
 
   # Pip-only installs
   - pip:
     - sphinx-copybutton
     - furo
     - KDEpy
+    - mdtraj
+    - matscipy
