@@ -26,7 +26,6 @@ dependencies:
   - ipykernel
   - scikit-learn
   - scipy
-  - torch-scatter
 
   # Pip-only installs
   - pip:
