@@ -83,6 +83,7 @@ class CommittorLoss(torch.nn.Module):
                             )
 
 def broadcast(src: torch.Tensor, other: torch.Tensor, dim: int):
+    """Broadcast util, from torch_scatter"""
     if dim < 0:
         dim = other.dim() + dim
     if src.dim() == 1:
@@ -98,6 +99,7 @@ def scatter_sum(src: torch.Tensor,
                 dim: int = -1,
                 out: Optional[torch.Tensor] = None,
                 dim_size: Optional[int] = None) -> torch.Tensor:
+    """Scatter sum function, from torch_scatter module (https://github.com/rusty1s/pytorch_scatter/blob/master/torch_scatter/scatter.py)"""
     index = broadcast(index, src, dim)
     if out is None:
         size = list(src.size())
