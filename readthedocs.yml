@@ -12,5 +12,8 @@ python:
     - method: pip
       path: .
 
+sphinx:
+  configuration: docs/conf.py
+
 conda:
   environment: docs/requirements.yaml
