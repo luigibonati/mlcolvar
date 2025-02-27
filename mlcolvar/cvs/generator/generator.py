@@ -86,7 +86,7 @@ class Generator(BaseCV, lightning.LightningModule):
         if cell is None:
             cell = self.cell
         if self.evecs is None:
-            eigenfunctions, evals, evecs = compute_eigenfunctions(self.forward, dataset, friction, eta, r, cell)
+            eigenfunctions, evals, evecs = compute_eigenfunctions(self.forward, dataset, friction, eta, r, cell, tikhonov_reg)
             self.evals = evals
             self.evecs = evecs
             return eigenfunctions, evals, evecs
