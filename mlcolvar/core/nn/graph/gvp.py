@@ -2,7 +2,7 @@ import functools
 import math
 import torch
 from torch import nn
-import torch_scatter
+from mlcolvar.utils import _code
 from torch_geometric.nn import MessagePassing
 from typing import Tuple, Callable, Optional, List, Dict
 
@@ -167,10 +167,10 @@ class GVPModel(BaseGNN):
 
         if scatter_mean:
             if 'system_masks' not in data.keys():
-                out = torch_scatter.scatter_mean(out, batch_id, dim=0)
+                out = _code.scatter_mean(out, batch_id, dim=0)
             else:
                 out = out * data['system_masks']
-                out = torch_scatter.scatter_sum(out, batch_id, dim=0)
+                out = _code.scatter_sum(out, batch_id, dim=0)
                 out = out / data['n_system']
 
         return out

@@ -1,6 +1,6 @@
 import math
 import torch
-import torch_scatter # TODO check this is equivalent in torch scatter
+from mlcolvar.utils import _code
 from torch import nn
 from torch_geometric.nn import MessagePassing
 
@@ -158,11 +158,11 @@ class SchNetModel(BaseGNN):
         if scatter_mean:
             if 'system_masks' not in data.keys():
                 # TODO check this is equivalent in torch scatter
-                out = torch_scatter.scatter_mean(out, batch_id, dim=0)
+                out = _code.scatter_mean(out, batch_id, dim=0)
             else:
                 out = out * data['system_masks']
                 # TODO check this is equivalent in torch scatter
-                out = torch_scatter.scatter_sum(out, batch_id, dim=0)
+                out = _code.scatter_sum(out, batch_id, dim=0)
                 out = out / data['n_system']
         
         if self._w_out_after_sum:
