@@ -4,7 +4,6 @@ numpy<2
 pandas
 matplotlib
 kdepy
-torch-scatter
 torch_geometric
 matscipy
 mdtraj

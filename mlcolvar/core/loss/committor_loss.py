@@ -15,8 +15,7 @@ __all__ = ["CommittorLoss", "committor_loss", "SmartDerivatives", "compute_descr
 # =============================================================================
 
 import torch
-from torch_scatter import scatter, scatter_sum
-from typing import Union
+from typing import Union, Optional
 import torch_geometric
 import warnings
 # =============================================================================
@@ -97,6 +96,37 @@ class CommittorLoss(torch.nn.Module):
                               z_regularization=self.z_regularization
                             )
 
+def broadcast(src: torch.Tensor, other: torch.Tensor, dim: int):
+    """Broadcast util, from torch_scatter"""
+    if dim < 0:
+        dim = other.dim() + dim
+    if src.dim() == 1:
+        for _ in range(0, dim):
+            src = src.unsqueeze(0)
+    for _ in range(src.dim(), other.dim()):
+        src = src.unsqueeze(-1)
+    src = src.expand(other.size())
+    return src
+
+def scatter_sum(src: torch.Tensor,
+                index: torch.Tensor,
+                dim: int = -1,
+                out: Optional[torch.Tensor] = None,
+                dim_size: Optional[int] = None) -> torch.Tensor:
+    """Scatter sum function, from torch_scatter module (https://github.com/rusty1s/pytorch_scatter/blob/master/torch_scatter/scatter.py)"""
+    index = broadcast(index, src, dim)
+    if out is None:
+        size = list(src.size())
+        if dim_size is not None:
+            size[dim] = dim_size
+        elif index.numel() == 0:
+            size[dim] = 0
+        else:
+            size[dim] = int(index.max()) + 1
+        out = torch.zeros(size, dtype=src.dtype, device=src.device)
+        return out.scatter_add_(dim, index, src)
+    else:
+        return out.scatter_add_(dim, index, src)
 
 def committor_loss(x: torch.Tensor, 
                    z: torch.Tensor,
@@ -353,7 +383,7 @@ class SmartDerivatives(torch.nn.Module):
 
         # get the number of elements in each batch 
         # e.g. [17, 18, 18, 18] 
-        batch_elements = scatter(torch.ones_like(batch_ind), batch_ind, reduce='sum')
+        batch_elements = scatter_sum(torch.ones_like(batch_ind), batch_ind)
         batch_elements[0] -= 1 # to make the later indexing consistent
 
         # compute the pointer idxs to the beginning of each batch by summing the number of elements in each batch
@@ -406,7 +436,7 @@ class SmartDerivatives(torch.nn.Module):
         indeces = indeces.long().to(x.device)
         
         # this sums the elements of x according to the indeces, this way we get the contributions of different descriptors to the same atom
-        out = scatter(x, indeces.long())
+        out = scatter_sum(x, indeces.long())
         # now make the square
         out = out.pow(2)
         # reshape, this needs to have the correct number of atoms as we need to mulply it by the mass vector later
