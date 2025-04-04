@@ -72,7 +72,7 @@ class BaseCV:
             return create_test_graph_input(output_type='tracing_example', n_atoms=3, n_samples=1, n_states=1)
 
 
-    # TODO add general torch.nn.Module TODO TODO TODO TODO
+    # TODO add general torch.nn.Module
     def parse_model(self, model: Union[List[int], FeedForward, BaseGNN]):
         if isinstance(model, list):
             self.layers = model
@@ -85,6 +85,11 @@ class BaseCV:
             self._override_model = True
             self.in_features = model.in_features
             self.out_features = model.out_features
+            # save buffers for the interface for PLUMED
+            if isinstance(model, BaseGNN):
+                self.register_buffer('n_out', model.n_out)    
+                self.register_buffer('cutoff', model.cutoff)
+                self.register_buffer('atomic_numbers', model.atomic_numbers)
         else:
             raise ValueError(
                 f"Keyword model can either accept type list, FeedForward or BaseGNN. Found {type(model)}"
