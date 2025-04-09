@@ -193,7 +193,10 @@ def create_dataset_from_configurations(
         for i in range(len(data_list)):
             data_list[i].cell = cell_list[i]
             # get and save the original index before removing isolated nodes for each entry
-            original_idx = torch.unique( torch.where(torch.isin(_aux_pos[i], data_list[i]['positions']))[0] )
+            original_idx = torch.unique( torch.where(torch.isin(torch.round(_aux_pos[i], decimals=5), 
+                                                                torch.round(data_list[i]['positions'], decimals=5))
+                                                    )[0]
+                                        )
             data_list[i]['names_idx'] = original_idx.to(torch.int64)
             
             # update if needed the overall list
@@ -310,7 +313,8 @@ def create_test_graph_input(output_type: str,
                             n_atoms: int = 3,
                             n_samples: int = 60, 
                             n_states: int = 2,
-                            random_weights = False ) -> torch_geometric.data.Batch:
+                            random_weights = False,
+                            add_noise = True ):
     if n_atoms == 3:
         numbers = [8, 1, 1]
         node_labels = np.array([[0], [1], [1]])
@@ -320,7 +324,7 @@ def create_test_graph_input(output_type: str,
                 [[0.0, 0.0, 0.0], [-0.07, 0.07, 0.0], [0.07, 0.07, 0.0]],
                 [[0.0, 0.0, 0.0], [0.07, -0.07, 0.0], [0.07, 0.07, 0.0]],
                 [[0.0, 0.0, 0.0], [0.0, -0.07, 0.07], [0.0, 0.07, 0.07]],
-                [[0.0, 0.0, 0.0], [0.07, 0.0, 0.07], [-0.07, 0.0, 0.07]],
+                [[0.0, 0.0, 0.0], [0.11, 0.11, 0.11], [-0.07, 0.0, 0.07]],
                 [[0.1, 0.0, 1.1], [0.17, 0.07, 1.1], [0.17, -0.07, 1.1]],
             ],
             dtype=np.float64
@@ -335,7 +339,7 @@ def create_test_graph_input(output_type: str,
                 [[0.0, 0.0, 0.0], [-0.07, 0.07, 0.0], [0.07, 0.07, 0.0], [0.05, 0.05, 0.0]],
                 [[0.0, 0.0, 0.0], [0.07, -0.07, 0.0], [0.07, 0.07, 0.0], [0.05, 0.05, 0.0]],
                 [[0.0, 0.0, 0.0], [0.0, -0.07, 0.07], [0.0, 0.07, 0.07], [0.0, 0.05, 0.05]],
-                [[0.0, 0.0, 0.0], [0.07, 0.0, 0.07] , [-0.07, 0.0, 0.07], [-0.05, 0.0, 0.05]],
+                [[0.0, 0.0, 0.0], [0.11, 0.11, 0.11] , [-0.07, 0.0, 0.07], [-0.05, 0.0, 0.05]],
                 [[0.1, 0.0, 1.1], [0.17, 0.07, 1.1] , [0.17, -0.07, 1.1], [0.15, -0.05, 1.1]],
             ],
             dtype=np.float64
@@ -344,6 +348,11 @@ def create_test_graph_input(output_type: str,
 
     idx = np.random.randint(low=0, high=6, size=(n_samples*n_states))
     positions = _ref_positions[idx, :, :]
+
+    # let's add some noise to the positions for fun
+    if add_noise:
+        noise = np.random.randn(*positions.shape)*1e-5
+        positions = positions + noise
 
     cell = np.identity(3, dtype=float) * 0.2
     graph_labels = np.zeros((n_samples*n_states, 1, 1))
@@ -373,7 +382,7 @@ def create_test_graph_input(output_type: str,
         return config
 
     dataset = create_dataset_from_configurations(
-        config, z_table, 0.1, show_progress=False
+        config, z_table, 0.1, show_progress=False, remove_isolated_nodes=True
     )
 
     if output_type == 'dataset':
