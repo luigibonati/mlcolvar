@@ -225,8 +225,8 @@ def create_timelagged_dataset(
 
     Parameters
     ----------
-    X : array-like
-        input descriptors
+    X : torch.Tensor or np.ndarray or DictDataset
+        Input data, graph data can only be provided as DictDataset
     t : array-like, optional
         time series, by default np.arange(len(X))
     reweight_mode: str, optional
@@ -327,46 +327,81 @@ def create_timelagged_dataset(
         return dataset 
     
     elif isinstance(X, DictDataset):
-        # we use deepcopy to avoid editing the original dataset
-        dataset = DictDataset(dictionary={"data_list" : copy.deepcopy(X[x_t.numpy().tolist()]["data_list"]),
-                                         "data_list_lag" : copy.deepcopy(X[x_lag.numpy().tolist()]["data_list"])},
-                                metadata={"z_table" : X.metadata["z_table"],
-                                        "cutoff" : X.metadata["cutoff"]},
-                                data_type="graphs")
-        # update weights
-        for i in range(len(dataset)):
-            dataset['data_list'][i]['weight'] = w_t[i]
-            dataset['data_list_lag'][i]['weight'] = w_lag[i]
+        if X.metadata["data_type"] == "descriptors":
+            dataset = DictDataset({"data": X['data'][x_t], 
+                               "data_lag": X['data'][x_lag], 
+                               "weights": w_t, 
+                               "weights_lag": w_lag},
+                               data_type='descriptors')
+            
+        elif X.metadata["data_type"] == "graphs":
+            # we use deepcopy to avoid editing the original dataset
+            dataset = DictDataset(dictionary={"data_list" : copy.deepcopy(X[x_t.numpy().tolist()]["data_list"]),
+                                            "data_list_lag" : copy.deepcopy(X[x_lag.numpy().tolist()]["data_list"])},
+                                    metadata={"z_table" : X.metadata["z_table"],
+                                            "cutoff" : X.metadata["cutoff"]},
+                                    data_type="graphs")
+            # update weights
+            for i in range(len(dataset)):
+                dataset['data_list'][i]['weight'] = w_t[i]
+                dataset['data_list_lag'][i]['weight'] = w_lag[i]
             
         return dataset
 
 
 def test_create_timelagged_dataset():
     in_features = 2
-    n_points = 100
+    n_points = 20
     X = torch.rand(n_points, in_features) * 100
+    dataset = DictDataset(data=X, data_type='descriptors')
+
 
     # unbiased case
     t = np.arange(n_points)
-    dataset = create_timelagged_dataset(X, t, lag_time=10)
-    print(len(dataset))
+    lagged_dataset_1 = create_timelagged_dataset(X, t, lag_time=10)
+    print(len(lagged_dataset_1))
+    lagged_dataset_2 = create_timelagged_dataset(dataset, t, lag_time=10)
+    print(len(lagged_dataset_2))
+    assert(torch.allclose(lagged_dataset_1['data'], lagged_dataset_2['data']))
+    assert(torch.allclose(lagged_dataset_1['data_lag'], lagged_dataset_2['data_lag']))
+    assert(torch.allclose(lagged_dataset_1['weights'], lagged_dataset_2['weights']))
+
 
     # reweight mode rescale_time (default)
     logweights = np.random.rand(n_points)
-    dataset = create_timelagged_dataset(X, t, logweights=logweights)
-    print(len(dataset))
+    lagged_dataset_1 = create_timelagged_dataset(X, t, logweights=logweights)
+    print(len(lagged_dataset_1))
+    lagged_dataset_2 = create_timelagged_dataset(dataset, t, logweights=logweights)
+    print(len(lagged_dataset_2))
+    assert(torch.allclose(lagged_dataset_1['data'], lagged_dataset_2['data']))
+    assert(torch.allclose(lagged_dataset_1['data_lag'], lagged_dataset_2['data_lag']))
+    assert(torch.allclose(lagged_dataset_1['weights'], lagged_dataset_2['weights']))
+
 
     # reweight mode weights_t
     logweights = np.random.rand(n_points)
-    dataset = create_timelagged_dataset(
+    lagged_dataset_1 = create_timelagged_dataset(
         X, t, logweights=logweights, reweight_mode="weights_t"
     )
-    print(len(dataset))
+    print(len(lagged_dataset_1))
+    lagged_dataset_2 = create_timelagged_dataset(
+        dataset, t, logweights=logweights, reweight_mode="weights_t"
+    )
+    print(len(lagged_dataset_2))
+    assert(torch.allclose(lagged_dataset_1['data'], lagged_dataset_2['data']))
+    assert(torch.allclose(lagged_dataset_1['data_lag'], lagged_dataset_2['data_lag']))
+    assert(torch.allclose(lagged_dataset_1['weights'], lagged_dataset_2['weights']))
+
+
 
     # graph data
     from mlcolvar.data.graph.utils import create_test_graph_input
     dataset = create_test_graph_input('dataset')
+    print(dataset['data_list'][0])
     lagged_dataset = create_timelagged_dataset(dataset, logweights=torch.randn(len(dataset)))
+    # lagged_dataset['data_list'][0]
+    print(dataset['data_list'][0])
+
     print(len(dataset))
 
 
