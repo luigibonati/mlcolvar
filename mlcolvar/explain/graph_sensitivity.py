@@ -68,7 +68,7 @@ def graph_node_sensitivity(
     results = {}
     results['atoms_list'] = np.array(dataset.metadata['used_names'])
     results['node_labels'] = [str(a) for a in results['atoms_list']]
-    results['node_labels_components'] = np.array([np.array(dataset.metadata['used_names'])[dataset[i]['data_list']['names_idx']] for i in range(len(dataset))])        
+    # results['node_labels_components'] = np.array([np.array(dataset.metadata['used_names'])[dataset[i]['data_list']['names_idx']] for i in range(len(dataset))])        
     results['sensitivities'] = sensitivities_components.mean(axis=0)
     results['sensitivities_components'] = sensitivities_components
 
@@ -200,3 +200,41 @@ def get_dataset_cv_gradients(
             cv_value_gradients.extend(aux.unsqueeze(0).cpu().numpy())
 
     return np.array(cv_value_gradients)
+
+
+def test_graph_sensitivity():
+    import lightning
+    from mlcolvar.cvs import DeepTDA
+    from mlcolvar.core.nn.graph import SchNetModel
+    from mlcolvar.data.graph.utils import create_test_graph_input
+
+    # create data, we need the dataset for sensitivity analysis later
+    dataset = create_test_graph_input(output_type='dataset', n_samples=100, n_states=2, n_atoms=3)
+    datamodule = DictModule(dataset=dataset, lengths=[0.8, 0.2], shuffle=[1, 0])
+
+    # create model
+    gnn_model = SchNetModel(n_out=1, cutoff=0.1, atomic_numbers=[8, 1])
+    model = DeepTDA(
+        n_states=2,
+        n_cvs=1,
+        target_centers=[-5, 5],
+        target_sigmas=[0.2, 0.2],
+        model=gnn_model
+    )
+
+    # train model
+    trainer = lightning.Trainer(
+        accelerator="cpu", max_epochs=2, logger=False, enable_checkpointing=False, enable_model_summary=False
+    )
+    trainer.fit(model, datamodule)
+
+    # do analysis
+    test_sensitivity = graph_node_sensitivity(model=model,
+                                    dataset=dataset,
+                                    batch_size=0)
+
+    # print results
+    print(test_sensitivity)
+
+if __name__ == '__main__':
+    test_graph_sensitivity()
