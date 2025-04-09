@@ -13,6 +13,14 @@ import urllib.request
 from typing import Union, List, Tuple
 import mdtraj
 
+# Import ASE for xyz to pdb conversion.
+try:
+    from ase.io import read, write
+    from ase import Atoms
+except ImportError as e:
+    raise ImportError("ASE is required for xyz to pdb conversion.", e)
+
+
 from mlcolvar.data import DictDataset
 from mlcolvar.data.graph.atomic import AtomicNumberTable, Configuration, Configurations
 from mlcolvar.data.graph.utils import create_dataset_from_configurations
@@ -262,15 +270,41 @@ def create_dataset_from_files(
     else:
         return dataset
 
+def create_pdb_from_xyz(input_filename: str, output_filename: str) -> str:
+    """
+    Convert the first frame of an XYZ file into a PDB file using ASE.
+    This pdb file can then serve as the topology for MDTraj.
+
+    Parameters:
+        input_filename: Path to the input .xyz file.
+        output_filename: Path to the output .pdb file.
+
+    Returns:
+        The path to the generated PDB file.
+    """
+    atoms: Atoms = read(input_filename, index=0)
+
+    if (atoms.cell == 0).all():
+        warn("A topology file was generated from the xyz trajectory file but no cell information were provided!")
+    if not atoms.pbc.any():
+        warn("A topology file was generated from the xyz trajectory file but no PBC information were provided!")
+    elif not atoms.pbc.all():
+        warn( f"Partial PBC are not supported! The provided input has pbc {atoms.pbc}")
+
+    write(output_filename, atoms, format='proteindatabank')
+    return output_filename
+
+
+
 def create_dataset_from_trajectories(
-    trajectories: Union[List[List[str]], List[str], str],
-    top: Union[List[List[str]], List[str], str],
+    trajectories: Union[List[str], str],
+    top: Union[List[str], str, None],
     cutoff: float,
     buffer: float = 0.0,
     z_table: AtomicNumberTable = None,
     load_args: list = None,
     folder: str = None,
-    create_labels: bool = True,
+    labels: list = None,
     system_selection: str = None,
     environment_selection: str = None,
     return_trajectories: bool = False,
@@ -289,10 +323,10 @@ def create_dataset_from_trajectories(
 
     Parameters
     ----------
-    trajectories: Union[List[List[str]], List[str], str]
-        Names of trajectories files.
-    top: Union[List[List[str]], List[str], str]
-        Names of topology files.
+    trajectories: Union[List[str], str]
+        Paths to trajectories files.
+    top: Union[List[str], str, None]
+        Path to topology files. Only for .xyz files it can be set to None or empty to generate automatically a topology file.
     cutoff: float (units: Ang)
         The graph cutoff radius.
     buffer: float
@@ -300,12 +334,14 @@ def create_dataset_from_trajectories(
     z_table: mlcolvar.graph.data.atomic.AtomicNumberTable
         The atomic number table used to build the node attributes. If not
         given, it will be created from the given trajectories.
+    load_args: list[dict], optional
+        List of dictionaries for loading options for each file (keys: start,stop,stride), by default None
     folder: str
         Common path for the files to be imported. If set, filenames become
         `folder/file_name`.
-    create_labels: bool
-        Assign a label to each file according to the total number of files.
-        If False, labels of all files will be `-1`.
+    labels: list
+        List of labels to be assigned to the given files. by default None.
+        If None, it simply enumerates the files.
     system_selection: str
         MDTraj style atom selections [1] of the system atoms. If given, only
         selected atoms will be loaded from the trajectories. This option may
@@ -320,6 +356,8 @@ def create_dataset_from_trajectories(
         If remove isolated nodes from the dataset.
     show_progress: bool
         If show the progress bar.
+    save_names: bool
+        If to save names from topology file, by default True
 
     Returns
     -------
@@ -343,6 +381,7 @@ def create_dataset_from_trajectories(
     .. [1] https://www.mdtraj.org/1.9.8.dev0/atom_selection.html
     """
 
+    # check if using truncated graph
     if environment_selection is not None:
         assert system_selection is not None, (
             'the `environment_selection` argument requires the'
@@ -355,87 +394,84 @@ def create_dataset_from_trajectories(
         selection = system_selection
     else:
         selection = None
-
+ 
     if environment_selection is None:
         assert buffer == 0, (
             'Not `environment_selection` given! Cannot define buffer size!'
         )
 
-    # fmt: off
-    assert type(trajectories) is type(top), (
-        'The `trajectories` and `top` parameters should have the same type!'
-    )
+    # initiliaze simple labels if not provided
+    if labels is None:
+        labels = [i for i in range(len(trajectories))]
+    else:
+        assert len(labels) == len(trajectories), (
+            "Number of labels and trajectories must be the same!"
+            )
+
+    # check topologies if given
+    if top is not None:
+        assert len(trajectories) == len(top) or len(top)==1 or isinstance(top, str), (
+            'Either a single topology file or as many as the trajectory files must be provided!'
+        )
+
+    # ensure trajectories is a list
     if isinstance(trajectories, str):
         trajectories = [trajectories]
-        top = [top]
-    assert len(trajectories) == len(top), (
-        'Numbers of trajectories and topology files should be the same!'
-    )
-    # fmt: on
+    
+    # --- Handle topologies input ---
+    # Allow top to be None or empty. In that case, create a list of empty strings.
+    if isinstance(top, str):
+        top = [top for _ in trajectories]
+    if top is None or (isinstance(top, list) and len(top) == 0):
+        top = ["" for _ in trajectories]
+    elif len(top) == 1 and len(trajectories) > 1:
+        top = [top for _ in trajectories]
 
+    # For each trajectory file (and its associated topology), if the trajectory file
+    # has a ".xyz" extension and no topology is provided, convert it.
     for i in range(len(trajectories)):
-        assert type(trajectories[i]) is type(top[i]), (
-            'Each element of `trajectories` and `top` parameters '
-            + 'should have the same type!'
-        )
-        if isinstance(trajectories[i], list):
-            assert len(trajectories[i]) == len(top[i]), (
-                'Numbers of trajectories and topology files should be '
-                + 'the same!'
-            )
-            for j in range(len(trajectories[i])):
-                if folder is not None:
-                    trajectories[i][j] = folder + '/' + trajectories[i][j]
-                    top[i][j] = folder + '/' + top[i][j]
-                assert isinstance(trajectories[i][j], str)
-                assert isinstance(top[i][j], str)
-        else:
-            if folder is not None:
-                trajectories[i] = folder + '/' + trajectories[i]
-                top[i] = folder + '/' + top[i]
-            assert isinstance(trajectories[i], str)
-            assert isinstance(top[i], str)
+        if folder is not None:
+            trajectories[i] = os.path.join(folder, trajectories[i])
+            if top[i]:
+                top[i] = os.path.join(folder, top[i])
+        assert isinstance(trajectories[i], str)
+        _, ext = os.path.splitext(trajectories[i])
+        if (ext.lower() == ".xyz") and (not top[i]):
+            pdb_file = trajectories[i].replace('.xyz', '_top.pdb')
+            top[i] = create_pdb_from_xyz(trajectories[i], pdb_file)
 
     # check if per file args are given, otherwise set to {}
     if load_args is not None:
         if (not isinstance(load_args, list)) or (len(trajectories) != len(load_args)):
             raise TypeError(
-                "load_args should be a list of dictionaries of arguments of same length as trajectories. If you want to use the same args for all file pass them directly as **kwargs."
+                "load_args should be a list of dictionaries of arguments of same length as trajectories."
             )
 
+
+    # load topologies and trajectories
     topologies = []
     trajectories_in_memory = []
-
     for i in range(len(trajectories)):
-        if isinstance(trajectories[i], list):
-            traj = [
-                mdtraj.load(trajectories[i][j], top=top[i][j])
-                for j in range(len(trajectories[i]))
-            ]
-            for j,t in enumerate(traj):
-                t.top = mdtraj.core.trajectory.load_topology(top[i][j])
-            if selection is not None:
-                for j in range(len(traj)):
-                    subset = traj[j].top.select(selection)
-                    assert len(subset) > 0, (
-                        'No atoms will be selected with selection string '
-                        + '"{:s}"!'.format(selection)
-                    )
-                    traj[j] = traj[j].atom_slice(subset)
-            trajectories_in_memory.append(traj)
-            topologies.extend([t.top for t in traj])
-        else:
-            traj = mdtraj.load(trajectories[i], top=top[i])
-            traj.top = mdtraj.core.trajectory.load_topology(top[i])
-            if selection is not None:
-                subset = traj.top.select(selection)
-                assert len(subset) > 0, (
-                    'No atoms will be selected with selection string '
-                    + '"{:s}"!'.format(selection)
-                )
-                traj = traj.atom_slice(subset)
-            trajectories_in_memory.append(traj)
-            topologies.append(traj.top)
+        # load trajectory
+        traj = mdtraj.load(trajectories[i], top=top[i])
+        traj.top = mdtraj.core.trajectory.load_topology(top[i])
+        
+        # mdtraj does not load cell info from xyz, so we use ASE and add it
+        _, ext = os.path.splitext(trajectories[i])
+        if (ext.lower() == ".xyz"):
+            ase_atoms = read(trajectories[i], index=':')
+            ase_cells = np.array([a.get_cell().array for a in ase_atoms], dtype=float)
+            traj.unitcell_vectors = ase_cells
+
+        if selection is not None:
+            subset = traj.top.select(selection)
+            assert len(subset) > 0, (
+                'No atoms will be selected with selection string '
+                + '"{:s}"!'.format(selection)
+            )
+            traj = traj.atom_slice(subset)
+        trajectories_in_memory.append(traj)
+        topologies.append(traj.top)
 
     if z_table is None:
         z_table = _z_table_from_top(topologies)
@@ -445,25 +481,12 @@ def create_dataset_from_trajectories(
     else:
         atom_names = None
 
-
+    # create configurations objects from trajectories
     configurations = []
     for i in range(len(trajectories_in_memory)):
-        if isinstance(trajectories_in_memory[i], list):
-            for j in range(len(trajectories_in_memory[i])):
-                configuration = _configures_from_trajectory(
-                    trajectory=trajectories_in_memory[i][j],
-                    label=i if create_labels else -1,  # NOTE: all these configurations have a label `i`
-                    system_selection=system_selection,
-                    environment_selection=environment_selection,
-                    start=load_args[i][j]['start'] if load_args is not None else 0,
-                    stop=load_args[i][j]['stop']  if load_args is not None else None,
-                    stride=load_args[i][j]['stride']  if load_args is not None else 1,
-                )
-                configurations.extend(configuration)
-        else:
             configuration = _configures_from_trajectory(
                 trajectory=trajectories_in_memory[i],
-                label=i if create_labels else -1,
+                label=labels[i],
                 system_selection=system_selection,
                 environment_selection=environment_selection,
                 start=load_args[i]['start'] if load_args is not None else 0,
@@ -472,14 +495,15 @@ def create_dataset_from_trajectories(
             )
             configurations.extend(configuration)
 
+    # convert configurations into DictDataset
     dataset = create_dataset_from_configurations(
-        configurations,
-        z_table,
-        cutoff,
-        buffer,
-        atom_names,
-        remove_isolated_nodes,
-        show_progress
+        config=configurations,
+        z_table=z_table,
+        cutoff=cutoff,
+        buffer=buffer,
+        atom_names=atom_names,
+        remove_isolated_nodes=remove_isolated_nodes,
+        show_progress=show_progress
     )
 
     if return_trajectories:
@@ -525,7 +549,8 @@ def _configures_from_trajectory(
     environment_selection: str = None,
     start: int = 0,
     stop: int = None,
-    stride: int = 1) -> Configurations:
+    stride: int = 1,
+    lengths_conversion : float = 10.0) -> Configurations:
     """
     Create configurations from one trajectory.
 
@@ -543,6 +568,9 @@ def _configures_from_trajectory(
         MDTraj style atom selections of the environment atoms. If given,
         only the system atoms and [the environment atoms within the cutoff
         radius of the system atoms] will be kept in the graph.
+    lengths_conversion: float,
+        Conversion factor for length units, by default 10.
+        MDTraj uses nanometers, the default sends to Angstroms.
     """
     if label is not None:
         label = np.array([[label]])
@@ -578,8 +606,8 @@ def _configures_from_trajectory(
     for i in range(start,stop,stride):
         configuration = Configuration(
             atomic_numbers=atomic_numbers,
-            positions=trajectory.xyz[i] * 10,
-            cell=cell[i] * 10,
+            positions=trajectory.xyz[i] * lengths_conversion,
+            cell=cell[i] * lengths_conversion,
             pbc=pbc,
             graph_labels=label,
             node_labels=None,  # TODO: Add supports for per-node labels.
@@ -589,6 +617,7 @@ def _configures_from_trajectory(
         configurations.append(configuration)
 
     return configurations
+
 
 # =================================================================================================
 # ============================================= TESTS =============================================
@@ -659,7 +688,7 @@ def test_datasesetFromTrajectories():
              'p.pdb'],
         folder="mlcolvar/tests/data",
         cutoff=8.0,  # Ang
-        create_labels=True,
+        labels=None,
         system_selection='all and not type H',
         show_progress=False,
     )
@@ -671,7 +700,7 @@ def test_datasesetFromTrajectories():
                     'p.pdb'],
                 folder="mlcolvar/tests/data",
                 cutoff=8.0,  # Ang
-                create_labels=True,
+                labels=[0,1],
                 system_selection='all and not type H',
                 show_progress=False,
                 load_args=[{'start' : 0, 'stop' : 10, 'stride' : 1},
@@ -680,17 +709,17 @@ def test_datasesetFromTrajectories():
     assert(len(dataset)==12)
 
     dataset = create_dataset_from_trajectories(
-                trajectories=[['r.dcd', 'r.dcd'],
-                              ['p.dcd', 'p.dcd']],
-                top=[['r.pdb', 'r.pdb'], 
-                     ['p.pdb', 'p.pdb']],
+                trajectories=['r.dcd', 'r.dcd',
+                              'p.dcd', 'p.dcd'],
+                top=['r.pdb', 'r.pdb', 
+                     'p.pdb', 'p.pdb'],
                 folder="mlcolvar/tests/data",
                 cutoff=8.0,  # Ang
-                create_labels=True,
+                labels=[0,1,2,3],
                 system_selection='all and not type H',
                 show_progress=False,
-                load_args=[[{'start' : 0, 'stop' : 10, 'stride' : 1}, {'start' : 0, 'stop' : 10, 'stride' : 1}],
-                           [{'start' : 6, 'stop' : 10, 'stride' : 2}, {'start' : 6, 'stop' : 10, 'stride' : 2}]]
+                load_args=[{'start' : 0, 'stop' : 10, 'stride' : 1}, {'start' : 0, 'stop' : 10, 'stride' : 1},
+                           {'start' : 6, 'stop' : 10, 'stride' : 2}, {'start' : 6, 'stop' : 10, 'stride' : 2}]
             )
     assert(len(dataset)==24)
 
@@ -708,142 +737,173 @@ END
 """, 
 system_selection: str = None
 ) -> None:
-    with open('test_dataset.pdb', 'w') as fp:
-        print(text, file=fp)
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmpdir:
+        test_dataset_path = "test_dataset.pdb"
+        test_dataset_path = os.path.join(tmpdir, test_dataset_path)
+        with open(test_dataset_path, 'w') as fp:
+            print(text, file=fp)
 
-    dataset, trajectories = create_dataset_from_trajectories(
-        ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
-        ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
-        1.0,
-        system_selection=system_selection,
-        return_trajectories=True,
-        show_progress=False
-    )
-
-    assert len(dataset) == 6
-    assert dataset.metadata["cutoff"] == 1.0
-    assert dataset.metadata["z_table"] == [1, 8]
-    assert len(trajectories) == 2
-    assert len(trajectories[0]) == 2
-    assert len(trajectories[1]) == 2
-    assert len(trajectories[1][0]) == 2
-    assert len(trajectories[1][1]) == 2
-
-    assert dataset[0]["data_list"]['graph_labels'] == torch.tensor([[0.0]])
-    assert dataset[1]["data_list"]['graph_labels'] == torch.tensor([[0.0]])
-    assert dataset[2]["data_list"]['graph_labels'] == torch.tensor([[1.0]])
-    assert dataset[3]["data_list"]['graph_labels'] == torch.tensor([[1.0]])
-    assert dataset[4]["data_list"]['graph_labels'] == torch.tensor([[1.0]])
-    assert dataset[5]["data_list"]['graph_labels'] == torch.tensor([[1.0]])
-
-    dataset, trajectories = create_dataset_from_trajectories(
-        ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
-        ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
-        1.0,
-        create_labels=False,
-        system_selection=system_selection,
-        return_trajectories=True,
-        show_progress=False
-    )
-
-    assert dataset[0]["data_list"]['graph_labels'] == torch.tensor([[-1.0]])
-    assert dataset[1]["data_list"]['graph_labels'] == torch.tensor([[-1.0]])
-    assert dataset[2]["data_list"]['graph_labels'] == torch.tensor([[-1.0]])
-    assert dataset[3]["data_list"]['graph_labels'] == torch.tensor([[-1.0]])
-    assert dataset[4]["data_list"]['graph_labels'] == torch.tensor([[-1.0]])
-    assert dataset[5]["data_list"]['graph_labels'] == torch.tensor([[-1.0]])
-
-    def check_data_1(data) -> None:
-        assert(torch.allclose(data["data_list"]['edge_index'], torch.tensor([[0, 0, 1, 1, 2, 2],
-                                                                             [2, 1, 0, 2, 1, 0]])
-                                )
-                )
-        assert(torch.allclose(data["data_list"]['shifts'], torch.tensor([[0.0, 0.0, 0.0],
-                                                                         [0.0, 0.0, 0.0],
-                                                                         [0.0, 0.0, 0.0],
-                                                                         [0.0, 2.0, 0.0],
-                                                                         [0.0, -2.0, 0.0],
-                                                                         [0.0, 0.0, 0.0]])
-                                    )
-                )
-        assert(torch.allclose(data["data_list"]['unit_shifts'], torch.tensor([[0.0, 0.0, 0.0],
-                                                                              [0.0, 0.0, 0.0],
-                                                                              [0.0, 0.0, 0.0],
-                                                                              [0.0, 1.0, 0.0],
-                                                                              [0.0, -1.0, 0.0],
-                                                                              [0.0, 0.0, 0.0]])
-                               )
-                )
-        assert(torch.allclose(data["data_list"]['positions'], torch.tensor([[0.0, 0.0, 0.0],
-                                                                            [0.7, 0.7, 0.0],
-                                                                            [0.7, -0.7, 0.0]])
-                            )
-                )
-        assert(torch.allclose(data["data_list"]['cell'], torch.tensor([[2.0, 0.0, 0.0],
-                                                                       [0.0, 2.0, 0.0],
-                                                                       [0.0, 0.0, 2.0]])
-                         )
-                )
-        assert(torch.allclose(data["data_list"]['node_attrs'], torch.tensor([[0.0, 1.0], 
-                                                                             [1.0, 0.0], 
-                                                                             [1.0, 0.0]])
-                        )
-                )
-
-    for i in range(6):
-        check_data_1(dataset[i])
-
-    if system_selection is not None:
-
-        dataset = create_dataset_from_trajectories(
-            ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
-            ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
-            1.0,
-            system_selection='type O and {:s}'.format(system_selection),
-            environment_selection='type H and {:s}'.format(system_selection),
+        dataset, trajectories = create_dataset_from_trajectories(
+            trajectories=[test_dataset_path, test_dataset_path, test_dataset_path],
+            top=[test_dataset_path, test_dataset_path, test_dataset_path],
+            cutoff=1.0,
+            system_selection=system_selection,
+            return_trajectories=True,
             show_progress=False
         )
 
-        for i in range(6):
-            check_data_1(dataset[i])
+        assert len(dataset) == 6
+        assert dataset.metadata["cutoff"] == 1.0
+        assert dataset.metadata["z_table"] == [1, 8]
+        assert len(trajectories[0]) == 2
+        assert len(trajectories[1]) == 2
+        assert len(trajectories[2]) == 2
 
-        dataset = create_dataset_from_trajectories(
-            ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
-            ['test_dataset.pdb', ['test_dataset.pdb', 'test_dataset.pdb']],
-            1.0,
-            system_selection='name H1 and {:s}'.format(system_selection),
-            environment_selection='name H2 and {:s}'.format(system_selection),
+        assert dataset[0]["data_list"]['graph_labels'] == torch.tensor([[0.0]])
+        assert dataset[1]["data_list"]['graph_labels'] == torch.tensor([[0.0]])
+        assert dataset[2]["data_list"]['graph_labels'] == torch.tensor([[1.0]])
+        assert dataset[3]["data_list"]['graph_labels'] == torch.tensor([[1.0]])
+        assert dataset[4]["data_list"]['graph_labels'] == torch.tensor([[2.0]])
+        assert dataset[5]["data_list"]['graph_labels'] == torch.tensor([[2.0]])
+
+        dataset, trajectories = create_dataset_from_trajectories(
+            trajectories=[test_dataset_path, test_dataset_path, test_dataset_path],
+            top=test_dataset_path,
+            cutoff=1.0,
+            labels=None,
+            system_selection=system_selection,
+            return_trajectories=True,
             show_progress=False
         )
 
-        def check_data_2(data) -> None:
-            assert(torch.allclose(data["data_list"]['edge_index'], torch.tensor([[0, 1], [1, 0]])))
-            assert(torch.allclose(data["data_list"]['shifts'], torch.tensor([[0.0, 2.0, 0.0], 
-                                                                             [0.0, -2.0, 0.0]])
+        assert dataset[0]["data_list"]['graph_labels'] == torch.tensor([[0.0]])
+        assert dataset[1]["data_list"]['graph_labels'] == torch.tensor([[0.0]])
+        assert dataset[2]["data_list"]['graph_labels'] == torch.tensor([[1.0]])
+        assert dataset[3]["data_list"]['graph_labels'] == torch.tensor([[1.0]])
+        assert dataset[4]["data_list"]['graph_labels'] == torch.tensor([[2.0]])
+        assert dataset[5]["data_list"]['graph_labels'] == torch.tensor([[2.0]])
+
+        def check_data_1(data) -> None:
+            assert(torch.allclose(data["data_list"]['edge_index'], torch.tensor([[0, 0, 1, 1, 2, 2],
+                                                                                [2, 1, 0, 2, 1, 0]])
                                     )
                     )
-            assert(torch.allclose(data["data_list"]['unit_shifts'], torch.tensor([[0.0, 1.0, 0.0], 
-                                                                                  [0.0, -1.0, 0.0]])
+            assert(torch.allclose(data["data_list"]['shifts'], torch.tensor([[0.0, 0.0, 0.0],
+                                                                            [0.0, 0.0, 0.0],
+                                                                            [0.0, 0.0, 0.0],
+                                                                            [0.0, 2.0, 0.0],
+                                                                            [0.0, -2.0, 0.0],
+                                                                            [0.0, 0.0, 0.0]])
+                                        )
+                    )
+            assert(torch.allclose(data["data_list"]['unit_shifts'], torch.tensor([[0.0, 0.0, 0.0],
+                                                                                [0.0, 0.0, 0.0],
+                                                                                [0.0, 0.0, 0.0],
+                                                                                [0.0, 1.0, 0.0],
+                                                                                [0.0, -1.0, 0.0],
+                                                                                [0.0, 0.0, 0.0]])
                                 )
                     )
-            assert(torch.allclose(data["data_list"]['positions'], torch.tensor([[0.7, 0.7, 0.0], 
+            assert(torch.allclose(data["data_list"]['positions'], torch.tensor([[0.0, 0.0, 0.0],
+                                                                                [0.7, 0.7, 0.0],
                                                                                 [0.7, -0.7, 0.0]])
                                 )
                     )
             assert(torch.allclose(data["data_list"]['cell'], torch.tensor([[2.0, 0.0, 0.0],
-                                                                           [0.0, 2.0, 0.0],
-                                                                           [0.0, 0.0, 2.0]])
-                                )
+                                                                        [0.0, 2.0, 0.0],
+                                                                        [0.0, 0.0, 2.0]])
+                            )
                     )
-            assert(torch.allclose(data["data_list"]['node_attrs'], torch.tensor([[1.0], 
-                                                                                 [1.0]])
-                                )
+            assert(torch.allclose(data["data_list"]['node_attrs'], torch.tensor([[0.0, 1.0], 
+                                                                                [1.0, 0.0], 
+                                                                                [1.0, 0.0]])
+                            )
                     )
 
         for i in range(6):
-            check_data_2(dataset[i])
+            check_data_1(dataset[i])
 
-    __import__('os').remove('test_dataset.pdb')
+        if system_selection is not None:
+
+            dataset = create_dataset_from_trajectories(
+                trajectories=[test_dataset_path, test_dataset_path, test_dataset_path],
+                top=[test_dataset_path, test_dataset_path, test_dataset_path],
+                cutoff=1.0,
+                system_selection='type O and {:s}'.format(system_selection),
+                environment_selection='type H and {:s}'.format(system_selection),
+                show_progress=False
+            )
+
+            for i in range(6):
+                check_data_1(dataset[i])
+
+            dataset = create_dataset_from_trajectories(
+                trajectories=[test_dataset_path, test_dataset_path, test_dataset_path],
+                top=[test_dataset_path, test_dataset_path, test_dataset_path],
+                cutoff=1.0,
+                system_selection='name H1 and {:s}'.format(system_selection),
+                environment_selection='name H2 and {:s}'.format(system_selection),
+                show_progress=False
+            )
+
+            def check_data_2(data) -> None:
+                assert(torch.allclose(data["data_list"]['edge_index'], torch.tensor([[0, 1], [1, 0]])))
+                assert(torch.allclose(data["data_list"]['shifts'], torch.tensor([[0.0, 2.0, 0.0], 
+                                                                                [0.0, -2.0, 0.0]])
+                                        )
+                        )
+                assert(torch.allclose(data["data_list"]['unit_shifts'], torch.tensor([[0.0, 1.0, 0.0], 
+                                                                                    [0.0, -1.0, 0.0]])
+                                    )
+                        )
+                assert(torch.allclose(data["data_list"]['positions'], torch.tensor([[0.7, 0.7, 0.0], 
+                                                                                    [0.7, -0.7, 0.0]])
+                                    )
+                        )
+                assert(torch.allclose(data["data_list"]['cell'], torch.tensor([[2.0, 0.0, 0.0],
+                                                                            [0.0, 2.0, 0.0],
+                                                                            [0.0, 0.0, 2.0]])
+                                    )
+                        )
+                assert(torch.allclose(data["data_list"]['node_attrs'], torch.tensor([[1.0], 
+                                                                                    [1.0]])
+                                    )
+                        )
+
+            for i in range(6):
+                check_data_2(dataset[i])
+
+
+def test_dataset_from_xyz():
+    # load single file
+    load_args = [{'start' : 0, 'stop' : 2, 'stride' : 1}]
+    dataset = create_dataset_from_trajectories(trajectories="Cu.xyz",
+                                               folder="mlcolvar/tests/data",
+                                               top=None,
+                                               cutoff=3.5,  # Ang
+                                               labels=None,
+                                               system_selection="index 0",
+                                               environment_selection="not index 0",
+                                               show_progress=False,
+                                               load_args=load_args,
+                                               buffer=1,
+                                           )
+
+    # load multiple files
+    load_args = [{'start' : 0, 'stop' : 2, 'stride' : 1},
+                 {'start' : 0, 'stop' : 4, 'stride' : 2}]
+    dataset = create_dataset_from_trajectories(trajectories=["Cu.xyz", "Cu.xyz"],
+                                               folder="mlcolvar/tests/data",
+                                               top=None,
+                                               cutoff=3.5,  # Ang
+                                               labels=None,
+                                               system_selection="index 0 or index 1",
+                                               environment_selection="not index 0 and not index 1",
+                                               show_progress=False,
+                                               load_args=load_args,
+                                               buffer=1,
+                                              )
 
 
 if __name__ == "__main__":
@@ -899,4 +959,6 @@ ATOM      6  H2  TIP3W   2       0.700  -0.700   0.000  1.00  0.00      WT1  H
 END
 """
     test_create_dataset_from_trajectories(text, 'not resname XXXX')
+
+    # test_with_xyz()
 
