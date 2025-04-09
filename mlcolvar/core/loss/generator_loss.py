@@ -100,7 +100,6 @@ class GeneratorLoss(torch.nn.Module):
     
     cov_Y =  self.compute_covariance(psi_Y , weights_Y)
 
-
     dcov_X =  self.compute_covariance(gradient_X , weights_X) 
  
     dcov_Y =  self.compute_covariance(gradient_Y , weights_Y) 
@@ -112,7 +111,7 @@ class GeneratorLoss(torch.nn.Module):
     loss_ef = torch.trace( ((cov_X@diag_lamb) @ W2 + (cov_Y@diag_lamb)@W1)/2 - cov_X@diag_lamb - cov_Y@diag_lamb)
 
     # Compute loss_ortho
-    loss_ortho = self.alpha * (torch.trace((torch.eye(output.shape[1], device=output.device) - cov_X).T @ (torch.eye(output.shape[1], device=output.device) - cov_X)))
+    loss_ortho = self.alpha * (torch.trace((torch.eye(output.shape[1], device=output.device) - cov_X).T @ (torch.eye(output.shape[1], device=output.device) - cov_Y)))
     #loss_ortho = penalty
     loss = loss_ef + loss_ortho#loss_ortho
     return loss, loss_ef, loss_ortho
@@ -199,9 +198,10 @@ def compute_eigenfunctions(model, dataset, friction, eta, r, cell=None, tikhonov
     lambdas = eta - 1 / evals
     sorting = torch.argsort(-lambdas.real) 
     # Ensure normalization of eigenfunctions
-    evecs.detach()[:,sorting] /= torch.sqrt(torch.mean(dataset["weights"].unsqueeze(1)*g**2,axis=0))
+    detached_evecs = evecs.detach()
+    detached_evecs /= torch.sqrt(torch.mean(dataset["weights"].unsqueeze(1)*g**2,axis=0))
     g /= torch.sqrt(torch.mean(dataset["weights"].unsqueeze(1)*g**2,axis=0))
-    return g[:,sorting], lambdas.detach()[sorting], evecs.detach()[:,sorting]
+    return g[:,sorting], lambdas.detach()[sorting],detached_evecs.detach()[:,sorting]
 
 def evaluate_eigenfunctions(model, dataset, evecs):
     """
