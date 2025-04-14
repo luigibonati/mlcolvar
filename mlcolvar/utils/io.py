@@ -12,6 +12,7 @@ import os
 import urllib.request
 from typing import Union, List, Tuple
 import mdtraj
+from warnings import warn
 
 # Import ASE for xyz to pdb conversion.
 try:
@@ -310,7 +311,8 @@ def create_dataset_from_trajectories(
     return_trajectories: bool = False,
     remove_isolated_nodes: bool = True,
     show_progress: bool = True,
-    save_names=True
+    save_names=True,
+    lengths_conversion : float = 10.0,
 ) -> Union[
     DictDataset,
     Tuple[
@@ -358,6 +360,9 @@ def create_dataset_from_trajectories(
         If show the progress bar.
     save_names: bool
         If to save names from topology file, by default True
+    lengths_conversion: float,
+        Conversion factor for length units, by default 10.
+        MDTraj uses nanometers, the default sends to Angstroms.
 
     Returns
     -------
@@ -492,6 +497,7 @@ def create_dataset_from_trajectories(
                 start=load_args[i]['start'] if load_args is not None else 0,
                 stop=load_args[i]['stop']  if load_args is not None else None,
                 stride=load_args[i]['stride']  if load_args is not None else 1,
+                lengths_conversion=lengths_conversion,
             )
             configurations.extend(configuration)
 
