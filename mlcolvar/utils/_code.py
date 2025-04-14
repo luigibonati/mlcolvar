@@ -1,6 +1,7 @@
 import torch 
 from typing import Optional
 
+@torch.jit.script_if_tracing
 def broadcast(src: torch.Tensor, other: torch.Tensor, dim: int):
     """Broadcast util, from torch_scatter"""
     if dim < 0:
@@ -13,6 +14,7 @@ def broadcast(src: torch.Tensor, other: torch.Tensor, dim: int):
     src = src.expand(other.size())
     return src
 
+@torch.jit.script_if_tracing
 def scatter_sum(src: torch.Tensor,
                 index: torch.Tensor,
                 dim: int = -1,
@@ -33,6 +35,7 @@ def scatter_sum(src: torch.Tensor,
     else:
         return out.scatter_add_(dim, index, src)
 
+@torch.jit.script_if_tracing
 def scatter_mean(src: torch.Tensor,
                  index: torch.Tensor,
                  dim: int = -1,

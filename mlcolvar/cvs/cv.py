@@ -2,7 +2,7 @@ import torch
 from mlcolvar.core.transform import Transform
 from typing import Union, List
 from mlcolvar.core.nn import FeedForward, BaseGNN
-from mlcolvar.data.graph.utils import create_test_graph_input
+from mlcolvar.data.graph.utils import create_graph_tracing_example
 
 
 class BaseCV:
@@ -69,7 +69,7 @@ class BaseCV:
                 else self.preprocessing.in_features
             )
         else:
-            return create_test_graph_input(output_type='tracing_example', n_atoms=3, n_samples=1, n_states=1)
+            return create_graph_tracing_example(n_species=len(self.atomic_numbers))
 
 
     # TODO add general torch.nn.Module

@@ -172,8 +172,6 @@ def create_dataset_from_configurations(
         atom_names_env = [f"Y{i}" for i in range(data_list[0]['n_env'].to(torch.int64).item())]
         atom_names = atom_names_system + atom_names_env
 
-    print(atom_names)
-
     # this is only to check what isolated nodes have been removed
     _aux_pos = torch.Tensor((np.array([d['positions'].numpy() for d in data_list])))
     if remove_isolated_nodes:
@@ -314,7 +312,31 @@ def create_test_graph_input(output_type: str,
                             n_samples: int = 60, 
                             n_states: int = 2,
                             random_weights = False,
-                            add_noise = True ):
+                            add_noise = True):
+    """
+    Util function to generate several types of mock graph data objects for testing purposes.
+    The graphs are created drawing positions from a predefined set of positions that cover most use cases.
+    It can generate: one or some configuration objects, a dataset, a datamodule, a batch of example inputs or a single item.
+
+    Parameters
+    ----------
+    output_type : str
+        Type of graph data object to create. Can be: 'configuration', 'configurations', 'datamodule', 'dataset', 'batch', 'example'
+    n_atoms : int, optional
+        Number of atoms for creating the graph, either 3 or 4, by default 3
+    n_samples : int, optional
+        Number of samples per state to create, by default 60
+    n_states : int, optional
+        Number of states for which to create data, by default 2. Configurations are then labelled accordingly.
+    random_weights : bool, optional
+        If to assign random weights to the entries, otherwise unitary weights are given, by default False
+    add_noise : bool, optional
+        If to add a random noise for each entry to the predefined positions, by default True
+
+    Returns
+    -------
+        Graph data object of the chosen type
+    """
     if n_atoms == 3:
         numbers = [8, 1, 1]
         node_labels = np.array([[0], [1], [1]])
@@ -330,7 +352,7 @@ def create_test_graph_input(output_type: str,
             dtype=np.float64
         )
 
-    if n_atoms == 4:
+    elif n_atoms == 4:
         numbers = [8, 1, 1, 8]
         node_labels = np.array([[0], [1], [1], [0]])
         _ref_positions = np.array(
@@ -344,6 +366,8 @@ def create_test_graph_input(output_type: str,
             ],
             dtype=np.float64
         )
+    else:
+        raise ValueError(f'Example input can be generated either with 3 or 4 atoms, found {n_atoms}')
 
 
     idx = np.random.randint(low=0, high=6, size=(n_samples*n_states))
@@ -406,9 +430,76 @@ def create_test_graph_input(output_type: str,
     example['batch'] = torch.zeros(len(example['positions']), dtype=torch.int64)
     if output_type == 'example':
         return example
-    if output_type == 'tracing_example':
-        return example.to_dict()
+    
 
+def create_graph_tracing_example(n_species : int):
+    """
+    Util to create a tracing example for graph based models.
+
+    Parameters
+    ----------
+    n_species : int
+        Number of chemical species to be considered in the model.
+
+    Returns
+    -------
+    dict
+        Tracing graph input example as dict.
+    """
+    numbers = [1, 1, 1]
+    node_labels = np.array([[0], [0], [0]])
+    _ref_positions = np.array(
+        [
+            [[0.0, 0.0, 0.0], [0.07, 0.07, 0.0], [0.07, -0.07, 0.0]],
+            [[0.0, 0.0, 0.0], [-0.07, 0.07, 0.0], [0.07, 0.07, 0.0]],
+            [[0.0, 0.0, 0.0], [0.07, -0.07, 0.0], [0.07, 0.07, 0.0]],
+            [[0.0, 0.0, 0.0], [0.0, -0.07, 0.07], [0.0, 0.07, 0.07]],
+            [[0.0, 0.0, 0.0], [0.11, 0.11, 0.11], [-0.07, 0.0, 0.07]],
+            [[0.1, 0.0, 1.1], [0.17, 0.07, 1.1], [0.17, -0.07, 1.1]],
+        ],
+        dtype=np.float64
+    )
+
+    idx = np.random.randint(low=0, high=6, size=1)
+    positions = _ref_positions[idx, :, :]
+    cell = np.identity(3, dtype=float) * 0.2
+    graph_labels = np.zeros((1, 1, 1))
+    
+    z_table = atomic.AtomicNumberTable.from_zs(numbers)
+
+    weights = np.ones((1, 1, 1))
+    config = [
+        atomic.Configuration(
+            atomic_numbers=numbers,
+            positions=positions[i],
+            cell=cell,
+            pbc=[True] * 3,
+            node_labels=node_labels,
+            graph_labels=graph_labels[i],
+            weight=weights[i]
+        ) for i in range(0, 1)
+    ]
+
+    # here we do not remove isolated nodes
+    dataset = create_dataset_from_configurations(
+        config, z_table, 0.1, show_progress=False, remove_isolated_nodes=False
+    )
+    
+    datamodule = DictModule(
+        dataset,
+        lengths=(0.8, 0.2),
+        batch_size=0,
+        shuffle=False,
+    )
+    
+    datamodule.setup()
+    batch = next(iter(datamodule.train_dataloader()))
+    example = batch['data_list'].get_example(0)
+    example['batch'] = torch.zeros(len(example['positions']), dtype=torch.int64)
+
+    example = example.to_dict()
+    example['node_attrs'] = torch.cat((example['node_attrs'], torch.zeros(3, n_species - 1)), 1)
+    return example
 
 # ===============================================================================
 # ===============================================================================
