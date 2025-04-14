@@ -1,6 +1,8 @@
 import torch
 import numpy as np
 from typing import List
+from mlcolvar.core import FeedForward, BaseGNN
+from mlcolvar.utils import _code
 from mlcolvar.core.loss.committor_loss import SmartDerivatives, compute_descriptors_derivatives
 from mlcolvar.data import DictDataset
 
@@ -36,12 +38,33 @@ class KolmogorovBias(torch.nn.Module):
         self.epsilon = epsilon
 
     def forward(self, x):
-        x.requires_grad = True
+        if isinstance(self.input_model.nn, FeedForward):
+            x.requires_grad = True
+        
+        elif isinstance(self.input_model.nn, BaseGNN):
+            x['positions'].requires_grad_(True)
+            x['node_attrs'].requires_grad_(True)
+        
         q = self.input_model(x)
         grad_outputs = torch.ones_like(q)
-        grads = torch.autograd.grad(q, x, grad_outputs, retain_graph=True)[0]
+
+        try:
+            grads = torch.autograd.grad(q, x['positions'], grad_outputs, retain_graph=True)[0]
+        except: 
+            grads = torch.autograd.grad(q, x, grad_outputs, retain_graph=True)[0]
         grads_squared = torch.sum(torch.pow(grads, 2), 1)
-        bias = - self.lambd*(1/self.beta)*(torch.log( grads_squared + self.epsilon ) - torch.log(self.epsilon))
+
+        try:
+            grads_squared = _code.scatter_sum(grads_squared, 
+                                              x['batch'], 
+                                              dim=0)
+        except:
+            pass
+        
+        print(grads_squared.shape)    
+
+        bias = - self.lambd*(1/self.beta)*(torch.log( grads_squared + self.epsilon ) - torch.log(self.epsilon))    
+    
         return bias
 
 def compute_committor_weights(dataset, 
@@ -98,7 +121,7 @@ def compute_committor_weights(dataset,
         
         # update the weights
         weights[torch.nonzero(new_labels == i, as_tuple=True)] = coeff * weights[torch.nonzero(new_labels == i, as_tuple=True)]
-    print(weights)
+
     # update dataset
     if dataset.metadata['data_type'] == 'descriptors':
         dataset['weights'] = weights
@@ -189,11 +212,37 @@ def get_descriptors_and_derivatives(dataset,
     return smart_dataset, smart_derivatives
 
 def test_Kolmogorov_bias():
-    from mlcolvar.core.nn import FeedForward
-    model = FeedForward(layers=[4,2,1], activation='tanh')
+    # test on feed forward
+    from mlcolvar import DeepTDA
+    model = DeepTDA(n_states=2, 
+                    n_cvs=1, 
+                    target_centers=[-1,1], 
+                    target_sigmas=[0.1, 0.1],
+                    model=[4,2,1])
     inp = torch.randn((10, 4))
     model_bias = KolmogorovBias(input_model=model, beta=1.0)
     model_bias(inp)
+
+    # test on GNN
+    from mlcolvar.core.nn.graph import SchNetModel
+    from mlcolvar.data.graph.utils import create_test_graph_input
+
+    dataset = create_test_graph_input('dataset')
+    inp = dataset.get_graph_inputs()
+
+    gnn_model = SchNetModel(n_out=1, 
+                        cutoff=0.1, 
+                        atomic_numbers=[1,8])
+
+    model = DeepTDA(n_states=2, 
+                    n_cvs=1, 
+                    target_centers=[-1,1], 
+                    target_sigmas=[0.1, 0.1],
+                    model=gnn_model)
+
+    model_bias = KolmogorovBias(input_model=model, beta=1.0)
+    model_bias(inp)
+
 
 def test_compute_committor_weights():
     # descriptors
