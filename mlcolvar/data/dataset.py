@@ -1,4 +1,5 @@
 import torch
+import torch_geometric
 import numpy as np
 from mlcolvar.core.transform.utils import Statistics
 from torch.utils.data import Dataset
@@ -66,7 +67,7 @@ class DictDataset(Dataset):
             metadata = {}
         
         if 'data_type' in metadata.keys():
-            if not metadata['data_type'] == metadata:
+            if not metadata['data_type'] == data_type:
                 raise ValueError(f"Two different data_type specified. Found {metadata['data_type']} in metadata and {data_type} as keyword")
         else:
             metadata['data_type'] = data_type
@@ -167,6 +168,14 @@ class DictDataset(Dataset):
             np.asarray(value, dtype=str) if value is not None else value
         )
 
+    def get_graph_inputs(self):
+        assert self.metadata['data_type'] == 'graphs', (
+            'Graph inputs can only be generated for graph-based datasets'
+        )
+        loader = torch_geometric.loader.DataLoader(self, 
+                                                   batch_size=len(self), 
+                                                   shuffle=False )
+        return next(iter(loader))['data_list']
 
 def test_DictDataset():
     # descriptors based

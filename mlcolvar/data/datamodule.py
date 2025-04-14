@@ -262,6 +262,23 @@ class DictModule(lightning.LightningDataModule):
                 "outside a Lightning trainer please call .setup() first."
             )
 
+    def get_graph_inputs(self, mode='train'):
+        """Generate an input that can be used as input for a GNN model
+
+        Parameters
+        ----------
+        mode : str, optional
+            Type of loader to be used, either 'train' or 'val'/'valid', by default 'train'
+        """
+        self.setup()
+        if mode == 'train': 
+            loader=self.train_dataloader
+        elif (mode=='val' or mode=='valid'): 
+            loader=self.val_dataloader
+        else:
+            raise ValueError(f"Mode can either be 'train', 'val', 'valid', found {mode}!")
+        
+        return next(iter(loader()))['data_list']
 
 def split_dataset(
     dataset,
