@@ -9,6 +9,7 @@ except ImportError as e:
 import numpy as np
 import torch
 import os
+import tempfile
 import urllib.request
 from typing import Union, List, Tuple
 import mdtraj
@@ -130,7 +131,11 @@ def load_dataframe(
         if "http" in filename:
             download = True
             url = filename
-            filename = "tmp_" + filename.split("/")[-1]
+            if delete_download:
+                temp = tempfile.NamedTemporaryFile()
+                filename = temp.name   
+            else:
+                filename = "tmp_" + filename.split("/")[-1]
             urllib.request.urlretrieve(url, filename)
 
         # check if file is in PLUMED format
@@ -150,7 +155,7 @@ def load_dataframe(
         # delete temporary data if necessary
         if download:
             if delete_download:
-                os.remove(filename)
+                temp.close()
             else:
                 print(f"downloaded file ({url}) saved as ({filename}).")
 

@@ -89,7 +89,7 @@ def save_dataset_configurations_as_extyz(dataset: DictDataset, file_name: str) -
 
 
 
-import os
+import tempfile
 
 def test_save_dataset():
     # check using descriptors dataset
@@ -100,19 +100,14 @@ def test_save_dataset():
     }
     dataset = DictDataset(dataset_dict)
 
-    # save to current working directory, so we can delete it
-    cwd = os.getcwd()
-    save_dataset(dataset=dataset, file_name=f'{cwd}/saved_dataset')
+    # save to temporary working directory
+    with tempfile.TemporaryDirectory() as tmpdir:
+        save_dataset(dataset=dataset, file_name=f'{tmpdir}/saved_dataset')
 
-    # load and check it's ok
-    loaded = load_dataset(file_name=f'{cwd}/saved_dataset') 
-    assert(torch.allclose(dataset['data'], loaded['data'])) 
+        # load and check it's ok
+        loaded = load_dataset(file_name=f'{tmpdir}/saved_dataset') 
+        assert(torch.allclose(dataset['data'], loaded['data'])) 
 
-    # remove file
-    os.remove(f'{cwd}/saved_dataset')
-
-
-    
     # check using graph dataset
     from mlcolvar.data.graph.atomic import AtomicNumberTable, Configuration
     from mlcolvar.data.graph.utils import create_dataset_from_configurations
@@ -139,21 +134,17 @@ def test_save_dataset():
                 )
 
     # save dataset
-    save_dataset(dataset=dataset, file_name=f'{cwd}/saved_dataset')
+    with tempfile.TemporaryDirectory() as tmpdir:
+        save_dataset(dataset=dataset, file_name=f'{tmpdir}/saved_dataset')
 
-    # load and check it's ok
-    loaded = load_dataset(file_name=f'{cwd}/saved_dataset') 
-    assert(torch.allclose(dataset['data_list'][0]['positions'], loaded['data_list'][0]['positions'])) 
-
-    # remove file
-    os.remove(f'{cwd}/saved_dataset')
+        # load and check it's ok
+        loaded = load_dataset(file_name=f'{tmpdir}/saved_dataset') 
+        assert(torch.allclose(dataset['data_list'][0]['positions'], loaded['data_list'][0]['positions'])) 
 
     # save to extxyz
-    save_dataset_configurations_as_extyz(dataset=dataset, file_name=f'{cwd}/saved_dataset')
-    
-    # remove file
-    os.remove(f'{cwd}/saved_dataset')
-
+    with tempfile.TemporaryDirectory() as tmpdir:
+        save_dataset_configurations_as_extyz(dataset=dataset, file_name=f'{tmpdir}/saved_dataset')
+        
 if __name__ == "__main__":
     test_save_dataset()
 
