@@ -900,6 +900,8 @@ def test_dataset_from_xyz():
                                                load_args=load_args,
                                                buffer=1,
                                            )
+    
+    dataset
 
     # load multiple files
     load_args = [{'start' : 0, 'stop' : 2, 'stride' : 1},
@@ -915,6 +917,7 @@ def test_dataset_from_xyz():
                                                load_args=load_args,
                                                buffer=1,
                                               )
+    dataset
 
 
 if __name__ == "__main__":

@@ -15,7 +15,7 @@ __all__ = ["CommittorLoss", "committor_loss", "SmartDerivatives", "compute_descr
 # =============================================================================
 
 import torch
-from typing import Union, Optional
+from typing import Union
 import torch_geometric
 import warnings
 
@@ -180,8 +180,6 @@ def committor_loss(x: torch.Tensor,
     
     # inherit right device
     device = x.device 
-    dtype = x.dtype
-
     # Create masks to access different states data
     mask_A = torch.nonzero(labels.squeeze() == 0, as_tuple=True) 
     mask_B = torch.nonzero(labels.squeeze() == 1, as_tuple=True)

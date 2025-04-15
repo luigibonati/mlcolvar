@@ -399,11 +399,11 @@ def test_create_timelagged_dataset():
     dataset = create_test_graph_input('dataset')
     print(dataset['data_list'][0])
     lagged_dataset = create_timelagged_dataset(dataset, logweights=torch.randn(len(dataset)))
-    # lagged_dataset['data_list'][0]
+    print(lagged_dataset['data_list'][0])
     print(dataset['data_list'][0])
 
     print(len(dataset))
-
+    
 
 
 if __name__ == "__main__":

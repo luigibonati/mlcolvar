@@ -27,7 +27,7 @@ def test_loadDataframe(file_type):
 
 
 if __name__ == "__main__":
-    # test_dataset_from_xyz()
+    test_dataset_from_xyz()
     test_datasetFromFile()
     test_datasesetFromTrajectories()
     text = """

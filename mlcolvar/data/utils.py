@@ -76,13 +76,13 @@ def save_dataset_configurations_as_extyz(dataset: DictDataset, file_name: str) -
         print(line.format(*cell), file=fp)
 
         # write atoms positions
-        for i in range(0, len(d['positions'])):
+        for j in range(0, len(d['positions'])):
             # chemical symbol
-            s = z_table.index_to_symbol(np.where(d['node_attrs'][i])[0][0])
+            s = z_table.index_to_symbol(np.where(d['node_attrs'][j])[0][0])
             print('{:2s}'.format(s), file=fp, end=' ')
 
             # positions
-            positions = [p.item() for p in d['positions'][i]]
+            positions = [p.item() for p in d['positions'][j]]
             print('{:10.5f} {:10.5f} {:10.5f}'.format(*positions), file=fp)
     fp.close()
 

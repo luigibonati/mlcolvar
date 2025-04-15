@@ -431,6 +431,7 @@ def create_test_graph_input(output_type: str,
     if output_type == 'example':
         return example
     
+    return None
 
 def create_graph_tracing_example(n_species : int):
     """

@@ -48,18 +48,19 @@ class KolmogorovBias(torch.nn.Module):
         q = self.input_model(x)
         grad_outputs = torch.ones_like(q)
 
-        try:
+        if isinstance(self.input_model.nn, BaseGNN):
             grads = torch.autograd.grad(q, x['positions'], grad_outputs, retain_graph=True)[0]
-        except: 
+
+        elif isinstance(self.input_model.nn, FeedForward): 
             grads = torch.autograd.grad(q, x, grad_outputs, retain_graph=True)[0]
+
         grads_squared = torch.sum(torch.pow(grads, 2), 1)
 
-        try:
+        # gnn models need an additional scatter
+        if isinstance(self.input_model.nn, BaseGNN):
             grads_squared = _code.scatter_sum(grads_squared, 
                                               x['batch'], 
                                               dim=0)
-        except:
-            pass
         
         print(grads_squared.shape)    
 
