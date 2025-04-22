@@ -23,7 +23,7 @@ import torch
 import torch_geometric
 import numpy as np
 import lightning
-from torch.utils.data import random_split, Subset
+from torch.utils.data import Subset
 from torch import default_generator, randperm
 
 from mlcolvar.data import DictLoader, DictDataset

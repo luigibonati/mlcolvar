@@ -150,9 +150,8 @@ class DeepTDA(BaseCV, lightning.LightningModule):
 
         return loss
 
-# TODO signature of tests?
-import numpy as np
 
+import numpy as np
 
 def test_deeptda_cv():
     from mlcolvar.data import DictDataset

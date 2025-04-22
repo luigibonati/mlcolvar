@@ -132,7 +132,7 @@ class DictDataset(Dataset):
         stats
             dictionary of dictionaries with statistics
         """
-        if self.metadata is 'graph':
+        if self.metadata == 'graph':
             raise ValueError (
                 "Method get_stats not supported for graph-based dataset!"
             )

@@ -157,11 +157,9 @@ class SchNetModel(BaseGNN):
 
         if scatter_mean:
             if 'system_masks' not in data.keys():
-                # TODO check this is equivalent in torch scatter
                 out = _code.scatter_mean(out, batch_id, dim=0)
             else:
                 out = out * data['system_masks']
-                # TODO check this is equivalent in torch scatter
                 out = _code.scatter_sum(out, batch_id, dim=0)
                 out = out / data['n_system']
         

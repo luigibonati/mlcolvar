@@ -106,7 +106,6 @@ def compute_committor_weights(dataset,
     if n_labels != len(data_groups):
         raise(ValueError(f'The number of labels ({n_labels}) and data groups ({len(data_groups)}) do not match! Ensure you are correctly mapping the data in your training set!'))
 
-    # TODO sign if not from committor bias
     weights = torch.exp(beta * bias)
     new_labels = torch.zeros_like(original_labels)
 
