@@ -6,6 +6,8 @@ from mlcolvar.core.transform.descriptors.utils import compute_distances_matrix, 
 
 from typing import Union
 
+from warnings import warn
+
 __all__ = ["CoordinationNumbers"]
 
 class CoordinationNumbers(Transform):
@@ -22,7 +24,8 @@ class CoordinationNumbers(Transform):
                  cell: Union[float, list],
                  mode: str,
                  scaled_coords: bool = False,
-                 switching_function = None) -> torch.Tensor:
+                 switching_function = None, 
+                 dmax: float = None) -> torch.Tensor:
         """Initialize a coordination number object between two groups of atoms A and B.
 
         Parameters
@@ -47,6 +50,8 @@ class CoordinationNumbers(Transform):
             Switch for coordinates scaled on cell's vectors use, by default False
         switching_function : _type_, optional
             Switching function to be applied for the cutoff, can be either initialized as a switching_functions/SwitchingFunctions class or a simple function, by default None
+        dmax : float, optional
+            Distance at which, if set, the switching function will be forced to be zero by strecthing it and shifting it, by default None.
 
         Returns
         -------
@@ -69,7 +74,20 @@ class CoordinationNumbers(Transform):
         self.scaled_coords = scaled_coords
         self.mode = mode
         self.switching_function = switching_function
-    
+        self.dmax = dmax
+
+        # do a few checks
+        if mode == 'continuous':
+            if switching_function is None:
+                raise ValueError('switching_function is required to use continuous mode! Set This can be either a user-defined and torch-based function or a method of class switching_functions/SwitchingFunctions')
+            if cutoff != switching_function.cutoff:
+                raise ValueError(f'The cutoff of CoordinationNumbers and switching_function must be the same! Found {cutoff} and {switching_function.cutoff}')
+            if dmax is not None and dmax != switching_function.dmax:
+                raise ValueError(f'The dmax of CoordinationNumbers and switching_function must be the same! Found {dmax} and {switching_function.dmax}')
+        if mode == 'discontinuous':
+            if dmax is not None:
+                warn('dmax was set in discontinuous mode, it will likely be ineffective!')
+        
     def compute_coordination_number(self, pos):
         # move the group A elements to first positions
         pos, batch_size = sanitize_positions_shape(pos, self.n_atoms)
@@ -80,6 +98,11 @@ class CoordinationNumbers(Transform):
                                         cell=self.cell,
                                         scaled_coords=self.scaled_coords)
 
+        # get mask in case dmax is set
+        mask_dmax = torch.ones_like(dist)
+        if self.dmax is not None:
+            mask_dmax[torch.nonzero(dist.gt(self.dmax), as_tuple=True)] = 0
+
         # we can apply the switching cutoff with the switching function
         contributions = apply_cutoff(x=dist, 
                             cutoff=self.cutoff, 
@@ -88,11 +111,13 @@ class CoordinationNumbers(Transform):
         
         # we can throw away part of the matrix as it is repeated uselessly
         contributions = contributions[:, :self._group_A_size, :]
+        mask_dmax = mask_dmax[:, :self._group_A_size, :]
 
         # and also ensure that the AxA part of the matrix is zero, we need also to preserve the gradients
         mask = torch.ones_like(contributions)
         mask[:, :self._group_A_size, :self._group_A_size] = 0
         contributions = contributions*mask
+        contributions = contributions*mask_dmax
 
         # compute coordination
         coord_numbers = torch.sum(contributions, dim=-1)
@@ -210,6 +235,23 @@ def test_coordination_number():
     out = model(pos)
     out.sum().backward()
     
+    # check using dmax
+    switching_function=SwitchingFunctions(in_features=n_atoms*3, name='Rational', cutoff=cutoff, dmax=0.6, options={'n': 2, 'm' : 6, 'eps' : 1e0})
+    model = CoordinationNumbers(group_A=[2, 3],
+                                group_B=[0, 1, 4, 5, 6, 7, 8, 9, 10, 11],
+                                cutoff=cutoff,
+                                n_atoms=n_atoms, 
+                                PBC=True,
+                                cell=cell,
+                                mode='continuous',
+                                scaled_coords=False,
+                                switching_function=switching_function,
+                                dmax=0.6)
+    
+    out = model(pos)
+    out.sum().backward()
+
+
     # TODO add reference value for check
 
 if __name__ == "__main__":
