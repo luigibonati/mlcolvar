@@ -2,7 +2,6 @@ import numpy as np
 import torch
 from matplotlib import patches as mpatches
 import matplotlib.pyplot as plt
-import mlcolvar.utils.plot
 
 __all__ = [ "sensitivity_analysis", "plot_sensitivity" ]
 

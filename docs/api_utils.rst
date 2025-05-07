@@ -1,7 +1,9 @@
 Utils
 -----
 
-.. rubric:: Input/Output
+
+Input/Output
+^^^^^^^^^^^^
 
 Helper functions for loading dataframes (incl. PLUMED files) and directly creating datasets from them.
 
@@ -14,7 +16,9 @@ Helper functions for loading dataframes (incl. PLUMED files) and directly creati
    load_dataframe
    create_dataset_from_files
 
-.. rubric:: Time-lagged datasets
+
+Time-lagged datasets
+^^^^^^^^^^^^^^^^^^^^
 
 Create a dataset of pairs of time-lagged configurations.
 
@@ -26,20 +30,9 @@ Create a dataset of pairs of time-lagged configurations.
 
    create_timelagged_dataset
 
-.. rubric:: FES
 
-.. rubric:: Trainer
-
-Functions used in conjunction with the lightning Trainer (e.g. logging, metrics...).
-
-.. currentmodule:: mlcolvar.utils.trainer
-
-.. autosummary::
-   :toctree: autosummary
-   :template: custom-class-template.rst
-
-   MetricsCallback
-
+FES
+^^^
 Compute (and plot) the free energy surface along the CVs.
 
 .. currentmodule:: mlcolvar.utils.fes
@@ -50,7 +43,22 @@ Compute (and plot) the free energy surface along the CVs.
 
    compute_fes
 
-Plotting utils
+
+Trainer
+^^^^^^^
+Functions used in conjunction with the lightning Trainer (e.g. logging, metrics...).
+
+.. currentmodule:: mlcolvar.utils.trainer
+
+.. autosummary::
+   :toctree: autosummary
+   :template: custom-class-template.rst
+
+   MetricsCallback
+
+
+Plot
+^^^^
 
 .. currentmodule:: mlcolvar.utils.plot
 
