@@ -69,9 +69,10 @@ def _apply_pbc_distances(dist_components, pbc_cell):
 
     else: 
         # loop over dimensions of the pbc_cell
+        # NB when using distances matrices actually it has 4 dimensions but the slicing still holds implicitly
         for d in range(3):
-            shifts[:, d, :, :] = torch.div(dist_components[:, d, :, :], pbc_cell[d]/2, rounding_mode='trunc')
-            shifts[:, d, :, :] = torch.div(shifts[:, d, :, :] + 1*torch.sign(shifts[:, d, :, :]), 2, rounding_mode='trunc' )*pbc_cell[d]/2
+            shifts[:, d, :] = torch.div(dist_components[:, d, :], pbc_cell[d]/2, rounding_mode='trunc')
+            shifts[:, d, :] = torch.div(shifts[:, d, :] + 1*torch.sign(shifts[:, d, :]), 2, rounding_mode='trunc' )*pbc_cell[d]/2
 
     # apply shifts
     dist_components = dist_components - shifts
@@ -272,8 +273,11 @@ def apply_cutoff(x: torch.Tensor,
         raise ValueError('switching_function is required to use continuous mode! Set This can be either a user-defined and torch-based function or a method of class switching_functions/SwitchingFunctions')
     
     batch_size = x.shape[0]
-    mask_diag = ~torch.eye(x.shape[-1], dtype=bool)
-    mask_diag = torch.tile(mask_diag, (batch_size, 1, 1))
+    if x.shape[-1] == x.shape[-2]:
+        mask_diag = ~torch.eye(x.shape[-1], dtype=bool)
+        mask_diag = torch.tile(mask_diag, (batch_size, 1, 1))
+    else:
+        mask_diag = torch.ones_like(x_clone, dtype=torch.bool) 
 
     if mode == 'continuous':
         x_clone[mask_diag] = switching_function( x_clone[mask_diag] )
