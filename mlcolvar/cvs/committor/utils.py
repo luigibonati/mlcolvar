@@ -152,7 +152,7 @@ def get_descriptors_and_derivatives(dataset,
     setup_device : str, optional
         Device on which to perform the expensive calculations. Either 'cpu' or 'cuda', by default 'cpu'
     force_all_atoms: bool
-            Whether to allow the use of atoms that are non involved in the calculation of any descriptor, by default False
+        Whether to allow the use in SmartDerivatives of atoms that are non involved in the calculation of any descriptor, by default False
     Returns
     -------
     smart_derivatives : torch.nn.Module
