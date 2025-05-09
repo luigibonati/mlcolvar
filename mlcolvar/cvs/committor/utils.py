@@ -135,7 +135,8 @@ def get_descriptors_and_derivatives(dataset,
                                  descriptor_function, 
                                  n_atoms : int, 
                                  separate_boundary_dataset=True, 
-                                 setup_device='cpu'):
+                                 setup_device='cpu',
+                                 force_all_atoms : bool = False):
     """Wrapper function to setup a faster calculation of derivatives computing only once the derivatives of descriptors wrt positions.
 
     Parameters
@@ -150,7 +151,8 @@ def get_descriptors_and_derivatives(dataset,
         Switch to exculde boundary condition labeled data from the variational loss, by default True
     setup_device : str, optional
         Device on which to perform the expensive calculations. Either 'cpu' or 'cuda', by default 'cpu'
-    
+    force_all_atoms: bool
+            Whether to allow the use of atoms that are non involved in the calculation of any descriptor, by default False
     Returns
     -------
     smart_derivatives : torch.nn.Module
@@ -167,7 +169,8 @@ def get_descriptors_and_derivatives(dataset,
   # this sets up the fixed part of the calculation of the derivatives
     smart_derivatives = SmartDerivatives(d_desc_d_x, 
                                         n_atoms=n_atoms, 
-                                        setup_device=setup_device)
+                                        setup_device=setup_device, 
+                                        force_all_atoms=force_all_atoms)
 
     # update dataset with the descriptors as data
     smart_dataset = DictDataset({'data' : desc.detach(), 
