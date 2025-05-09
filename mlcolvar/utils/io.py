@@ -471,7 +471,8 @@ def create_dataset_from_trajectories(
         if (ext.lower() == ".xyz"):
             ase_atoms = read(trajectories[i], index=':')
             ase_cells = np.array([a.get_cell().array for a in ase_atoms], dtype=float)
-            traj.unitcell_vectors = ase_cells
+            # the pdb for the topology are in nm, ase work in A so we need to scale it
+            traj.unitcell_vectors = ase_cells/10
 
         if selection is not None:
             subset = traj.top.select(selection)
