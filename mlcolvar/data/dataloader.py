@@ -223,7 +223,7 @@ class DictLoader:
                 self._dataset = old_dataset
                 self._batch_size = old_batch_size
                 raise ValueError(
-                    f"batch_size (length {batch_size_len}) must have length equal to the number of datasets (length {len(self.dataset)}."
+                    f"batch_size (length {len(self._batch_size)} must have length equal to the number of datasets (length {len(self.dataset)}."
                 )
 
             # The number of batches per epoch must be the same for all datasets.

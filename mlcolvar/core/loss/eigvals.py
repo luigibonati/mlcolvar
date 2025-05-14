@@ -129,7 +129,7 @@ def reduce_eigenvalues_loss(
         else:
             n_eig = len(evals)
 
-    loss = None
+    loss = torch.zeros(1, dtype=evals.dtype, device=evals.device)
 
     if mode == "sum":
         loss = torch.sum(evals[:n_eig])

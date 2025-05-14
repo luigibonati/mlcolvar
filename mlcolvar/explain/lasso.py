@@ -3,7 +3,6 @@ import torch
 
 import matplotlib 
 import matplotlib.pyplot as plt
-import mlcolvar.utils.plot
 
 try:
     import sklearn
