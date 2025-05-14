@@ -170,7 +170,9 @@ def get_descriptors_and_derivatives(dataset,
                                  descriptor_function, 
                                  n_atoms : int, 
                                  separate_boundary_dataset=True, 
-                                 setup_device='cpu'):
+                                 setup_device='cpu',
+                                 force_all_atoms : bool = False,
+                                 positions_noise : float = 0.0):
     """Wrapper function to setup a faster calculation of derivatives computing only once the derivatives of descriptors wrt positions.
 
     Parameters
@@ -185,7 +187,12 @@ def get_descriptors_and_derivatives(dataset,
         Switch to exculde boundary condition labeled data from the variational loss, by default True
     setup_device : str, optional
         Device on which to perform the expensive calculations. Either 'cpu' or 'cuda', by default 'cpu'
-    
+    force_all_atoms : bool
+        Whether to allow the use in SmartDerivatives of atoms that are non involved in the calculation of any descriptor, by default False
+    positions_noise : float
+        Order of magnitude of small noise to be added to the positions to avoid atoms having the exact same coordinates on some dimension and thus zero derivatives, by default 0.
+        Ideally the smaller the better, e.g., 1e-6 for single precision, even lower for double precision.
+
     Returns
     -------
     smart_derivatives : torch.nn.Module
@@ -193,16 +200,19 @@ def get_descriptors_and_derivatives(dataset,
     smart_dataset : DictDataset
         Updated dataset. Dataset['data'] are the computed descriptors
     """
+
     # apply preprocessing and compute derivatives of descriptors
     pos, desc, d_desc_d_x = compute_descriptors_derivatives(dataset=dataset, 
                                                             descriptor_function=descriptor_function, 
                                                             n_atoms=n_atoms, 
-                                                            separate_boundary_dataset=separate_boundary_dataset)
+                                                            separate_boundary_dataset=separate_boundary_dataset,
+                                                            positions_noise=positions_noise)
 
   # this sets up the fixed part of the calculation of the derivatives
     smart_derivatives = SmartDerivatives(d_desc_d_x, 
                                         n_atoms=n_atoms, 
-                                        setup_device=setup_device)
+                                        setup_device=setup_device, 
+                                        force_all_atoms=force_all_atoms)
 
     # update dataset with the descriptors as data
     smart_dataset = DictDataset({'data' : desc.detach(), 
