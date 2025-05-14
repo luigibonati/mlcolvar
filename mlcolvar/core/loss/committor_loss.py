@@ -399,12 +399,20 @@ class SmartDerivatives(torch.nn.Module):
         # now make the square
         out = out.pow(2)
         # reshape, this needs to have the correct number of atoms as we need to mulply it by the mass vector later
-        out = out.reshape((batch_size, n_atoms*3))
+        try:
+            out = out.reshape((batch_size, n_atoms*3))
+        except RuntimeError as e:
+            raise RuntimeError(e, f"""It may be that some descriptor have a zero component because a low precision in the positions.
+                               Try adding a small random noise to the positions by hand or by tweaking the positions_noise key in get_descriptors_and_derivatives or compute_descriptors_derivatives utils""")
         return out
 
 
 from mlcolvar.core.transform.descriptors.utils import sanitize_positions_shape
-def compute_descriptors_derivatives(dataset, descriptor_function, n_atoms, separate_boundary_dataset = True):
+def compute_descriptors_derivatives(dataset, 
+                                    descriptor_function, 
+                                    n_atoms : int, 
+                                    separate_boundary_dataset = True, 
+                                    positions_noise : float = 0.0):
     """Compute the derivatives of a set of descriptors wrt input positions in a dataset for committor optimization
 
     Parameters
@@ -417,6 +425,9 @@ def compute_descriptors_derivatives(dataset, descriptor_function, n_atoms, separ
         Number of atoms in the system
     separate_boundary_dataset : bool, optional
             Switch to exculde boundary condition labeled data from the variational loss, by default True
+    positions_noise : float
+        Order of magnitude of small noise to be added to the positions to avoid atoms having the exact same coordinates on some dimension and thus zero derivatives, by default 0.
+        Ideally the smaller the better, e.g., 1e-6 for single precision, even lower for double precision.
 
     Returns
     -------
@@ -425,6 +436,10 @@ def compute_descriptors_derivatives(dataset, descriptor_function, n_atoms, separ
     d_desc_d_pos : torch.Tensor
         Derivatives of desc wrt to pos
     """
+    if positions_noise > 0:
+        noise = torch.rand_like(dataset['data'], )*positions_noise
+        dataset['data'] = dataset['data'] + noise
+
     pos = dataset['data']
     labels = dataset['labels']
     pos = sanitize_positions_shape(pos=pos, n_atoms=n_atoms)[0]
@@ -575,6 +590,47 @@ def test_smart_derivatives():
         assert(torch.allclose(smart_out, Ref))
 
         smart_out.sum().backward()
+
+
+
+    # check with disappearing gradient components
+    # compute some descriptors from positions --> distances
+    n_atoms = 3
+    pos = torch.Tensor([[ 1.4970,  1.3861, -0.0273, 
+                          1.4970,  1.5070, -0.1133, 
+                         -1.4473, -1.4193, -0.0553]])
+    pos = pos.repeat(4, 1)
+    labels = torch.arange(0, 4)
+
+    dataset = DictDataset({'data' : pos, 'labels' : labels})
+
+    cell = torch.Tensor([3.0233])
+  
+    ComputeDescriptors = PairwiseDistances(n_atoms=n_atoms,
+                              PBC=True,
+                              cell=cell,
+                              scaled_coords=False)
+    
+    pos, desc, d_desc_d_x = compute_descriptors_derivatives(dataset=dataset, 
+                                                            descriptor_function=ComputeDescriptors, 
+                                                            n_atoms=n_atoms, 
+                                                            separate_boundary_dataset=separate_boundary_dataset,
+                                                            positions_noise=1e-5)
+        
+
+    # apply simple NN
+    NN = FeedForward(layers = [3, 2, 1])
+    out = NN(desc)
+
+    # compute derivatives of out wrt descriptors
+    d_out_d_d = torch.autograd.grad(out, desc, grad_outputs=torch.ones_like(out), retain_graph=True, create_graph=True )[0]
+    
+    # apply smart derivatives
+    smart_derivatives = SmartDerivatives(d_desc_d_x, n_atoms=n_atoms, force_all_atoms=True)
+    right_input = d_out_d_d.squeeze(-1)
+    smart_out = smart_derivatives(right_input).sum(dim=1)
+
+    smart_out.sum().backward()
 
 if __name__ == "__main__":
     test_smart_derivatives()
