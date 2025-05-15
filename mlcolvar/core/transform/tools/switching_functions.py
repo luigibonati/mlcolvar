@@ -14,7 +14,8 @@ class SwitchingFunctions(Transform):
     def __init__(self,
                  in_features: int,
                  name: str, 
-                 cutoff: float, 
+                 cutoff: float,
+                 dmax: float = None, 
                  options: dict = None):
         f"""Initialize switching function object
 
@@ -24,6 +25,8 @@ class SwitchingFunctions(Transform):
             Name of the switching function to be used, available {",".join(self.SWITCH_FUNCS)}
         cutoff : float
             Cutoff for the swtiching functions
+        dmax : float, optional
+            Distance at which, if set, the switching function will be forced to be zero by strecthing it and shifting it, by default None.
         options : dict, optional
             Dictionary with all the arguments of the switching function, by default None
         """
@@ -34,6 +37,9 @@ class SwitchingFunctions(Transform):
         if options is None:
             options = {}
         self.options = options
+        if dmax is not None:
+            dmax = torch.Tensor([dmax])
+        self.dmax = dmax
        
         if name not in self.SWITCH_FUNCS:
             raise NotImplementedError(f'''The switching function {name} is not implemented in this class. The available options are: {",".join(self.SWITCH_FUNCS)}.
@@ -42,6 +48,9 @@ class SwitchingFunctions(Transform):
     def forward(self, x: torch.Tensor):
         switch_function = getattr(self, f'{self.name}_switch')
         y = switch_function(x, self.cutoff, **self.options)
+        if self.dmax is not None:
+            ymax = switch_function(self.dmax, self.cutoff, **self.options)
+            y = torch.div((y-ymax), (1-ymax))
         return y
     
     # ========================== define here switching functions ==========================

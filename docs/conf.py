@@ -23,7 +23,7 @@ import mlcolvar
 # -- Project information -----------------------------------------------------
 
 project = 'mlcolvar'
-copyright = ("2023, Luigi Bonati et. al.")
+copyright = ("2023-present, Luigi Bonati et. al.")
 author = 'Luigi Bonati'
 
 # The short X.Y version
