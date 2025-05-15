@@ -241,12 +241,13 @@ class SmartDerivatives(torch.nn.Module):
     def __init__(self,
                  der_desc_wrt_pos: torch.Tensor,
                  n_atoms: int,
-                 setup_device  : str = 'cpu'
+                 setup_device  : str = 'cpu',
+                 force_all_atoms : bool = False
                  ):
         """Initialize the fixed matrices for smart derivatives, i.e. matrix of derivatives of descriptors wrt positions.
         The derivatives wrt positions are recovered by multiplying the derivatives of q wrt the descriptors (right input, computed at each epoch)
         by the non-zero elements of the derivatives of the descriptors wrt the positions (left input, compute once at the beginning on the whole dataset).
-        The multiplication are done using scatte functions and keepoing track of the indeces of the batches, descriptors, atoms and dimensions.
+        The multiplication are done using scatter functions and keeping track of the indeces of the batches, descriptors, atoms and dimensions.
 
         NB. It should be used with only training set and single batch with shuffle and random_split disabled.
 
@@ -258,10 +259,13 @@ class SmartDerivatives(torch.nn.Module):
             Number of atoms in the systems, all the atoms should be used in at least one of the descriptors
         setup_device : str
             Device on which to perform the expensive calculations. Either 'cpu' or 'cuda', by default 'cpu'
+        force_all_atoms: bool
+            Whether to allow the use of atoms that are non involved in the calculation of any descriptor, by default False
         """
         super().__init__()
         self.batch_size = len(der_desc_wrt_pos)
         self.n_atoms = n_atoms
+        self.force_all_atoms = force_all_atoms
 
         # setup the fixed part of the computation, i.e. left input and indeces for the scatter
         self.left, self.mat_ind, self.scatter_indeces = self._setup_left(der_desc_wrt_pos, setup_device=setup_device)
@@ -274,11 +278,6 @@ class SmartDerivatives(torch.nn.Module):
         # the indeces in mat_ind are: batch, atom, descriptor and dimension
         left, mat_ind = self._create_nonzero_left(left_input)
         
-        # it is possible that some atoms are not involved in anything
-        n_effective_atoms = len(torch.unique(mat_ind[1]))
-        if n_effective_atoms < self.n_atoms:
-            raise ValueError(f"Some of the input atoms are useless LOL. The not used atom IDs are : {[i for i in range(self.n_atoms) if i not in torch.unique(mat_ind[1]).numpy()]}  ")
-        
         scatter_indeces = self._get_scatter_indices(batch_ind = mat_ind[0], atom_ind=mat_ind[1], dim_ind=mat_ind[3])
         return left, mat_ind, scatter_indeces
     
@@ -287,16 +286,36 @@ class SmartDerivatives(torch.nn.Module):
         """
         # find indeces of nonzero entries of d_dist_d_x
         mat_ind = x.nonzero(as_tuple=True)
+
+        # it is possible that some atoms are not involved in anything
+        used_atoms = torch.unique(mat_ind[1])
+        n_effective_atoms = len(used_atoms)
+
+        if n_effective_atoms < self.n_atoms:
+            # find not used atoms
+            missing_atoms = torch.arange(self.n_atoms)[torch.logical_not(torch.isin(torch.arange(self.n_atoms), used_atoms))]
+
+            if self.force_all_atoms:
+                # add by hand a contribute to at least one batch and one descriptor
+                # we use it to add the correct indeces, then we revert it
+                x[:, missing_atoms, 0, :] = x[:, missing_atoms, 0, :] + 10
                 
-        # flatten matrix --> big nonzero vector
-        x = x.ravel()
-        # find indeces of nonzero entries of the flattened matrix
-        vec_ind = x.nonzero(as_tuple=True)
-        
+                # find indeces of nonzero entries of augmented d_dist_d_x
+                mat_ind = x.nonzero(as_tuple=True)
+                # find indeces of nonzero entries of flattened augmented matrix
+                vec_ind = x.ravel().nonzero(as_tuple=True)
+
+                # revert
+                x[:, missing_atoms, 0, :] = x[:, missing_atoms, 0, :] - 10
+            else:
+                raise ValueError(f"Some of the input atoms are not used in any of the descriptors. The not used atom IDs are : {missing_atoms}. If you want to include all atoms even if not used swtich the force_all_atoms key on. ")
+        else:
+            # find indeces of nonzero entries of flattened matrix
+            vec_ind = x.ravel().nonzero(as_tuple=True)    
+               
         # create vector with the nonzero entries only
-        x_vec = x[vec_ind[0].long()]
-        
-        # del(vec_ind)
+        x_vec = x.ravel()[vec_ind[0].long()]
+        del(vec_ind)
         return x_vec, mat_ind
     
     def _get_scatter_indices(self, batch_ind, atom_ind, dim_ind):
@@ -376,15 +395,24 @@ class SmartDerivatives(torch.nn.Module):
         
         # this sums the elements of x according to the indeces, this way we get the contributions of different descriptors to the same atom
         out = scatter_sum(x, indeces.long())
+
         # now make the square
         out = out.pow(2)
         # reshape, this needs to have the correct number of atoms as we need to mulply it by the mass vector later
-        out = out.reshape((batch_size, n_atoms*3))
+        try:
+            out = out.reshape((batch_size, n_atoms*3))
+        except RuntimeError as e:
+            raise RuntimeError(e, f"""It may be that some descriptor have a zero component because a low precision in the positions.
+                               Try adding a small random noise to the positions by hand or by tweaking the positions_noise key in get_descriptors_and_derivatives or compute_descriptors_derivatives utils""")
         return out
 
 
 from mlcolvar.core.transform.descriptors.utils import sanitize_positions_shape
-def compute_descriptors_derivatives(dataset, descriptor_function, n_atoms, separate_boundary_dataset = True):
+def compute_descriptors_derivatives(dataset, 
+                                    descriptor_function, 
+                                    n_atoms : int, 
+                                    separate_boundary_dataset = True, 
+                                    positions_noise : float = 0.0):
     """Compute the derivatives of a set of descriptors wrt input positions in a dataset for committor optimization
 
     Parameters
@@ -397,6 +425,9 @@ def compute_descriptors_derivatives(dataset, descriptor_function, n_atoms, separ
         Number of atoms in the system
     separate_boundary_dataset : bool, optional
             Switch to exculde boundary condition labeled data from the variational loss, by default True
+    positions_noise : float
+        Order of magnitude of small noise to be added to the positions to avoid atoms having the exact same coordinates on some dimension and thus zero derivatives, by default 0.
+        Ideally the smaller the better, e.g., 1e-6 for single precision, even lower for double precision.
 
     Returns
     -------
@@ -405,6 +436,10 @@ def compute_descriptors_derivatives(dataset, descriptor_function, n_atoms, separ
     d_desc_d_pos : torch.Tensor
         Derivatives of desc wrt to pos
     """
+    if positions_noise > 0:
+        noise = torch.rand_like(dataset['data'], )*positions_noise
+        dataset['data'] = dataset['data'] + noise
+
     pos = dataset['data']
     labels = dataset['labels']
     pos = sanitize_positions_shape(pos=pos, n_atoms=n_atoms)[0]
@@ -497,6 +532,105 @@ def test_smart_derivatives():
         assert(torch.allclose(smart_out, Ref))
 
         smart_out.sum().backward()
+
+    # test with useless atoms
+    # compute some descriptors from positions --> distances
+    n_atoms = 5
+    pos = torch.Tensor([[ 1.4970,  1.3861, -0.0273, -1.4933,  1.5070, -0.1133, -1.4473, -1.4193,
+                        -0.0553, 1.4940,  1.4990, -0.2403, 1.4780, -1.4173, -0.3363]])
+    pos = pos.repeat(4, 1)
+    labels = torch.arange(0, 4)
+
+    dataset = DictDataset({'data' : pos, 'labels' : labels})
+
+    cell = torch.Tensor([3.0233])
+    ref_distances = torch.Tensor([[0.1521, 0.1220]])
+    ref_distances = ref_distances.repeat(4, 1)
+  
+    ComputeDescriptors = PairwiseDistances(n_atoms=n_atoms,
+                              PBC=True,
+                              cell=cell,
+                              scaled_coords=False, 
+                              slicing_pairs=[[0, 1], [1, 2]])
+    
+    for separate_boundary_dataset in [False, True]:
+        if separate_boundary_dataset:
+            mask = [labels > 1]
+        else: 
+            mask = torch.ones_like(labels, dtype=torch.bool)
+
+        pos, desc, d_desc_d_x = compute_descriptors_derivatives(dataset=dataset, 
+                                                                descriptor_function=ComputeDescriptors, 
+                                                                n_atoms=n_atoms, 
+                                                                separate_boundary_dataset=separate_boundary_dataset)
+        
+        assert(torch.allclose(desc, ref_distances, atol=1e-3))
+
+
+        # apply simple NN
+        NN = FeedForward(layers = [2, 2, 1])
+        out = NN(desc)
+
+        # compute derivatives of out wrt input
+        d_out_d_x = torch.autograd.grad(out, pos, grad_outputs=torch.ones_like(out), retain_graph=True, create_graph=True )[0]
+        # compute derivatives of out wrt descriptors
+        d_out_d_d = torch.autograd.grad(out, desc, grad_outputs=torch.ones_like(out), retain_graph=True, create_graph=True )[0]
+        ref = torch.einsum('badx,bd->bax ',d_desc_d_x,d_out_d_d[mask])
+        ref = ref.pow(2).sum(dim=(-2,-1))
+
+        Ref = d_out_d_x[mask].pow(2).sum(dim=(-2,-1))
+
+        # apply smart derivatives
+        smart_derivatives = SmartDerivatives(d_desc_d_x, n_atoms=n_atoms, force_all_atoms=True)
+        right_input = d_out_d_d.squeeze(-1)
+        smart_out = smart_derivatives(right_input).sum(dim=1)
+
+        # do checks
+        assert(torch.allclose(smart_out, ref))
+        assert(torch.allclose(smart_out, Ref))
+
+        smart_out.sum().backward()
+
+
+
+    # check with disappearing gradient components
+    # compute some descriptors from positions --> distances
+    n_atoms = 3
+    pos = torch.Tensor([[ 1.4970,  1.3861, -0.0273, 
+                          1.4970,  1.5070, -0.1133, 
+                         -1.4473, -1.4193, -0.0553]])
+    pos = pos.repeat(4, 1)
+    labels = torch.arange(0, 4)
+
+    dataset = DictDataset({'data' : pos, 'labels' : labels})
+
+    cell = torch.Tensor([3.0233])
+  
+    ComputeDescriptors = PairwiseDistances(n_atoms=n_atoms,
+                              PBC=True,
+                              cell=cell,
+                              scaled_coords=False)
+    
+    pos, desc, d_desc_d_x = compute_descriptors_derivatives(dataset=dataset, 
+                                                            descriptor_function=ComputeDescriptors, 
+                                                            n_atoms=n_atoms, 
+                                                            separate_boundary_dataset=separate_boundary_dataset,
+                                                            positions_noise=1e-5)
+        
+
+    # apply simple NN
+    NN = FeedForward(layers = [3, 2, 1])
+    out = NN(desc)
+
+    # compute derivatives of out wrt descriptors
+    d_out_d_d = torch.autograd.grad(out, desc, grad_outputs=torch.ones_like(out), retain_graph=True, create_graph=True )[0]
+    
+    # apply smart derivatives
+    smart_derivatives = SmartDerivatives(d_desc_d_x, n_atoms=n_atoms, force_all_atoms=True)
+    right_input = d_out_d_d.squeeze(-1)
+    smart_out = smart_derivatives(right_input).sum(dim=1)
+
+    smart_out.sum().backward()
 
 if __name__ == "__main__":
     test_smart_derivatives()
