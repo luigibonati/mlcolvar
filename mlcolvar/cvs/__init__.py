@@ -8,7 +8,6 @@ __all__ = [
     "MultiTaskCV",
     'Committor',
     "Generator",
-    "Generator_singleNN"
 ]
 
 from .cv import BaseCV

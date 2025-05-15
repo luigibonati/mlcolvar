@@ -17,7 +17,6 @@ __all__ = [
     "compute_descriptors_derivatives",
     "GeneratorLoss",
     "compute_eigenfunctions",
-    "evaluate_eigenfunctions"
 ]
 
 from .mse import MSELoss, mse_loss
@@ -27,4 +26,4 @@ from .elbo import ELBOGaussiansLoss, elbo_gaussians_loss
 from .autocorrelation import AutocorrelationLoss, autocorrelation_loss
 from .fisher import FisherDiscriminantLoss, fisher_discriminant_loss
 from .committor_loss import CommittorLoss, committor_loss, SmartDerivatives, compute_descriptors_derivatives
-from .generator_loss import GeneratorLoss, compute_eigenfunctions, evaluate_eigenfunctions
+from .generator_loss import GeneratorLoss, compute_eigenfunctions
