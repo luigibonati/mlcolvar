@@ -472,7 +472,6 @@ def compute_descriptors_derivatives(dataset,
     # we loop over batches and compute everything only for that part of the data, inside we loop over descriptors
     # we save lists and make them proper tensors later
     batch_aux_stack = []
-    aux_desc = []
     batch_count = 0
     while batch_count * batch_size + 1 <= len(pos):
         print(f"Processing batch {batch_count}/{n_batches}", end='\r')
