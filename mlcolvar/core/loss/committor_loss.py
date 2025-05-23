@@ -435,10 +435,12 @@ def compute_descriptors_derivatives(dataset,
 
     Returns
     -------
+    pos : torch.Tensor
+        Positions tensor (detached)
     desc : torch.Tensor
-        Computed descriptors
+        Computed descriptors (detached)
     d_desc_d_pos : torch.Tensor
-        Derivatives of desc wrt to pos
+        Derivatives of desc wrt to pos (detached)
     """
     
     # apply noise if given
@@ -451,6 +453,9 @@ def compute_descriptors_derivatives(dataset,
     labels = dataset['labels']
     pos = sanitize_positions_shape(pos=pos, n_atoms=n_atoms)[0]
     pos.requires_grad = True
+    
+    # get_device 
+    device = pos.device
 
     # check if to separate boundary data
     if separate_boundary_dataset:
@@ -487,18 +492,23 @@ def compute_descriptors_derivatives(dataset,
             batch_desc = descriptor_function(batch_pos)
 
             # loop over descriptors, #TODO maybe can be done with jacobians?
+            # we store things always on the cpu
             batch_aux = []
             for i in range(len(batch_desc[0])):
                 aux_der = torch.autograd.grad(batch_desc[:,i], batch_pos, grad_outputs=torch.ones_like(batch_desc[:,i]), retain_graph=True )[0]
-                batch_aux.append(aux_der)
+                batch_aux.append(aux_der.detach().cpu())
             
-            batch_d_desc_d_pos = torch.stack(batch_aux, axis=2) # derivatives of this batch
-            batch_aux_stack.append(batch_d_desc_d_pos)          # derivatives of all batches
+            batch_d_desc_d_pos = torch.stack(batch_aux, axis=2)         # derivatives of this batch
+            batch_aux_stack.append(batch_d_desc_d_pos.detach().cpu())   # derivatives of all batches
 
             # cleanup
             del aux_der    
             del batch_pos
             del batch_desc
+
+            # to be sure, clean the gpu cache
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
         batch_count += 1
     
@@ -509,8 +519,18 @@ def compute_descriptors_derivatives(dataset,
     else:
         d_desc_d_pos = torch.cat(batch_aux_stack, dim=0)
     
-    # we compute the descriptors on the whole dataset to always have all of them    
-    desc = descriptor_function(pos)
+    # we compute the descriptors on the whole dataset to always have all of them, no need for grads   
+    with torch.no_grad():
+        desc = descriptor_function(pos)
+
+    # detach and move back to original device
+    pos = pos.detach().to(device)
+    desc = desc.detach().to(device)
+    d_desc_d_pos = d_desc_d_pos.detach().to(device)
+
+    # to be sure, clean the gpu cache
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
     return pos, desc, d_desc_d_pos.squeeze(-1)
 
@@ -557,6 +577,10 @@ def test_smart_derivatives():
         
         assert(torch.allclose(desc, ref_distances, atol=1e-3))
 
+
+        # compute descriptors outside to have their derivatives for checks
+        pos.requires_grad = True
+        desc = ComputeDescriptors(pos)
 
         # apply simple NN
         NN = FeedForward(layers = [45, 2, 1])
@@ -615,6 +639,9 @@ def test_smart_derivatives():
         
         assert(torch.allclose(desc, ref_distances, atol=1e-3))
 
+        # compute descriptors outside to have their derivatives for checks
+        pos.requires_grad = True
+        desc = ComputeDescriptors(pos)
 
         # apply simple NN
         NN = FeedForward(layers = [2, 2, 1])
@@ -667,7 +694,10 @@ def test_smart_derivatives():
                                                             separate_boundary_dataset=separate_boundary_dataset,
                                                             positions_noise=1e-5, 
                                                             batch_size=3)
-        
+    
+    # compute descriptors outside to have their derivatives for checks
+    pos.requires_grad = True
+    desc = ComputeDescriptors(pos)
 
     # apply simple NN
     NN = FeedForward(layers = [3, 2, 1])
