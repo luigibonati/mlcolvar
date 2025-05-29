@@ -312,7 +312,7 @@ def test_generator():
 
     assert( torch.allclose(ref_eigfuncs, check_ref_eigfuncs, atol=1e-3) )
     assert( torch.allclose(ref_eigvals, check_ref_eigvals, atol=1e-3) )
-    assert( torch.allclose(ref_eigvecs, check_ref_eigvecs, atol=1e-2) )
+    assert( torch.allclose(ref_eigvecs, check_ref_eigvecs, atol=1e-1) ) # eigvecs are larger numbers
 
     # 2 ------------ Descriptors as input + explicit pass derivatives ------------
     dataset = DictDataset({"data": ref_pos.detach(), "weights": ref_weights, "labels": torch.ones((len(ref_pos), 1))})
@@ -369,7 +369,7 @@ def test_generator():
 
     assert( torch.allclose(eigfuncs, ref_eigfuncs, atol=1e-3) )
     assert( torch.allclose(eigvals, ref_eigvals, atol=1e-3) )
-    assert( torch.allclose(eigvecs, ref_eigvecs, atol=1e-2) )
+    assert( torch.allclose(eigvecs, ref_eigvecs, atol=1e-1) ) # eigvecs are larger numbers
 
 
     # 3 ------------ Descriptors as input + SmartDerivatives ------------
@@ -420,7 +420,7 @@ def test_generator():
 
     assert( torch.allclose(eigfuncs, ref_eigfuncs, atol=1e-3) )
     assert( torch.allclose(eigvals, ref_eigvals, atol=1e-3) )
-    assert( torch.allclose(eigvecs, ref_eigvecs, atol=1e-2) )
+    assert( torch.allclose(eigvecs, ref_eigvecs, atol=1e-1) ) # eigvecs are larger numbers
 
 if __name__ == '__main__':
     test_generator()

@@ -154,12 +154,11 @@ def generator_loss(input : torch.Tensor,
     if cell is not None:
         gradient_positions /= cell
 
-    # TODO check if is actually needed but I think so
-    try: # multiple outputs (r!=0)
-        gradient_positions = gradient_positions.swapaxes(2,1)
-    except: # single output (r==0)
-        gradient_positions = gradient_positions.unsqueeze(-1).swapaxes(2,1)
+    if r==1:
+        gradient_positions = gradient_positions.unsqueeze(-1)
 
+    gradient_positions = gradient_positions.swapaxes(2,1)
+    
     # multiply by friction
     # TODO change to have a simpler mass tensor
     gradient_positions = gradient_positions * torch.sqrt(friction)
@@ -298,11 +297,10 @@ def compute_eigenfunctions(input : torch.Tensor,
     if cell is not None:
         gradient_positions /= cell
 
-    # TODO check if is actually needed but I think so
-    try: # multiple outputs (r!=0) 
-        gradient_positions = gradient_positions.swapaxes(2,1)
-    except: # single output (r==0)
-        gradient_positions = gradient_positions.unsqueeze(-1).swapaxes(2,1)
+    if r==1:
+        gradient_positions = gradient_positions.unsqueeze(-1)
+
+    gradient_positions = gradient_positions.swapaxes(2,1)
 
     # multiply by friction
     # TODO change to have a simpler mass tensor
