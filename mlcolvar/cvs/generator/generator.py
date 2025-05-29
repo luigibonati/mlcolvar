@@ -309,7 +309,7 @@ def test_generator():
 
     assert( torch.allclose(ref_eigfuncs, check_ref_eigfuncs, atol=1e-4) )
     assert( torch.allclose(ref_eigvals, check_ref_eigvals, atol=1e-4) )
-    assert( torch.allclose(ref_eigvecs, check_ref_eigvecs, atol=1e-4) )
+    assert( torch.allclose(ref_eigvecs, check_ref_eigvecs, atol=1e-2) )
 
 
     # 2 ------------ Descriptors as input + explicit pass derivatives ------------

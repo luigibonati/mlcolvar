@@ -649,8 +649,6 @@ def test_smart_derivatives():
         # compute derivatives of out wrt descriptors
         d_out_d_d = torch.autograd.grad(out, desc, grad_outputs=torch.ones_like(out), retain_graph=True, create_graph=True )[0]
         ref = torch.einsum('badx,bd->bax ',d_desc_d_x,d_out_d_d[mask])
-        ref = ref
-
         Ref = d_out_d_x[mask]
 
         # apply smart derivatives
@@ -712,8 +710,6 @@ def test_smart_derivatives():
         # compute derivatives of out wrt descriptors
         d_out_d_d = torch.autograd.grad(out, desc, grad_outputs=torch.ones_like(out), retain_graph=True, create_graph=True )[0]
         ref = torch.einsum('badx,bd->bax ',d_desc_d_x,d_out_d_d[mask])
-        ref = ref
-
         Ref = d_out_d_x[mask]
 
         # apply smart derivatives
@@ -827,7 +823,6 @@ def test_smart_derivatives():
         d_out_d_d = torch.stack([torch.autograd.grad(out[:, i], desc, grad_outputs=torch.ones_like(out[:, i]), retain_graph=True, create_graph=True )[0] for i in range(out.shape[-1])], dim=2)
         
         ref = torch.einsum('badx,bdo->baxo ',d_desc_d_x,d_out_d_d[mask])
-        ref = ref
         Ref = d_out_d_x[mask]
 
         # apply smart derivatives
