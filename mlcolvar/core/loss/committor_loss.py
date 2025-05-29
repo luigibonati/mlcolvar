@@ -63,7 +63,7 @@ class CommittorLoss(torch.nn.Module):
         self.cell = cell
         self.gamma = gamma
         self.delta_f = delta_f
-        self.descriptors_derivatives=descriptors_derivatives
+        self.descriptors_derivatives = descriptors_derivatives
         self.separate_boundary_dataset = separate_boundary_dataset
 
     def forward(
@@ -101,7 +101,7 @@ def scatter_sum(src: torch.Tensor,
                 out: Optional[torch.Tensor] = None,
                 dim_size: Optional[int] = None) -> torch.Tensor:
     """Scatter sum function, from torch_scatter module (https://github.com/rusty1s/pytorch_scatter/blob/master/torch_scatter/scatter.py)"""
-    index = broadcast(index, src, dim)
+    index = broadcast(index, src, dim).to(src.device)
     if out is None:
         size = list(src.size())
         if dim_size is not None:
@@ -114,7 +114,7 @@ def scatter_sum(src: torch.Tensor,
         return out.scatter_add_(dim, index, src)
     else:
         return out.scatter_add_(dim, index, src)
-
+    
 def committor_loss(x: torch.Tensor, 
                   q: torch.Tensor, 
                   labels: torch.Tensor, 
@@ -204,7 +204,7 @@ def committor_loss(x: torch.Tensor,
         grad = grad / cell
     
     if descriptors_derivatives is not None:
-        grad_square = descriptors_derivatives(grad)
+        grad_square = descriptors_derivatives(grad, do_square=True)
     else:
         # we get the square of grad(q) and we multiply by the weight
         grad_square = torch.pow(grad, 2)
@@ -267,20 +267,28 @@ class SmartDerivatives(torch.nn.Module):
         self.batch_size = len(der_desc_wrt_pos)
         self.n_atoms = n_atoms
         self.force_all_atoms = force_all_atoms
-
+        
         # setup the fixed part of the computation, i.e. left input and indeces for the scatter
-        self.left, self.mat_ind, self.scatter_indeces = self._setup_left(der_desc_wrt_pos, setup_device=setup_device)
+        self.left, self.batch_ind, self.atom_ind, self.desc_ind, self.dim_ind, self.scatter_indeces = self._setup_left(der_desc_wrt_pos, setup_device=setup_device)
         
     def _setup_left(self, left_input : torch.Tensor, setup_device : str = 'cpu'):
         """Setup the fixed part of the computation, i.e. left input"""
-        # all the setup should be done on the CPU by defualt
-        left_input = left_input.to(torch.device(setup_device))
+        with torch.no_grad():
+            # all the setup should be done on the CPU by defualt
+            left_input = left_input.to(torch.device(setup_device))
 
-        # the indeces in mat_ind are: batch, atom, descriptor and dimension
-        left, mat_ind = self._create_nonzero_left(left_input)
-        
-        scatter_indeces = self._get_scatter_indices(batch_ind = mat_ind[0], atom_ind=mat_ind[1], dim_ind=mat_ind[3])
-        return left, mat_ind, scatter_indeces
+            # the indeces in mat_ind are: batch, atom, descriptor and dimension
+            left, mat_ind = self._create_nonzero_left(left_input)
+            
+            scatter_indeces = self._get_scatter_indices(batch_ind = mat_ind[0], atom_ind=mat_ind[1], dim_ind=mat_ind[3])
+            
+            batch_ind = mat_ind[0].long().detach()
+            atom_ind = mat_ind[1].long().detach()
+            desc_ind = mat_ind[2].long().detach()
+            dim_ind = mat_ind[3].long().detach()
+            scatter_indeces = scatter_indeces.long().detach()
+
+        return left, batch_ind, atom_ind, desc_ind, dim_ind, scatter_indeces
     
     def _create_nonzero_left(self, x):
         """Find the indeces of the non-zero elements of the left input
@@ -371,40 +379,93 @@ class SmartDerivatives(torch.nn.Module):
 
         return shifted_indeces
 
-    def forward(self, x : torch.Tensor):
+    def forward(self, x : torch.Tensor, do_square : bool = True):
         # ensure device consistency
-        left = self.left.to(x.device)
-
-        # get the vector with the derivatives of q wrt the descriptors
-        right = self._create_right(x=x, batch_ind=self.mat_ind[0], des_ind=self.mat_ind[2])
-
-        # do element-wise product
-        src = left * right
+        if self.left.device != x.device:
+            print('[SmartDerivatives] Moving left to device..')
+            self.left = self.left.to(x.device)
         
-        # compute square modulus
-        out = self._compute_square_modulus(x=src, indeces=self.scatter_indeces, n_atoms=self.n_atoms, batch_size=self.batch_size)
+        # get the vector with non-zero elements of derivatives of q wrt the descriptors
+        right = self._create_right(x=x)
+
+        # do element-wise product between:
+        # desc/pos derivatives matrix non-zero elements (left)
+        # out/desc derivatives matrix non-zero elements (right)
+        if self.left.shape == right.shape:
+            src = self.left * right
+        else:
+            src = torch.einsum("j,jr->jr",self.left,right)
+
+        # sum contributions from different descriptors to the same atoms
+        out = self._sum_desc_contributions(x=src, do_square=do_square)
 
         return out
         
-    def _create_right(self, x : torch.Tensor, batch_ind : torch.Tensor, des_ind : torch.Tensor):
+    def _create_right(self, x : torch.Tensor):
+        if self.batch_ind.device != x.device:
+            print('[SmartDerivatives] Moving batch_ind to device..')
+            self.batch_ind = self.batch_ind.to(x.device)
+        if self.desc_ind.device != x.device:
+            print('[SmartDerivatives] Moving desc_ind to device..')
+            self.desc_ind = self.desc_ind.to(x.device)
         # keep only the non zero elements of right input
-        desc_vec = x[batch_ind, des_ind]
+        desc_vec = x[self.batch_ind, self.desc_ind]
         return desc_vec
 
-    def _compute_square_modulus(self, x : torch.Tensor, indeces : torch.Tensor, n_atoms : int, batch_size : torch.Tensor):
-        indeces = indeces.long().to(x.device)
-        
-        # this sums the elements of x according to the indeces, this way we get the contributions of different descriptors to the same atom
-        out = scatter_sum(x, indeces.long())
+    def _sum_desc_contributions(self, x : torch.Tensor, do_square : bool = True):
+        if self.scatter_indeces.device != x.device:
+            print('[SmartDerivatives] Moving scatter_indeces to device..')
+            self.scatter_indeces = self.scatter_indeces.to(x.device)
 
-        # now make the square
-        out = out.pow(2)
-        # reshape, this needs to have the correct number of atoms as we need to mulply it by the mass vector later
+        # this sums the elements of x according to the indeces, this way we get the contributions of different descriptors to the same atom
         try:
-            out = out.reshape((batch_size, n_atoms*3))
+            # single output case
+            if self.scatter_indeces.shape == x.shape:
+                # create output tensor to make it faster    
+                out = torch.zeros((self.batch_size*self.n_atoms*3), device=x.device)
+                # scatter to the right indeces
+                out = scatter_sum(x, self.scatter_indeces, out=out)
+                # reshape to the right shape
+                out = out.reshape((self.batch_size, self.n_atoms*3))
+            
+            # multiple outputs case
+            else:
+                # if not hasattr(self, "out_ind"):
+                #     with torch.no_grad():
+                #         # we create a big index vector repeated for the different outputs
+                #         self.out_ind = self.scatter_indeces.unsqueeze(0).repeat((x.shape[-1], 1))   
+
+                #         # get and apply shifts
+                #         aux = (torch.arange(x.shape[-1], device=x.device)*(self.batch_size*self.n_atoms*3)).unsqueeze(-1)
+                #         self.out_ind = self.out_ind + aux         
+
+                #         # flatten the indeces and to be sure move to device
+                #         self.out_ind = self.out_ind.ravel()
+                #         self.out_ind = self.out_ind.to(x.device)
+                
+                # # create output tensor to make it faster    
+                # out = torch.zeros((self.batch_size*self.n_atoms*3*x.shape[-1]), device=x.device)
+                # # scatter to the right indeces
+                # out = scatter_sum(x.T.ravel(), self.out_ind, out=out)
+                # # reshape to the right shape
+                # out = out.reshape((self.batch_size, self.n_atoms*3, x.shape[-1]))
+                
+                # ----> This is an alternative implemention, a little bit slower but less memory consuming maybe <----
+                out = torch.zeros((self.batch_size*self.n_atoms*3, x.shape[-1]), device=x.device)
+                for i in range(x.shape[-1]): 
+                    out[:, i] = scatter_sum(x[:, i], self.scatter_indeces, out=out[:, i])
+                out = out.reshape((self.batch_size, self.n_atoms*3, x.shape[-1]))
+
+
+        # in case somehting's wrong      
         except RuntimeError as e:
             raise RuntimeError(e, f"""It may be that some descriptor have a zero component because a low precision in the positions.
-                               Try adding a small random noise to the positions by hand or by tweaking the positions_noise key in get_descriptors_and_derivatives or compute_descriptors_derivatives utils""")
+                                Try adding a small random noise to the positions by hand or by tweaking the positions_noise key in get_descriptors_and_derivatives or compute_descriptors_derivatives utils""")
+        
+        # if needed make the square
+        if do_square:
+            out = out.pow(2)
+        
         return out
 
 
@@ -606,6 +667,8 @@ def test_smart_derivatives():
 
         smart_out.sum().backward()
 
+
+
     # test with useless atoms
     # compute some descriptors from positions --> distances
     n_atoms = 5
@@ -712,6 +775,74 @@ def test_smart_derivatives():
     smart_out = smart_derivatives(right_input).sum(dim=1)
 
     smart_out.sum().backward()
+
+
+    # Test with multiple outputs
+    # compute some descriptors from positions --> distances
+    n_atoms = 10
+    pos = torch.Tensor([[ 1.4970,  1.3861, -0.0273, -1.4933,  1.5070, -0.1133, -1.4473, -1.4193,
+                        -0.0553,  1.4940,  1.4990, -0.2403,  1.4780, -1.4173, -0.3363, -1.4243,
+                        -1.4093, -0.4293,  1.3530, -1.4313, -0.4183,  1.3060,  1.4750, -0.4333,
+                        1.2970, -1.3233, -0.4643,  1.1670, -1.3253, -0.5354]])
+    pos = pos.repeat(4, 1)
+    labels = torch.arange(0, 4)
+
+    dataset = DictDataset({'data' : pos, 'labels' : labels})
+
+    cell = torch.Tensor([3.0233])
+    ref_distances = torch.Tensor([[0.1521, 0.2335, 0.2412, 0.3798, 0.4733, 0.4649, 0.4575, 0.5741, 0.6815,
+                                0.1220, 0.1323, 0.2495, 0.3407, 0.3627, 0.3919, 0.4634, 0.5885, 0.2280,
+                                0.2976, 0.3748, 0.4262, 0.4821, 0.5043, 0.6376, 0.1447, 0.2449, 0.2454,
+                                0.2705, 0.3597, 0.4833, 0.1528, 0.1502, 0.2370, 0.2408, 0.3805, 0.2472,
+                                0.3243, 0.3159, 0.4527, 0.1270, 0.1301, 0.2440, 0.2273, 0.2819, 0.1482]])
+    ref_distances = ref_distances.repeat(4, 1)
+  
+    ComputeDescriptors = PairwiseDistances(n_atoms=n_atoms,
+                              PBC=True,
+                              cell=cell,
+                              scaled_coords=False)
+    
+    for separate_boundary_dataset in [False, True]:
+        if separate_boundary_dataset:
+            mask = [labels > 1]
+        else: 
+            mask = torch.ones_like(labels, dtype=torch.bool)
+
+        pos, desc, d_desc_d_x = compute_descriptors_derivatives(dataset=dataset, 
+                                                                descriptor_function=ComputeDescriptors, 
+                                                                n_atoms=n_atoms, 
+                                                                separate_boundary_dataset=separate_boundary_dataset)
+        
+        assert(torch.allclose(desc, ref_distances, atol=1e-3))
+
+        # compute descriptors outside to have their derivatives for checks
+        pos.requires_grad = True
+        desc = ComputeDescriptors(pos)
+
+        # apply simple NN
+        torch.manual_seed(42)
+        NN = FeedForward(layers = [45, 2, 2])
+        out = NN(desc)
+
+        # compute derivatives of out wrt input
+        d_out_d_x = torch.stack([torch.autograd.grad(out[:, i], pos, grad_outputs=torch.ones_like(out[:, i]), retain_graph=True, create_graph=True )[0] for i in range(out.shape[-1])], dim=3)
+        # compute derivatives of out wrt descriptors
+        d_out_d_d = torch.stack([torch.autograd.grad(out[:, i], desc, grad_outputs=torch.ones_like(out[:, i]), retain_graph=True, create_graph=True )[0] for i in range(out.shape[-1])], dim=2)
+        
+        ref = torch.einsum('badx,bdo->baxo ',d_desc_d_x,d_out_d_d[mask])
+        ref = ref.pow(2).sum(dim=(-3,-2))
+        Ref = d_out_d_x[mask].pow(2).sum(dim=(-3,-2))
+
+        # apply smart derivatives
+        smart_derivatives = SmartDerivatives(d_desc_d_x, n_atoms=n_atoms)
+        right_input = d_out_d_d
+        smart_out = smart_derivatives(right_input).sum(dim=1)
+        
+        # do checks
+        assert(torch.allclose(smart_out, ref))
+        assert(torch.allclose(smart_out, Ref))
+
+        smart_out.sum().backward()
 
 if __name__ == "__main__":
     test_smart_derivatives()
