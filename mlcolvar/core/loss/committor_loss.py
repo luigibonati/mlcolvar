@@ -204,10 +204,10 @@ def committor_loss(x: torch.Tensor,
         grad = grad / cell
     
     if descriptors_derivatives is not None:
-        grad_square = descriptors_derivatives(grad, do_square=True)
-    else:
-        # we get the square of grad(q) and we multiply by the weight
-        grad_square = torch.pow(grad, 2)
+        grad = descriptors_derivatives(grad).reshape(x[mask_var].shape[0], -1)
+    
+    # we do the square
+    grad_square = torch.pow(grad, 2)
         
     # we sanitize the shapes of mass and weights tensors
     # mass should have size [1, n_atoms*spatial_dims]
@@ -397,7 +397,7 @@ class SmartDerivatives(torch.nn.Module):
             src = torch.einsum("j,jr->jr",self.left,right)
 
         # sum contributions from different descriptors to the same atoms
-        out = self._sum_desc_contributions(x=src, do_square=do_square)
+        out = self._sum_desc_contributions(x=src)
 
         return out
         
@@ -426,7 +426,7 @@ class SmartDerivatives(torch.nn.Module):
                 # scatter to the right indeces
                 out = scatter_sum(x, self.scatter_indeces, out=out)
                 # reshape to the right shape
-                out = out.reshape((self.batch_size, self.n_atoms*3))
+                out = out.reshape((self.batch_size, self.n_atoms, 3))
             
             # multiple outputs case
             else:
@@ -454,18 +454,14 @@ class SmartDerivatives(torch.nn.Module):
                 out = torch.zeros((self.batch_size*self.n_atoms*3, x.shape[-1]), device=x.device)
                 for i in range(x.shape[-1]): 
                     out[:, i] = scatter_sum(x[:, i], self.scatter_indeces, out=out[:, i])
-                out = out.reshape((self.batch_size, self.n_atoms*3, x.shape[-1]))
+                out = out.reshape((self.batch_size, self.n_atoms, 3, x.shape[-1]))
 
 
         # in case somehting's wrong      
         except RuntimeError as e:
             raise RuntimeError(e, f"""It may be that some descriptor have a zero component because a low precision in the positions.
                                 Try adding a small random noise to the positions by hand or by tweaking the positions_noise key in get_descriptors_and_derivatives or compute_descriptors_derivatives utils""")
-        
-        # if needed make the square
-        if do_square:
-            out = out.pow(2)
-        
+    
         return out
 
 
@@ -652,14 +648,14 @@ def test_smart_derivatives():
         # compute derivatives of out wrt descriptors
         d_out_d_d = torch.autograd.grad(out, desc, grad_outputs=torch.ones_like(out), retain_graph=True, create_graph=True )[0]
         ref = torch.einsum('badx,bd->bax ',d_desc_d_x,d_out_d_d[mask])
-        ref = ref.pow(2).sum(dim=(-2,-1))
+        ref = ref
 
-        Ref = d_out_d_x[mask].pow(2).sum(dim=(-2,-1))
+        Ref = d_out_d_x[mask]
 
         # apply smart derivatives
         smart_derivatives = SmartDerivatives(d_desc_d_x, n_atoms=n_atoms)
         right_input = d_out_d_d.squeeze(-1)
-        smart_out = smart_derivatives(right_input).sum(dim=1)
+        smart_out = smart_derivatives(right_input)
 
         # do checks
         assert(torch.allclose(smart_out, ref))
@@ -715,14 +711,14 @@ def test_smart_derivatives():
         # compute derivatives of out wrt descriptors
         d_out_d_d = torch.autograd.grad(out, desc, grad_outputs=torch.ones_like(out), retain_graph=True, create_graph=True )[0]
         ref = torch.einsum('badx,bd->bax ',d_desc_d_x,d_out_d_d[mask])
-        ref = ref.pow(2).sum(dim=(-2,-1))
+        ref = ref
 
-        Ref = d_out_d_x[mask].pow(2).sum(dim=(-2,-1))
+        Ref = d_out_d_x[mask]
 
         # apply smart derivatives
         smart_derivatives = SmartDerivatives(d_desc_d_x, n_atoms=n_atoms, force_all_atoms=True)
         right_input = d_out_d_d.squeeze(-1)
-        smart_out = smart_derivatives(right_input).sum(dim=1)
+        smart_out = smart_derivatives(right_input)
 
         # do checks
         assert(torch.allclose(smart_out, ref))
@@ -772,7 +768,7 @@ def test_smart_derivatives():
     # apply smart derivatives
     smart_derivatives = SmartDerivatives(d_desc_d_x, n_atoms=n_atoms, force_all_atoms=True)
     right_input = d_out_d_d.squeeze(-1)
-    smart_out = smart_derivatives(right_input).sum(dim=1)
+    smart_out = smart_derivatives(right_input)
 
     smart_out.sum().backward()
 
@@ -830,13 +826,13 @@ def test_smart_derivatives():
         d_out_d_d = torch.stack([torch.autograd.grad(out[:, i], desc, grad_outputs=torch.ones_like(out[:, i]), retain_graph=True, create_graph=True )[0] for i in range(out.shape[-1])], dim=2)
         
         ref = torch.einsum('badx,bdo->baxo ',d_desc_d_x,d_out_d_d[mask])
-        ref = ref.pow(2).sum(dim=(-3,-2))
-        Ref = d_out_d_x[mask].pow(2).sum(dim=(-3,-2))
+        ref = ref
+        Ref = d_out_d_x[mask]
 
         # apply smart derivatives
         smart_derivatives = SmartDerivatives(d_desc_d_x, n_atoms=n_atoms)
         right_input = d_out_d_d
-        smart_out = smart_derivatives(right_input).sum(dim=1)
+        smart_out = smart_derivatives(right_input)
         
         # do checks
         assert(torch.allclose(smart_out, ref))
