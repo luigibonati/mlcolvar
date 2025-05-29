@@ -205,7 +205,7 @@ def compute_fes(
                 pos = grid_list
 
             # pdf --> fes
-            fes = (
+            fes_i = (
                 -kbt
                 * np.log(kde.evaluate(cartesian(pos)) + eps)
                 .reshape([num_samples for i in range(dim)])
@@ -217,17 +217,17 @@ def compute_fes(
             kde.fit(X_i, sample_weight=w_i)
 
             # logpdf --> fes
-            fes = -kbt * kde.score_samples(positions).reshape(
+            fes_i = -kbt * kde.score_samples(positions).reshape(
                 [num_samples for i in range(dim)]
             )
 
         if fes_to_zero is not None:
-            fes -= fes[fes_to_zero]
+            fes_i -= fes_i[fes_to_zero]
         else:
-            fes -= fes.min()
+            fes_i -= fes_i.min()
 
         # result for each block
-        O_i.append(fes)
+        O_i.append(fes_i)
         W_i.append(np.sum(w_i))
 
     O_i = np.asarray(O_i)
@@ -236,16 +236,16 @@ def compute_fes(
     # compute avg and std
     if blocks > 1:
         # weighted average
-        O = np.dot(O_i.T, W_i) / np.sum(W_i)
+        fes = np.dot(O_i.T, W_i) / np.sum(W_i)
         # weighted std
-        dev = O_i - O
+        dev = O_i - fes
         blocks_eff = (np.sum(W_i)) ** 2 / (np.sum(W_i**2))
         variance = (
             blocks_eff / (blocks_eff - 1) * (np.dot((dev**2).T, W_i)) / (np.sum(W_i))
         )
         error = np.sqrt(variance / blocks_eff)
     else:
-        O = O_i[0]
+        fes = O_i[0]
         error = None
 
     # rescale back
