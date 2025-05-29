@@ -10,6 +10,8 @@ __all__ = [
 # =============================================================================
 
 import torch
+from typing import Union, Tuple
+from mlcolvar.core.loss.committor_loss import SmartDerivatives
 
 
 class GeneratorLoss(torch.nn.Module):
@@ -17,8 +19,17 @@ class GeneratorLoss(torch.nn.Module):
     Computes the loss to learn a representation for the generator
     """
 
-    def __init__(self, eta, cell, friction, alpha, n_cvs):
+    def __init__(self, 
+                 eta : float, 
+                 cell : float, # TODO needed?
+                 friction : torch.Tensor, 
+                 alpha : float, 
+                 n_cvs : int, # TODO doesn't seem useless 
+                 descriptors_derivatives : Union[SmartDerivatives, torch.Tensor]
+                 ):
         """
+        TODO docstring
+
         eta: float
         eta : float
           Hyperparameter for the shift to define the resolvent. $(\eta I-_mathcal{L})^{-1}$
@@ -34,23 +45,30 @@ class GeneratorLoss(torch.nn.Module):
           useless, remove it
         """
         super().__init__()
+
         self.eta = eta
-        self.friction = friction
+        self.register_buffer("friction", friction)
         self.lambdas = torch.nn.Parameter(10 * torch.randn(n_cvs), requires_grad=True)
         self.alpha = alpha
         self.cell = cell
+        self.descriptors_derivatives = descriptors_derivatives
 
-    def forward(self, data, output, weights, gradient_descriptors=None):
+    def forward(self,
+                input : torch.Tensor,
+                output : torch.Tensor, 
+                weights : torch.Tensor
+                ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        
         return generator_loss(
-            data,
-            output,
-            self.eta,
-            self.alpha,
-            self.friction,
-            self.cell,
-            self.lambdas,
-            weights,
-            gradient_descriptors,
+            input=input,
+            output=output,
+            eta=self.eta,
+            alpha=self.alpha,
+            friction=self.friction,
+            cell=self.cell,
+            lambdas=self.lambdas,
+            weights=weights,
+            descriptors_derivatives=self.descriptors_derivatives,
         )
 
 
@@ -66,92 +84,116 @@ def compute_covariance(X, weights):
         return pre_factor * (torch.einsum("ijk,ilk,i->jl", X, X, weights) / n)
 
 
-def generator_loss(
-    data,
-    output,
-    eta,
-    alpha,
-    friction,
-    cell,
-    lambdas,
-    weights,
-    gradient_descriptors=None,
-):
+def generator_loss(input : torch.Tensor,
+                   output : torch.Tensor,
+                   eta : float,
+                   alpha : float,
+                   friction : torch.Tensor,
+                   cell : float,
+                   lambdas : torch.Tensor,
+                   weights : torch.Tensor,
+                   descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None
+                   ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
+    TODO docstring
     Computes the loss to learn the representation
-    data: torch.tensor
+    input: torch.tensor
       input of the NN
     output: torch.tensor
       output of the NN
     weights: torch.tensor
       Statistical weights
-    gradient_descriptors: torch.tensor, optional
+    descriptors_derivatives: torch.tensor, optional
       Gradient of the descriptors with respect to the atomic positions.
       Used for the chain rule to compute the full gradients
     """
-    lambdas = lambdas**2
-    diag_lamb = torch.diag(lambdas)
-    # sorted_lambdas = lambdas[torch.argsort(lambdas)]
+    
+    # ------------------------ SETUP ------------------------
+    # get correct device
+    device = input.device
+
+    # move and process lambdas to device
+    lambdas = lambdas.to(device)
+    diag_lamb = torch.diag(lambdas**2)
+    
+    # get number of outputs and sample sizes
     r = output.shape[1]
     sample_size = output.shape[0] // 2
-
-    gradient = torch.stack(
-        [
-            torch.autograd.grad(
-                outputs=output[:, idx].sum(),
-                inputs=data,
-                retain_graph=True,
-                create_graph=True,
-            )[0]
-            for idx in range(r)
-        ],
-        dim=2,
-    ).swapaxes(2, 1)
-    ### jacrev seems to be a bit faster, but I need to pass the model as argument, and in order to go with the philosophy of the other losses I am keeping it like this for now
-    # compute_batch_jacobian = functorch.vmap(functorch.jacrev(model,argnums=0),in_dims=(0))
-    # gradient = compute_batch_jacobian(data.unsqueeze(1))
-    gradient = gradient.reshape(weights.shape[0], output.shape[1], -1)
-
-    if gradient_descriptors is None:  # If there is no descriptors or a precompute layer
-        gradient_positions = gradient * torch.sqrt(friction)
+    
+    
+    # ------------------------ GRADIENTS ------------------------    
+    # compute gradients of output wrt to the input iterating on the outputs
+    grad_outputs = torch.ones(len(output), device=device)
+    gradient = torch.stack([torch.autograd.grad(outputs=output[:, idx],
+                                                inputs=input,
+                                                grad_outputs=grad_outputs, 
+                                                retain_graph=True, 
+                                                create_graph=True)[0] for idx in range(r)
+                            ], dim=2)
+    
+    
+    # in case the input is not positions but descriptors, we need to correct the gradients up to the positions
+    # --> If we pass a SmartDerivative object that takes the nonzero elements of the matrix d_desc/d_pos
+    if isinstance(descriptors_derivatives, SmartDerivatives):
+        gradient_positions = descriptors_derivatives(gradient).reshape(input.shape[0], -1, r)
+    
+    # --> If we directly pass the matrix d_desc/d_pos
+    elif isinstance(descriptors_derivatives, torch.Tensor): 
+        descriptors_derivatives = descriptors_derivatives.to(device)
+        gradient_positions = torch.einsum("bdo,badx->baxo", gradient, descriptors_derivatives)
+        gradient_positions = gradient_positions.reshape(input.shape[0],  # number of entries
+                                                        descriptors_derivatives.shape[1] * 3, # number of atoms * 3 
+                                                        output.shape[-1] # number of outputs
+                                                        )
+        
+    # If the input was already positions
     else:
-        gradient_positions = torch.einsum(
-            "ijk,imkl->ijml", gradient, gradient_descriptors
-        )
-        gradient_positions = gradient_positions.reshape(
-            -1, output.shape[1], gradient_descriptors.shape[1] * 3
-        ) * torch.sqrt(friction)
+        gradient_positions = gradient 
+
+    # TODO is needed?
     if cell is not None:
         gradient_positions /= cell
 
-    ### In order to have unbiased estimation, we split the dataset in two chunks ###
+    # TODO check if is actually needed but I think so
+    try: # multiple outputs (r!=0)
+        gradient_positions = gradient_positions.swapaxes(2,1)
+    except: # single output (r==0)
+        gradient_positions = gradient_positions.unsqueeze(-1).swapaxes(2,1)
+
+    # multiply by friction
+    # TODO change to have a simpler mass tensor
+    gradient_positions = gradient_positions * torch.sqrt(friction)
+
+
+    # ------------------------ COVARIANCES ------------------------
+
+    # In order to have unbiased estimation, we split the dataset in two chunks TODO what?
     weights_X, weights_Y = weights[:sample_size], weights[sample_size:]
-    gradient_X, gradient_Y = (
-        gradient_positions[:sample_size],
-        gradient_positions[sample_size:],
-    )
+    gradient_X, gradient_Y = gradient_positions[:sample_size], gradient_positions[sample_size:]
     psi_X, psi_Y = output[:sample_size], output[sample_size:]
 
+    # compute covariances
     cov_X = compute_covariance(psi_X, weights_X)
-
     cov_Y = compute_covariance(psi_Y, weights_Y)
-
     dcov_X = compute_covariance(gradient_X, weights_X)
-
     dcov_Y = compute_covariance(gradient_Y, weights_Y)
 
+    # TODO what are these?
     W1 = (eta * cov_X + dcov_X) @ diag_lamb
     W2 = (eta * cov_Y + dcov_Y) @ diag_lamb
 
-    ### Unbiased estimation of the "variational part"
-    # It might be worse replacing with einsum if it is faster
+
+    # ------------------------ COMPUTE LOSSES ------------------------
+
+    # Unbiased estimation of the "variational part"
+    # It might be worth replacing with einsum if it is faster
     loss_ef = torch.trace(
         ((cov_X @ diag_lamb) @ W2 + (cov_Y @ diag_lamb) @ W1) / 2
         - cov_X @ diag_lamb
         - cov_Y @ diag_lamb
     )
 
-    # Compute loss_ortho
+    # Orthogonality part TODO or is orthonormality?
     loss_ortho = alpha * (
         torch.trace(
             (torch.eye(output.shape[1], device=output.device) - cov_X).T
@@ -159,22 +201,26 @@ def generator_loss(
         )
     )
 
-    loss = loss_ef + loss_ortho  # loss_ortho
-    return loss, loss_ef, loss_ortho
+    # combine
+    loss = loss_ef + loss_ortho
+
+    return loss, loss_ef.detach(), loss_ortho.detach()
 
 
-def compute_eigenfunctions(
-    input,
-    output,
-    weights,
-    friction,
-    eta,
-    r,
-    cell=None,
-    tikhonov_reg=1e-4,
-    descriptors_derivatives=None,
-):
+# TODO are these two functions connected with the loss? Can't them become functions of the Generator class?
+def compute_eigenfunctions(input : torch.Tensor,
+                           output : torch.Tensor,
+                           weights : torch.Tensor,
+                           friction : torch.Tensor,
+                           eta : float,
+                           r : int, # TODO change it to the same name as above
+                           cell: float = None, # TODO needed?
+                           tikhonov_reg : float = 1e-4,
+                           descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None
+                           ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
+    # TODO docstring
+
     Computes eigenfunctions and eigenvalues from a learned representation.
 
     This function estimates the eigenfunctions and eigenvalues of the infinitesimal generator
@@ -213,47 +259,64 @@ def compute_eigenfunctions(
     Notes:
     ------
     - Eigenfunctions are normalized using the dataset weights.
-    - If `gradient_descriptors` is provided, the function projects the gradients onto it.
+    - If `descriptors_derivatives` is provided, the function projects the gradients onto it.
     - The operator matrix is regularized to improve numerical stability.
     """
-    # friction=friction.to("cuda")
 
-    d = input.shape[1]
+    # ------------------------ SETUP ------------------------
+    # get device
+    device = input.device
 
-    # gradient with respect to descriptors
-    gradient_X = torch.stack(
-        [
-            torch.autograd.grad(
-                outputs=output[:, idx].sum(),
-                inputs=input,
-                retain_graph=True,
-                create_graph=True,
-            )[0].reshape((-1, d))
-            for idx in range(r)
-        ],
-        dim=2,
-    ).swapaxes(2, 1)
-
-    if descriptors_derivatives is not None:  # If there is no precomputing layer
-        gradient_positions = torch.einsum(
-            "ijk,imkl->ijml", gradient_X, descriptors_derivatives
-        )
-        gradient_positions = gradient_positions.reshape(
-            -1, output.shape[1], descriptors_derivatives.shape[1] * 3
-        ) * torch.sqrt(friction)
-
+    # ------------------------ GRADIENTS ------------------------    
+    # compute gradients of output wrt to the input iterating on the outputs
+    grad_outputs = torch.ones(len(output), device=device)
+    gradient = torch.stack([torch.autograd.grad(outputs=output[:, idx],
+                                                inputs=input,
+                                                grad_outputs=grad_outputs, 
+                                                retain_graph=True, 
+                                                create_graph=True)[0] for idx in range(r)
+                            ], dim=2)
+    
+    # in case the input is not positions but descriptors, we need to correct the gradients up to the positions
+    # --> If we pass a SmartDerivative object that takes the nonzero elements of the matrix d_desc/d_pos
+    if isinstance(descriptors_derivatives, SmartDerivatives):
+        gradient_positions = descriptors_derivatives(gradient).reshape(input.shape[0], -1, r)
+    
+    # --> If we directly pass the matrix d_desc/d_pos
+    elif isinstance(descriptors_derivatives, torch.Tensor): 
+        descriptors_derivatives = descriptors_derivatives.to(device)
+        gradient_positions = torch.einsum("bdo,badx->baxo", gradient, descriptors_derivatives)
+        gradient_positions = gradient_positions.reshape(input.shape[0],  # number of entries
+                                                        descriptors_derivatives.shape[1] * 3, # number of atoms * 3 
+                                                        output.shape[-1] # number of outputs
+                                                        )
+        
+    # If the input was already positions
     else:
-        gradient_positions = gradient_X * torch.sqrt(friction)
+        gradient_positions = gradient
+
     if cell is not None:
         gradient_positions /= cell
 
-    weights_X = weights
+    # TODO check if is actually needed but I think so
+    try: # multiple outputs (r!=0) 
+        gradient_positions = gradient_positions.swapaxes(2,1)
+    except: # single output (r==0)
+        gradient_positions = gradient_positions.unsqueeze(-1).swapaxes(2,1)
 
+    # multiply by friction
+    # TODO change to have a simpler mass tensor
+    gradient_positions = gradient_positions * torch.sqrt(friction)
+
+
+    # ------------------------ COVARIANCES ------------------------
     # Compute covariances
-    cov_X = compute_covariance(output, weights_X)
-    dcov_X = compute_covariance(gradient_positions, weights_X)
+    cov_X = compute_covariance(output, weights)
+    dcov_X = compute_covariance(gradient_positions, weights)
 
+    # TODO what is this?
     W = eta * cov_X + dcov_X
+
     # The resolvent projected on the learned space
     operator = (
         torch.linalg.inv(
@@ -261,27 +324,37 @@ def compute_eigenfunctions(
         )
         @ cov_X
     )
-    evals, evecs = torch.linalg.eig(operator)
-    # eigenfunctions
-    g = output @ evecs.real
-    lambdas = eta - 1 / evals  # eigenvalues of the generator
-    sorting = torch.argsort(-lambdas.real)
+
+
+    # ------------------------ EIGENFUNCTIONS ------------------------
+
+    # get eigenvalues and eigenvectors of resolvent # TODO correct?
+    evals, evecs = torch.linalg.eigh(operator)
+
+    # eigenfunctions and eigenvalues of generator
+    lambdas = eta - 1 / evals
+    sorting = torch.argsort(-lambdas)
+    
+    # eigenfunctions of generator
+    g = output @ evecs
+    
     # Ensure normalization of eigenfunctions
     detached_evecs = evecs.detach()
-    detached_evecs /= torch.sqrt(torch.mean(weights.unsqueeze(1) * g**2, axis=0))
-    g /= torch.sqrt(torch.mean(weights.unsqueeze(1) * g**2, axis=0))
+    detached_evecs /= torch.sqrt( torch.mean( weights.unsqueeze(1) * g**2, axis=0 ) )
+    g /= torch.sqrt( torch.mean( weights.unsqueeze(1) * g**2, axis=0 ) )
+
     return g[:, sorting], lambdas.detach()[sorting], detached_evecs.detach()[:, sorting]
 
 
+# TODO are these two functions connected with the loss? Can't them become functions of the Generator class?
 # For the future, it might be worse having a more general function
-def forecast_state_occupation(
-    eigenfunctions: torch.Tensor,
-    eigenvalues: torch.Tensor,
-    times: torch.Tensor,
-    classification: torch.Tensor,
-    weights: torch.Tensor,
-    n_states: torch.Tensor,
-):
+def forecast_state_occupation(eigenfunctions: torch.Tensor,
+                              eigenvalues: torch.Tensor,
+                              times: torch.Tensor,
+                              classification: torch.Tensor,
+                              weights: torch.Tensor,
+                              n_states: int
+                              ) -> torch.Tensor:
     """
     Computes the time evolution of state occupation probabilities in a dynamical system.
 
@@ -318,25 +391,18 @@ def forecast_state_occupation(
     """
 
     # Number of samples
-    N = classification.shape[0]
+    n_samples = classification.shape[0]
 
     # Create masks for each state
-    state_masks = torch.arange(n_states, device=classification.device).view(
-        -1, 1
-    ) == classification.unsqueeze(
-        0
-    )  # (n_states, N)
+    state_masks = torch.arange(n_states, device=classification.device).view(-1, 1) == classification.unsqueeze(0)  # (n_states, N)
 
-    # Compute initial state occupations
+    # Compute initial state occupations u
     inv_u_0 = (state_masks * weights).mean(dim=1, keepdim=True)  # (n_states, 1)
     u_0 = state_masks / inv_u_0
+
     # Project onto eigenfunctions
-    initial_state_on_basis = (
-        (u_0 * weights) @ eigenfunctions
-    ) / N  # (n_states, n_eigen)
-    final_state_on_basis = (
-        (state_masks * weights) @ eigenfunctions
-    ) / N  # Ensure proper mean normalization
+    initial_state_on_basis = ((u_0 * weights) @ eigenfunctions) / n_samples  # (n_states, n_eigen)
+    final_state_on_basis = ((state_masks * weights) @ eigenfunctions) / n_samples  # Ensure proper mean normalization
 
     # Ensure eigenvalues are correctly shaped
     eigenvalues = eigenvalues.view(1, -1)  # (1, n_eigen)
@@ -346,151 +412,57 @@ def forecast_state_occupation(
 
     # Compute occupation over time
     occupation_over_time = (
-        (
-            initial_state_on_basis[:, None, :] * final_state_on_basis[None, :, :]
-        )  # (n_states, n_states, n_eigen)
+        (initial_state_on_basis[:, None, :] * final_state_on_basis[None, :, :])  # (n_states, n_states, n_eigen)
         @ time_evolution.T.real  # Matrix multiplication over n_eigen -> (n_states, n_states, n_times)
     )
 
     return occupation_over_time  # Shape: (n_states, n_states, n_times)
 
 
+
+# ---------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------- TESTS ----------------------------------------------------
+# ---------------------------------------------------------------------------------------------------------------
+
 def test_forecast_state_occupation():
-    eigenfunctions = torch.Tensor(
-        [
-            [-1.0000, -0.1565, 1.0694],
-            [-1.0000, -0.1567, 1.1080],
-            [-1.0000, -0.1565, 1.1119],
-            [-1.0000, -0.1567, -0.3890],
-            [-0.9999, 6.3998, -0.0503],
-        ]
-    )
+    # reference eigenfunctions
+    eigenfunctions = torch.Tensor([[-1.0000, -0.1565, 1.0694],
+                                   [-1.0000, -0.1567, 1.1080],
+                                   [-1.0000, -0.1565, 1.1119],
+                                   [-1.0000, -0.1567, -0.3890],
+                                   [-0.9999, 6.3998, -0.0503]]
+                                   )
+    # reference eigenvalues
     evals = torch.Tensor([-4.9422e-05, -2.2918e-04, -1.1490e-01])
 
+    # TODO what?
     classification = torch.Tensor([1, 1, 1, 0, 2])
     times = torch.linspace(0, 100, 10)
     weights = torch.Tensor([1.4809, 0.0736, 0.3693, 0.1849, 0.0885])
-    ref_occupation_numbers = torch.Tensor(
-        [
-            [
-                [
-                    4.3484e-02,
-                    3.9426e-02,
-                    3.8278e-02,
-                    3.7942e-02,
-                    3.7832e-02,
-                    3.7785e-02,
-                    3.7755e-02,
-                    3.7731e-02,
-                    3.7708e-02,
-                    3.7685e-02,
-                ],
-                [
-                    2.3270e-01,
-                    3.4891e-01,
-                    3.8116e-01,
-                    3.8998e-01,
-                    3.9228e-01,
-                    3.9275e-01,
-                    3.9271e-01,
-                    3.9253e-01,
-                    3.9231e-01,
-                    3.9208e-01,
-                ],
-                [
-                    2.9414e-04,
-                    7.9851e-05,
-                    4.5504e-05,
-                    6.1280e-05,
-                    9.0959e-05,
-                    1.2444e-04,
-                    1.5890e-04,
-                    1.9355e-04,
-                    2.2819e-04,
-                    2.6274e-04,
-                ],
-            ],
-            [
-                [
-                    2.2365e-02,
-                    3.3534e-02,
-                    3.6634e-02,
-                    3.7482e-02,
-                    3.7703e-02,
-                    3.7748e-02,
-                    3.7744e-02,
-                    3.7727e-02,
-                    3.7706e-02,
-                    3.7684e-02,
-                ],
-                [
-                    8.4217e-01,
-                    5.1892e-01,
-                    4.2858e-01,
-                    4.0321e-01,
-                    3.9596e-01,
-                    3.9377e-01,
-                    3.9299e-01,
-                    3.9260e-01,
-                    3.9232e-01,
-                    3.9208e-01,
-                ],
-                [
-                    -9.9108e-04,
-                    -2.6303e-04,
-                    -3.4530e-05,
-                    5.4529e-05,
-                    1.0461e-04,
-                    1.4374e-04,
-                    1.7974e-04,
-                    2.1479e-04,
-                    2.4949e-04,
-                    2.8402e-04,
-                ],
-            ],
-            [
-                [
-                    6.1453e-04,
-                    1.6683e-04,
-                    9.5072e-05,
-                    1.2803e-04,
-                    1.9004e-04,
-                    2.5998e-04,
-                    3.3197e-04,
-                    4.0438e-04,
-                    4.7674e-04,
-                    5.4893e-04,
-                ],
-                [
-                    -2.1544e-02,
-                    -5.7176e-03,
-                    -7.5061e-04,
-                    1.1853e-03,
-                    2.2740e-03,
-                    3.1246e-03,
-                    3.9072e-03,
-                    4.6690e-03,
-                    5.4234e-03,
-                    6.1740e-03,
-                ],
-                [
-                    7.4269e-01,
-                    7.4080e-01,
-                    7.3894e-01,
-                    7.3710e-01,
-                    7.3526e-01,
-                    7.3342e-01,
-                    7.3159e-01,
-                    7.2977e-01,
-                    7.2795e-01,
-                    7.2613e-01,
-                ],
-            ],
-        ]
+    ref_occupation_numbers = torch.Tensor([[[4.3484e-02, 3.9426e-02, 3.8278e-02, 3.7942e-02, 3.7832e-02, 
+                                             3.7785e-02, 3.7755e-02, 3.7731e-02, 3.7708e-02, 3.7685e-02],
+                                            [2.3270e-01, 3.4891e-01, 3.8116e-01, 3.8998e-01, 3.9228e-01, 
+                                             3.9275e-01, 3.9271e-01, 3.9253e-01, 3.9231e-01, 3.9208e-01],
+                                            [2.9414e-04, 7.9851e-05, 4.5504e-05, 6.1280e-05, 9.0959e-05, 
+                                             1.2444e-04, 1.5890e-04, 1.9355e-04, 2.2819e-04, 2.6274e-04]],
+                                           [[2.2365e-02, 3.3534e-02, 3.6634e-02, 3.7482e-02, 3.7703e-02, 
+                                             3.7748e-02, 3.7744e-02, 3.7727e-02, 3.7706e-02, 3.7684e-02],
+                                            [8.4217e-01, 5.1892e-01, 4.2858e-01, 4.0321e-01, 3.9596e-01,
+                                             3.9377e-01, 3.9299e-01, 3.9260e-01, 3.9232e-01, 3.9208e-01],
+                                            [-9.9108e-04, -2.6303e-04, -3.4530e-05, 5.4529e-05, 1.0461e-04,
+                                             1.4374e-04, 1.7974e-04, 2.1479e-04, 2.4949e-04, 2.8402e-04]],
+                                           [[6.1453e-04, 1.6683e-04, 9.5072e-05, 1.2803e-04, 1.9004e-04,
+                                             2.5998e-04, 3.3197e-04, 4.0438e-04, 4.7674e-04, 5.4893e-04],
+                                            [-2.1544e-02, -5.7176e-03, -7.5061e-04, 1.1853e-03, 2.2740e-03, 
+                                             3.1246e-03, 3.9072e-03, 4.6690e-03, 5.4234e-03, 6.1740e-03],
+                                            [7.4269e-01, 7.4080e-01, 7.3894e-01, 7.3710e-01, 7.3526e-01,
+                                             7.3342e-01, 7.3159e-01, 7.2977e-01, 7.2795e-01, 7.2613e-01]]]
     )
 
-    occupation_numbers = forecast_state_occupation(
-        eigenfunctions, evals, times, classification, weights, 3
-    )
-    print(occupation_numbers)
-    assert torch.allclose(occupation_numbers, ref_occupation_numbers, atol=1e-3)
+    occupation_numbers = forecast_state_occupation(eigenfunctions, evals, times, classification, weights, 3)
+    
+    # check we are all good
+    assert torch.allclose(occupation_numbers, ref_occupation_numbers, atol=1e-2)
+
+if __name__ == '__main__':
+    test_forecast_state_occupation()

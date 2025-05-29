@@ -211,6 +211,7 @@ def committor_loss(x: torch.Tensor,
         
     # we sanitize the shapes of mass and weights tensors
     # mass should have size [1, n_atoms*spatial_dims]
+    # TODO change to have a simpler mass tensor
     mass = mass.unsqueeze(0)
     # weights should have size [n_batch, 1]
     w = w.unsqueeze(-1)
