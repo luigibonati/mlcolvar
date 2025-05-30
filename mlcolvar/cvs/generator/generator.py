@@ -15,8 +15,24 @@ class Generator(BaseCV, lightning.LightningModule):
     """
     Baseclass for learning a representation for the eigenfunctions of the infinitesimal generator.
     The representation is expressed as a concatenation of the output of r neural networks.
+    
     **Data**: for training it requires a DictDataset with the keys 'data', and 'weights'
+    
     **Loss**: Minimize the representation loss and the orthonormalization loss
+
+    References
+    ----------
+    .. [*] T. Devergne, V. Kostic, M. Pontil, M. Parrinello, "Slow dynamical modes from static averages", J. Chem. Phys., 2025, DOI: 10.1063/5.0246248
+
+    See also
+    --------
+    mlcolvar.core.loss.generator_loss
+        Loss function to learn a representation for the infinitesimal generator
+    mlcolvar.cvs.generator.utils.compute_eigenfunctions
+        Computes eigenfunctions and eigenvalues from a learned representation
+    mlcolvar.cvs.generator.utils.forecast_state_occupation
+        Computes the time evolution of state occupation probabilities in a dynamical system from the learned eigenfunctions
+
     """
 
     BLOCKS = ["nn"]
@@ -134,17 +150,17 @@ class Generator(BaseCV, lightning.LightningModule):
             eta = self.eta
         if cell is None:
             cell = self.cell
+        
+        # get data
+        input = dataset["data"]
+        weights = dataset['weights']
+        input.requires_grad = True
+        
+        # get output
+        output = self.forward(input)
 
         # If the calculation has not been done previously, or we want to compute again the eigenpairs due to a change of parameters
         if (recompute or self.evecs is None): 
-            # get data
-            input = dataset["data"]
-            weights = dataset['weights']
-            input.requires_grad = True
-
-            # get output
-            output = self.forward(input)
-
             # get eigenfunctions
             eigenfunctions, evals, evecs = compute_eigenfunctions(
                 input=input,
@@ -163,7 +179,7 @@ class Generator(BaseCV, lightning.LightningModule):
             return eigenfunctions, evals, evecs
 
         else:
-            eigenfunctions = self.forward(input) @ self.evecs
+            eigenfunctions = output @ self.evecs
             return eigenfunctions, self.evals, self.evecs
 
     def forward_cv(self, 

@@ -152,7 +152,7 @@ def forecast_state_occupation(eigenfunctions: torch.Tensor,
                               n_states: int
                               ) -> torch.Tensor:
     """
-    Computes the time evolution of state occupation probabilities in a dynamical system.
+    Computes the time evolution of state occupation probabilities in a dynamical system from the learned eigenfunctions.
 
     This function estimates the probability of being in a state, starting in another state
     over time using eigenfunctions and eigenvalues of the system's generator.
