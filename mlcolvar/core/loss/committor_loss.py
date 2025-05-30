@@ -135,7 +135,7 @@ def committor_loss(x: torch.Tensor,
     x : torch.Tensor
         Input of the NN
     q : torch.Tensor
-        Committor quess q(x), it is the output of NN
+        Committor guess q(x), it is the output of NN
     labels : torch.Tensor
         Labels for states, A and B states for boundary conditions
     w : torch.Tensor
@@ -380,7 +380,7 @@ class SmartDerivatives(torch.nn.Module):
 
         return shifted_indeces
 
-    def forward(self, x : torch.Tensor, do_square : bool = True):
+    def forward(self, x : torch.Tensor):
         # ensure device consistency
         if self.left.device != x.device:
             print('[SmartDerivatives] Moving left to device..')

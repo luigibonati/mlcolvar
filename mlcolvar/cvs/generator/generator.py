@@ -3,28 +3,28 @@ import lightning
 from typing import Union, Tuple
 from mlcolvar.cvs import BaseCV
 from mlcolvar.core import FeedForward
-from mlcolvar.core.loss.generator_loss import GeneratorLoss, compute_eigenfunctions
+from mlcolvar.core.loss.generator_loss import GeneratorLoss
+from mlcolvar.cvs.generator.utils import compute_eigenfunctions
 from mlcolvar.core.loss.committor_loss import SmartDerivatives
+from mlcolvar.data import DictDataset
 
 __all__ = ["Generator"]
 
 
 class Generator(BaseCV, lightning.LightningModule):
     """
-    Baseclass for learning a representation for the eigenfunctions of the generator.
+    Baseclass for learning a representation for the eigenfunctions of the infinitesimal generator.
     The representation is expressed as a concatenation of the output of r neural networks.
     **Data**: for training it requires a DictDataset with the keys 'data', and 'weights'
-              and optionally 'derivatives' which should contain the descriptors derivatives
     **Loss**: Minimize the representation loss and the orthonormalization loss
-
     """
 
     BLOCKS = ["nn"]
 
     def __init__(self,
+                 r: int, # TODO add check on dimensions
                  layers: list,
                  eta: float,
-                 r: int,
                  alpha: float,
                  friction=None,
                  cell: float = None,
@@ -36,19 +36,23 @@ class Generator(BaseCV, lightning.LightningModule):
 
         Parameters
         ----------
-        layers : list
-            Number of neurons per layer
-        eta : float
-            Hyperparameter for the shift to define the resolvent. $(\eta I-_mathcal{L})^{-1}$
         r : int
-            Hyperparamer for the number of eigenfunctions wanted
+            Number of eigenfunctions wanted, i.e., number of neural networks to be initialized
+        layers : list
+            Number of neurons per layer of each of the `r` neural networks
+        eta : float
+            Hyperparameter for the shift to define the resolvent, i.e., $(\eta I-_mathcal{L})^{-1}$
         alpha : float
-            Hyperparamer that scales the orthonormality loss
+            Hyperparamer that scales the contribution of orthonormality loss to the total loss, i.e., L = L_ef + alpha*L_ortho        
         friction: torch.tensor
-            Langevin friction which should contain \sqrt{k_B*T/(gamma*m_i)}
+            Langevin friction, i.e., $\sqrt{k_B*T/(gamma*m_i)}$
         cell : float, optional
             CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, by default None
-
+        descriptors_derivatives : Union[SmartDerivatives, torch.Tensor], optional
+            Derivatives of descriptors wrt atomic positions (if used) to speed up calculation of gradients, by default None. 
+            Can be either:
+                - A `SmartDerivatives` object to save both memory and time, see also mlcolvar.core.loss.committor_loss.SmartDerivatives
+                - A torch.Tensor with the derivatives to save time, memory-wise could be less efficient
         options : dict[str, Any], optional
             Options for the building blocks of the model, by default {}.
             Available blocks: ['nn'] .
@@ -56,11 +60,11 @@ class Generator(BaseCV, lightning.LightningModule):
         super().__init__(in_features=layers[0], out_features=r, **kwargs)
 
         # =======  LOSS  =======
-        self.loss_fn = GeneratorLoss(eta=eta, 
+        self.loss_fn = GeneratorLoss(r=r,
+                                     eta=eta, 
                                      alpha=alpha, 
-                                     cell=cell, 
                                      friction=friction, 
-                                     n_cvs=r, 
+                                     cell=cell,
                                      descriptors_derivatives=descriptors_derivatives
                                      )
         self.r = r
@@ -87,35 +91,42 @@ class Generator(BaseCV, lightning.LightningModule):
         )
 
     def compute_eigenfunctions(self,
-                               dataset,        
-                               friction=None,      
-                               eta=None,       
-                               cell=None,      
-                               tikhonov_reg=1e-4,      
-                               recompute=False,        
-                               descriptors_derivatives=None
+                               dataset : DictDataset,        
+                               eta : float = None, 
+                               friction : float = None,      
+                               cell : float = None,      
+                               tikhonov_reg : float = 1e-4,      
+                               recompute : bool = False,        
+                               descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None
                                ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Computes the eigenfunctions based on the representation learned given by the neural networks.
 
         Parameters
         ----------
         dataset : DictDataset
-        Dictionary containing:
-            - 'data' (torch.Tensor, shape (N, d)): Input descriptors or positions.
-            - 'weights' (torch.Tensor, shape (N,)): Biasing weights associated with the data points.
-            - 'derivatives', optional, (torch.Tensor, shape (N,natoms, d, 3)): derivatives of the descriptors with respect to the atomic positions
-        friction:torch.tensor, optional
-            If different from the one used in training: Langevin friction which should contain \sqrt{k_B*T/(gamma*m_i)}
+            Dictionary containing:
+            - 'data' : Input descriptors or positions.
+            - 'weights' : Biasing weights associated with the data points.
         eta : float, optional
-            If different from the one used in training, Hyperparameter for the shift to define the resolvent. $(\eta I-_mathcal{L})^{-1}$
-
+            Set only if different from the one used in training, Hyperparameter for the shift to define the resolvent, i.e., $(\eta I-_mathcal{L})^{-1}$
+        friction:torch.tensor, optional
+            Set only if different from the one used in training, Langevin friction, i.e., $\sqrt{k_B*T/(gamma*m_i)}$
         cell : float, optional
-            If different form the one used in training, CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, by default None
-
+            Set only if different form the one used in training, CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, by default None
         tikhonov_reg: float, optional
             Hyperparameter for the regularization of the inverse (Ridge regression parameter)
         recompute: Boolean, optional
-            Is used to know if the eigenvectors are needed to be recomputed or not
+            Whether to recompute the eigenfucntions or not, by default False
+
+        Returns
+        -------
+        Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+            eigenfunctions : torch.Tensor, shape (N, r)
+                The computed eigenfunctions evaluated at each data point.
+            evals : torch.Tensor, shape (r,)
+                The eigenvalues associated with the generator, sorted in descending order.
+            evecs : torch.Tensor, shape (r, r)
+                The eigenvectors of the operator.
         """
         if friction is None:
             friction = self.friction
@@ -123,28 +134,36 @@ class Generator(BaseCV, lightning.LightningModule):
             eta = self.eta
         if cell is None:
             cell = self.cell
-        if (
-            recompute or self.evecs is None
-        ):  # If the calculation has not been done previously, or we want to compute again the eigenpairs due to a change of parameters
-            dataset["data"].requires_grad = True
-            output = self.forward(dataset["data"])
+
+        # If the calculation has not been done previously, or we want to compute again the eigenpairs due to a change of parameters
+        if (recompute or self.evecs is None): 
+            # get data
+            input = dataset["data"]
+            weights = dataset['weights']
+            input.requires_grad = True
+
+            # get output
+            output = self.forward(input)
+
+            # get eigenfunctions
             eigenfunctions, evals, evecs = compute_eigenfunctions(
-                dataset["data"],
-                output,
-                dataset["weights"],
-                friction,
-                eta,
-                self.r,
-                cell,
-                tikhonov_reg,
+                input=input,
+                output=output,
+                weights=weights,
+                r=self.r,
+                eta=eta,
+                friction=friction,
+                cell=cell,
+                tikhonov_reg=tikhonov_reg,
                 descriptors_derivatives=descriptors_derivatives,
             )
             self.evals = evals
             self.evecs = evecs
+
             return eigenfunctions, evals, evecs
 
         else:
-            eigenfunctions = self.forward(dataset["data"]) @ self.evecs.real
+            eigenfunctions = self.forward(input) @ self.evecs
             return eigenfunctions, self.evals, self.evecs
 
     def forward_cv(self, 
@@ -249,12 +268,12 @@ def test_generator():
     # seed for reproducibility
     torch.manual_seed(42)
     model = Generator(
+        r=3,
         layers=[45, 20, 20, 1],
         eta=0.005,
-        r=3,
-        cell=None,
         alpha=0.01,
         friction=friction,
+        cell=None,
         descriptors_derivatives=None,
         options=options,
     )
@@ -331,12 +350,12 @@ def test_generator():
     # seed for reproducibility
     torch.manual_seed(42)
     model = Generator(
+        r=3,
         layers=[45, 20, 20, 1],
         eta=0.005,
-        r=3,
-        cell=None,
         alpha=0.01,
         friction=friction,
+        cell=None,
         descriptors_derivatives=d_desc_d_pos,
         options=options,
     )
@@ -382,12 +401,12 @@ def test_generator():
     # seed for reproducibility
     torch.manual_seed(42)
     model = Generator(
+        r=3,
         layers=[45, 20, 20, 1],
         eta=0.005,
-        r=3,
-        cell=None,
         alpha=0.01,
         friction=friction,
+        cell=None,
         descriptors_derivatives=smart_derivatives,
         options=options,
     )
