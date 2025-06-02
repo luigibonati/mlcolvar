@@ -265,7 +265,7 @@ def compute_fes(
         if ax is None:
             fig, ax = plt.subplots()
         if dim == 1:
-            fes2 = np.copy(O)
+            fes2 = np.copy(fes)
             if plot_max_fes is not None:
                 fes2[fes2 > plot_max_fes] = np.nan
             if blocks > 1:
@@ -274,7 +274,7 @@ def compute_fes(
                 ax.plot(grid, fes2)
             ax.set_ylabel("FES")
         elif dim == 2:
-            fes2 = np.copy(O)
+            fes2 = np.copy(fes)
             if plot_max_fes is not None:
                 fes2[fes2 > plot_max_fes] = np.nan
             extent = [item for sublist in bounds for item in sublist]
