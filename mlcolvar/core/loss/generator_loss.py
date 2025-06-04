@@ -13,14 +13,15 @@ class GeneratorLoss(torch.nn.Module):
     """Computes the loss function to learn a representation for the infinitesimal generator"""
 
     def __init__(self,
-                 r : int, 
-                 eta : float, 
-                 friction : torch.Tensor, 
-                 alpha : float,
-                 cell : float = None,  
-                 descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None
+                 r: int, 
+                 eta: float, 
+                 friction: torch.Tensor, 
+                 alpha: float,
+                 cell: float = None,  
+                 descriptors_derivatives: Union[SmartDerivatives, torch.Tensor] = None,
+                 n_dim: int = 3,
                  ):
-        """TODO _summary_
+        """#TODO _summary_
 
         Parameters
         ----------
@@ -39,6 +40,8 @@ class GeneratorLoss(torch.nn.Module):
             Can be either:
                 - A `SmartDerivatives` object to save both memory and time, see also mlcolvar.core.loss.committor_loss.SmartDerivatives
                 - A torch.Tensor with the derivatives to save time, memory-wise could be less efficient
+        n_dim : int
+            Number of dimensions, by default 3.
         """
         super().__init__()
 
@@ -48,6 +51,7 @@ class GeneratorLoss(torch.nn.Module):
         self.alpha = alpha
         self.cell = cell
         self.descriptors_derivatives = descriptors_derivatives
+        self.n_dim = n_dim
 
     def forward(self,
                 input : torch.Tensor,
@@ -63,7 +67,8 @@ class GeneratorLoss(torch.nn.Module):
                               friction=self.friction,
                               lambdas=self.lambdas,
                               cell=self.cell,
-                              descriptors_derivatives=self.descriptors_derivatives
+                              descriptors_derivatives=self.descriptors_derivatives,
+                              n_dim=self.n_dim
                               )
 
 
@@ -87,9 +92,10 @@ def generator_loss(input : torch.Tensor,
                    friction : torch.Tensor,
                    lambdas : torch.Tensor,
                    cell : float = None,
-                   descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None
+                   descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None,
+                   n_dim : int = 3,
                    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """TODO _summary_
+    """#TODO _summary_
 
     Parameters
     ----------
@@ -106,7 +112,7 @@ def generator_loss(input : torch.Tensor,
     friction : torch.Tensor
         Langevin friction, i.e., $\sqrt{k_B*T/(gamma*m_i)}$
     lambdas : torch.Tensor
-        TODO
+        Trainable parameters. After training, they should correspond to the resolvent eigenvalues.
     cell : float, optional
         CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, by default None
     descriptors_derivatives : Union[SmartDerivatives, torch.Tensor], optional
@@ -114,6 +120,8 @@ def generator_loss(input : torch.Tensor,
         Can be either:
             - A `SmartDerivatives` object to save both memory and time, see also mlcolvar.core.loss.committor_loss.SmartDerivatives
             - A torch.Tensor with the derivatives to save time, memory-wise could be less efficient
+    n_dim : int
+        Number of dimensions, by default 3.
 
     Returns
     -------
@@ -131,7 +139,9 @@ def generator_loss(input : torch.Tensor,
     # get number of outputs and sample sizes
     r = output.shape[1]
     sample_size = output.shape[0] // 2
-    
+
+    # expand friction tensor
+    friction = friction.unsqueeze(-1).repeat((1, n_dim)).ravel()
     
     # ------------------------ GRADIENTS ------------------------    
     # compute gradients of output wrt to the input iterating on the outputs
@@ -168,16 +178,19 @@ def generator_loss(input : torch.Tensor,
     if r==1:
         gradient_positions = gradient_positions.unsqueeze(-1)
 
+    # this is to make the following computation easier to write
     gradient_positions = gradient_positions.swapaxes(2,1)
-    
+
     # multiply by friction
-    # TODO change to have a simpler mass tensor
-    gradient_positions = gradient_positions * torch.sqrt(friction)
+    try:
+        gradient_positions = gradient_positions * torch.sqrt(friction)
+    except RuntimeError as e:
+        raise RuntimeError(e, """[HINT]: Is you system in 3 dimension? By default the code assumes so, if it's not the case change the n_dim key to the right dimensionality.""")
 
 
     # ------------------------ COVARIANCES ------------------------
 
-    # In order to have unbiased estimation, we split the dataset in two chunks TODO what?
+    # In order to have unbiased estimation, we split the dataset in two chunks
     weights_X, weights_Y = weights[:sample_size], weights[sample_size:]
     gradient_X, gradient_Y = gradient_positions[:sample_size], gradient_positions[sample_size:]
     psi_X, psi_Y = output[:sample_size], output[sample_size:]
@@ -188,7 +201,7 @@ def generator_loss(input : torch.Tensor,
     dcov_X = compute_covariance(gradient_X, weights_X)
     dcov_Y = compute_covariance(gradient_Y, weights_Y)
 
-    # TODO what are these?
+    # action of shifted generator on the two chunks
     W1 = (eta * cov_X + dcov_X) @ diag_lamb
     W2 = (eta * cov_Y + dcov_Y) @ diag_lamb
 

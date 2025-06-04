@@ -8,12 +8,13 @@ __all__ = ["compute_eigenfunctions", "forecast_state_occupation"]
 def compute_eigenfunctions(input : torch.Tensor,
                            output : torch.Tensor,
                            weights : torch.Tensor,
-                           r : int, # TODO add check on dimensions
+                           r : int,
                            eta : float,
                            friction : torch.Tensor,
                            cell: float = None,
                            tikhonov_reg : float = 1e-4,
-                           descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None
+                           descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None,
+                           n_dim : int = 3,
                            ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Computes eigenfunctions and eigenvalues from a learned representation.
 
@@ -44,6 +45,8 @@ def compute_eigenfunctions(input : torch.Tensor,
         Can be either:
             - A `SmartDerivatives` object to save both memory and time, see also mlcolvar.core.loss.committor_loss.SmartDerivatives
             - A torch.Tensor with the derivatives to save time, memory-wise could be less efficient
+    n_dim : int
+        Number of dimensions, by default 3.
 
     Returns
     -------
@@ -64,6 +67,16 @@ def compute_eigenfunctions(input : torch.Tensor,
     # ------------------------ SETUP ------------------------
     # get device
     device = input.device
+
+    # check output and r
+    if output.shape[-1] != r:
+        raise ValueError ( 
+            f"The number of eigenfunctions to compute (r) must match the number of outputs from the model! Found r:{r} and output.shape:{output.shape}"
+            )
+        
+
+    # expand friction tensor
+    friction = friction.unsqueeze(-1).repeat((1, n_dim)).ravel()
 
     # ------------------------ GRADIENTS ------------------------    
     # compute gradients of output wrt to the input iterating on the outputs
@@ -99,11 +112,15 @@ def compute_eigenfunctions(input : torch.Tensor,
     if r==1:
         gradient_positions = gradient_positions.unsqueeze(-1)
 
+    # this is to make the following computation easier to write
     gradient_positions = gradient_positions.swapaxes(2,1)
 
     # multiply by friction
-    # TODO change to have a simpler mass tensor
-    gradient_positions = gradient_positions * torch.sqrt(friction)
+    try:
+        gradient_positions = gradient_positions * torch.sqrt(friction)
+    except RuntimeError as e:
+        raise RuntimeError(e, """[HINT]: Is you system in 3 dimension? By default the code assumes so, if it's not the case change the n_dim key to the right dimensionality.""")
+
 
 
     # ------------------------ COVARIANCES ------------------------
@@ -111,7 +128,7 @@ def compute_eigenfunctions(input : torch.Tensor,
     cov_X = compute_covariance(output, weights)
     dcov_X = compute_covariance(gradient_positions, weights)
 
-    # TODO what is this?
+    # compute action of shifted generator
     W = eta * cov_X + dcov_X
 
     # The resolvent projected on the learned space
@@ -125,7 +142,7 @@ def compute_eigenfunctions(input : torch.Tensor,
 
     # ------------------------ EIGENFUNCTIONS ------------------------
 
-    # get eigenvalues and eigenvectors of resolvent # TODO correct?
+    # get eigenvalues and eigenvectors of resolvent
     evals, evecs = torch.linalg.eigh(operator)
 
     # eigenfunctions and eigenvalues of generator
@@ -143,13 +160,14 @@ def compute_eigenfunctions(input : torch.Tensor,
     return eigenfunctions[:, sorting], lambdas.detach()[sorting], detached_evecs.detach()[:, sorting]
 
 
-# For the future, it might be worse having a more general function
+# For the future, it might be worth having a more general function
 def forecast_state_occupation(eigenfunctions: torch.Tensor,
                               eigenvalues: torch.Tensor,
                               times: torch.Tensor,
                               classification: torch.Tensor,
                               weights: torch.Tensor,
-                              n_states: int
+                              n_states: int,
+                              reg_first_mode: bool = True,
                               ) -> torch.Tensor:
     """
     Computes the time evolution of state occupation probabilities in a dynamical system from the learned eigenfunctions.
@@ -162,21 +180,18 @@ def forecast_state_occupation(eigenfunctions: torch.Tensor,
     eigenfunctions : torch.Tensor, shape (N, r)
         The eigenfunctions evaluated at each sample point, where N is the number of samples
         and r is the number of eigenfunctions.
-
     eigenvalues : torch.Tensor, shape (r,)
         The eigenvalues associated with the eigenfunctions.
-
     times : torch.Tensor, shape (n_times,)
         A 1D tensor containing the time points at which to evaluate the occupation probabilities.
-
     classification : torch.Tensor, shape (N,)
         A tensor assigning each sample point to a discrete state, with integer values in {0, ..., n_states-1}.
-
     weights : torch.Tensor, shape (N,)
         Biasing weights
-
     n_states : int
         The total number of discrete states in the system.
+    reg_first_mode : bool
+        Whether to regularize the first mode to have eigenfunction equal to 1 and eigenvalue equal to 0 to stabilize the calculation, by default True. 
 
     Returns:
     --------
@@ -185,6 +200,9 @@ def forecast_state_occupation(eigenfunctions: torch.Tensor,
         from state `i` to state `j` at time `times[t]`.
 
     """
+    if reg_first_mode:
+        eigenfunctions[:, 0] = 1
+        eigenvalues[0] = 0
 
     # Number of samples
     n_samples = classification.shape[0]
@@ -231,7 +249,7 @@ def test_forecast_state_occupation():
     # reference eigenvalues
     evals = torch.Tensor([-4.9422e-05, -2.2918e-04, -1.1490e-01])
 
-    # TODO what?
+    # labels of points used, one for each eigenfunction
     classification = torch.Tensor([1, 1, 1, 0, 2])
     times = torch.linspace(0, 100, 10)
     weights = torch.Tensor([1.4809, 0.0736, 0.3693, 0.1849, 0.0885])

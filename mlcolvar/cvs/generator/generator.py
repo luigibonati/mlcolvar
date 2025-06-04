@@ -38,13 +38,14 @@ class Generator(BaseCV, lightning.LightningModule):
     BLOCKS = ["nn"]
 
     def __init__(self,
-                 r: int, # TODO add check on dimensions
+                 r: int,
                  layers: list,
                  eta: float,
                  alpha: float,
-                 friction=None,
+                 friction: torch.Tensor,
                  cell: float = None,
-                 descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None,
+                 descriptors_derivatives: Union[SmartDerivatives, torch.Tensor] = None,
+                 n_dim: int = 3,
                  options: dict = None,
                  **kwargs
                  ):
@@ -60,7 +61,7 @@ class Generator(BaseCV, lightning.LightningModule):
             Hyperparameter for the shift to define the resolvent, i.e., $(\eta I-_mathcal{L})^{-1}$
         alpha : float
             Hyperparamer that scales the contribution of orthonormality loss to the total loss, i.e., L = L_ef + alpha*L_ortho        
-        friction: torch.tensor
+        friction: torch.Tensor
             Langevin friction, i.e., $\sqrt{k_B*T/(gamma*m_i)}$
         cell : float, optional
             CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, by default None
@@ -69,6 +70,8 @@ class Generator(BaseCV, lightning.LightningModule):
             Can be either:
                 - A `SmartDerivatives` object to save both memory and time, see also mlcolvar.core.loss.committor_loss.SmartDerivatives
                 - A torch.Tensor with the derivatives to save time, memory-wise could be less efficient
+        n_dim : int
+            Number of dimensions, by default 3
         options : dict[str, Any], optional
             Options for the building blocks of the model, by default {}.
             Available blocks: ['nn'] .
@@ -81,13 +84,21 @@ class Generator(BaseCV, lightning.LightningModule):
                                      alpha=alpha, 
                                      friction=friction, 
                                      cell=cell,
-                                     descriptors_derivatives=descriptors_derivatives
+                                     descriptors_derivatives=descriptors_derivatives,
+                                     n_dim=n_dim,
                                      )
         self.r = r
         self.eta = eta
         self.friction = friction
         self.cell = cell
+        self.n_dim=n_dim
 
+        # check layers
+        if layers[-1] != 1:
+            raise ValueError ( 
+                f"The last layer of the neural network should have dimension 1! Found {layers[-1]}"
+                )
+        
         # these are initialized by compute_eigenfunctions method
         self.evecs = None
         self.evals = None
@@ -172,6 +183,7 @@ class Generator(BaseCV, lightning.LightningModule):
                 cell=cell,
                 tikhonov_reg=tikhonov_reg,
                 descriptors_derivatives=descriptors_derivatives,
+                n_dim=self.n_dim
             )
             self.evals = evals
             self.evecs = evecs
@@ -262,13 +274,9 @@ def test_generator():
 
     # create friction tensor
     #### This part should be made easier using committor utils TODO
-    masses = torch.tensor([ 12.011, 12.011, 15.999, 14.0067, 12.011, 12.011, 12.011, 15.999, 14.0067, 12.011])
+    masses = torch.Tensor([ 12.011, 12.011, 15.999, 14.0067, 12.011, 12.011, 12.011, 15.999, 14.0067, 12.011])
     gamma = 1 / 0.05
-    friction = torch.zeros(n_atoms * 3)
-    for i_atom in range(10):
-        friction[3 * i_atom : 3 * i_atom + 3] = torch.Tensor([kT / (gamma * masses[i_atom])] * 3)
-    friction = torch.Tensor(friction)
-
+    friction = kT / (gamma*masses)
 
     # --------------------------------- TRAIN MODELS ---------------------------------
     # Train the models: positions as input, desc as input with smartderivatives and passing derivatives
