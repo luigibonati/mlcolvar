@@ -3,6 +3,7 @@ from torch import nn
 from typing import List, Dict, Tuple
 
 from mlcolvar.core.nn.graph import radial
+from mlcolvar.utils import _code
 
 """
 GNN models.
@@ -21,9 +22,10 @@ class BaseGNN(nn.Module):
         n_out: int,
         cutoff: float,
         atomic_numbers: List[int],
+        pooling_operation: str,
         n_bases: int = 6,
         n_polynomials: int = 6,
-        basis_type: str = 'bessel'
+        basis_type: str = 'bessel',
     ) -> None:
         """Initializes the core of a GNN model, taking care of edge embeddings.
 
@@ -36,6 +38,8 @@ class BaseGNN(nn.Module):
             radius used to build the graphs.
         atomic_numbers : List[int]
             The atomic numbers mapping.
+        pooling_operation : str
+            Type of pooling operation to combine node-level features into graph-level features, either mean or sum
         n_bases : int, optional
             Size of the basis set used for the embedding, by default 6
         n_polynomials : int, optional
@@ -59,6 +63,7 @@ class BaseGNN(nn.Module):
         self.register_buffer(
             'atomic_numbers', torch.tensor(atomic_numbers, dtype=torch.int64)
         )
+        self.pooling_operation = pooling_operation
 
     @property
     def out_features(self):
@@ -98,6 +103,39 @@ class BaseGNN(nn.Module):
             normalize=normalize,
         )
         return lengths, self._radial_embedding(lengths), vectors
+    
+    def pooling(self,
+                input : torch.Tensor,
+                data : Dict[str, torch.Tensor]) -> torch.Tensor:
+        """Performs pooling of the node-level outputs to obtain a graph-level output
+
+        Parameters
+        ----------
+        input : torch.Tensor
+            Nodel level features to be pooled
+        data : Dict[str, torch.Tensor]
+            Data batch containing the graph data informations
+
+        Returns
+        -------
+        torch.Tensor
+            Pooled output
+        """
+        if self.pooling_operation == 'mean':
+            if 'system_masks' not in data.keys():
+                out = _code.scatter_mean(input, data['batch'], dim=0)
+            else:
+                out = input * data['system_masks']
+                out = _code.scatter_sum(out, data['batch'], dim=0)
+                out = out / data['n_system']
+        
+        if self.pooling_operation == 'sum':
+            if 'system_masks' in data.keys():
+                out = input * data['system_masks']
+            else:
+                out = _code.scatter_sum(input, data['batch'], dim=0)
+
+        return out
     
 def get_edge_vectors_and_lengths(
     positions: torch.Tensor,

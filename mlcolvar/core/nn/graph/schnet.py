@@ -39,8 +39,8 @@ class SchNetModel(BaseGNN):
     n_hidden_channels: int
         Size of hidden embeddings.
     aggr: str
-        Type of the GNN aggr function.
-    w_out_after_sum: bool
+        Type of aggregation function for the GNN message passing.
+    w_out_after_pool: bool
         If apply the readout MLP layer after the scatter sum.
     References
     ----------
@@ -54,12 +54,13 @@ class SchNetModel(BaseGNN):
         n_out: int,
         cutoff: float,
         atomic_numbers: List[int],
+        pooling_operation : str = 'mean',
         n_bases: int = 16,
         n_layers: int = 2,
         n_filters: int = 16,
         n_hidden_channels: int = 16,
         aggr: str = 'mean',
-        w_out_after_sum: bool = False
+        w_out_after_pool: bool = False,
     ) -> None:
         """The SchNet model. This implementation is taken from torch_geometric:
         https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/nn/models/schnet.py
@@ -73,6 +74,8 @@ class SchNetModel(BaseGNN):
             radius used to build the graphs.
         atomic_numbers : List[int]
             The atomic numbers mapping.
+        pooling_operation : str
+            Type of pooling operation to combine node-level features into graph-level features, either mean or sum, by default 'mean'
         n_bases : int, optional
             Size of the basis set used for the embedding, by default 16
         n_layers : int, optional
@@ -83,20 +86,28 @@ class SchNetModel(BaseGNN):
             Size of hidden embeddings, by default 16
         aggr : str, optional
             Type of the GNN aggregation function, by default 'mean'
-        w_out_after_sum : bool, optional
-            Whether to apply the last linear transformation after the sum, by default False
+        w_out_after_pool : bool, optional
+            Whether to apply the last linear transformation form hidden to output channels after the pooling sum, by default False
         """
 
         super().__init__(
-            n_out=n_out, cutoff=cutoff, atomic_numbers=atomic_numbers, n_bases=n_bases, n_polynomials=0, basis_type='gaussian'
+            n_out=n_out, 
+            cutoff=cutoff, 
+            atomic_numbers=atomic_numbers, 
+            pooling_operation=pooling_operation, 
+            n_bases=n_bases, 
+            n_polynomials=0, 
+            basis_type='gaussian'
         )
 
+        # transforms embedding into hidden channels
         self.W_v = nn.Linear(
             in_features=len(atomic_numbers), 
             out_features=n_hidden_channels, 
             bias=False
         )
 
+        # initialize layers with interaction blocks
         self.layers = nn.ModuleList([
             InteractionBlock(
                 n_hidden_channels, n_bases, n_filters, cutoff, aggr
@@ -104,13 +115,14 @@ class SchNetModel(BaseGNN):
             for _ in range(n_layers)
         ])
 
+        # transforms hidden channels into output channels
         self.W_out = nn.ModuleList([
             nn.Linear(n_hidden_channels, n_hidden_channels // 2),
             ShiftedSoftplus(),
             nn.Linear(n_hidden_channels // 2, n_out)
         ])
 
-        self._w_out_after_sum = w_out_after_sum
+        self._w_out_after_pool = w_out_after_pool
 
         self.reset_parameters()
 
@@ -129,7 +141,7 @@ class SchNetModel(BaseGNN):
         self.W_out[2].bias.data.fill_(0)
 
     def forward(
-        self, data: Dict[str, torch.Tensor], scatter_mean: bool = True
+        self, data: Dict[str, torch.Tensor], pool: bool = True
     ) -> torch.Tensor:
         """
         The forward pass.
@@ -138,32 +150,30 @@ class SchNetModel(BaseGNN):
         data: Dict[str, torch.Tensor]
             The data dict. Usually came from the `to_dict` method of a
             `torch_geometric.data.Batch` object.
-        scatter_mean: bool
-            If to perform the scatter mean to the model output.
+        pool: bool
+            If to perform the pooling to the model output.
         """
 
+        # embed edges and node attrs
         h_E = self.embed_edge(data)
         h_V = self.W_v(data['node_attrs'])
 
-        batch_id = data['batch']
-
+        # update through layers
         for layer in self.layers:
             h_V = h_V + layer(h_V, data['edge_index'], h_E[0], h_E[1])
 
-        if not self._w_out_after_sum:
+        # in case the last linear transformation is performed BEFORE pooling
+        if not self._w_out_after_pool:
             for w in self.W_out:
                 h_V = w(h_V)
         out = h_V
 
-        if scatter_mean:
-            if 'system_masks' not in data.keys():
-                out = _code.scatter_mean(out, batch_id, dim=0)
-            else:
-                out = out * data['system_masks']
-                out = _code.scatter_sum(out, batch_id, dim=0)
-                out = out / data['n_system']
+        # perform pooling of the node-level ouptuts
+        if pool:
+            out = self.pooling(input=out, data=data)
         
-        if self._w_out_after_sum:
+        # in case the last linear transformation is performed AFTER pooling
+        if self._w_out_after_pool:
             for w in self.W_out:
                 out = w(out)
 
@@ -248,7 +258,7 @@ class CFConv(MessagePassing):
         cutoff: float,
         aggr: str = 'mean'
     ) -> None:
-        """_summary_
+        """Applies a continuous-filter convolution
 
         Parameters
         ----------
@@ -324,12 +334,23 @@ def test_schnet_1() -> None:
     )
 
     data = _test_get_data()
-    assert (
-        torch.abs(
-            model(data) -
-            torch.tensor([[0.40384621527953063, -0.1257513365138969]] * 6)
-        ) < 1E-12
-    ).all()
+    ref_out = torch.tensor([[0.40384621527953063, -0.1257513365138969]] * 6)
+    assert ( torch.allclose(model(data), ref_out) )
+    
+    model = SchNetModel(
+        n_out=2,
+        cutoff=0.1,
+        atomic_numbers=[1, 8],
+        n_bases=6,
+        n_layers=2,
+        n_filters=16,
+        n_hidden_channels=16,
+        pooling_operation='sum',
+    )
+
+    data = _test_get_data()
+    ref_out = torch.tensor([[0.5760462255365488, -0.4465858318467991]] * 6)
+    assert ( torch.allclose(model(data), ref_out) )
 
 
 def test_schnet_2() -> None:
@@ -345,15 +366,14 @@ def test_schnet_2() -> None:
         n_filters=16,
         n_hidden_channels=16,
         aggr='min',
-        w_out_after_sum=True
+        w_out_after_pool=True
     )
 
     data = _test_get_data()
-    assert (
-        torch.abs(
-            model(data) -
-            torch.tensor([[0.3654537816221449, -0.0748265132499575]] * 6)
-        ) < 1E-12
-    ).all()
-
+    ref_out = torch.tensor([[0.3654537816221449, -0.0748265132499575]] * 6)
+    assert ( torch.allclose(model(data), ref_out) )
+    
     torch.set_default_dtype(torch.float32)
+
+if __name__ == "__main__":
+    test_schnet_1()

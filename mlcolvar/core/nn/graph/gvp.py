@@ -35,6 +35,7 @@ class GVPModel(BaseGNN):
         n_out: int,
         cutoff: float,
         atomic_numbers: List[int],
+        pooling_operation : str = 'mean',
         n_bases: int = 8,
         n_polynomials: int = 6,
         n_layers: int = 1,
@@ -59,6 +60,8 @@ class GVPModel(BaseGNN):
             radius used to build the graphs.
         atomic_numbers: List[int]
             The atomic numbers mapping
+        pooling_operation : str
+            Type of pooling operation to combine node-level features into graph-level features, either mean or sum, by default 'mean'
         n_bases: int
             Size of the basis set used for the embedding, by default 8.
         n_polynomials: bool
@@ -85,7 +88,13 @@ class GVPModel(BaseGNN):
             If use the smoothed GVPConv, by default False.
         """
         super().__init__(
-            n_out, cutoff, atomic_numbers, n_bases, n_polynomials, basis_type
+            n_out=n_out, 
+            cutoff=cutoff, 
+            atomic_numbers=atomic_numbers, 
+            pooling_operation=pooling_operation, 
+            n_bases=n_bases, 
+            n_polynomials=n_polynomials, 
+            basis_type=basis_type
         )
 
         self.W_e = nn.ModuleList([
@@ -128,7 +137,7 @@ class GVPModel(BaseGNN):
         ])
 
     def forward(
-        self, data: Dict[str, torch.Tensor], scatter_mean: bool = True
+        self, data: Dict[str, torch.Tensor], pool: bool = True
     ) -> torch.Tensor:
         """The forward pass.
 
@@ -137,8 +146,8 @@ class GVPModel(BaseGNN):
         data: Dict[str, torch.Tensor]
             The data dict. Usually came from the `to_dict` method of a
             `torch_geometric.data.Batch` object.
-        scatter_mean: bool
-            If perform the scatter mean to the model output, by default True.
+        pool: bool
+            If perform the pooling to the model output, by default True.
         """
         h_V = (data['node_attrs'], None)
         for w in self.W_v:
@@ -156,8 +165,6 @@ class GVPModel(BaseGNN):
         assert h_E_2 is not None
         h_E = (h_E_1, h_E_2)
 
-        batch_id = data['batch']
-
         for layer in self.layers:
             h_V = layer(h_V, data['edge_index'], h_E, lengths)
 
@@ -165,13 +172,8 @@ class GVPModel(BaseGNN):
             h_V = w(h_V)
         out = h_V[0]
 
-        if scatter_mean:
-            if 'system_masks' not in data.keys():
-                out = _code.scatter_mean(out, batch_id, dim=0)
-            else:
-                out = out * data['system_masks']
-                out = _code.scatter_sum(out, batch_id, dim=0)
-                out = out / data['n_system']
+        if pool:
+            out = self.pooling(input=out, data=data)
 
         return out
 
