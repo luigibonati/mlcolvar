@@ -264,13 +264,26 @@ def test_compute_committor_weights():
     y = torch.zeros(X.shape[0])
     y[samples:] += 1
     y[int(2*samples):] += 1
-    bias = torch.ones_like(X)
+    bias = torch.zeros(X.shape[0])
     w = torch.zeros(X.shape[0])
 
     # create and edit dataset
     dataset = DictDataset({"data": X, "labels": y, "weights": w})
     dataset = compute_committor_weights(dataset=dataset, bias=bias, data_groups=[0,1,2], beta=1.0)
+    assert (torch.allclose(dataset['weights'], torch.ones(X.shape[0])))
     
+
+    # graphs
+    # create dataset
+    from mlcolvar.data.graph.utils import create_test_graph_input
+    dataset = create_test_graph_input('dataset', n_states=4, random_weights=True)
+    bias = torch.zeros(len(dataset))
+    dataset = compute_committor_weights(dataset=dataset, bias=bias, data_groups=[0,1,2,3], beta=1)
+    aux = []
+    for i in range(len(dataset)):    
+            aux.append(dataset['data_list'][i]['weight'])
+    assert (torch.allclose(torch.ones(len(dataset)), torch.Tensor(aux)))
+
 if __name__ == '__main__':
     test_Kolmogorov_bias()
     test_compute_committor_weights()
