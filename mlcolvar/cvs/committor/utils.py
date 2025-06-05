@@ -172,7 +172,8 @@ def get_descriptors_and_derivatives(dataset,
                                  separate_boundary_dataset=True, 
                                  setup_device='cpu',
                                  force_all_atoms : bool = False,
-                                 positions_noise : float = 0.0):
+                                 positions_noise : float = 0.0,
+                                 batch_size : int = None ):
     """Wrapper function to setup a faster calculation of derivatives computing only once the derivatives of descriptors wrt positions.
 
     Parameters
@@ -192,6 +193,8 @@ def get_descriptors_and_derivatives(dataset,
     positions_noise : float
         Order of magnitude of small noise to be added to the positions to avoid atoms having the exact same coordinates on some dimension and thus zero derivatives, by default 0.
         Ideally the smaller the better, e.g., 1e-6 for single precision, even lower for double precision.
+    batch_size : int
+        Size of batches to process data, useful for heavy computation to avoid memory overflows, if None a singel batch is used, by default None
 
     Returns
     -------
@@ -202,11 +205,13 @@ def get_descriptors_and_derivatives(dataset,
     """
 
     # apply preprocessing and compute derivatives of descriptors
+    print("Computing descriptors derivatives. This can be heavy, consider using batches by setting batch_size")
     pos, desc, d_desc_d_x = compute_descriptors_derivatives(dataset=dataset, 
                                                             descriptor_function=descriptor_function, 
                                                             n_atoms=n_atoms, 
                                                             separate_boundary_dataset=separate_boundary_dataset,
-                                                            positions_noise=positions_noise)
+                                                            positions_noise=positions_noise,
+                                                            batch_size=batch_size)
 
   # this sets up the fixed part of the calculation of the derivatives
     smart_derivatives = SmartDerivatives(d_desc_d_x, 
@@ -214,6 +219,7 @@ def get_descriptors_and_derivatives(dataset,
                                         setup_device=setup_device, 
                                         force_all_atoms=force_all_atoms)
 
+    
     # update dataset with the descriptors as data
     smart_dataset = DictDataset({'data' : desc.detach(), 
                                 'labels': torch.clone(dataset['labels']), 

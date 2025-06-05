@@ -15,6 +15,7 @@ __all__ = ["CommittorLoss", "committor_loss", "SmartDerivatives", "compute_descr
 # =============================================================================
 
 import torch
+import numpy as np
 from typing import Union
 import torch_geometric
 import warnings
@@ -442,7 +443,8 @@ def compute_descriptors_derivatives(dataset,
                                     descriptor_function, 
                                     n_atoms : int, 
                                     separate_boundary_dataset = True, 
-                                    positions_noise : float = 0.0):
+                                    positions_noise : float = 0.0,
+                                    batch_size : int = None):
     """Compute the derivatives of a set of descriptors wrt input positions in a dataset for committor optimization
 
     Parameters
@@ -458,41 +460,108 @@ def compute_descriptors_derivatives(dataset,
     positions_noise : float
         Order of magnitude of small noise to be added to the positions to avoid atoms having the exact same coordinates on some dimension and thus zero derivatives, by default 0.
         Ideally the smaller the better, e.g., 1e-6 for single precision, even lower for double precision.
+    batch_size : int
+        Size of batches to process data, useful for heavy computation to avoid memory overflows, if None a singel batch is used, by default None 
 
     Returns
     -------
+    pos : torch.Tensor
+        Positions tensor (detached)
     desc : torch.Tensor
-        Computed descriptors
+        Computed descriptors (detached)
     d_desc_d_pos : torch.Tensor
-        Derivatives of desc wrt to pos
+        Derivatives of desc wrt to pos (detached)
     """
+    
+    # apply noise if given
     if positions_noise > 0:
         noise = torch.rand_like(dataset['data'], )*positions_noise
         dataset['data'] = dataset['data'] + noise
 
+    # get and prepare positions
     pos = dataset['data']
     labels = dataset['labels']
     pos = sanitize_positions_shape(pos=pos, n_atoms=n_atoms)[0]
     pos.requires_grad = True
+    
+    # get_device 
+    device = pos.device
 
-    desc = descriptor_function(pos)
+    # check if to separate boundary data
     if separate_boundary_dataset:
-        mask_var = torch.nonzero(labels.squeeze() > 1, as_tuple=True)[0]
-        der_desc = desc[mask_var]
-        if len(der_desc)==0:
+        mask_var = labels.squeeze() > 1
+        if mask_var.sum()==0:
             raise(ValueError('No points left after separating boundary and variational datasets. \n If you are using only unbiased data set separate_boundary_dataset=False here and in Committor or don\'t use SmartDerivatives!!'))
     else:
-        der_desc = desc
+        mask_var = torch.ones_like(labels.squeeze()).to(torch.bool)
+    
+    # check batches size for calculation
+    if batch_size is None or batch_size == -1:
+        batch_size = len(pos)
+    else:
+        if batch_size <= 0:
+            raise ( ValueError(f"Batch size must be larger than zero if set! Found {batch_size}"))
+    n_batches = int(np.ceil(len(pos) / batch_size))
 
-    # compute derivatives of descriptors wrt positions, loop over the number of decriptors
-    aux = []
-    for i in range(len(der_desc[0])):
-        aux_der = torch.autograd.grad(der_desc[:,i], pos, grad_outputs=torch.ones_like(der_desc[:,i]), retain_graph=True )[0]
-        if separate_boundary_dataset:
-            aux_der = aux_der[mask_var]
-        aux.append(aux_der)
+    # compute descriptors and derivatives
+    # we loop over batches and compute everything only for that part of the data, inside we loop over descriptors
+    # we save lists and make them proper tensors later
+    batch_aux_stack = []
+    batch_count = 0
+    while batch_count * batch_size + 1 <= len(pos):
+        print(f"Processing batch {batch_count}/{n_batches}", end='\r')
 
-    d_desc_d_pos = torch.stack(aux, axis=2)
+        # get batch slicing indexes, they don't need to be all of the same size
+        batch_start, batch_stop = batch_count*batch_size, (batch_count+1) * batch_size
+        
+        batch_mask_var = mask_var[batch_start:batch_stop]   # separate_dataset mask
+        batch_pos = pos[batch_start:batch_stop]             # batch positions
+        batch_pos = batch_pos[batch_mask_var, :, :]         # batch_positions for variational dataset only
+        
+        if len(batch_pos) > 0:
+            batch_desc = descriptor_function(batch_pos)
+
+            # loop over descriptors, #TODO maybe can be done with jacobians?
+            # we store things always on the cpu
+            batch_aux = []
+            for i in range(len(batch_desc[0])):
+                aux_der = torch.autograd.grad(batch_desc[:,i], batch_pos, grad_outputs=torch.ones_like(batch_desc[:,i]), retain_graph=True )[0]
+                batch_aux.append(aux_der.detach().cpu())
+            
+            batch_d_desc_d_pos = torch.stack(batch_aux, axis=2)         # derivatives of this batch
+            batch_aux_stack.append(batch_d_desc_d_pos.detach().cpu())   # derivatives of all batches
+
+            # cleanup
+            del aux_der    
+            del batch_pos
+            del batch_desc
+
+            # to be sure, clean the gpu cache
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+        batch_count += 1
+    
+    print(f"Processed all data in {n_batches} batches!")
+
+    if batch_count == 1:
+        d_desc_d_pos = batch_d_desc_d_pos
+    else:
+        d_desc_d_pos = torch.cat(batch_aux_stack, dim=0)
+    
+    # we compute the descriptors on the whole dataset to always have all of them, no need for grads   
+    with torch.no_grad():
+        desc = descriptor_function(pos)
+
+    # detach and move back to original device
+    pos = pos.detach().to(device)
+    desc = desc.detach().to(device)
+    d_desc_d_pos = d_desc_d_pos.detach().to(device)
+
+    # to be sure, clean the gpu cache
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
     return pos, desc, d_desc_d_pos.squeeze(-1)
 
 
@@ -538,6 +607,10 @@ def test_smart_derivatives():
         
         assert(torch.allclose(desc, ref_distances, atol=1e-3))
 
+
+        # compute descriptors outside to have their derivatives for checks
+        pos.requires_grad = True
+        desc = ComputeDescriptors(pos)
 
         # apply simple NN
         NN = FeedForward(layers = [45, 2, 1])
@@ -596,6 +669,9 @@ def test_smart_derivatives():
         
         assert(torch.allclose(desc, ref_distances, atol=1e-3))
 
+        # compute descriptors outside to have their derivatives for checks
+        pos.requires_grad = True
+        desc = ComputeDescriptors(pos)
 
         # apply simple NN
         NN = FeedForward(layers = [2, 2, 1])
@@ -623,7 +699,7 @@ def test_smart_derivatives():
 
 
 
-    # check with disappearing gradient components
+    # check with disappearing gradient components and using batches
     # compute some descriptors from positions --> distances
     n_atoms = 3
     pos = torch.Tensor([[ 1.4970,  1.3861, -0.0273, 
@@ -631,6 +707,7 @@ def test_smart_derivatives():
                          -1.4473, -1.4193, -0.0553]])
     pos = pos.repeat(4, 1)
     labels = torch.arange(0, 4)
+    labels[-1] = 0
 
     dataset = DictDataset({'data' : pos, 'labels' : labels})
 
@@ -645,8 +722,12 @@ def test_smart_derivatives():
                                                             descriptor_function=ComputeDescriptors, 
                                                             n_atoms=n_atoms, 
                                                             separate_boundary_dataset=separate_boundary_dataset,
-                                                            positions_noise=1e-5)
-        
+                                                            positions_noise=1e-5, 
+                                                            batch_size=3)
+    
+    # compute descriptors outside to have their derivatives for checks
+    pos.requires_grad = True
+    desc = ComputeDescriptors(pos)
 
     # apply simple NN
     NN = FeedForward(layers = [3, 2, 1])

@@ -59,7 +59,7 @@ pip -e install .
 
 ---
 
-**PLUMED interface**: the resulting CVs can be deployed for enhancing sampling with the [PLUMED](https://www.plumed.org/) package via the [pytorch](https://www.plumed.org/doc-master/user-doc/html/_p_y_t_o_r_c_h__m_o_d_e_l.html>`_) interface, available since version 2.9. 
+**PLUMED interface**: the resulting CVs can be deployed for enhancing sampling with the [PLUMED](https://www.plumed.org/) package via the [pytorch](https://www.plumed.org/doc-master/user-doc/html/PYTORCH_MODEL/) interface, available since version 2.9. 
 
 ---
 
