@@ -284,7 +284,7 @@ def test_bessel_basis() -> None:
 
     torch.set_default_dtype(dtype)
     
-    rbf
+    print(rbf)
 
 
 def test_gaussian_basis() -> None:
@@ -314,7 +314,7 @@ def test_gaussian_basis() -> None:
 
     torch.set_default_dtype(dtype)
 
-    rbf
+    print(rbf)
 
 
 def test_polynomial_cutoff() -> None:
@@ -344,7 +344,7 @@ def test_polynomial_cutoff() -> None:
 
     torch.set_default_dtype(dtype)
 
-    cutoff_function
+    print(cutoff_function)
 
 def test_radial_embedding_block():
     dtype = torch.get_default_dtype()

@@ -318,6 +318,7 @@ class ShiftedSoftplus(nn.Module):
 
 
 from mlcolvar.core.nn.graph.utils import _test_get_data
+from mlcolvar.data.graph.utils import create_graph_tracing_example
 
 def test_schnet_1() -> None:
     torch.manual_seed(0)
@@ -336,7 +337,7 @@ def test_schnet_1() -> None:
     data = _test_get_data()
     ref_out = torch.tensor([[0.40384621527953063, -0.1257513365138969]] * 6)
     assert ( torch.allclose(model(data), ref_out) )
-    
+
     model = SchNetModel(
         n_out=2,
         cutoff=0.1,
@@ -351,6 +352,9 @@ def test_schnet_1() -> None:
     data = _test_get_data()
     ref_out = torch.tensor([[0.5760462255365488, -0.4465858318467991]] * 6)
     assert ( torch.allclose(model(data), ref_out) )
+
+    traced_model = torch.jit.trace(model, example_inputs=create_graph_tracing_example(2))
+    assert ( torch.allclose(traced_model(data), ref_out) )
 
 
 def test_schnet_2() -> None:

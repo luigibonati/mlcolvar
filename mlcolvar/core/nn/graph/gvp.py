@@ -863,6 +863,8 @@ def _merge(s: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
 
 def test_gvp() -> None:
     from mlcolvar.core.nn.graph.utils import _test_get_data
+    from mlcolvar.data.graph.utils import create_graph_tracing_example
+
     torch.manual_seed(0)
     torch.set_default_dtype(torch.float64)
 
@@ -883,12 +885,12 @@ def test_gvp() -> None:
     )
 
     data = _test_get_data()
-    assert (
-        torch.abs(
-            model(data) -
-            torch.tensor([[0.6100070244145421, -0.2559670171962067]] * 6)
-        ) < 1E-12
-    ).all()
+    ref_out = torch.tensor([[0.6100070244145421, -0.2559670171962067]] * 6)
+    assert ( torch.allclose(model(data), ref_out) )
+    
+    traced_model = torch.jit.trace(model, example_inputs=create_graph_tracing_example(2))
+    assert ( torch.allclose(traced_model(data), ref_out) )
+
     torch.set_default_dtype(torch.float32)
 
 if __name__ == '__main__':
