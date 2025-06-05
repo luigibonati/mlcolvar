@@ -1,6 +1,5 @@
 import math
 import torch
-from mlcolvar.utils import _code
 from torch import nn
 from torch_geometric.nn import MessagePassing
 

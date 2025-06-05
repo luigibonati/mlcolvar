@@ -129,11 +129,13 @@ class BaseGNN(nn.Module):
                 out = _code.scatter_sum(out, data['batch'], dim=0)
                 out = out / data['n_system']
         
-        if self.pooling_operation == 'sum':
+        elif self.pooling_operation == 'sum':
             if 'system_masks' in data.keys():
                 out = input * data['system_masks']
             else:
                 out = _code.scatter_sum(input, data['batch'], dim=0)
+        else:
+            raise ValueError (f"Invalid pooling operation! Found {self.pooling_operation}")
 
         return out
     

@@ -2,7 +2,6 @@ import functools
 import math
 import torch
 from torch import nn
-from mlcolvar.utils import _code
 from torch_geometric.nn import MessagePassing
 from typing import Tuple, Callable, Optional, List, Dict
 
