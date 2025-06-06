@@ -41,7 +41,7 @@ Architectures
 
 Loss
 ----
-This module implements the loss fucntions that can be used to optimize CV models.
+This module implements the loss functions that can be used to optimize CV models.
 
 .. currentmodule:: mlcolvar.core.loss
 

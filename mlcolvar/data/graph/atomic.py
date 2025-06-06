@@ -1,6 +1,6 @@
 import warnings
 import numpy as np
-import mdtraj as md # TODO re-write the two functions maybe
+import mdtraj as md
 from dataclasses import dataclass
 from typing import List, Iterable, Optional
 

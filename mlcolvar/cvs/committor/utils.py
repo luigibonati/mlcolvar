@@ -276,6 +276,7 @@ def test_compute_committor_weights():
     # create and edit dataset
     dataset = DictDataset({"data": X, "labels": y, "weights": w})
     dataset = compute_committor_weights(dataset=dataset, bias=bias, data_groups=[0,1,2], beta=1.0)
+    print(dataset)
     assert (torch.allclose(dataset['weights'], torch.ones(X.shape[0])))
     
 

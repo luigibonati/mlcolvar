@@ -248,7 +248,7 @@ def test_deeplda(n_states=2):
     model.eval()
     with torch.no_grad():
         s = model(X).numpy()
-
+    print(s)
 
     # gnn external
     print()
@@ -277,7 +277,7 @@ def test_deeplda(n_states=2):
     model.eval()
     with torch.no_grad():
         s = model(example_input_graph_test).numpy()
-
+    print(s)
 
 
 if __name__ == "__main__":

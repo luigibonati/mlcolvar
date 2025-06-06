@@ -170,7 +170,6 @@ class Committor(BaseCV, lightning.LightningModule):
 
 
 def test_committor():
-    import os
     from mlcolvar.data import DictDataset, DictModule
     from mlcolvar.cvs.committor.utils import initialize_committor_masses, KolmogorovBias
 
