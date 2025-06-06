@@ -78,7 +78,7 @@ class Statistics(object):
         # Initialize
         if self.mean is None:
             for prop in ["mean", "M2", "std"]:
-                setattr(self, prop, torch.zeros(nfeatures))
+                setattr(self, prop, torch.zeros(nfeatures, device=x.device))
 
         # compute sample mean
         sample_mean = torch.mean(x, dim=0)
