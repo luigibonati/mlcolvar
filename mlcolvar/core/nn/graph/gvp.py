@@ -737,7 +737,7 @@ def _tuple_sum(
     return out[0], out[1]
 
 
-@torch.jit.script
+@torch.jit.script_if_tracing
 def _tuple_cat(
     input_1: Tuple[torch.Tensor, torch.Tensor],
     input_2: Tuple[torch.Tensor, torch.Tensor],
@@ -771,7 +771,7 @@ def _tuple_cat(
     return torch.cat(s_args, dim=dim), torch.cat(v_args, dim=dim)
 
 
-@torch.jit.script
+@torch.jit.script_if_tracing
 def _tuple_index(
     x: Tuple[torch.Tensor, torch.Tensor], idx: torch.Tensor
 ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -792,7 +792,7 @@ def _tuple_index(
     return x[0][idx], x[1][idx]
 
 
-@torch.jit.script
+@torch.jit.script_if_tracing
 def _norm_no_nan(
     x: torch.Tensor,
     axis: int = -1,
@@ -825,7 +825,7 @@ def _norm_no_nan(
     return torch.sqrt(out) if sqrt else out
 
 
-@torch.jit.script
+@torch.jit.script_if_tracing
 def _split(x: torch.Tensor, nv: int) -> Tuple[torch.Tensor, torch.Tensor]:
     """Splits a merged representation of (s, V) back into a tuple.
     Should be used only with `_merge(s, V)` and only if the tuple
@@ -849,7 +849,7 @@ def _split(x: torch.Tensor, nv: int) -> Tuple[torch.Tensor, torch.Tensor]:
     return s, v
 
 
-@torch.jit.script
+@torch.jit.script_if_tracing
 def _merge(s: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
     """Merges a tuple (s, V) into a single `torch.Tensor`, where the
     vector channels are flattened and appended to the scalar channels.
@@ -889,6 +889,30 @@ def test_gvp() -> None:
     
     traced_model = torch.jit.trace(model, example_inputs=create_graph_tracing_example(2))
     assert ( torch.allclose(traced_model(data), ref_out) )
+
+    model = GVPModel(
+        n_out=2,
+        cutoff=0.1,
+        atomic_numbers=[1, 8],
+        n_bases=6,
+        n_polynomials=6,
+        n_layers=2,
+        n_messages=2,
+        n_feedforwards=2,
+        n_scalars_node=16,
+        n_vectors_node=8,
+        n_scalars_edge=16,
+        drop_rate=0,
+        activation='SiLU',
+    )
+
+    data = _test_get_data()
+    ref_out = torch.tensor([[-0.3065361946949377, 0.16624918721972567]] * 6)
+    assert ( torch.allclose(model(data), ref_out) )
+    
+    traced_model = torch.jit.trace(model, example_inputs=create_graph_tracing_example(2))
+    assert ( torch.allclose(traced_model(data), ref_out) )
+
 
     torch.set_default_dtype(torch.float32)
 

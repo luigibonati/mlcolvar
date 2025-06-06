@@ -169,6 +169,7 @@ class DictDataset(Dataset):
         )
 
     def get_graph_inputs(self):
+        """Generate and input suitable for graph models. Returns the whole dataset as a single batch not shuffled"""
         assert self.metadata['data_type'] == 'graphs', (
             'Graph inputs can only be generated for graph-based datasets'
         )
