@@ -52,8 +52,9 @@ def compute_fes(
     fes_to_zero=None,
     plot=False,
     plot_color = "fessa6",
-    plot_max_fes=None,
-    plot_error_style="fill_between",
+    plot_max_fes = None,
+    plot_error_style = "fill_between",
+    plot_levels = None,
     ax=None,
     backend=None,
     eps=None,
@@ -69,7 +70,7 @@ def compute_fes(
     fes_units : string, optional
         units of the FES, by default "kJ/mol"
     kbt : float, optional
-        temperature in energy units, by default None
+        temperature in energy units (fes_units), by default None
     num_samples : int, optional
         number of points used along each direction, by default 100
     bounds : list of lists, optional
@@ -304,7 +305,6 @@ def compute_fes(
 
     # Plot
     if plot:
-        color = "fessa6"
         if ax is None:
             fig, ax = plt.subplots()
         if dim == 1:
@@ -314,25 +314,25 @@ def compute_fes(
             if blocks > 1:
                 if plot_error_style is not None:
                     if plot_error_style == "errorbar":  
-                        ax.errorbar(grid, fes2, error,color='fessa6',alpha=0.5)
+                        ax.errorbar(grid, fes2, error,color=plot_color,alpha=0.5)
                     elif plot_error_style == "fill_between":
-                        ax.plot(grid, fes2, color="fessa6")
-                        ax.fill_between(grid, fes2 - error, fes2 + error,alpha=0.5, color='fessa6')
+                        ax.plot(grid, fes2, color=plot_color)
+                        ax.fill_between(grid, fes2 - error, fes2 + error,alpha=0.5, color=plot_color)
                     else:
                         raise ValueError(
                             "plot_error_style must be 'errorbar' or 'fill_between' (None to disable plotting errors)"
                         )
             else:
-                ax.plot(grid, fes2, color="fessa6")
-            ax.set_ylabel("FES"+ f"[{fes_units}]" if fes_units is not None else "")
+                ax.plot(grid, fes2, color=plot_color)
+            ax.set_ylabel(f"FES [{fes_units}]" if fes_units is not None else "FES")
         elif dim == 2:
             fes2 = np.copy(fes)
             if plot_max_fes is not None:
                 fes2[fes2 > plot_max_fes] = np.nan
             extent = [item for sublist in bounds for item in sublist]
-            pp = ax.contourf(fes2, cmap="fessa", extent=extent)  # ,vmax=max_fes)
+            pp = ax.contourf(fes2, cmap="fessa", levels=plot_levels, extent=extent)  # ,vmax=max_fes)
             cbar = plt.colorbar(pp, ax=ax)
-            cbar.set_label("FES"+ f"[{fes_units}]" if fes_units is not None else "")
+            cbar.set_label(f"FES [{fes_units}]" if fes_units is not None else "FES")
 
     return fes, grid, bounds, error
 
