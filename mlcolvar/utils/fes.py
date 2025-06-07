@@ -53,7 +53,7 @@ def compute_fes(
     plot_max_fes=None,
     ax=None,
     backend=None,
-    eps=0,
+    eps=None,
 ):
     """Compute the Free Energy Surface along the given variables.
 
@@ -130,7 +130,7 @@ def compute_fes(
         backend = kdelib
 
     # temperature
-    if kbt is None:
+    if kbt is None:  
         kb = 0.00831441
         kbt = kb * temp
 
@@ -154,7 +154,7 @@ def compute_fes(
         weights = np.ones(nsamples)
     else:
         assert weights.ndim == 1
-        assert weights.shape[0] == nsamples
+        assert weights.shape[0] == nsamples                                                
 
     # rescale
     if scale_by is not None:
@@ -205,12 +205,27 @@ def compute_fes(
                 pos = grid_list
 
             # pdf --> fes
-            fes_i = (
-                -kbt
-                * np.log(kde.evaluate(cartesian(pos)) + eps)
-                .reshape([num_samples for i in range(dim)])
-                .T
-            )
+            if eps is not None:
+                fes_i = (
+                    -kbt
+                    * np.log(kde.evaluate(cartesian(pos)) + eps)
+                    .reshape([num_samples for i in range(dim)])
+                    .T
+                )
+            else:
+                # automatically adjust eps to avoid nans
+                eps_values = [0] +np.logspace(-15,-6,10).tolist()
+                for e in eps_values:    
+                    fes_i = (
+                        -kbt
+                        * np.log(kde.evaluate(cartesian(pos)) + e)
+                        .reshape([num_samples for i in range(dim)])
+                        .T
+                    )
+                    if not np.isnan(fes_i).any():
+                        if e>0:
+                            print(f"Adjusting regularization (eps) to {e:1.1e} to avoid NaNs.")
+                        break
 
         elif backend == "sklearn":
             kde = KernelDensity(bandwidth=bandwidth, kernel=kernel)
@@ -221,11 +236,11 @@ def compute_fes(
                 [num_samples for i in range(dim)]
             )
 
+
         if fes_to_zero is not None:
             fes_i -= fes_i[fes_to_zero]
         else:
-            fes_i -= fes_i.min()
-
+            fes_i -= np.nanmin(fes_i)
         # result for each block
         O_i.append(fes_i)
         W_i.append(np.sum(w_i))
@@ -236,12 +251,14 @@ def compute_fes(
     # compute avg and std
     if blocks > 1:
         # weighted average
-        fes = np.dot(O_i.T, W_i) / np.sum(W_i)
+        fes = np.nansum(O_i.T * W_i, axis=-1) / np.nansum(W_i)
         # weighted std
         dev = O_i - fes
         blocks_eff = (np.sum(W_i)) ** 2 / (np.sum(W_i**2))
         variance = (
-            blocks_eff / (blocks_eff - 1) * (np.dot((dev**2).T, W_i)) / (np.sum(W_i))
+            blocks_eff / (blocks_eff - 1)
+            * (np.nansum((dev**2).T * W_i, axis=-1))
+            / np.nansum(W_i)
         )
         error = np.sqrt(variance / blocks_eff)
     else:
