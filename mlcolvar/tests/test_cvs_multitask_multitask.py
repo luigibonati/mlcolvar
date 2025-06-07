@@ -21,6 +21,7 @@ import pytest
 import lightning
 import torch
 
+from mlcolvar.core.nn import FeedForward
 from mlcolvar.core.loss import TDALoss, FisherDiscriminantLoss, AutocorrelationLoss
 from mlcolvar.cvs.cv import BaseCV
 from mlcolvar.cvs.multitask.multitask import MultiTaskCV
@@ -62,11 +63,13 @@ class MockAuxLoss(torch.nn.Module):
 class MockCV(BaseCV, lightning.LightningModule):
     """Mock CV for mock testing."""
 
-    BLOCKS = []
+    DEFAULT_BLOCKS = []
+    MODEL_BLOCKS = []
 
     def __init__(self, in_features=N_DESCRIPTORS, out_features=N_CVS):
         """Constructor."""
-        super().__init__(in_features=in_features, out_features=out_features)
+        model = FeedForward(layers=[in_features, in_features])
+        super().__init__(model=model)
         self.loss_fn = MockAuxLoss(in_features, out_features)
 
     def training_step(self, train_batch, batch_idx):
@@ -129,7 +132,7 @@ def create_cv(cv_name, n_descriptors=N_DESCRIPTORS, n_cvs=N_CVS):
             n_cvs=n_cvs, encoder_layers=[n_descriptors, 10]
         )
     elif cv_name == "deeptica":
-        returned = "time-lagged", DeepTICA(layers=[n_descriptors, 10, n_cvs])
+        returned = "time-lagged", DeepTICA(model=[n_descriptors, 10, n_cvs])
     else:
         raise ValueError("Unrecognized cv_name.")
 
