@@ -38,6 +38,15 @@ Some examples of how to interpret the CVs, using sensitivity analysis or sparse 
 
    tutorials_explain
 
+.. rubric:: Utils
+
+Tutorials on how to use some of the utils functions provided.
+
+.. toctree::
+   :maxdepth: 2
+
+   tutorials_utils
+
 
 
 
