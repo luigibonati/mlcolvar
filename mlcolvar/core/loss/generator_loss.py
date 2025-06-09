@@ -10,7 +10,7 @@ from mlcolvar.core.loss.committor_loss import SmartDerivatives
 
 
 class GeneratorLoss(torch.nn.Module):
-    """Computes the loss function to learn a representation for the infinitesimal generator"""
+    """Computes the loss function to learn a representation for the resolvent of the infinitesimal generator"""
 
     def __init__(self,
                  r: int, 
@@ -21,7 +21,7 @@ class GeneratorLoss(torch.nn.Module):
                  descriptors_derivatives: Union[SmartDerivatives, torch.Tensor] = None,
                  n_dim: int = 3,
                  ):
-        """#TODO _summary_
+        """Computes the loss to learn a representation on which the resolvent of the infinitesimal generator can be learned
 
         Parameters
         ----------
@@ -95,7 +95,7 @@ def generator_loss(input : torch.Tensor,
                    descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None,
                    n_dim : int = 3,
                    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """#TODO _summary_
+    """Optimizes r functions to be the representation on which the resolvent of the infinitesimal generator can be learned
 
     Parameters
     ----------
