@@ -265,34 +265,42 @@ class SmartDerivatives(torch.nn.Module):
             Whether to allow the use of atoms that are non involved in the calculation of any descriptor, by default False
         """
         super().__init__()
-        self.batch_size = len(der_desc_wrt_pos)
         self.n_atoms = n_atoms
         self.force_all_atoms = force_all_atoms
-        
+
+        # auxiliary variable to check if elements have been loaded on computation device
+        self._device_preload = False
+
         # setup the fixed part of the computation, i.e. left input and indeces for the scatter
-        self.left, self.batch_ind, self.atom_ind, self.desc_ind, self.dim_ind, self.scatter_indeces = self._setup_left(der_desc_wrt_pos, setup_device=setup_device)
-        
-    def _setup_left(self, left_input : torch.Tensor, setup_device : str = 'cpu'):
-        """Setup the fixed part of the computation, i.e. left input"""
+        self._setup_left(der_desc_wrt_pos, setup_device=setup_device)
+       
+    def _setup_left(self, 
+                    left_input : torch.Tensor, 
+                    setup_device : str = 'cpu'):
+        """Setup the fixed part of the computation. This """
         with torch.no_grad():
-            # all the setup should be done on the CPU by defualt
+            self.total_dataset_length = len(left_input)
+            # all the setup should be done on the CPU by default
             left_input = left_input.to(torch.device(setup_device))
 
             # the indeces in mat_ind are: batch, atom, descriptor and dimension
-            left, mat_ind = self._create_nonzero_left(left_input)
+            self.left, mat_ind = self._create_nonzero_left(left_input)
             
-            scatter_indeces = self._get_scatter_indices(batch_ind = mat_ind[0], atom_ind=mat_ind[1], dim_ind=mat_ind[3])
-            
-            batch_ind = mat_ind[0].long().detach()
-            atom_ind = mat_ind[1].long().detach()
-            desc_ind = mat_ind[2].long().detach()
-            dim_ind = mat_ind[3].long().detach()
-            scatter_indeces = scatter_indeces.long().detach()
+            # save them with clearer names
+            self.batch_ind = mat_ind[0].long().detach()
+            self.atom_ind = mat_ind[1].long().detach()
+            self.desc_ind = mat_ind[2].long().detach()
+            self.dim_ind = mat_ind[3].long().detach()
 
-        return left, batch_ind, atom_ind, desc_ind, dim_ind, scatter_indeces
+            # get indeces to scatter the contributions to the right place at the end
+            self.scatter_indeces, self.batch_shift = self._get_scatter_indices(batch_ind = self.batch_ind, 
+                                                                               atom_ind=self.atom_ind, 
+                                                                               dim_ind=self.dim_ind)
+            self.scatter_indeces = self.scatter_indeces.long().detach()
     
+
     def _create_nonzero_left(self, x):
-        """Find the indeces of the non-zero elements of the left input
+        """Find the indeces of the non-zero elements of the left input (i.e., derivatives of descriptors wrt positions)
         """
         # find indeces of nonzero entries of d_dist_d_x
         mat_ind = x.nonzero(as_tuple=True)
@@ -374,18 +382,31 @@ class SmartDerivatives(torch.nn.Module):
         #       18, 18, 18, 18, 18, 18, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27 ]
         batch_shift = torch.gather(cumulative_markers, 0, batch_ind)
         del(cumulative_markers)
-        
         # finally compute the scatter indeces by including also their shift due to the batch
         shifted_indeces = atom_ind*3 + dim_ind + batch_shift
+        return shifted_indeces, batch_shift
 
-        return shifted_indeces
+    def preload_on_device(self, device):
+        for attr in ["left", "batch_ind", "desc_ind", "scatter_indeces"]:
+            if self.__dict__[attr].device != device:
+                print(f"[SmartDerivatives] Moving {attr} to {device}")
+                self.__setattr__(attr, self.__dict__[attr].to(device))
+        print("[SmartDerivatives] To move the preloaded tensors back to cpu, use the `SmartDerivatives.move_to_cpu` method")
+        self._device_preload = True
+
+
+    def move_to_cpu(self):
+        for attr in ["left", "batch_ind", "desc_ind", "scatter_indeces"]:
+            print(f"[SmartDerivatives] Moving {attr} to cpu")
+            self.__setattr__(attr, self.__dict__[attr].to(torch.device("cpu")))
+        self._device_preload = False
+
 
     def forward(self, x : torch.Tensor):
-        # ensure device consistency
-        if self.left.device != x.device:
-            print('[SmartDerivatives] Moving left to device..')
-            self.left = self.left.to(x.device)
-        
+        # preloading on right device at first call
+        if not self._device_preload:
+            self.preload_on_device(device=x.device)
+
         # get the vector with non-zero elements of derivatives of q wrt the descriptors
         right = self._create_right(x=x)
 
