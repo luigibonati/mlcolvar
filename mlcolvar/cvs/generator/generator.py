@@ -235,7 +235,7 @@ class Generator(BaseCV, lightning.LightningModule):
 def test_generator():
     from mlcolvar.cvs.generator import Generator
     from mlcolvar.data import DictModule, DictDataset
-    from mlcolvar.core.loss.committor_loss import SmartDerivatives,compute_descriptors_derivatives
+    from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives,compute_descriptors_derivatives
     from mlcolvar.core.transform import PairwiseDistances
 
     torch.manual_seed(42)

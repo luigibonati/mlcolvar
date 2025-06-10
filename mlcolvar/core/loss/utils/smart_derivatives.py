@@ -188,7 +188,7 @@ class SmartDerivatives(torch.nn.Module):
         self._device_preload = False
 
 
-    def forward(self, x : torch.Tensor, ref_idx : torch.Tensor):
+    def forward(self, x : torch.Tensor, ref_idx : torch.Tensor = None):
         """Adds the derivatives of descriptors wrt atomic positions to the derivatives of output using the chain rule only for non-zero contributions.
 
         Parameters
@@ -207,6 +207,9 @@ class SmartDerivatives(torch.nn.Module):
         if not self._device_preload:
             self.preload_on_device(device=x.device)
 
+        # TODO remove!
+        if ref_idx is None: 
+            ref_idx = torch.arange(len(x), dtype=torch.long)
         # =========================== SORT DATA ==========================
         # order by ref_idx, this way it's easier to handle later
         ref_idx, ordering = ref_idx.sort()
@@ -684,7 +687,7 @@ def test_smart_derivatives():
 
         smart_out.sum().backward()
 
-def test_aux():
+def test_batched_smart_derivatives():
     from mlcolvar.core.transform import PairwiseDistances
     from mlcolvar.core.nn import FeedForward
     from mlcolvar.data import DictDataset, DictModule
@@ -762,4 +765,4 @@ def test_aux():
 
 if __name__ == "__main__":
     # test_smart_derivatives()
-    test_aux()
+    test_batched_smart_derivatives()
