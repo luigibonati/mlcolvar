@@ -16,8 +16,11 @@ __all__ = ["CommittorLoss", "committor_loss", "SmartDerivatives", "compute_descr
 
 import torch
 import numpy as np
-from typing import Optional
+from typing import Union
+import torch_geometric
+import warnings
 
+from mlcolvar.utils._code import scatter_sum
 # =============================================================================
 # LOSS FUNCTIONS
 # =============================================================================
@@ -27,19 +30,20 @@ class CommittorLoss(torch.nn.Module):
     """Compute a loss function based on Kolmogorov's variational principle for the determination of the committor function"""
 
     def __init__(self,
-                mass: torch.Tensor,
+                atomic_masses: torch.Tensor,
                 alpha: float,
-                cell: float = None,
-                gamma: float = 10000,
-                delta_f: float = 0,
+                gamma: float = 10000.0,
+                delta_f: float = 0.0,
                 separate_boundary_dataset : bool = True,
-                descriptors_derivatives : torch.nn.Module = None
+                descriptors_derivatives : torch.nn.Module = None,
+                log_var: bool = True,
+                z_regularization: float = 0.0
                  ):
         """Compute Kolmogorov's variational principle loss and impose boundary conditions on the metastable states
 
         Parameters
         ----------
-        mass : torch.Tensor
+        atomic_masses : torch.Tensor
             Atomic masses of the atoms in the system
         alpha : float
             Hyperparamer that scales the boundary conditions contribution to loss, i.e. alpha*(loss_bound_A + loss_bound_B)
@@ -53,80 +57,63 @@ class CommittorLoss(torch.nn.Module):
         separate_boundary_dataset : bool, optional
             Switch to exculde boundary condition labeled data from the variational loss, by default True
         descriptors_derivatives : torch.nn.Module, optional
-            `SmartDerivatives` object to save memory and time when using descriptors.
+            `SmartDerivatives` object to save memory and time when using descriptors, by default None. Cannot be used with GNN models.
             See also mlcolvar.core.loss.committor_loss.SmartDerivatives
-
+        log_var : bool, optional
+            Switch to minimize the log of the variational functional, by default True.
+        z_regularization : float, optional
+            Introduces a regularization on the learned z space avoiding too large absolute values.
+            The magnitude of the regularization is scaled by the given number, by default 0.0
         """
         super().__init__()
-        self.register_buffer("mass", mass)
+        self.register_buffer("atomic_masses", atomic_masses)
         self.alpha = alpha
-        self.cell = cell
         self.gamma = gamma
         self.delta_f = delta_f
-        self.descriptors_derivatives=descriptors_derivatives
+        self.descriptors_derivatives = descriptors_derivatives
         self.separate_boundary_dataset = separate_boundary_dataset
+        self.log_var = log_var
+        self.z_regularization = z_regularization
 
-    def forward(
-        self, x: torch.Tensor, q: torch.Tensor, labels: torch.Tensor, w: torch.Tensor, create_graph: bool = True
+    def forward(self, 
+                x: Union[torch.Tensor, torch_geometric.data.Batch], 
+                z: torch.Tensor,
+                q: torch.Tensor, 
+                labels: torch.Tensor, 
+                w: torch.Tensor, 
+                create_graph: bool = True
     ) -> torch.Tensor:
         return committor_loss(x=x,
-                                q=q,
-                                labels=labels,
-                                w=w,
-                                mass=self.mass,
-                                alpha=self.alpha,
-                                gamma=self.gamma,
-                                delta_f=self.delta_f,
-                                create_graph=create_graph,
-                                cell=self.cell,
-                                separate_boundary_dataset=self.separate_boundary_dataset,
-                                descriptors_derivatives=self.descriptors_derivatives
+                              z=z,
+                              q=q,
+                              labels=labels,
+                              w=w,
+                              atomic_masses=self.atomic_masses,
+                              alpha=self.alpha,
+                              gamma=self.gamma,
+                              delta_f=self.delta_f,
+                              create_graph=create_graph,
+                              separate_boundary_dataset=self.separate_boundary_dataset,
+                              descriptors_derivatives=self.descriptors_derivatives,
+                              log_var=self.log_var,
+                              z_regularization=self.z_regularization
                             )
 
-def broadcast(src: torch.Tensor, other: torch.Tensor, dim: int):
-    """Broadcast util, from torch_scatter"""
-    if dim < 0:
-        dim = other.dim() + dim
-    if src.dim() == 1:
-        for _ in range(0, dim):
-            src = src.unsqueeze(0)
-    for _ in range(src.dim(), other.dim()):
-        src = src.unsqueeze(-1)
-    src = src.expand(other.size())
-    return src
-
-def scatter_sum(src: torch.Tensor,
-                index: torch.Tensor,
-                dim: int = -1,
-                out: Optional[torch.Tensor] = None,
-                dim_size: Optional[int] = None) -> torch.Tensor:
-    """Scatter sum function, from torch_scatter module (https://github.com/rusty1s/pytorch_scatter/blob/master/torch_scatter/scatter.py)"""
-    index = broadcast(index, src, dim)
-    if out is None:
-        size = list(src.size())
-        if dim_size is not None:
-            size[dim] = dim_size
-        elif index.numel() == 0:
-            size[dim] = 0
-        else:
-            size[dim] = int(index.max()) + 1
-        out = torch.zeros(size, dtype=src.dtype, device=src.device)
-        return out.scatter_add_(dim, index, src)
-    else:
-        return out.scatter_add_(dim, index, src)
 
 def committor_loss(x: torch.Tensor, 
-                  q: torch.Tensor, 
-                  labels: torch.Tensor, 
-                  w: torch.Tensor,
-                  mass: torch.Tensor,
-                  alpha: float,
-                  gamma: float = 10000,
-                  delta_f: float = 0,
-                  create_graph: bool = True,
-                  cell: float = None,
-                  separate_boundary_dataset : bool = True,
-                  descriptors_derivatives : torch.nn.Module = None
+                   z: torch.Tensor,
+                   q: torch.Tensor, 
+                   labels: torch.Tensor, 
+                   w: torch.Tensor,
+                   atomic_masses: torch.Tensor,
+                   alpha: float,
+                   gamma: float = 10000,
+                   delta_f: float = 0,
+                   create_graph: bool = True,
+                   separate_boundary_dataset: bool = True,
+                   descriptors_derivatives: torch.nn.Module = None,
+                   log_var: bool = True,
+                   z_regularization: float = 0.0
                   ):
     """Compute variational loss for committor optimization with boundary conditions
 
@@ -140,7 +127,7 @@ def committor_loss(x: torch.Tensor,
         Labels for states, A and B states for boundary conditions
     w : torch.Tensor
         Reweighing factors to Boltzmann distribution. This should depend on the simulation in which the data were collected.
-    mass : torch.Tensor
+    atomic_masses : torch.Tensor
         List of masses of all the atoms we are using, for each atom we need to repeat three times for x,y,z.
         Can be created using `committor.utils.initialize_committor_masses`
     alpha : float
@@ -157,9 +144,14 @@ def committor_loss(x: torch.Tensor,
     separate_boundary_dataset : bool, optional
             Switch to exculde boundary condition labeled data from the variational loss, by default True
     descriptors_derivatives : torch.nn.Module, optional
-        `SmartDerivatives` object to save memory and time when using descriptors.
-        See also mlcolvar.core.loss.committor_loss.SmartDerivatives
-
+        `SmartDerivatives` object to save memory and time when using descriptors. Cannot be used with GNN models.
+            See also mlcolvar.core.loss.committor_loss.SmartDerivatives
+    log_var : bool, optional
+        Switch to minimize the log of the variational functional, by default True.
+    z_regularization : float, optional
+        Introduces a regularization on the learned z space avoiding too large absolute values.
+        The magnitude of the regularization is scaled by the given number, by default 0.0
+        
     Returns
     -------
     loss : torch.Tensor
@@ -170,68 +162,106 @@ def committor_loss(x: torch.Tensor,
         The boundary loss term on basin A
     gamma*alpha*loss_B : torch.Tensor
         The boundary loss term on basin B
-    """
+    """ 
+    # ============================== SETUP ==============================
+    # check if input is graph
+    _is_graph_data = False
+    if isinstance(x, torch_geometric.data.batch.Batch):
+        batch = torch.clone(x['batch'])
+        node_types = torch.where(x['node_attrs'])[1]
+        x = x['positions']
+        _is_graph_data = True
+
+    # checks and warnings
+    if _is_graph_data and descriptors_derivatives is not None:
+        raise ValueError("The descriptors_derivatives key cannot be used with GNN-based models!")
+    
+    if _is_graph_data and separate_boundary_dataset:
+        warnings.warn("Using GNN-based models it may be better to set separate_boundary_dataset to False")
+    
     # inherit right device
     device = x.device 
-
-    mass = mass.to(device)
-
     # Create masks to access different states data
     mask_A = torch.nonzero(labels.squeeze() == 0, as_tuple=True) 
     mask_B = torch.nonzero(labels.squeeze() == 1, as_tuple=True)
     if separate_boundary_dataset:
-        mask_var = torch.nonzero(labels.squeeze() > 1, as_tuple=True) 
+        mask_var = torch.nonzero(labels.squeeze() > 1, as_tuple=not(_is_graph_data))
     else: 
-        mask_var = torch.ones(len(x), dtype=torch.bool)
-    
-    # Update weights of basin B using the information on the delta_f
-    delta_f = torch.Tensor([delta_f])
-    if delta_f < 0: # B higher in energy --> A-B < 0
+        mask_var = torch.ones(len(labels), dtype=torch.bool)
+
+    if _is_graph_data:
+        # this needs to be on the batch index, not only the labels
+        aux = torch.where(mask_var)[0].to(device)
+        mask_var_batches = torch.isin(batch, aux)
+        mask_var_batches = batch[mask_var_batches]
+    else:
+        mask_var_batches = mask_var
+
+    # setup atomic masses
+    atomic_masses = atomic_masses.to(device)
+
+    # mass should have size [1, n_atoms*spatial_dims]
+    if _is_graph_data:
+        atomic_masses = atomic_masses[node_types[mask_var_batches]].unsqueeze(-1)
+    else:
+        atomic_masses = atomic_masses.unsqueeze(0)
+
+    # Update weights for bc confs using the information on the delta_f
+    delta_f = torch.Tensor([delta_f]) #.to(device)
+    # B higher in energy --> A-B < 0
+    if delta_f < 0: 
         w[mask_B] = w[mask_B] * torch.exp(delta_f.to(device))
-    elif delta_f > 0: # A higher in energy --> A-B > 0
+    # A higher in energy --> A-B > 0
+    elif delta_f > 0:
         w[mask_A] = w[mask_A] * torch.exp(-delta_f.to(device)) 
 
-    ###### VARIATIONAL PRINICIPLE LOSS ######
-    # Each loss contribution is scaled by the number of samples
-    
-    # We need the gradient of q(x)
-    grad_outputs = torch.ones_like(q[mask_var])
-    grad = torch.autograd.grad(q[mask_var], x, grad_outputs=grad_outputs, retain_graph=True, create_graph=create_graph)[0]
-    grad = grad[mask_var]
-    
-    # TODO this fixes cell size issue
-    if cell is not None:
-        grad = grad / cell
-    
-    if descriptors_derivatives is not None:
-        grad_square = descriptors_derivatives(grad)
-    else:
-        # we get the square of grad(q) and we multiply by the weight
-        grad_square = torch.pow(grad, 2)
-        
-    # we sanitize the shapes of mass and weights tensors
-    # mass should have size [1, n_atoms*spatial_dims]
-    mass = mass.unsqueeze(0)
     # weights should have size [n_batch, 1]
     w = w.unsqueeze(-1)
+    # ==============================  LOSS ==============================
+    # Each loss contribution is scaled by the number of samples
 
-    grad_square = torch.sum((grad_square * (1/mass)), axis=1, keepdim=True)    
+    # 1. VARIATIONAL LOSS
+    # Compute gradients of q(x) wrt x
+    grad_outputs = torch.ones_like(q[mask_var])
+    grad = torch.autograd.grad(q[mask_var], x, grad_outputs=grad_outputs, retain_graph=True, create_graph=create_graph)[0]
+    grad = grad[mask_var_batches]
+    if descriptors_derivatives is not None:
+        # we use the precomputed derivatives from descriptors to pos
+        grad_square = descriptors_derivatives(grad)
+    else:
+        grad_square = torch.pow(grad, 2)
+
+    grad_square = torch.sum((grad_square * (1/atomic_masses)), axis=1, keepdim=True)    
+
+    if _is_graph_data:
+        # we need to sum on the right batch first
+        grad_square = scatter_sum(grad_square, mask_var_batches, dim=0)
+
     grad_square = grad_square * w[mask_var]
-
     # variational contribution to loss: we sum over the batch
     loss_var = torch.mean(grad_square)
+    if log_var:
+        loss_var = torch.log(loss_var + 1)
+    else:
+        loss_var = gamma*loss_var
 
-    # boundary conditions
-    q_A = q[mask_A]
-    q_B = q[mask_B]
-    loss_A = torch.mean( torch.pow(q_A, 2))
-    loss_B = torch.mean( torch.pow( (q_B - 1) , 2))
 
-    loss = gamma*( loss_var + alpha*(loss_A + loss_B) )
+    # 2. BOUNDARY LOSS
+    loss_A = gamma * torch.mean( torch.pow(q[mask_A], 2))
+    loss_B = gamma * torch.mean( torch.pow( (q[mask_B] - 1) , 2))
+
+
+    # 3. OPTIONAL regularization on z
+    if z_regularization != 0.0:
+        loss_z_diff = z_regularization * (z.mean().abs() - z.mean().abs()).pow(2)
+    else:
+        loss_z_diff = 0
+
+    # 4. TOTAL LOSS
+    loss = loss_var + alpha*(loss_A + loss_B) + loss_z_diff
     
     # TODO maybe there is no need to detach them for logging
-    return loss, gamma*loss_var.detach(), alpha*gamma*loss_A.detach(), alpha*gamma*loss_B.detach()
-
+    return loss, loss_var.detach(), alpha*loss_A.detach(), alpha*loss_B.detach()
 
 class SmartDerivatives(torch.nn.Module):
     """
