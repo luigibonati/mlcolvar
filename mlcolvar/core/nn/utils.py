@@ -36,14 +36,16 @@ def get_activation(activation: str):
     elif activation == "shifted_softplus":
         activ = Shifted_Softplus()
     elif activation == "custom_sigmoid":
-        activ = Custom_Sigmoid()    
+        activ = Custom_Sigmoid()
+    elif activation == "leaky_relu":
+        activ = torch.nn.LeakyReLU(negative_slope=0.01, inplace=True)    
     elif activation == "linear":
         print("WARNING: no activation selected")
     elif activation is None:
         pass
     else:
         raise ValueError(
-            f"Unknown activation: {activation}. options: 'relu','elu','tanh','softplus','shifted_softplus','linear'. "
+            f"Unknown activation: {activation}. options: 'relu','elu','tanh','softplus','shifted_softplus','linear','leaky_relu'. "
         )
     return activ
 
