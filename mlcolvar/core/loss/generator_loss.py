@@ -6,7 +6,7 @@ __all__ = ["GeneratorLoss"]
 
 import torch
 from typing import Union, Tuple
-from mlcolvar.core.loss.committor_loss import SmartDerivatives
+from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
 
 
 class GeneratorLoss(torch.nn.Module):

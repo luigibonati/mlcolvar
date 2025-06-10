@@ -5,7 +5,7 @@ from mlcolvar.cvs import BaseCV
 from mlcolvar.core import FeedForward
 from mlcolvar.core.loss.generator_loss import GeneratorLoss
 from mlcolvar.cvs.generator.utils import compute_eigenfunctions
-from mlcolvar.core.loss.committor_loss import SmartDerivatives
+from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
 from mlcolvar.data import DictDataset
 
 __all__ = ["Generator"]

@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from typing import List
-from mlcolvar.core.loss.committor_loss import SmartDerivatives, compute_descriptors_derivatives
+from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives, compute_descriptors_derivatives
 from mlcolvar.data import DictDataset
 
 __all__ = ["KolmogorovBias", "compute_committor_weights", "initialize_committor_masses"]
