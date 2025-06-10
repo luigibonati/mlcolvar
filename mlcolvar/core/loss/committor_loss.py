@@ -402,11 +402,84 @@ class SmartDerivatives(torch.nn.Module):
         self._device_preload = False
 
 
-    def forward(self, x : torch.Tensor):
+    def forward(self, x : torch.Tensor, ref_idx : torch.Tensor):
+        """Adds the derivatives of descriptors wrt atomic positions to the derivatives of output using the chain rule only for non-zero contributions.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Derivatives of output wrt to descriptors
+        ref_idx : torch.Tensor
+            Reference indeces of the pristine dataset (i.e., before splitting, shuffling..)
+
+        Returns
+        -------
+        torch.Tensor
+            Derivatives of the output wrt atomic positions, shape (N, n_atoms, n_dim, (n_out)))
+        """
         # preloading on right device at first call
         if not self._device_preload:
             self.preload_on_device(device=x.device)
 
+        # =========================== SORT DATA ==========================
+        # order by ref_idx, this way it's easier to handle later
+        ref_idx, ordering = ref_idx.sort()
+        x = x[ordering, :]
+
+
+        batch_size = len(x)
+        # =========================== HANDLE BATCHING/SPLITTING ==========================
+        # If we have batches we need to get the right: 
+        # 1) non-zero elements from self.left
+        # 2) scatter indeces from self.scatter_indeces and shift them to be consistent with the batch
+
+        # if there is no batching, the shift to the scatter indeces will be fake
+        scatter_indeces = self.scatter_indeces
+        shifts = torch.zeros_like(self.scatter_indeces)
+
+        # check, based on ref_idx, which batch entries are used. If there are no batches, we just get a fully true mask
+        used_batch = torch.isin(self.batch_ind, ref_idx)
+        
+
+        # if we detect batches/splits we update scatter_indeces and shifts
+        if (used_batch == False).any():
+            # get the corresponding scatter indeces, these allow properly recombining the contributions 
+            scatter_indeces = self.scatter_indeces[used_batch]    
+            
+            # get the indeces shift due to batches, these map how many entries there were before the indeces we took 
+            batch_shift_used = self.batch_shift[used_batch]    # This is increasing but *not* sequential!
+
+            # find uniques to get markers and index used batches
+            uniques, indeces = torch.unique(batch_shift_used, return_inverse=True)   # This is increasing *and also* sequential!
+            
+            # we need to shift the indeces of each batch so that they start after the ones of the previous batch
+            n_previous_entries = torch.Tensor([torch.max(scatter_indeces[indeces==i] - scatter_indeces[indeces==i].min()) + 1 for i in range(len(uniques))])
+            n_previous_entries = torch.Tensor([n_previous_entries[:i].sum() for i in range(len(n_previous_entries))]).to(torch.int64)    
+
+            # get the final shifts tensor, uniques make all of them zero-based, n_previous_entries make shifts them to remove overlaps
+            shifts = torch.gather(uniques - n_previous_entries, 0, indeces).to(torch.int64)    
+
+
+        # apply shift to the original scatter_indeces
+        scatter_indeces = scatter_indeces - shifts
+
+        # get the used part of the left elements
+        left = self.left[used_batch]
+        
+        # get the vector with non-zero elements of derivatives of q wrt the descriptors
+        right = self._create_right(x=x, used_batch=used_batch)
+        
+        # do element-wise product between:
+        #   left:  desc/pos derivatives matrix non-zero elements
+        #   right: out/desc derivatives matrix non-zero elements
+        if left.shape == right.shape:
+            src = left * right
+        else:
+            src = torch.einsum("j,jr->jr", left, right)
+
+        # sum contributions from different descriptors to the same atoms
+        out = self._sum_desc_contributions(x=src, scatter_indeces=scatter_indeces, batch_size=batch_size)
+        return out
         # get the vector with non-zero elements of derivatives of q wrt the descriptors
         right = self._create_right(x=x)
 
@@ -423,60 +496,40 @@ class SmartDerivatives(torch.nn.Module):
 
         return out
         
-    def _create_right(self, x : torch.Tensor):
-        if self.batch_ind.device != x.device:
-            print('[SmartDerivatives] Moving batch_ind to device..')
-            self.batch_ind = self.batch_ind.to(x.device)
-        if self.desc_ind.device != x.device:
-            print('[SmartDerivatives] Moving desc_ind to device..')
-            self.desc_ind = self.desc_ind.to(x.device)
+    def _create_right(self, x : torch.Tensor, used_batch : torch.Tensor):        
+        """Create a long 1D tensor with the elements of the derivatives of the output 
+        wrt the descriptors needed to propagate the derivatives to the positions.
+        """
+        # NOTE: for batching, x here is already batched and doesn't need slicing
+        # make general batch idx consistent with the batch
+        _, used_batch_ind = torch.unique(self.batch_ind[used_batch], return_inverse=True)
+
+        # descriptors indeces need to be corrected by the used batch
+        desc_ind = self.desc_ind[used_batch]
+        
         # keep only the non zero elements of right input
-        desc_vec = x[self.batch_ind, self.desc_ind]
+        desc_vec = x[used_batch_ind, desc_ind]
         return desc_vec
 
-    def _sum_desc_contributions(self, x : torch.Tensor, do_square : bool = True):
-        if self.scatter_indeces.device != x.device:
-            print('[SmartDerivatives] Moving scatter_indeces to device..')
-            self.scatter_indeces = self.scatter_indeces.to(x.device)
-
-        # this sums the elements of x according to the indeces, this way we get the contributions of different descriptors to the same atom
+    def _sum_desc_contributions(self, x : torch.Tensor, scatter_indeces : torch.Tensor, batch_size : int):
+        """Sums the elements of x according to the indeces to obtain the contribution of each atom to the output due 
+              to a single descriptor along a single space dimension"""
         try:
             # single output case
-            if self.scatter_indeces.shape == x.shape:
+            if scatter_indeces.shape == x.shape:
                 # create output tensor to make it faster    
-                out = torch.zeros((self.batch_size*self.n_atoms*3), device=x.device)
+                out = torch.zeros((batch_size*self.n_atoms*3), device=x.device)
                 # scatter to the right indeces
-                out = scatter_sum(x, self.scatter_indeces, out=out)
+                out = scatter_sum(x, scatter_indeces, out=out)
                 # reshape to the right shape
-                out = out.reshape((self.batch_size, self.n_atoms, 3))
+                out = out.reshape((batch_size, self.n_atoms, 3))
             
             # multiple outputs case
             else:
-                # if not hasattr(self, "out_ind"):
-                #     with torch.no_grad():
-                #         # we create a big index vector repeated for the different outputs
-                #         self.out_ind = self.scatter_indeces.unsqueeze(0).repeat((x.shape[-1], 1))   
-
-                #         # get and apply shifts
-                #         aux = (torch.arange(x.shape[-1], device=x.device)*(self.batch_size*self.n_atoms*3)).unsqueeze(-1)
-                #         self.out_ind = self.out_ind + aux         
-
-                #         # flatten the indeces and to be sure move to device
-                #         self.out_ind = self.out_ind.ravel()
-                #         self.out_ind = self.out_ind.to(x.device)
-                
-                # # create output tensor to make it faster    
-                # out = torch.zeros((self.batch_size*self.n_atoms*3*x.shape[-1]), device=x.device)
-                # # scatter to the right indeces
-                # out = scatter_sum(x.T.ravel(), self.out_ind, out=out)
-                # # reshape to the right shape
-                # out = out.reshape((self.batch_size, self.n_atoms*3, x.shape[-1]))
-                
-                # ----> This is an alternative implemention, a little bit slower but less memory consuming maybe <----
-                out = torch.zeros((self.batch_size*self.n_atoms*3, x.shape[-1]), device=x.device)
+                out = torch.zeros((batch_size*self.n_atoms*3, x.shape[-1]), device=x.device)
                 for i in range(x.shape[-1]): 
-                    out[:, i] = scatter_sum(x[:, i], self.scatter_indeces, out=out[:, i])
-                out = out.reshape((self.batch_size, self.n_atoms, 3, x.shape[-1]))
+                    out[:, i] = scatter_sum(x[:, i], scatter_indeces, out=out[:, i])
+                out = out.reshape((batch_size, self.n_atoms, 3, x.shape[-1]))
 
 
         # in case somehting's wrong      
@@ -646,6 +699,7 @@ def test_smart_derivatives():
     for separate_boundary_dataset in [False, True]:
         if separate_boundary_dataset:
             mask = [labels > 1]
+            dataset["ref_idx"] = torch.cat( [torch.Tensor([100, 100]), torch.arange(len(dataset["ref_idx"][mask]))])
         else: 
             mask = torch.ones_like(labels, dtype=torch.bool)
 
@@ -655,7 +709,7 @@ def test_smart_derivatives():
                                                                 separate_boundary_dataset=separate_boundary_dataset)
         
         assert(torch.allclose(desc, ref_distances, atol=1e-3))
-
+        print(dataset["ref_idx"])
 
         # compute descriptors outside to have their derivatives for checks
         pos.requires_grad = True
@@ -675,7 +729,7 @@ def test_smart_derivatives():
         # apply smart derivatives
         smart_derivatives = SmartDerivatives(d_desc_d_x, n_atoms=n_atoms)
         right_input = d_out_d_d.squeeze(-1)
-        smart_out = smart_derivatives(right_input)
+        smart_out = smart_derivatives(right_input, dataset['ref_idx'][mask])
 
         # do checks
         assert(torch.allclose(smart_out, ref))
@@ -708,6 +762,7 @@ def test_smart_derivatives():
     for separate_boundary_dataset in [False, True]:
         if separate_boundary_dataset:
             mask = [labels > 1]
+            dataset["ref_idx"] = torch.cat( [torch.Tensor([100, 100]), torch.arange(len(dataset["ref_idx"][mask]))])
         else: 
             mask = torch.ones_like(labels, dtype=torch.bool)
 
@@ -736,7 +791,7 @@ def test_smart_derivatives():
         # apply smart derivatives
         smart_derivatives = SmartDerivatives(d_desc_d_x, n_atoms=n_atoms, force_all_atoms=True)
         right_input = d_out_d_d.squeeze(-1)
-        smart_out = smart_derivatives(right_input)
+        smart_out = smart_derivatives(right_input, dataset['ref_idx'][mask])
 
         # do checks
         assert(torch.allclose(smart_out, ref))
@@ -786,7 +841,7 @@ def test_smart_derivatives():
     # apply smart derivatives
     smart_derivatives = SmartDerivatives(d_desc_d_x, n_atoms=n_atoms, force_all_atoms=True)
     right_input = d_out_d_d.squeeze(-1)
-    smart_out = smart_derivatives(right_input)
+    smart_out = smart_derivatives(right_input, ref_idx=dataset['ref_idx'])
 
     smart_out.sum().backward()
 
@@ -819,6 +874,7 @@ def test_smart_derivatives():
     for separate_boundary_dataset in [False, True]:
         if separate_boundary_dataset:
             mask = [labels > 1]
+            dataset["ref_idx"] = torch.cat( [torch.Tensor([100, 100]), torch.arange(len(dataset["ref_idx"][mask]))])
         else: 
             mask = torch.ones_like(labels, dtype=torch.bool)
 
@@ -849,7 +905,7 @@ def test_smart_derivatives():
         # apply smart derivatives
         smart_derivatives = SmartDerivatives(d_desc_d_x, n_atoms=n_atoms)
         right_input = d_out_d_d
-        smart_out = smart_derivatives(right_input)
+        smart_out = smart_derivatives(right_input, ref_idx=dataset['ref_idx'])
         
         # do checks
         assert(torch.allclose(smart_out, ref))
@@ -857,5 +913,82 @@ def test_smart_derivatives():
 
         smart_out.sum().backward()
 
+def test_aux():
+    from mlcolvar.core.transform import PairwiseDistances
+    from mlcolvar.core.nn import FeedForward
+    from mlcolvar.data import DictDataset, DictModule
+    
+    # seed for reproducibility
+    torch.manual_seed(42)
+
+    # compute some descriptors from positions --> distances
+    n_atoms = 3
+    pos = torch.Tensor([[ 1.4970,  1.3861, -0.0273, -1.4933,  1.5070, -0.1133, -1.4473, -1.4193,
+                        -0.0553
+                        ]])
+    pos = pos.repeat(8, 1)
+    labels = torch.arange(0, 8)
+    # pos = pos + torch.randn_like(pos)*1e-2
+
+    cell = torch.Tensor([3.0233])
+
+    ref_distances = torch.Tensor([[0.1521, 0.2335, 0.1220]])
+    ref_distances = ref_distances.repeat(8, 1)
+  
+    
+    ComputeDescriptors = PairwiseDistances(n_atoms=n_atoms,
+                              PBC=True,
+                              cell=cell,
+                              scaled_coords=False)
+
+    dataset = DictDataset({'data' : pos, 'labels' : labels})
+    for i in [42]:
+        print(f"====================== {i} ======================")
+        torch.manual_seed(i)
+        datamodule = DictModule(dataset, lengths=[1], batch_size=2, shuffle=True)
+        datamodule.setup()
+        for b, batch in enumerate(iter(datamodule.train_dataloader())):
+            print(f"==================== BATCH {b} ====================")
+            aux_dataset = DictDataset(batch)
+            ref_idx = aux_dataset['ref_idx']
+            print(aux_dataset)
+            separate_boundary_dataset = False
+            mask = torch.ones_like(labels, dtype=torch.bool)
+
+            pos, desc, d_desc_d_x = compute_descriptors_derivatives(dataset=dataset, 
+                                                                    descriptor_function=ComputeDescriptors, 
+                                                                    n_atoms=n_atoms, 
+                                                                    separate_boundary_dataset=separate_boundary_dataset)
+            print(desc)
+            assert(torch.allclose(desc, ref_distances, atol=1e-3))
+
+
+            # compute descriptors outside to have their derivatives for checks
+            pos.requires_grad = True
+            desc = ComputeDescriptors(pos)
+
+            # apply simple NN
+            NN = FeedForward(layers = [3, 2, 1])
+            out = NN(desc)
+
+            # # compute derivatives of out wrt input
+            d_out_d_x = torch.autograd.grad(out, pos, grad_outputs=torch.ones_like(out), retain_graph=True, create_graph=True )[0]
+            # compute derivatives of out wrt descriptors
+            d_out_d_d = torch.autograd.grad(out, desc, grad_outputs=torch.ones_like(out), retain_graph=True, create_graph=True )[0]
+            ref = torch.einsum('badx,bd->bax ',d_desc_d_x,d_out_d_d[mask])
+            Ref = d_out_d_x[mask]
+
+            # # apply smart derivatives
+            smart_derivatives = SmartDerivatives(d_desc_d_x, n_atoms=n_atoms)
+            right_input = d_out_d_d.squeeze(-1)
+            smart_out = smart_derivatives(right_input[ref_idx], ref_idx)
+            print(smart_out)
+            # do checks
+            assert(torch.allclose(smart_out, ref[ref_idx]))
+            assert(torch.allclose(smart_out, Ref[ref_idx]))
+
+
+
 if __name__ == "__main__":
-    test_smart_derivatives()
+    # test_smart_derivatives()
+    test_aux()
