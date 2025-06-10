@@ -14,7 +14,7 @@ class DictDataset(Dataset):
            'weights' : np.asarray([0.5,1.5,1.5,0.5]) }
     """
 
-    def __init__(self, dictionary: dict = None, feature_names=None, **kwargs):
+    def __init__(self, dictionary: dict = None, feature_names=None, ref_idx=None, **kwargs):
         """Create a Dataset from a dictionary or from a list of kwargs.
 
         Parameters
@@ -54,6 +54,11 @@ class DictDataset(Dataset):
         self.length = len(next(it))
         if not all(len(l) == self.length for l in it):
             raise ValueError("not all arrays in dictionary have same length!")
+        
+        # add indexing of entries for shuffling and slicing reference
+        if ref_idx is None and "ref_idx" not in self._dictionary.keys():
+            dictionary['ref_idx'] = torch.arange(len(self), dtype=torch.int)
+        
 
     def __getitem__(self, index):
         if isinstance(index, str):
