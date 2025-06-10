@@ -209,6 +209,21 @@ class SmartDerivatives(torch.nn.Module):
     Utils to compute efficently (time and memory wise) the derivatives of q wrt some input descriptors.
     Rather than computing explicitly the derivatives wrt the positions, we compute those wrt the descriptors (right input)
     and multiply them by the matrix of the derivatives of the descriptors wrt the positions (left input).
+
+    Overview
+        Preparation:
+            - Finds the non-zero entries of the derivatives of the descriptors wrt the positions (left)
+            - Stores such entries in a long 1D tensor
+            - Stores the indeces to find such entries in the original derivatives matrix
+            - Creates a long 1D tensor of indeces that allows properly taking together the contributions
+        Forward:      
+            - Use the matrix indeces to retrieve the corresponding elements from the derivatives of output wrt the descriptors (right) 
+              into a long 1D tensor
+            - Get the single contributions via element-wise multiplication (i.e., of each atom to the output due 
+              to a single descriptor along a single space dimension) 
+            - Scatter the single contributions to global contributions (of each atom to the output along each space dimension)
+
+        When working with batches or splits the scatter indeces are rescaled from the whole dataset to the batched entry.
     """
     def __init__(self,
                  der_desc_wrt_pos: torch.Tensor,
@@ -220,8 +235,6 @@ class SmartDerivatives(torch.nn.Module):
         The derivatives wrt positions are recovered by multiplying the derivatives of q wrt the descriptors (right input, computed at each epoch)
         by the non-zero elements of the derivatives of the descriptors wrt the positions (left input, compute once at the beginning on the whole dataset).
         The multiplication are done using scatter functions and keeping track of the indeces of the batches, descriptors, atoms and dimensions.
-
-        NB. It should be used with only training set and single batch with shuffle and random_split disabled.
 
         Parameters
         ----------
@@ -305,7 +318,8 @@ class SmartDerivatives(torch.nn.Module):
         x_vec = x.ravel()[vec_ind[0].long()]
         del(vec_ind)
         return x_vec, mat_ind
-    
+
+
     def _get_scatter_indices(self, batch_ind, atom_ind, dim_ind):
         """Compute the general indices to map the long vector of nonzero derivatives to the right atom, dimension and descriptor also in the case of non homogenoeus input.
         We need to gather the derivatives with respect to the same atom coming from different descriptors to obtain the total gradient.
@@ -342,6 +356,7 @@ class SmartDerivatives(torch.nn.Module):
         markers = not_shifted_indeces[batch_pointers.long()] # highest not_shifted index for each batch
         del(not_shifted_indeces)
         del(batch_pointers)
+
         cumulative_markers = torch.Tensor([markers[:i+1].sum() for i in range(len(markers))]).to(batch_ind.device) # stupid sum of indeces
         del(markers)
         cumulative_markers += torch.unique(batch_ind) # markers correction by the number of batches
@@ -352,6 +367,7 @@ class SmartDerivatives(torch.nn.Module):
         #       18, 18, 18, 18, 18, 18, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27 ]
         batch_shift = torch.gather(cumulative_markers, 0, batch_ind)
         del(cumulative_markers)
+
         # finally compute the scatter indeces by including also their shift due to the batch
         shifted_indeces = atom_ind*3 + dim_ind + batch_shift
         return shifted_indeces, batch_shift
@@ -449,21 +465,6 @@ class SmartDerivatives(torch.nn.Module):
 
         # sum contributions from different descriptors to the same atoms
         out = self._sum_desc_contributions(x=src, scatter_indeces=scatter_indeces, batch_size=batch_size)
-        return out
-        # get the vector with non-zero elements of derivatives of q wrt the descriptors
-        right = self._create_right(x=x)
-
-        # do element-wise product between:
-        # desc/pos derivatives matrix non-zero elements (left)
-        # out/desc derivatives matrix non-zero elements (right)
-        if self.left.shape == right.shape:
-            src = self.left * right
-        else:
-            src = torch.einsum("j,jr->jr",self.left,right)
-
-        # sum contributions from different descriptors to the same atoms
-        out = self._sum_desc_contributions(x=src)
-
         return out
         
     def _create_right(self, x : torch.Tensor, used_batch : torch.Tensor):        
