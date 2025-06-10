@@ -40,6 +40,8 @@ class ELBOGaussiansLoss(torch.nn.Module):
         output: torch.Tensor,
         mean: torch.Tensor,
         log_variance: torch.Tensor,
+        beta: float = 1.0,
+        decompose: bool = False,
         weights: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """Compute the value of the loss function.
@@ -57,6 +59,17 @@ class ELBOGaussiansLoss(torch.nn.Module):
         log_variance : torch.Tensor
             Shape ``(n_batches, latent_features)``. The logarithm of the variances
             of the Gaussian distributions associated to the inputs.
+        beta : float, optional
+            A scaling factor for the KL divergence term. The default is 1.0,
+            which means that the KL divergence is not scaled. If set to a value
+            greater than 1, it will increase the weight of the KL divergence
+            term in the loss function (useful to increase regularization). 
+            If set to a value less than 1, it will decrease the weight
+            of the KL divergence term (useful to avoid posterior collapse)
+        decompose : bool, optional
+            If ``True``, besides to total loss, return the two main terms of the ELBO
+            separately (reconstruction loss and KL divergence). The default is
+            ``False``, which returns just the total loss.
         weights : torch.Tensor, optional
             Shape ``(n_batches,)`` or ``(n_batches,1)``. If given, the average over
             batches is weighted. The default (``None``) is unweighted.
@@ -66,7 +79,7 @@ class ELBOGaussiansLoss(torch.nn.Module):
         loss: torch.Tensor
             The value of the loss function.
         """
-        return elbo_gaussians_loss(target, output, mean, log_variance, weights)
+        return elbo_gaussians_loss(target, output, mean, log_variance, beta, decompose, weights)
 
 
 def elbo_gaussians_loss(
@@ -74,6 +87,8 @@ def elbo_gaussians_loss(
     output: torch.Tensor,
     mean: torch.Tensor,
     log_variance: torch.Tensor,
+    beta: float = 1.0,
+    decompose: bool = False,
     weights: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     """ELBO loss function assuming the latent and reconstruction distributions are Gaussian.
@@ -96,6 +111,17 @@ def elbo_gaussians_loss(
     log_variance : torch.Tensor
         Shape ``(n_batches, latent_features)``. The logarithm of the variances
         of the Gaussian distributions associated to the inputs.
+    beta : float, optional
+        A scaling factor for the KL divergence term. The default is 1.0,
+        which means that the KL divergence is not scaled. If set to a value
+        greater than 1, it will increase the weight of the KL divergence
+        term in the loss function (useful to increase regularization). 
+        If set to a value less than 1, it will decrease the weight
+        of the KL divergence term (useful to avoid posterior collapse).
+    decompose : bool, optional
+        If ``True``, besides to total loss, return the two main terms of the ELBO
+        separately (reconstruction loss and KL divergence). The default is
+        ``False``, which returns just the total loss.
     weights : torch.Tensor, optional
         Shape ``(n_batches,)`` or ``(n_batches,1)``. If given, the average over
         batches is weighted. The default (``None``) is unweighted.
@@ -123,4 +149,9 @@ def elbo_gaussians_loss(
     # Reconstruction loss.
     reconstruction = mse_loss(output, target, weights=weights)
 
-    return reconstruction + kl
+    loss = reconstruction + beta*kl
+    
+    if decompose:
+        return loss, reconstruction, kl
+    else:
+        return loss
