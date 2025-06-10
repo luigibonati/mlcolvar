@@ -65,6 +65,7 @@ class VariationalAutoEncoderCV(BaseCV, lightning.LightningModule):
         n_cvs: int,
         encoder_layers: list,
         decoder_layers: Optional[list] = None,
+        beta: float = 1.0,
         options: Optional[dict] = None,
         **kwargs,
     ):
@@ -84,6 +85,8 @@ class VariationalAutoEncoderCV(BaseCV, lightning.LightningModule):
             Number of neurons per layer of the decoder, except for the input layer
             which is specified by ``n_cvs``. If ``None`` (default), it takes automatically
             the reversed architecture of the encoder.
+        beta : float, optional
+            A scaling factor for the KL divergence term in the loss function. The default is 1.0.
         options : dict[str, Any], optional
             Options for the building blocks of the model, by default ``None``.
             Available blocks are: ``'norm_in'``, ``'encoder'``, and ``'decoder'``.
@@ -95,6 +98,7 @@ class VariationalAutoEncoderCV(BaseCV, lightning.LightningModule):
         # =======   LOSS  =======
         # ELBO loss function when latent space and reconstruction distributions are Gaussians.
         self.loss_fn = ELBOGaussiansLoss()
+        self.beta = beta
 
         # ======= OPTIONS =======
         # parse and sanitize
@@ -221,11 +225,20 @@ class VariationalAutoEncoderCV(BaseCV, lightning.LightningModule):
             x_ref = x
 
         # Loss function.
-        loss = self.loss_fn(x_ref, x_hat, mean, log_variance, **loss_kwargs)
+        loss, reconstruction_loss, kl_loss = self.loss_fn(target = x_ref, 
+                                                          output = x_hat, 
+                                                          mean = mean, 
+                                                          log_variance = log_variance, 
+                                                          beta = self.beta,
+                                                          decompose = True, 
+                                                          **loss_kwargs)
 
         # Log.
         name = "train" if self.training else "valid"
         self.log(f"{name}_loss", loss, on_epoch=True)
+        self.log(f"{name}_reconstruction_loss", reconstruction_loss, on_epoch=True)
+        self.log(f"{name}_kl_loss", kl_loss, on_epoch=True)
+        self.log(f"beta", self.beta, on_epoch=True)
 
         return loss
 
