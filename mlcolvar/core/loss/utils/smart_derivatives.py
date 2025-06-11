@@ -455,7 +455,7 @@ def test_smart_derivatives():
     pos = pos.repeat(4, 1)
     labels = torch.arange(0, 4)
 
-    dataset = DictDataset({'data' : pos, 'labels' : labels})
+    dataset = DictDataset({'data' : pos, 'labels' : labels}, create_ref_idx=True)
 
     cell = torch.Tensor([3.0233])
     ref_distances = torch.Tensor([[0.1521, 0.2335, 0.2412, 0.3798, 0.4733, 0.4649, 0.4575, 0.5741, 0.6815,
@@ -473,7 +473,7 @@ def test_smart_derivatives():
     for separate_boundary_dataset in [False, True]:
         if separate_boundary_dataset:
             mask = [labels > 1]
-            dataset["ref_idx"] = torch.cat( [torch.Tensor([100, 100]), torch.arange(len(dataset["ref_idx"][mask]))])
+            dataset["ref_idx"] = torch.cat( [torch.Tensor([100, 100]), torch.arange(len(dataset["ref_idx"][mask]))]) #TODO FIX
         else: 
             mask = torch.ones_like(labels, dtype=torch.bool)
 
@@ -521,7 +521,7 @@ def test_smart_derivatives():
     pos = pos.repeat(4, 1)
     labels = torch.arange(0, 4)
 
-    dataset = DictDataset({'data' : pos, 'labels' : labels})
+    dataset = DictDataset({'data' : pos, 'labels' : labels}, create_ref_idx=True)
 
     cell = torch.Tensor([3.0233])
     ref_distances = torch.Tensor([[0.1521, 0.1220]])
@@ -585,7 +585,7 @@ def test_smart_derivatives():
     labels = torch.arange(0, 4)
     labels[-1] = 0
 
-    dataset = DictDataset({'data' : pos, 'labels' : labels})
+    dataset = DictDataset({'data' : pos, 'labels' : labels}, create_ref_idx=True)
 
     cell = torch.Tensor([3.0233])
   
@@ -615,7 +615,7 @@ def test_smart_derivatives():
     # apply smart derivatives
     smart_derivatives = SmartDerivatives(d_desc_d_x, n_atoms=n_atoms, force_all_atoms=True)
     right_input = d_out_d_d.squeeze(-1)
-    smart_out = smart_derivatives(right_input, ref_idx=dataset['ref_idx'])
+    smart_out = smart_derivatives(right_input, ref_idx=dataset['ref_idx'][mask])
 
     smart_out.sum().backward()
 
@@ -630,7 +630,7 @@ def test_smart_derivatives():
     pos = pos.repeat(4, 1)
     labels = torch.arange(0, 4)
 
-    dataset = DictDataset({'data' : pos, 'labels' : labels})
+    dataset = DictDataset({'data' : pos, 'labels' : labels}, create_ref_idx=True)
 
     cell = torch.Tensor([3.0233])
     ref_distances = torch.Tensor([[0.1521, 0.2335, 0.2412, 0.3798, 0.4733, 0.4649, 0.4575, 0.5741, 0.6815,
@@ -648,7 +648,7 @@ def test_smart_derivatives():
     for separate_boundary_dataset in [False, True]:
         if separate_boundary_dataset:
             mask = [labels > 1]
-            dataset["ref_idx"] = torch.cat( [torch.Tensor([100, 100]), torch.arange(len(dataset["ref_idx"][mask]))])
+            dataset["ref_idx"] = torch.cat( [torch.Tensor([torch.nan, torch.nan]), torch.arange(len(dataset["ref_idx"][mask]))])
         else: 
             mask = torch.ones_like(labels, dtype=torch.bool)
 
@@ -679,8 +679,10 @@ def test_smart_derivatives():
         # apply smart derivatives
         smart_derivatives = SmartDerivatives(d_desc_d_x, n_atoms=n_atoms)
         right_input = d_out_d_d
-        smart_out = smart_derivatives(right_input, ref_idx=dataset['ref_idx'])
-        
+        smart_out = smart_derivatives(right_input, ref_idx=dataset['ref_idx'][mask])
+        print(smart_out.shape)
+        print(ref.shape)
+        print(Ref.shape)
         # do checks
         assert(torch.allclose(smart_out, ref))
         assert(torch.allclose(smart_out, Ref))
@@ -715,7 +717,7 @@ def test_batched_smart_derivatives():
                               cell=cell,
                               scaled_coords=False)
 
-    dataset = DictDataset({'data' : pos, 'labels' : labels})
+    dataset = DictDataset({'data' : pos, 'labels' : labels}, create_ref_idx=True)
     for i in [42]:
         print(f"====================== {i} ======================")
         torch.manual_seed(i)
@@ -764,5 +766,5 @@ def test_batched_smart_derivatives():
 
 
 if __name__ == "__main__":
-    # test_smart_derivatives()
-    test_batched_smart_derivatives()
+    test_smart_derivatives()
+    # test_batched_smart_derivatives()
