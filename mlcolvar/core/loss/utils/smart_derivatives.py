@@ -480,10 +480,10 @@ def create_smart_dataset(desc, dataset, separate_boundary_dataset):
         if separate_boundary_dataset:
             mask_var = dataset["labels"].squeeze() > 1
         else:
-            mask_var = torch.ones_like(dataset["labels"].squeeze()).to(torch.bool)
+            mask_var = torch.ones(len(dataset)).to(torch.bool)
 
         # create reference indeces for batching
-        ref_idx = torch.zeros_like(dataset["labels"], dtype=torch.int)
+        ref_idx = torch.zeros(len(dataset), dtype=torch.int)
         ref_idx[mask_var] = torch.arange(len(ref_idx[mask_var]), dtype=torch.int)
         ref_idx[~mask_var] = -1
 

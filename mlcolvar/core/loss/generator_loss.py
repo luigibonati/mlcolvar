@@ -40,6 +40,11 @@ class GeneratorLoss(torch.nn.Module):
             Can be either:
                 - A `SmartDerivatives` object to save both memory and time, see also mlcolvar.core.loss.committor_loss.SmartDerivatives
                 - A torch.Tensor with the derivatives to save time, memory-wise could be less efficient
+        ref_idx: torch.Tensor, optional
+            Reference indeces for the unshuffled dataset for properly handling batching/splitting/shuffling
+            when descriptors derivatives are provided, by default None. 
+            Ref_idx can be generated automatically using SmartDerivatives or by setting create_ref_idx=True when initializing a DictDataset.
+            See also mlcolvar.core.loss.utils.smart_derivatives.SmartDerivatives
         n_dim : int
             Number of dimensions, by default 3.
         """
@@ -56,7 +61,8 @@ class GeneratorLoss(torch.nn.Module):
     def forward(self,
                 input : torch.Tensor,
                 output : torch.Tensor, 
-                weights : torch.Tensor
+                weights : torch.Tensor,
+                ref_idx : torch.Tensor = None
                 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         
         return generator_loss(input=input,
@@ -68,6 +74,7 @@ class GeneratorLoss(torch.nn.Module):
                               lambdas=self.lambdas,
                               cell=self.cell,
                               descriptors_derivatives=self.descriptors_derivatives,
+                              ref_idx=ref_idx,
                               n_dim=self.n_dim
                               )
 
@@ -93,6 +100,7 @@ def generator_loss(input : torch.Tensor,
                    lambdas : torch.Tensor,
                    cell : float = None,
                    descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None,
+                   ref_idx : torch.Tensor = None,
                    n_dim : int = 3,
                    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """#TODO _summary_
@@ -120,6 +128,11 @@ def generator_loss(input : torch.Tensor,
         Can be either:
             - A `SmartDerivatives` object to save both memory and time, see also mlcolvar.core.loss.committor_loss.SmartDerivatives
             - A torch.Tensor with the derivatives to save time, memory-wise could be less efficient
+    ref_idx: torch.Tensor, optional
+        Reference indeces for the unshuffled dataset for properly handling batching/splitting/shuffling
+        when descriptors derivatives are provided, by default None. 
+        Ref_idx can be generated automatically using SmartDerivatives or by setting create_ref_idx=True when initializing a DictDataset.
+        See also mlcolvar.core.loss.utils.smart_derivatives.SmartDerivatives
     n_dim : int
         Number of dimensions, by default 3.
 
@@ -127,7 +140,10 @@ def generator_loss(input : torch.Tensor,
     -------
     Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
         Total loss, eigenfunctions loss, orthonormality loss 
-    """
+    """    
+    if descriptors_derivatives is not None and ref_idx is None:
+        raise ValueError ("Descriptors derivatives need reference indeces from the dataset! Use a dataset with the ref_idx, see docstrign for details")
+
     # ------------------------ SETUP ------------------------
     # get correct device
     device = input.device
@@ -157,12 +173,12 @@ def generator_loss(input : torch.Tensor,
     # in case the input is not positions but descriptors, we need to correct the gradients up to the positions
     # --> If we pass a SmartDerivative object that takes the nonzero elements of the matrix d_desc/d_pos
     if isinstance(descriptors_derivatives, SmartDerivatives):
-        gradient_positions = descriptors_derivatives(gradient).reshape(input.shape[0], -1, r)
+        gradient_positions = descriptors_derivatives(gradient, ref_idx).reshape(input.shape[0], -1, r)
     
     # --> If we directly pass the matrix d_desc/d_pos
     elif isinstance(descriptors_derivatives, torch.Tensor): 
         descriptors_derivatives = descriptors_derivatives.to(device)
-        gradient_positions = torch.einsum("bdo,badx->baxo", gradient, descriptors_derivatives)
+        gradient_positions = torch.einsum("bdo,badx->baxo", gradient, descriptors_derivatives[ref_idx])
         gradient_positions = gradient_positions.reshape(input.shape[0],  # number of entries
                                                         descriptors_derivatives.shape[1] * 3, # number of atoms * 3 
                                                         output.shape[-1] # number of outputs

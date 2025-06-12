@@ -212,14 +212,19 @@ class Generator(BaseCV, lightning.LightningModule):
 
         weights = train_batch["weights"]
 
+        try:
+            ref_idx = train_batch["ref_idx"]
+        except:
+            ref_idx = None 
+
         # =================forward====================
         # we use forward and not forward_cv to also apply the preprocessing (if present)
         q = self.forward(x)
         # ===================loss=====================
         if self.training:
-            loss, loss_ef, loss_ortho = self.loss_fn(x, q, weights)
+            loss, loss_ef, loss_ortho = self.loss_fn(x, q, weights, ref_idx)
         else:
-            loss, loss_ef, loss_ortho = self.loss_fn(x, q, weights)
+            loss, loss_ef, loss_ortho = self.loss_fn(x, q, weights, ref_idx)
         # ====================log=====================+
         name = "train" if self.training else "valid"
         self.log(f"{name}_loss", loss, on_epoch=True)
@@ -366,7 +371,7 @@ def test_generator():
     )
 
     # create dataset with descriptors
-    dataset_desc = DictDataset({"data": desc, "weights": dataset["weights"]})
+    dataset_desc = DictDataset({"data": desc, "weights": dataset["weights"]}, create_ref_idx=True)
     
     # initialize datamodule, split and shuffle false for derivatives
     datamodule = DictModule(dataset_desc, lengths=[1.0], random_split=False, shuffle=False)
@@ -417,10 +422,13 @@ def test_generator():
 
     # 3 ------------ Descriptors as input + SmartDerivatives ------------
     # initialize smart derivatives, we do it explicitly to test different functionalities
-    smart_derivatives = SmartDerivatives(der_desc_wrt_pos=d_desc_d_pos,
-                                         n_atoms=n_atoms,
-                                         setup_device='cpu',
-                                         force_all_atoms=False)
+    smart_derivatives = SmartDerivatives()
+    smart_dataset = smart_derivatives.setup(dataset=dataset,
+                                            descriptor_function=ComputeDistances,
+                                            n_atoms=n_atoms,
+                                            separate_boundary_dataset=False)
+    
+    datamodule = DictModule(smart_dataset, lengths=[1.0], random_split=False, shuffle=False)
 
     # seed for reproducibility
     torch.manual_seed(42)
