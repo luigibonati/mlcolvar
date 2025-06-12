@@ -53,6 +53,11 @@ class CommittorLoss(torch.nn.Module):
         descriptors_derivatives : torch.nn.Module, optional
             `SmartDerivatives` object to save memory and time when using descriptors.
             See also mlcolvar.core.loss.committor_loss.SmartDerivatives
+        ref_idx: torch.Tensor, optional
+            Reference indeces for the unshuffled dataset for properly handling batching/splitting/shuffling
+            when descriptors derivatives are provided, by default None. 
+            Ref_idx can be generated automatically using SmartDerivatives or by setting create_ref_idx=True when initializing a DictDataset.
+            See also mlcolvar.core.loss.utils.smart_derivatives.SmartDerivatives
 
         """
         super().__init__()
@@ -65,7 +70,7 @@ class CommittorLoss(torch.nn.Module):
         self.separate_boundary_dataset = separate_boundary_dataset
 
     def forward(
-        self, x: torch.Tensor, q: torch.Tensor, labels: torch.Tensor, w: torch.Tensor, create_graph: bool = True
+        self, x: torch.Tensor, q: torch.Tensor, labels: torch.Tensor, w: torch.Tensor, ref_idx: torch.Tensor = None, create_graph: bool = True
     ) -> torch.Tensor:
         return committor_loss(x=x,
                                 q=q,
@@ -78,7 +83,8 @@ class CommittorLoss(torch.nn.Module):
                                 create_graph=create_graph,
                                 cell=self.cell,
                                 separate_boundary_dataset=self.separate_boundary_dataset,
-                                descriptors_derivatives=self.descriptors_derivatives
+                                descriptors_derivatives=self.descriptors_derivatives,
+                                ref_idx=ref_idx,
                             )
 
 
@@ -93,7 +99,8 @@ def committor_loss(x: torch.Tensor,
                   create_graph: bool = True,
                   cell: float = None,
                   separate_boundary_dataset : bool = True,
-                  descriptors_derivatives : torch.nn.Module = None
+                  descriptors_derivatives : torch.nn.Module = None,
+                  ref_idx: torch.Tensor = None,
                   ):
     """Compute variational loss for committor optimization with boundary conditions
 
@@ -125,7 +132,12 @@ def committor_loss(x: torch.Tensor,
             Switch to exculde boundary condition labeled data from the variational loss, by default True
     descriptors_derivatives : torch.nn.Module, optional
         `SmartDerivatives` object to save memory and time when using descriptors.
-        See also mlcolvar.core.loss.committor_loss.SmartDerivatives
+        See also mlcolvar.core.loss.utils.smart_derivatives.SmartDerivatives
+    ref_idx: torch.Tensor, optional
+        Reference indeces for the unshuffled dataset for properly handling batching/splitting/shuffling
+        when descriptors derivatives are provided, by default None. 
+        Ref_idx can be generated automatically using SmartDerivatives or by setting create_ref_idx=True when initializing a DictDataset.
+        See also mlcolvar.core.loss.utils.smart_derivatives.SmartDerivatives
 
     Returns
     -------
@@ -138,6 +150,9 @@ def committor_loss(x: torch.Tensor,
     gamma*alpha*loss_B : torch.Tensor
         The boundary loss term on basin B
     """
+    if descriptors_derivatives is not None and ref_idx is None:
+        raise ValueError ("Descriptors derivatives need reference indeces from the dataset! Use a dataset with the ref_idx, see docstrign for details")
+
     # inherit right device
     device = x.device 
 
@@ -171,7 +186,7 @@ def committor_loss(x: torch.Tensor,
         grad = grad / cell
     
     if descriptors_derivatives is not None:
-        grad = descriptors_derivatives(grad).reshape(x[mask_var].shape[0], -1)
+        grad = descriptors_derivatives(grad, ref_idx[mask_var]).reshape(x[mask_var].shape[0], -1)
     
     # we do the square
     grad_square = torch.pow(grad, 2)

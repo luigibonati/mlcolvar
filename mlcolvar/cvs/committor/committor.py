@@ -113,6 +113,11 @@ class Committor(BaseCV, lightning.LightningModule):
 
         labels = train_batch["labels"]
         weights = train_batch["weights"]
+        try:
+            ref_idx = train_batch["ref_idx"]
+        except:
+            ref_idx = None
+
 
         # =================forward====================
         # we use forward and not forward_cv to also apply the preprocessing (if present)
@@ -120,11 +125,11 @@ class Committor(BaseCV, lightning.LightningModule):
         # ===================loss=====================
         if self.training:
             loss, loss_var, loss_bound_A, loss_bound_B = self.loss_fn(
-                x, q, labels, weights 
+                x, q, labels, weights, ref_idx 
             )
         else:
             loss, loss_var, loss_bound_A, loss_bound_B = self.loss_fn(
-                x, q, labels, weights 
+                x, q, labels, weights, ref_idx 
             )
         # ====================log=====================+
         name = "train" if self.training else "valid"
