@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from mlcolvar.utils._code import scatter_sum
 from mlcolvar.data import DictDataset
+from mlcolvar.core.transform import Transform
 
 __all__ = ["SmartDerivatives", "compute_descriptors_derivatives"]
 
@@ -57,12 +58,38 @@ class SmartDerivatives(torch.nn.Module):
         self._device_preload = False
 
     def setup(self,
-              dataset, 
-              descriptor_function, 
+              dataset: DictDataset, 
+              descriptor_function: Transform, 
               n_atoms : int, 
-              separate_boundary_dataset = True, 
+              separate_boundary_dataset = False, 
               positions_noise : float = 0.0,
-              descriptors_batch_size : int = None):
+              descriptors_batch_size : int = None
+              ) -> DictDataset:
+        """Setup the smart derivatives object from a dataset and a descriptor function.
+        Returns a properly formatted new datset with the descriptors as data. 
+
+        Parameters
+        ----------
+        dataset : DictDataset
+            Input dataset containing atomic positions as `data` and the needed entries
+        descriptor_function : Transform
+            Function to compute the descriptors from the atomic positions, it should be taken from the mlcolvar.core.tranform module
+        n_atoms : int
+            Number of atoms in the dataset
+        separate_boundary_dataset : bool, optional
+            Whether to separate the boundary dataset from the variational one, by default False
+            Should be used only for mlcolvar.cvs.committor. 
+        positions_noise : float, optional
+            Order of magnitude of small noise to be added to the positions to avoid atoms having the exact same coordinates on some dimension and thus zero derivatives, by default 0.
+            Ideally the smaller the better, e.g., 1e-6 for single precision, even lower for double precision.
+        batch_size : int
+            Size of batches to process data, useful for heavy computation to avoid memory overflows, if None a singel batch is used, by default None 
+
+        Returns
+        -------
+        DictDataset
+            Updated dataset with the computed descriptors as 'data'.
+        """
         
         self.n_atoms = n_atoms
         # compute descriptors and their derivatives from original dataset
@@ -352,7 +379,7 @@ from mlcolvar.core.transform.descriptors.utils import sanitize_positions_shape
 def compute_descriptors_derivatives(dataset, 
                                     descriptor_function, 
                                     n_atoms : int, 
-                                    separate_boundary_dataset = True, 
+                                    separate_boundary_dataset = False, 
                                     positions_noise : float = 0.0,
                                     batch_size : int = None):
     """Compute the derivatives of a set of descriptors wrt input positions in a dataset for committor optimization
@@ -366,7 +393,7 @@ def compute_descriptors_derivatives(dataset,
     n_atoms : int
         Number of atoms in the system
     separate_boundary_dataset : bool, optional
-            Switch to exculde boundary condition labeled data from the variational loss, by default True
+            Switch to exculde boundary condition labeled data from the variational loss, by default False
     positions_noise : float
         Order of magnitude of small noise to be added to the positions to avoid atoms having the exact same coordinates on some dimension and thus zero derivatives, by default 0.
         Ideally the smaller the better, e.g., 1e-6 for single precision, even lower for double precision.
