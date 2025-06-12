@@ -241,9 +241,9 @@ class SmartDerivatives(torch.nn.Module):
         # =========================== SORT DATA ==========================
         # order by ref_idx, this way it's easier to handle later
         ref_idx, ordering = ref_idx.sort()
-        revert_ordering = torch.arange(len(ref_idx))[ordering]
-        print(revert_ordering)
         x = x[ordering, :]
+        # we store the indeces to properly re-order the output
+        revert_ordering = torch.arange(len(ref_idx))[ordering].sort()[1]
 
 
         batch_size = len(x)
@@ -298,9 +298,10 @@ class SmartDerivatives(torch.nn.Module):
 
         # sum contributions from different descriptors to the same atoms
         out = self._sum_desc_contributions(x=src, scatter_indeces=scatter_indeces, batch_size=batch_size)
-        print(out)
-        out = out[ revert_ordering, :]
-        print(out)
+        
+        # get the original order in case
+        out = out[revert_ordering]
+        
         return out
         
     def _create_right(self, x : torch.Tensor, used_batch : torch.Tensor):        
@@ -704,10 +705,10 @@ def test_batched_smart_derivatives():
     pos = torch.Tensor([[ 1.4970,  1.3861, -0.0273, -1.4933,  1.5070, -0.1133, -1.4473, -1.4193,
                         -0.0553
                         ]])
-    pos = pos.repeat(10, 1)
+    pos = pos.repeat(20, 1)
     pos = pos + torch.randn_like(pos)*1e-2
     
-    labels = torch.arange(0, 2).repeat(5).sort()[0]
+    labels = torch.arange(0, 4).repeat(5).sort()[0]
     weights = torch.ones_like(labels)
 
     cell = torch.Tensor([3.0233])
@@ -747,41 +748,48 @@ def test_batched_smart_derivatives():
         assert(torch.allclose(smart_dataset['data'], desc, atol=1e-3))
 
         # apply simple NN
+        torch.manual_seed(42)
         NN = FeedForward(layers = [3, 2, 1])
         out = NN(desc)
-        print(desc)
-        print(out)
+
+        # here we compute things on the whole dataset and we slice it later to get the right entries
         # compute derivatives of out wrt input
         d_out_d_x = torch.autograd.grad(out, pos, grad_outputs=torch.ones_like(out), retain_graph=True, create_graph=False )[0]
         # compute derivatives of out wrt descriptors
         d_out_d_d = torch.autograd.grad(out, desc, grad_outputs=torch.ones_like(out), retain_graph=True, create_graph=False )[0]
-        print(d_out_d_d)
+        # get total reference values
         ref = torch.einsum('badx,bd->bax ', d_desc_d_x, d_out_d_d[mask])
         Ref = d_out_d_x[mask]
 
-        right_input = d_out_d_d[mask].squeeze(-1)
-        print(mask)
+        # test for different seeds for dataloader
         for i in [42, 420]:
             print(f"====================== {i} ======================")
             torch.manual_seed(i)
-            datamodule = DictModule(smart_dataset, lengths=[1], batch_size=4, shuffle=True)
+            datamodule = DictModule(smart_dataset, lengths=[0.8, 0.2], batch_size=4, shuffle=True, random_split=True)
             datamodule.setup()
-            for loader in [datamodule.train_dataloader()]:#, datamodule.val_dataloader()]:
+
+            for loader in [datamodule.train_dataloader(), datamodule.val_dataloader()]:
                 for b, batch in enumerate(iter(loader)):
                     print(f"==================== BATCH {b} ====================")
                     aux_dataset = DictDataset(batch)
-                    ref_idx = torch.clone(aux_dataset['ref_idx'])
-                    print(ref_idx)
-                    smart_out = smart_derivatives(right_input[ref_idx], ref_idx)
-                    print(smart_out)
-                    print(ref[ref_idx])
-                    print(Ref[ref_idx])
-                    # do checks
+
+                    # we have to mimic what happens during training
+                    if separate_boundary_dataset:
+                        aux_mask = aux_dataset['labels'] > 1
+                    else:
+                        aux_mask = torch.ones_like(aux_dataset['labels'], dtype=torch.bool)
+
+                    # we get the ref indeces only for the "var" part
+                    ref_idx = torch.clone(aux_dataset['ref_idx'])[aux_mask]
+                    # we get only the right input for the "var" part
+                    right_input = d_out_d_d.squeeze(-1)[ref_idx]
+                    # get smart out
+                    smart_out = smart_derivatives(right_input, ref_idx)
+            
+                    # do checks with the reference value for the elements present in the batch
                     assert(torch.allclose(smart_out, ref[ref_idx], atol=1e-3))
                     assert(torch.allclose(smart_out, Ref[ref_idx], atol=1e-3))
 
-
-
 if __name__ == "__main__":
-    # test_smart_derivatives()
+    test_smart_derivatives()
     test_batched_smart_derivatives()
