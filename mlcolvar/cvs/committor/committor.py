@@ -115,9 +115,8 @@ class Committor(BaseCV, lightning.LightningModule):
         weights = train_batch["weights"]
         try:
             ref_idx = train_batch["ref_idx"]
-        except:
+        except KeyError:
             ref_idx = None
-
 
         # =================forward====================
         # we use forward and not forward_cv to also apply the preprocessing (if present)

@@ -214,7 +214,7 @@ class Generator(BaseCV, lightning.LightningModule):
 
         try:
             ref_idx = train_batch["ref_idx"]
-        except:
+        except KeyError:
             ref_idx = None 
 
         # =================forward====================
