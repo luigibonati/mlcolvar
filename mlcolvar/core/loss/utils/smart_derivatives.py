@@ -641,7 +641,7 @@ def test_smart_derivatives():
             out = NN(desc)
 
             # compute derivatives of out wrt input
-            d_out_d_x = torch.autograd.grad(out, pos, grad_outputs=torch.ones_like(out), retain_graph=True, create_graph=True )[0]
+            d_out_d_x = torch.autograd.grad(out, pos, grad_outputs=torch.ones_like(out), retain_graph=True, create_graph=False )[0]
             # compute derivatives of out wrt descriptors
             d_out_d_d = torch.autograd.grad(out, desc, grad_outputs=torch.ones_like(out), retain_graph=True, create_graph=True )[0]
             ref = torch.einsum('badx,bd->bax ',d_desc_d_x,d_out_d_d[mask])
@@ -712,7 +712,7 @@ def test_smart_derivatives():
         out = NN(desc)
 
         # compute derivatives of out wrt input
-        d_out_d_x = torch.stack([torch.autograd.grad(out[:, i], pos, grad_outputs=torch.ones_like(out[:, i]), retain_graph=True, create_graph=True )[0] for i in range(out.shape[-1])], dim=3)
+        d_out_d_x = torch.stack([torch.autograd.grad(out[:, i], pos, grad_outputs=torch.ones_like(out[:, i]), retain_graph=True, create_graph=False )[0] for i in range(out.shape[-1])], dim=3)
         # compute derivatives of out wrt descriptors
         d_out_d_d = torch.stack([torch.autograd.grad(out[:, i], desc, grad_outputs=torch.ones_like(out[:, i]), retain_graph=True, create_graph=True )[0] for i in range(out.shape[-1])], dim=2)
         
@@ -737,6 +737,8 @@ def test_smart_derivatives():
     
         assert(torch.allclose(smart_out, ref, atol=1e-3))
         assert(torch.allclose(smart_out, Ref, atol=1e-3))
+        smart_out.sum().backward()
+
             
 def test_batched_smart_derivatives():
     from mlcolvar.core.transform import PairwiseDistances
@@ -801,7 +803,7 @@ def test_batched_smart_derivatives():
         # compute derivatives of out wrt input
         d_out_d_x = torch.autograd.grad(out, pos, grad_outputs=torch.ones_like(out), retain_graph=True, create_graph=False )[0]
         # compute derivatives of out wrt descriptors
-        d_out_d_d = torch.autograd.grad(out, desc, grad_outputs=torch.ones_like(out), retain_graph=True, create_graph=False )[0]
+        d_out_d_d = torch.autograd.grad(out, desc, grad_outputs=torch.ones_like(out), retain_graph=True, create_graph=True )[0]
         # get total reference values
         ref = torch.einsum('badx,bd->bax ', d_desc_d_x, d_out_d_d[mask])
         Ref = d_out_d_x[mask]
@@ -834,6 +836,8 @@ def test_batched_smart_derivatives():
                     # do checks with the reference value for the elements present in the batch
                     assert(torch.allclose(smart_out, ref[ref_idx], atol=1e-3))
                     assert(torch.allclose(smart_out, Ref[ref_idx], atol=1e-3))
+
+                    smart_out.sum().backward(retain_graph=True)
 
 def test_compute_descriptors_and_derivatives():
     from mlcolvar.core.transform import PairwiseDistances
@@ -898,6 +902,6 @@ def test_compute_descriptors_and_derivatives():
             assert( torch.allclose(d_desc_d_x, d_desc_d_x_ref[mask]) )
 
 if __name__ == "__main__":
-    # test_smart_derivatives()
-    # test_batched_smart_derivatives()
+    test_smart_derivatives()
+    test_batched_smart_derivatives()
     test_compute_descriptors_and_derivatives()
