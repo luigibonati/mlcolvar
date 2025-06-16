@@ -203,6 +203,8 @@ class Generator(BaseCV, lightning.LightningModule):
                       train_batch, 
                       batch_idx):
         """Compute and return the training loss and record metrics."""
+        torch.set_grad_enabled(True)
+
         # =================get data===================
         x = train_batch["data"]
         # check data are have shape (n_data, -1)

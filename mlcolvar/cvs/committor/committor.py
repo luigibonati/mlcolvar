@@ -104,6 +104,8 @@ class Committor(BaseCV, lightning.LightningModule):
 
 
     def training_step(self, train_batch, batch_idx):
+        torch.set_grad_enabled(True)
+
         """Compute and return the training loss and record metrics."""
         # =================get data===================
         x = train_batch["data"]
