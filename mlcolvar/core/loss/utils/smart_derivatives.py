@@ -258,22 +258,21 @@ class SmartDerivatives(torch.nn.Module):
         torch.Tensor
             Derivatives of the output wrt atomic positions, shape (N, n_atoms, n_dim, (n_out)))
         """
-        # preloading on right device at first call
         if not self._device_preload:
             self._preload_on_device(device=x.device)
 
-        # TODO remove!
-        if ref_idx is None: 
-            ref_idx = torch.arange(len(x), dtype=torch.int)
+        if ref_idx is None:
+            ref_idx = torch.arange(x.size(0), dtype=torch.int, device=x.device)
         # =========================== SORT DATA ==========================
         # order by ref_idx, this way it's easier to handle later
-        ref_idx, ordering = ref_idx.sort()
-        x = x[ordering, :]
+        ref_idx, ordering = torch.sort(ref_idx)
+        x = x.index_select(0, ordering)
+
         # we store the indeces to properly re-order the output
-        revert_ordering = torch.arange(len(ref_idx), device=x.device)[ordering].sort()[1]
+        revert_ordering = torch.empty_like(ordering)
+        revert_ordering[ordering] = torch.arange(ordering.size(0), device=ordering.device)
 
-
-        batch_size = len(x)
+        batch_size = x.size(0)
         # =========================== HANDLE BATCHING/SPLITTING ==========================
         # If we have batches we need to get the right: 
         # 1) non-zero elements from self.left
@@ -284,26 +283,45 @@ class SmartDerivatives(torch.nn.Module):
         shifts = torch.zeros_like(self.scatter_indeces)
 
         # check, based on ref_idx, which batch entries are used. If there are no batches, we just get a fully true mask
-        used_batch = torch.isin(self.batch_ind, ref_idx).to(x.device)
+        # used_batch = torch.isin(self.batch_ind, ref_idx).to(x.device)
+        max_val = max(self.batch_ind.max(), ref_idx.max()) + 1
+        lookup = torch.zeros(max_val, dtype=torch.bool, device=self.batch_ind.device)
+        lookup[ref_idx] = True
+        used_batch = lookup[self.batch_ind]
         
         # if we detect batches/splits we update scatter_indeces and shifts
-        if (used_batch == False).any():
-            # get the corresponding scatter indeces, these allow properly recombining the contributions 
-            scatter_indeces = self.scatter_indeces[used_batch]    
+        if not used_batch.all():
+            # get the corresponding scatter indeces, these allow properly recombining the contributions
+            scatter_indeces = self.scatter_indeces[used_batch]  
             
             # get the indeces shift due to batches, these map how many entries there were before the indeces we took 
             batch_shift_used = self.batch_shift[used_batch]    # This is increasing but *not* sequential!
-
+        
             # find uniques to get markers and index used batches
-            uniques, indeces = torch.unique(batch_shift_used, return_inverse=True)   # This is increasing *and also* sequential!
-            
+            uniques, indeces = torch.unique_consecutive(batch_shift_used, return_inverse=True)   # This is increasing *and also* sequential!
+        
             # we need to shift the indeces of each batch so that they start after the ones of the previous batch
-            n_previous_entries = torch.Tensor([torch.max(scatter_indeces[indeces==i] - scatter_indeces[indeces==i].min()) + 1 for i in range(len(uniques))])
-            n_previous_entries = torch.Tensor([n_previous_entries[:i].sum() for i in range(len(n_previous_entries))]).to(torch.int64).to(x.device)
+            # Get max and min scatter index for each group
+            num_groups = uniques.numel()
+            scatter_min = torch.full((num_groups,), 1e8, device=x.device, dtype=torch.long)
+            scatter_max = torch.full((num_groups,), -1e8, device=x.device, dtype=torch.long)
+
+            scatter_min.scatter_reduce_(0, indeces, scatter_indeces, reduce='amin', include_self=True)
+            scatter_max.scatter_reduce_(0, indeces, scatter_indeces, reduce='amax', include_self=True)
+
+            # Compute group spans
+            group_spans = (scatter_max - scatter_min + 1)
+
+            # Compute exclusive cumulative sum
+            n_previous_entries = torch.cat([torch.zeros(1, device=x.device, dtype=torch.int64),
+                                            torch.cumsum(group_spans[:-1], dim=0)])
+            # optimized version of:
+            # n_previous_entries = torch.Tensor([torch.max(scatter_indeces[indeces==i] - scatter_indeces[indeces==i].min()) + 1 for i in range(len(uniques))])
+            # n_previous_entries = torch.Tensor([n_previous_entries[:i].sum() for i in range(len(n_previous_entries))]).to(torch.int64).to(x.device)
             
             # get the final shifts tensor, uniques make all of them zero-based, n_previous_entries make shifts them to remove overlaps
             shifts = torch.gather(uniques - n_previous_entries, 0, indeces).to(torch.int64)    
-
+            
         # apply shift to the original scatter_indeces
         scatter_indeces = scatter_indeces - shifts
 
@@ -325,8 +343,7 @@ class SmartDerivatives(torch.nn.Module):
         out = self._sum_desc_contributions(x=src, scatter_indeces=scatter_indeces, batch_size=batch_size)
         
         # get the original order in case
-        out = out[revert_ordering]
-
+        out = out.index_select(0, revert_ordering)
         return out
         
     def _create_right(self, x : torch.Tensor, used_batch : torch.Tensor):        
@@ -335,7 +352,7 @@ class SmartDerivatives(torch.nn.Module):
         """
         # NOTE: for batching, x here is already batched and doesn't need slicing
         # make general batch idx consistent with the batch
-        _, used_batch_ind = torch.unique(self.batch_ind[used_batch], return_inverse=True)
+        _, used_batch_ind = torch.unique_consecutive(self.batch_ind[used_batch], return_inverse=True)
 
         # descriptors indeces need to be corrected by the used batch
         desc_ind = self.desc_ind[used_batch]
@@ -343,6 +360,7 @@ class SmartDerivatives(torch.nn.Module):
         # keep only the non zero elements of right input
         desc_vec = x[used_batch_ind, desc_ind]
         return desc_vec
+   
 
     def _sum_desc_contributions(self, x : torch.Tensor, scatter_indeces : torch.Tensor, batch_size : int):
         """Sums the elements of x according to the indeces to obtain the contribution of each atom to the output due 
@@ -937,7 +955,7 @@ def test_train_with_smart_derivatives():
                                         separate_boundary_dataset=True,
                                         descriptors_batch_size=25)
     
-    datamodule = DictModule(dataset=smart_dataset, lengths=[0.8, 0.2], batch_size=40)
+    datamodule = DictModule(dataset=smart_dataset, lengths=[0.8, 0.2], batch_size=80)
     
     model = Committor(layers=[45, 10, 1],
                       mass=atomic_masses,
@@ -953,7 +971,7 @@ def test_train_with_smart_derivatives():
 
 
 if __name__ == "__main__":
-    # test_smart_derivatives()
-    # test_batched_smart_derivatives()
-    # test_compute_descriptors_and_derivatives()
+    test_smart_derivatives()
+    test_batched_smart_derivatives()
+    test_compute_descriptors_and_derivatives()
     test_train_with_smart_derivatives()
