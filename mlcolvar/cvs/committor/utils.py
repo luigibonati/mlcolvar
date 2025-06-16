@@ -1,7 +1,6 @@
 import torch
 import numpy as np
 from typing import List
-from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives, compute_descriptors_derivatives
 from mlcolvar.data import DictDataset
 
 __all__ = ["KolmogorovBias", "compute_committor_weights", "initialize_committor_masses"]
@@ -44,7 +43,7 @@ class KolmogorovBias(torch.nn.Module):
         bias = - self.lambd*(1/self.beta)*(torch.log( grads_squared + self.epsilon ) - torch.log(self.epsilon))
         return bias
 
-def compute_committor_weights(dataset, 
+def compute_committor_weights(dataset : DictDataset, 
                               bias: torch.Tensor, 
                               data_groups: List[int], 
                               beta: float):
