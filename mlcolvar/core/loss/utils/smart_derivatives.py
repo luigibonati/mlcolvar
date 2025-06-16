@@ -228,7 +228,7 @@ class SmartDerivatives(torch.nn.Module):
         return shifted_indeces, batch_shift
 
     def _preload_on_device(self, device):
-        for attr in ["left", "batch_ind", "desc_ind", "scatter_indeces"]:
+        for attr in ["left", "batch_ind", "desc_ind", "scatter_indeces", "batch_shift"]:
             if self.__dict__[attr].device != device:
                 print(f"[SmartDerivatives] Moving {attr} to {device}")
                 self.__setattr__(attr, self.__dict__[attr].to(device))
@@ -237,7 +237,7 @@ class SmartDerivatives(torch.nn.Module):
 
 
     def move_to_cpu(self):
-        for attr in ["left", "batch_ind", "desc_ind", "scatter_indeces"]:
+        for attr in ["left", "batch_ind", "desc_ind", "scatter_indeces", "batch_shift"]:
             print(f"[SmartDerivatives] Moving {attr} to cpu")
             self.__setattr__(attr, self.__dict__[attr].to(torch.device("cpu")))
         self._device_preload = False
@@ -284,9 +284,8 @@ class SmartDerivatives(torch.nn.Module):
         shifts = torch.zeros_like(self.scatter_indeces)
 
         # check, based on ref_idx, which batch entries are used. If there are no batches, we just get a fully true mask
-        used_batch = torch.isin(self.batch_ind, ref_idx)
+        used_batch = torch.isin(self.batch_ind, ref_idx).to(x.device)
         
-
         # if we detect batches/splits we update scatter_indeces and shifts
         if (used_batch == False).any():
             # get the corresponding scatter indeces, these allow properly recombining the contributions 
@@ -300,11 +299,10 @@ class SmartDerivatives(torch.nn.Module):
             
             # we need to shift the indeces of each batch so that they start after the ones of the previous batch
             n_previous_entries = torch.Tensor([torch.max(scatter_indeces[indeces==i] - scatter_indeces[indeces==i].min()) + 1 for i in range(len(uniques))])
-            n_previous_entries = torch.Tensor([n_previous_entries[:i].sum() for i in range(len(n_previous_entries))]).to(torch.int64)    
-
+            n_previous_entries = torch.Tensor([n_previous_entries[:i].sum() for i in range(len(n_previous_entries))]).to(torch.int64).to(x.device)
+            
             # get the final shifts tensor, uniques make all of them zero-based, n_previous_entries make shifts them to remove overlaps
             shifts = torch.gather(uniques - n_previous_entries, 0, indeces).to(torch.int64)    
-
 
         # apply shift to the original scatter_indeces
         scatter_indeces = scatter_indeces - shifts
@@ -901,7 +899,61 @@ def test_compute_descriptors_and_derivatives():
             assert( torch.allclose(desc, desc_ref) )
             assert( torch.allclose(d_desc_d_x, d_desc_d_x_ref[mask]) )
 
+def test_train_with_smart_derivatives():
+    from mlcolvar.core.transform import PairwiseDistances
+    from mlcolvar.data import DictModule
+    from mlcolvar.cvs import Committor
+    from mlcolvar.cvs.committor.utils import initialize_committor_masses
+    import lightning
+
+    # full atoms with all distances
+    n_atoms = 10
+    pos = torch.Tensor([[ 1.4970,  1.3861, -0.0273, -1.4933,  1.5070, -0.1133, -1.4473, -1.4193,
+                        -0.0553,  1.4940,  1.4990, -0.2403,  1.4780, -1.4173, -0.3363, -1.4243,
+                        -1.4093, -0.4293,  1.3530, -1.4313, -0.4183,  1.3060,  1.4750, -0.4333,
+                        1.2970, -1.3233, -0.4643,  1.1670, -1.3253, -0.5354]])
+    
+    pos = pos.repeat(200, 1)
+    labels = torch.arange(0, 5).unsqueeze(-1).repeat(40,1).sort()[0]
+    weights = torch.ones_like(labels)
+    atomic_masses = initialize_committor_masses(atom_types=[0, 0, 1, 2, 0, 0, 0, 1, 2, 0], 
+                                            masses=[12.011, 15.999, 14.007], 
+                                            n_dims=3)
+
+    dataset = DictDataset({'data' : pos, 'labels' : labels, 'weights': weights})
+
+    cell = torch.Tensor([3.0233])
+
+    ComputeDescriptors = PairwiseDistances(n_atoms=n_atoms,
+                            PBC=True,
+                            cell=cell,
+                            scaled_coords=False,
+                            slicing_pairs=None)
+    
+    smart_derivatives = SmartDerivatives()
+    smart_dataset = smart_derivatives.setup(dataset=dataset, 
+                                        descriptor_function=ComputeDescriptors,
+                                        n_atoms=n_atoms,
+                                        separate_boundary_dataset=True,
+                                        descriptors_batch_size=25)
+    
+    datamodule = DictModule(dataset=smart_dataset, lengths=[0.8, 0.2], batch_size=40)
+    
+    model = Committor(layers=[45, 10, 1],
+                      mass=atomic_masses,
+                      alpha=1,
+                      separate_boundary_dataset=True,
+                      descriptors_derivatives=smart_derivatives 
+                      )
+    
+    trainer = lightning.Trainer(max_epochs=3, logger=False, enable_checkpointing=False)
+    
+    trainer.fit(model, datamodule)
+
+
+
 if __name__ == "__main__":
-    test_smart_derivatives()
-    test_batched_smart_derivatives()
-    test_compute_descriptors_and_derivatives()
+    # test_smart_derivatives()
+    # test_batched_smart_derivatives()
+    # test_compute_descriptors_and_derivatives()
+    test_train_with_smart_derivatives()
