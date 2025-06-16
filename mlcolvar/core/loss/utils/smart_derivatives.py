@@ -270,7 +270,7 @@ class SmartDerivatives(torch.nn.Module):
         ref_idx, ordering = ref_idx.sort()
         x = x[ordering, :]
         # we store the indeces to properly re-order the output
-        revert_ordering = torch.arange(len(ref_idx))[ordering].sort()[1]
+        revert_ordering = torch.arange(len(ref_idx), device=x.device)[ordering].sort()[1]
 
 
         batch_size = len(x)
@@ -443,7 +443,8 @@ def compute_descriptors_derivatives(dataset,
     # compute descriptors and derivatives
     # we loop over batches and compute everything only for that part of the data, inside we loop over descriptors
     # we save lists and make them proper tensors later
-    batch_aux_stack = []
+    batch_aux_der = []
+    batch_aux_desc = []
     batch_count = 0
     while batch_count * batch_size + 1 <= len(pos):
         print(f"Processing batch {batch_count}/{n_batches}", end='\r')
@@ -465,8 +466,12 @@ def compute_descriptors_derivatives(dataset,
                 aux_der = torch.autograd.grad(batch_desc[:,i], batch_pos, grad_outputs=torch.ones_like(batch_desc[:,i]), retain_graph=True )[0]
                 batch_aux.append(aux_der.detach().cpu())
             
+            # derivatives
             batch_d_desc_d_pos = torch.stack(batch_aux, axis=2)         # derivatives of this batch
-            batch_aux_stack.append(batch_d_desc_d_pos.detach().cpu())   # derivatives of all batches
+            batch_aux_der.append(batch_d_desc_d_pos.detach().cpu())   # derivatives of all batches
+            
+            # descriptors
+            batch_aux_desc.append(batch_desc)
 
             # cleanup
             del aux_der    
@@ -484,11 +489,21 @@ def compute_descriptors_derivatives(dataset,
     if batch_count == 1:
         d_desc_d_pos = batch_d_desc_d_pos
     else:
-        d_desc_d_pos = torch.cat(batch_aux_stack, dim=0)
+        d_desc_d_pos = torch.cat(batch_aux_der, dim=0)
+    
+    # get descriptors
+    desc_var = torch.cat(batch_aux_desc, axis=0)
     
     # we compute the descriptors on the whole dataset to always have all of them, no need for grads   
-    with torch.no_grad():
-        desc = descriptor_function(pos)
+    if separate_boundary_dataset:
+        with torch.no_grad():
+            desc_not_var = descriptor_function(pos[~mask_var])
+            desc = torch.zeros((len(dataset), desc_not_var.shape[-1]))
+
+            desc[mask_var] = desc_var
+            desc[~mask_var] = desc_not_var
+    else:
+        desc = desc_var
 
     # detach and move back to original device
     pos = pos.detach().to(device)
@@ -820,6 +835,69 @@ def test_batched_smart_derivatives():
                     assert(torch.allclose(smart_out, ref[ref_idx], atol=1e-3))
                     assert(torch.allclose(smart_out, Ref[ref_idx], atol=1e-3))
 
+def test_compute_descriptors_and_derivatives():
+    from mlcolvar.core.transform import PairwiseDistances
+
+    # full atoms with all distances
+    n_atoms = 10
+    pos = torch.Tensor([[ 1.4970,  1.3861, -0.0273, -1.4933,  1.5070, -0.1133, -1.4473, -1.4193,
+                        -0.0553,  1.4940,  1.4990, -0.2403,  1.4780, -1.4173, -0.3363, -1.4243,
+                        -1.4093, -0.4293,  1.3530, -1.4313, -0.4183,  1.3060,  1.4750, -0.4333,
+                        1.2970, -1.3233, -0.4643,  1.1670, -1.3253, -0.5354]])
+    ref_distances = torch.Tensor([[0.1521, 0.2335, 0.2412, 0.3798, 0.4733, 0.4649, 0.4575, 0.5741, 0.6815,
+                                0.1220, 0.1323, 0.2495, 0.3407, 0.3627, 0.3919, 0.4634, 0.5885, 0.2280,
+                                0.2976, 0.3748, 0.4262, 0.4821, 0.5043, 0.6376, 0.1447, 0.2449, 0.2454,
+                                0.2705, 0.3597, 0.4833, 0.1528, 0.1502, 0.2370, 0.2408, 0.3805, 0.2472,
+                                0.3243, 0.3159, 0.4527, 0.1270, 0.1301, 0.2440, 0.2273, 0.2819, 0.1482]])
+
+    pos = pos.repeat(5, 1)
+    labels = torch.arange(0, 5)
+    weights = torch.ones_like(labels)
+
+    dataset = DictDataset({'data' : pos, 'labels' : labels, 'weights': weights})
+
+    cell = torch.Tensor([3.0233])
+    ref_distances = ref_distances.repeat(5, 1)
+
+    ComputeDescriptors = PairwiseDistances(n_atoms=n_atoms,
+                            PBC=True,
+                            cell=cell,
+                            scaled_coords=False,
+                            slicing_pairs=None)
+
+    for batch_size in [2,3,5]:    
+        for separate_boundary_dataset in [False, True]:
+            if separate_boundary_dataset:
+                mask = [labels > 1]
+            else: 
+                mask = torch.ones_like(labels, dtype=torch.bool)
+
+            pos, desc, d_desc_d_x = compute_descriptors_derivatives(dataset=dataset, 
+                                                                    descriptor_function=ComputeDescriptors, 
+                                                                    n_atoms=n_atoms, 
+                                                                    separate_boundary_dataset=separate_boundary_dataset,
+                                                                    batch_size=batch_size)
+            
+            assert(torch.allclose(desc, ref_distances, atol=1e-3))
+
+            # compute descriptors outside to have their derivatives for checks
+            pos.requires_grad = True
+            desc_ref = ComputeDescriptors(pos)
+
+            aux = []
+            # compute derivatives of descriptors wrt positions
+            for i in range(len(desc_ref[0])):
+                    aux_der = torch.autograd.grad(desc_ref[:, i], pos, grad_outputs=torch.ones_like(desc[:,i]), retain_graph=True )[0]
+                    aux.append(aux_der.detach().cpu())
+                
+            # derivatives
+            d_desc_d_x_ref = torch.stack(aux, axis=2) 
+
+            # checks
+            assert( torch.allclose(desc, desc_ref) )
+            assert( torch.allclose(d_desc_d_x, d_desc_d_x_ref[mask]) )
+
 if __name__ == "__main__":
-    test_smart_derivatives()
-    test_batched_smart_derivatives()
+    # test_smart_derivatives()
+    # test_batched_smart_derivatives()
+    test_compute_descriptors_and_derivatives()
