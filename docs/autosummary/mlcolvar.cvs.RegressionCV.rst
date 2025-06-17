@@ -29,10 +29,11 @@
 
    .. autosummary::
    
-      ~RegressionCV.BLOCKS
       ~RegressionCV.CHECKPOINT_HYPER_PARAMS_KEY
       ~RegressionCV.CHECKPOINT_HYPER_PARAMS_NAME
       ~RegressionCV.CHECKPOINT_HYPER_PARAMS_TYPE
+      ~RegressionCV.DEFAULT_BLOCKS
+      ~RegressionCV.MODEL_BLOCKS
       ~RegressionCV.T_destination
       ~RegressionCV.automatic_optimization
       ~RegressionCV.call_super_init
