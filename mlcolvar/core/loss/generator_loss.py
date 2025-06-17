@@ -146,7 +146,7 @@ def generator_loss(input : torch.Tensor,
     sample_size = output.shape[0] // 2
 
     # expand friction tensor
-    friction = friction.repeat_interleave(3) 
+    friction = friction.repeat_interleave(n_dim) 
 
     # ------------------------ GRADIENTS ------------------------    
     # compute gradients of output wrt to the input iterating on the outputs
