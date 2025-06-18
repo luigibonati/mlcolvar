@@ -158,13 +158,20 @@ def committor_loss(x: torch.Tensor,
 
     mass = mass.to(device)
 
+    labels = labels.squeeze()
+
     # Create masks to access different states data
-    mask_A = torch.nonzero(labels.squeeze() == 0, as_tuple=True) 
-    mask_B = torch.nonzero(labels.squeeze() == 1, as_tuple=True)
+    mask_A = torch.nonzero(labels == 0, as_tuple=True) 
+    mask_B = torch.nonzero(labels == 1, as_tuple=True)
     if separate_boundary_dataset:
-        mask_var = torch.nonzero(labels.squeeze() > 1, as_tuple=True) 
+        mask_var = torch.nonzero(labels > 1, as_tuple=True) 
     else: 
         mask_var = torch.ones(len(x), dtype=torch.bool)
+
+    if separate_boundary_dataset:
+        mask_var = labels > 1
+    else:
+        mask_var = torch.ones_like(labels, dtype=torch.bool)
     
     # Update weights of basin B using the information on the delta_f
     delta_f = torch.Tensor([delta_f])
