@@ -42,6 +42,7 @@ def compute_fes(
     temp=300,
     kbt=None,
     num_samples=100,
+    fes_units="kJ/mol",
     bounds=None,
     bandwidth=0.01,
     kernel="gaussian",
@@ -65,6 +66,8 @@ def compute_fes(
         temperature, by default 300
     kbt : float, optional
         temperature in energy units, by default None
+    fes_units : string, optional
+        units of the FES, by default "kJ/mol"
     num_samples : int, optional
         number of points used along each direction, by default 100
     bounds : list of lists, optional
@@ -272,7 +275,7 @@ def compute_fes(
                 ax.errorbar(grid, fes2, error)
             else:
                 ax.plot(grid, fes2)
-            ax.set_ylabel("FES")
+            ax.set_ylabel(f"FES [{fes_units}]")
         elif dim == 2:
             fes2 = np.copy(O)
             if plot_max_fes is not None:
@@ -280,7 +283,7 @@ def compute_fes(
             extent = [item for sublist in bounds for item in sublist]
             pp = ax.contourf(fes2, cmap="fessa", extent=extent)  # ,vmax=max_fes)
             cbar = plt.colorbar(pp, ax=ax)
-            cbar.set_label("FES")
+            cbar.set_label(f"FES [{fes_units}]")
 
     return fes, grid, bounds, error
 
