@@ -34,8 +34,10 @@ class VariationalAutoEncoderCV(BaseCV, lightning.LightningModule):
     At training time, the encoder outputs a mean and a variance for each CV
     defining a Gaussian distribution associated to the input. One sample is
     drawn from this Gaussian, and it goes through the decoder. Then the ELBO
-    loss is minimized. The ELBO sums the MSE of the reconstruction and the KL
-    divergence between the generated Gaussian and a N(0, 1) Gaussian.
+    loss is minimized [1]_. The ELBO sums the MSE of the reconstruction and the KL
+    divergence between the generated Gaussian and a N(0, 1) Gaussian multiplied
+    by a beta factor. The beta factor can be used to control the weight of the KL
+    divergence term in the loss function [2]_.
 
     At evaluation time, the encoder's output mean is used as the CV, while the
     variance output and the decoder are ignored.
@@ -43,13 +45,17 @@ class VariationalAutoEncoderCV(BaseCV, lightning.LightningModule):
     **Data**: for training, it requires a DictDataset with the key ``'data'`` and
     optionally ``'weights'``. If a 'target' key is present this will be used as reference
     for the output of the decoder, otherway this will be compared with the input 'data'.
-    This feature can be used to train (variational) time-lagged autoencoders like in [1]_.
+    This feature can be used to train (variational) time-lagged autoencoders like in [3]_.
 
     **Loss**: Evidence Lower BOund (ELBO)
 
     References
     ----------
-    .. [1] C. X. Hernández, H. K. Wayment-Steele, M. M. Sultan, B. E. Husic, and V. S. Pande,
+    .. [1] Kingma, Diederik P., and Max Welling. "Auto-encoding variational bayes." 20 Dec. 2013.
+    .. [2] Higgins, Irina, Loic Matthey, Arka Pal, Christopher Burgess, Xavier Glorot, Matthew Botvinick, 
+           Shakir Mohamed, and Alexander Lerchner. “β-VAE: Learning basic visual concepts with a constrained 
+           variational framework.” International Conference on Learning Representations (ICLR), 2017.
+    .. [3] C. X. Hernández, H. K. Wayment-Steele, M. M. Sultan, B. E. Husic, and V. S. Pande,
         “Variational encoding of complex dynamics,” Physical Review E 97, 062412 (2018).
 
     See also
@@ -230,7 +236,7 @@ class VariationalAutoEncoderCV(BaseCV, lightning.LightningModule):
                                                           mean = mean, 
                                                           log_variance = log_variance, 
                                                           beta = self.beta,
-                                                          decompose = True, 
+                                                          return_loss_terms = True, 
                                                           **loss_kwargs)
 
         # Log.
