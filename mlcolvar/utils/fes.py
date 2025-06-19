@@ -263,10 +263,6 @@ def compute_fes(
                 [num_samples for i in range(dim)]
             )
 
-        if fes_to_zero is not None:
-            fes_i -= fes_i[fes_to_zero]
-        else:
-            fes_i -= np.nanmin(fes_i)
         # result for each block
         fes_blocks.append(fes_i)
         W_blocks.append(np.sum(w_i))
@@ -290,6 +286,11 @@ def compute_fes(
     else:
         fes = fes_blocks[0]
         error = None
+    
+    if fes_to_zero is not None:
+        fes -= fes[fes_to_zero]
+    else:
+        fes -= np.nanmin(fes)
 
     # rescale back
     if scale_by is not None:
