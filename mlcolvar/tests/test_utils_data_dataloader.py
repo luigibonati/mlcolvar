@@ -28,7 +28,7 @@ from mlcolvar.data.dataloader import DictLoader
 # =============================================================================
 
 
-def create_random_datasets(same_batch_size=True):
+def create_random_datasets(same_batch_size=True, create_ref_idx=False):
     """A list of datasets with different keys and different number of samples."""
     # One number of samples for each of the dataset.
     if same_batch_size:
@@ -70,7 +70,7 @@ def test_fast_dictionary_loader_init():
 
     batch_size = 2
 
-    def _check_dataloader(dl, n_samples=10, n_batches=5, shuffled=False):
+    def _check_dataloader(dl, n_samples=10, n_batches=5, shuffled=False, ref_idx=False):
         assert dl.dataset_len == n_samples
         assert len(dl) == n_batches
 
@@ -79,10 +79,15 @@ def test_fast_dictionary_loader_init():
 
         # Check the batch.
         batch = next(iter(dl))
-        assert set(batch.keys()) == set(["data", "labels"])
+        if not ref_idx:
+            assert set(batch.keys()) == set(["data", "labels"])
+        else:
+            assert set(batch.keys()) == set(["data", "labels", "ref_idx"]) 
         if not shuffled:
             assert torch.all(batch["data"] == torch.tensor([[1.0], [2.0]]))
             assert torch.all(batch["labels"] == torch.tensor([1.0, 4.0]))
+            if ref_idx:
+                assert torch.all(batch["ref_idx"] == torch.tensor([0.0, 1.0]))
 
         # Count number of iterated batches.
         counter = 0
@@ -100,7 +105,13 @@ def test_fast_dictionary_loader_init():
     dataloader = DictLoader(dict_dataset, batch_size=batch_size, shuffle=False)
     _check_dataloader(dataloader)
 
+    # check with ref indeces
+    dict_dataset = DictDataset(d, create_ref_idx=True)
+    dataloader = DictLoader(dict_dataset, batch_size=batch_size, shuffle=False)
+    _check_dataloader(dataloader, ref_idx=True)
+
     # or from subset
+    dict_dataset = DictDataset(d)
     train, _ = torch.utils.data.random_split(dict_dataset, [0.5, 0.5])
     dataloader = DictLoader(train, batch_size=batch_size, shuffle=False)
     _check_dataloader(dataloader, n_samples=5, n_batches=3, shuffled=True)
