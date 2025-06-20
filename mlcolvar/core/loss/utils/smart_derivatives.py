@@ -1,8 +1,10 @@
 import torch
+import gc
 import numpy as np
 from mlcolvar.utils._code import scatter_sum
 from mlcolvar.data import DictDataset
 from mlcolvar.core.transform import Transform
+from mlcolvar.core.transform.descriptors.utils import sanitize_positions_shape
 
 __all__ = ["SmartDerivatives", "compute_descriptors_derivatives"]
 
@@ -391,7 +393,6 @@ class SmartDerivatives(torch.nn.Module):
         return out
 
 
-from mlcolvar.core.transform.descriptors.utils import sanitize_positions_shape
 def compute_descriptors_derivatives(dataset, 
                                     descriptor_function, 
                                     n_atoms : int, 
@@ -435,7 +436,6 @@ def compute_descriptors_derivatives(dataset,
     pos = dataset['data']
     labels = dataset['labels']
     pos = sanitize_positions_shape(pos=pos, n_atoms=n_atoms)[0]
-    pos.requires_grad = True
     
     # get_device 
     device = pos.device
@@ -462,7 +462,8 @@ def compute_descriptors_derivatives(dataset,
     batch_aux_der = []
     batch_aux_desc = []
     batch_count = 0
-    while batch_count * batch_size + 1 <= len(pos):
+    
+    for batch_count in range(0, n_batches + 1):
         print(f"Processing batch {batch_count}/{n_batches}", end='\r')
 
         # get batch slicing indexes, they don't need to be all of the same size
@@ -471,35 +472,35 @@ def compute_descriptors_derivatives(dataset,
         batch_mask_var = mask_var[batch_start:batch_stop]   # separate_dataset mask
         batch_pos = pos[batch_start:batch_stop]             # batch positions
         batch_pos = batch_pos[batch_mask_var, :, :]         # batch_positions for variational dataset only
-        
+        batch_pos.requires_grad = True
+
         if len(batch_pos) > 0:
             batch_desc = descriptor_function(batch_pos)
 
-            # loop over descriptors, #TODO maybe can be done with jacobians?
             # we store things always on the cpu
             batch_aux = []
+            
             for i in range(len(batch_desc[0])):
-                aux_der = torch.autograd.grad(batch_desc[:,i], batch_pos, grad_outputs=torch.ones_like(batch_desc[:,i]), retain_graph=True )[0]
-                batch_aux.append(aux_der.detach().cpu())
+                aux_der = torch.autograd.grad(batch_desc[:,i], batch_pos, grad_outputs=torch.ones_like(batch_desc[:,i]), retain_graph=True )[0].contiguous()
+                batch_aux.append(aux_der.detach())
             
             # derivatives
-            batch_d_desc_d_pos = torch.stack(batch_aux, axis=2)         # derivatives of this batch
-            batch_aux_der.append(batch_d_desc_d_pos.detach().cpu())   # derivatives of all batches
-            
+            batch_d_desc_d_pos = torch.stack(batch_aux, axis=2).to('cpu')         # derivatives of this batch
+            batch_aux_der.append(batch_d_desc_d_pos.detach().cpu())               # derivatives of all batches
+
             # descriptors
-            batch_aux_desc.append(batch_desc)
+            batch_aux_desc.append(batch_desc.detach().cpu())
 
             # cleanup
             del aux_der    
             del batch_pos
             del batch_desc
 
+            gc.collect()
             # to be sure, clean the gpu cache
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-        batch_count += 1
-    
     print(f"Processed all data in {n_batches} batches!")
 
     if batch_count == 1:
@@ -527,6 +528,7 @@ def compute_descriptors_derivatives(dataset,
     d_desc_d_pos = d_desc_d_pos.detach().to(device)
 
     # to be sure, clean the gpu cache
+    gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
