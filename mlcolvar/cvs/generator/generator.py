@@ -46,6 +46,7 @@ class Generator(BaseCV, lightning.LightningModule):
                  cell: float = None,
                  descriptors_derivatives: Union[SmartDerivatives, torch.Tensor] = None,
                  n_dim: int = 3,
+                 u_stat:bool = True,
                  options: dict = None,
                  **kwargs
                  ):
@@ -72,6 +73,8 @@ class Generator(BaseCV, lightning.LightningModule):
                 - A torch.Tensor with the derivatives to save time, memory-wise could be less efficient
         n_dim : int
             Number of dimensions, by default 3
+        u_stat : bool, optional
+            Do we use U-statistics to compute the loss
         options : dict[str, Any], optional
             Options for the building blocks of the model, by default {}.
             Available blocks: ['nn'] .
@@ -86,6 +89,7 @@ class Generator(BaseCV, lightning.LightningModule):
                                      cell=cell,
                                      descriptors_derivatives=descriptors_derivatives,
                                      n_dim=n_dim,
+                                     u_stat=u_stat
                                      )
         self.r = r
         self.eta = eta
