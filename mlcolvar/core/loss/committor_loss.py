@@ -422,10 +422,8 @@ class SmartDerivatives(torch.nn.Module):
         try:
             # single output case
             if self.scatter_indeces.shape == x.shape:
-                # create output tensor to make it faster    
-                out = torch.zeros((self.batch_size*self.n_atoms*3), device=x.device)
                 # scatter to the right indeces
-                out = scatter_sum(x, self.scatter_indeces, out=out)
+                out = scatter_sum(x, self.scatter_indeces)
                 # reshape to the right shape
                 out = out.reshape((self.batch_size, self.n_atoms, 3))
             
@@ -452,9 +450,7 @@ class SmartDerivatives(torch.nn.Module):
                 # out = out.reshape((self.batch_size, self.n_atoms*3, x.shape[-1]))
                 
                 # ----> This is an alternative implemention, a little bit slower but less memory consuming maybe <----
-                out = torch.zeros((self.batch_size*self.n_atoms*3, x.shape[-1]), device=x.device)
-                for i in range(x.shape[-1]): 
-                    out[:, i] = scatter_sum(x[:, i], self.scatter_indeces, out=out[:, i])
+                out = torch.stack( [scatter_sum(x[:, i], self.scatter_indeces) for i in range(x.shape[-1])], dim=1 )
                 out = out.reshape((self.batch_size, self.n_atoms, 3, x.shape[-1]))
 
 
