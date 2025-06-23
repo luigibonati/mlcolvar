@@ -74,6 +74,9 @@ class SelfTICA(BaseCV, lightning.LightningModule):
 
         latent_dim = encoder_layers[-1]
 
+        self.register_buffer('current_evecs', torch.eye(latent_dim, n_cvs))
+        self.register_buffer('current_means', torch.zeros(latent_dim))
+
         # =======   LOSS  =======
         self.loss_fn = RegSpectralLoss(reg=regularization)
 
@@ -101,6 +104,10 @@ class SelfTICA(BaseCV, lightning.LightningModule):
         self.tica = TICA(latent_dim, n_cvs, **options[o])
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        nn_output = self.forward_nn(x)
+        if not self.training:
+            centered = nn_output - self.current_means
+            return centered @ self.current_evecs[:, :self.n_cvs]
         return self.forward_nn(x)
     
     def forward_nn(self, x: torch.Tensor, lagged: bool = False) -> torch.Tensor:
@@ -144,6 +151,8 @@ class SelfTICA(BaseCV, lightning.LightningModule):
             eigvals, _ = self.tica.compute(
                 data=[f_t, f_lag_nolin], weights=[w_t, w_lag], save_params=True
             )
+            self.current_evecs = self.tica.evecs.clone()
+            self.current_means = self.tica.mean.clone()
         # ====================log=====================
         name = "train" if self.training else "valid"
         loss_dict = {f"{name}_loss": loss}
