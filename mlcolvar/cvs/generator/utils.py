@@ -143,7 +143,7 @@ def compute_eigenfunctions(input : torch.Tensor,
     # ------------------------ EIGENFUNCTIONS ------------------------
 
     # get eigenvalues and eigenvectors of resolvent
-    evals, evecs = torch.linalg.eig(operator)
+    evals, evecs = torch.linalg.eigh(operator)
 
     # eigenfunctions and eigenvalues of generator
     lambdas = eta - 1 / evals.real
