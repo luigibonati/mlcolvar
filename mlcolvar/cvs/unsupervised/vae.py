@@ -198,7 +198,7 @@ class VariationalAutoEncoderCV(BaseCV, lightning.LightningModule):
         
         # Sample from the Gaussian distribution in latent space.
         std = torch.exp(log_variance / 2)
-        z = torch.distributions.Normal(mean, std+1e-8).rsample()
+        z = torch.distributions.Normal(mean, std).rsample()
 
         # Decode sample.
         x_hat = self.decoder(z)
