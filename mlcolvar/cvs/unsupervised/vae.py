@@ -193,6 +193,9 @@ class VariationalAutoEncoderCV(BaseCV, lightning.LightningModule):
         x = self.encoder(x)
         mean, log_variance = self.mean_nn(x), self.log_var_nn(x)
 
+        # Clamp the log_variance to prevent it from becoming -inf (numerical stability).
+        log_variance = torch.clamp(log_variance, min=-15)
+        
         # Sample from the Gaussian distribution in latent space.
         std = torch.exp(log_variance / 2)
         z = torch.distributions.Normal(mean, std).rsample()
