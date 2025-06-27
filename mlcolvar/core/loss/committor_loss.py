@@ -450,7 +450,9 @@ class SmartDerivatives(torch.nn.Module):
                 # out = out.reshape((self.batch_size, self.n_atoms*3, x.shape[-1]))
                 
                 # ----> This is an alternative implemention, a little bit slower but less memory consuming maybe <----
-                out = torch.stack( [scatter_sum(x[:, i], self.scatter_indeces) for i in range(x.shape[-1])], dim=1 )
+                out = torch.zeros((self.batch_size*self.n_atoms*3, x.shape[-1]), device=x.device)
+                for i in range(x.shape[-1]): 
+                    out[:, i] = scatter_sum(x[:, i], self.scatter_indeces, out=out[:, i])
                 out = out.reshape((self.batch_size, self.n_atoms, 3, x.shape[-1]))
 
 
