@@ -14,7 +14,9 @@ __all__ = [
     "CommittorLoss",
     "committor_loss",
     "SmartDerivatives",
-    "compute_descriptors_derivatives"
+    "compute_descriptors_derivatives",
+    "RegSpectralLoss",
+    "reg_spectral_loss",
 ]
 
 from .mse import MSELoss, mse_loss
@@ -24,3 +26,4 @@ from .elbo import ELBOGaussiansLoss, elbo_gaussians_loss
 from .autocorrelation import AutocorrelationLoss, autocorrelation_loss
 from .fisher import FisherDiscriminantLoss, fisher_discriminant_loss
 from .committor_loss import CommittorLoss, committor_loss, SmartDerivatives, compute_descriptors_derivatives
+from .regspectral_loss import RegSpectralLoss, reg_spectral_loss
