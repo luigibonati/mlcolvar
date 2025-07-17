@@ -1,7 +1,7 @@
 import torch
 from typing import Union, Tuple
 from mlcolvar.core.loss.generator_loss import compute_covariance
-from mlcolvar.core.loss.committor_loss import SmartDerivatives
+from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
 
 __all__ = ["compute_eigenfunctions", "forecast_state_occupation"]
 
