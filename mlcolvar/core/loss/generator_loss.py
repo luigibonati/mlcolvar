@@ -10,7 +10,7 @@ from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
 
 
 class GeneratorLoss(torch.nn.Module):
-    """Computes the loss function to learn a representation for the infinitesimal generator"""
+    """Computes the loss function to learn a representation for the resolvent of the infinitesimal generator"""
 
     def __init__(self,
                  r: int, 
@@ -20,8 +20,9 @@ class GeneratorLoss(torch.nn.Module):
                  cell: float = None,  
                  descriptors_derivatives: Union[SmartDerivatives, torch.Tensor] = None,
                  n_dim: int = 3,
+                 u_stat: bool = True,
                  ):
-        """#TODO _summary_
+        """Computes the loss to learn a representation on which the resolvent of the infinitesimal generator can be learned
 
         Parameters
         ----------
@@ -47,6 +48,8 @@ class GeneratorLoss(torch.nn.Module):
             See also mlcolvar.core.loss.utils.smart_derivatives.SmartDerivatives
         n_dim : int
             Number of dimensions, by default 3.
+        u_stat : bool
+            Do we use U-statistics to compute the loss
         """
         super().__init__()
 
@@ -57,6 +60,7 @@ class GeneratorLoss(torch.nn.Module):
         self.cell = cell
         self.descriptors_derivatives = descriptors_derivatives
         self.n_dim = n_dim
+        self.u_stat=u_stat
 
     def forward(self,
                 input : torch.Tensor,
@@ -65,6 +69,11 @@ class GeneratorLoss(torch.nn.Module):
                 ref_idx : torch.Tensor = None
                 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         
+        # preload descriptors matrix on device
+        if isinstance(self.descriptors_derivatives, torch.Tensor):
+            if self.descriptors_derivatives.device != input.device:
+                self.descriptors_derivatives = self.descriptors_derivatives.to(input.device)
+
         return generator_loss(input=input,
                               output=output,
                               weights=weights,
@@ -75,7 +84,8 @@ class GeneratorLoss(torch.nn.Module):
                               cell=self.cell,
                               descriptors_derivatives=self.descriptors_derivatives,
                               ref_idx=ref_idx,
-                              n_dim=self.n_dim
+                              n_dim=self.n_dim,
+                              u_stat=self.u_stat
                               )
 
 
@@ -102,8 +112,9 @@ def generator_loss(input : torch.Tensor,
                    descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None,
                    ref_idx : torch.Tensor = None,
                    n_dim : int = 3,
+                   u_stat : bool = True,
                    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """#TODO _summary_
+    """Optimizes r functions to be the representation on which the resolvent of the infinitesimal generator can be learned
 
     Parameters
     ----------
@@ -135,6 +146,8 @@ def generator_loss(input : torch.Tensor,
         See also mlcolvar.core.loss.utils.smart_derivatives.SmartDerivatives
     n_dim : int
         Number of dimensions, by default 3.
+    u_stat : bool
+        Do we use U-statistics to compute the loss
 
     Returns
     -------
@@ -157,8 +170,8 @@ def generator_loss(input : torch.Tensor,
     sample_size = output.shape[0] // 2
 
     # expand friction tensor
-    friction = friction.unsqueeze(-1).repeat((1, n_dim)).ravel()
-    
+    friction = friction.repeat_interleave(n_dim) 
+
     # ------------------------ GRADIENTS ------------------------    
     # compute gradients of output wrt to the input iterating on the outputs
     grad_outputs = torch.ones(len(output), device=device)
@@ -173,13 +186,13 @@ def generator_loss(input : torch.Tensor,
     # in case the input is not positions but descriptors, we need to correct the gradients up to the positions
     # --> If we pass a SmartDerivative object that takes the nonzero elements of the matrix d_desc/d_pos
     if isinstance(descriptors_derivatives, SmartDerivatives):
-        gradient_positions = descriptors_derivatives(gradient, ref_idx).reshape(input.shape[0], -1, r)
+        gradient_positions = descriptors_derivatives(gradient, ref_idx).view(input.shape[0], -1, r)
     
     # --> If we directly pass the matrix d_desc/d_pos
     elif isinstance(descriptors_derivatives, torch.Tensor): 
         descriptors_derivatives = descriptors_derivatives.to(device)
-        gradient_positions = torch.einsum("bdo,badx->baxo", gradient, descriptors_derivatives[ref_idx])
-        gradient_positions = gradient_positions.reshape(input.shape[0],  # number of entries
+        gradient_positions = torch.einsum("bdo,badx->baxo", gradient, descriptors_derivatives[ref_idx]).contiguous()
+        gradient_positions = gradient_positions.view(input.shape[0],  # number of entries
                                                         descriptors_derivatives.shape[1] * 3, # number of atoms * 3 
                                                         output.shape[-1] # number of outputs
                                                         )
@@ -188,14 +201,14 @@ def generator_loss(input : torch.Tensor,
     else:
         gradient_positions = gradient 
 
-    if cell is not None:
-        gradient_positions /= cell
 
     if r==1:
         gradient_positions = gradient_positions.unsqueeze(-1)
 
     # this is to make the following computation easier to write
-    gradient_positions = gradient_positions.swapaxes(2,1)
+    gradient_positions = gradient_positions.transpose(2,1).contiguous()
+    if cell is not None:
+        gradient_positions /= cell.repeat_interleave(gradient_positions.shape[-1]//n_dim)
 
     # multiply by friction
     try:
@@ -205,41 +218,58 @@ def generator_loss(input : torch.Tensor,
 
 
     # ------------------------ COVARIANCES ------------------------
+    if u_stat:
+        first = slice(0, sample_size)
+        second = slice(sample_size, None)
 
-    # In order to have unbiased estimation, we split the dataset in two chunks
-    weights_X, weights_Y = weights[:sample_size], weights[sample_size:]
-    gradient_X, gradient_Y = gradient_positions[:sample_size], gradient_positions[sample_size:]
-    psi_X, psi_Y = output[:sample_size], output[sample_size:]
+        # In order to have unbiased estimation, we split the dataset in two chunks
+        weights_X, weights_Y = weights[first], weights[second]
+        gradient_X, gradient_Y = gradient_positions[first], gradient_positions[second]
+        psi_X, psi_Y = output[first], output[second]
 
-    # compute covariances
-    cov_X = compute_covariance(psi_X, weights_X)
-    cov_Y = compute_covariance(psi_Y, weights_Y)
-    dcov_X = compute_covariance(gradient_X, weights_X)
-    dcov_Y = compute_covariance(gradient_Y, weights_Y)
+        # compute covariances
+        cov_X = compute_covariance(psi_X, weights_X)
+        cov_Y = compute_covariance(psi_Y, weights_Y)
+        dcov_X = compute_covariance(gradient_X, weights_X)
+        dcov_Y = compute_covariance(gradient_Y, weights_Y)
 
-    # action of shifted generator on the two chunks
-    W1 = (eta * cov_X + dcov_X) @ diag_lamb
-    W2 = (eta * cov_Y + dcov_Y) @ diag_lamb
+        # action of shifted generator on the two chunks
+        W1 = (eta * cov_X + dcov_X) @ diag_lamb
+        W2 = (eta * cov_Y + dcov_Y) @ diag_lamb
 
 
-    # ------------------------ COMPUTE LOSSES ------------------------
+        # ------------------------ COMPUTE LOSSES ------------------------
 
-    # Unbiased estimation of the "variational part"
-    # It might be worth replacing with einsum if it is faster
-    loss_ef = torch.trace(
-        ((cov_X @ diag_lamb) @ W2 + (cov_Y @ diag_lamb) @ W1) / 2
-        - cov_X @ diag_lamb
-        - cov_Y @ diag_lamb
-    )
-
-    # Orthonormality part
-    loss_ortho = alpha * (
-        torch.trace(
-            (torch.eye(output.shape[1], device=output.device) - cov_X).T
-            @ (torch.eye(output.shape[1], device=output.device) - cov_Y)
+        # Unbiased estimation of the "variational part"
+        loss_ef = torch.trace(
+            ((cov_X @ diag_lamb) @ W2 + (cov_Y @ diag_lamb) @ W1) / 2
+            - cov_X @ diag_lamb
+        -    cov_Y @ diag_lamb
         )
-    )
+    
+        # Orthonormality part
+        I = torch.eye(output.shape[1], device=output.device, dtype=output.dtype)
+        loss_ortho = alpha * torch.trace( (I - cov_X) @ (I - cov_Y) )
+    else:
 
+        # compute covariances
+        cov = compute_covariance(output, weights)
+        dcov = compute_covariance(gradient_positions, weights)
+        W = (eta * cov + dcov) @ diag_lamb
+
+
+
+        # ------------------------ COMPUTE LOSSES ------------------------
+
+        # Unbiased estimation of the "variational part"
+        loss_ef = torch.trace(
+            (cov @ diag_lamb) @ W
+            - 2 * cov @ diag_lamb
+        )
+    
+        # Orthonormality part
+        I = torch.eye(output.shape[1], device=output.device, dtype=output.dtype)
+        loss_ortho = alpha * torch.trace( (I - cov) @ (I - cov) )
     # combine
     loss = loss_ef + loss_ortho
 

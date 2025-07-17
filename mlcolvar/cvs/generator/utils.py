@@ -106,15 +106,15 @@ def compute_eigenfunctions(input : torch.Tensor,
     else:
         gradient_positions = gradient
 
-    if cell is not None:
-        gradient_positions /= cell
+    
 
     if r==1:
         gradient_positions = gradient_positions.unsqueeze(-1)
 
     # this is to make the following computation easier to write
     gradient_positions = gradient_positions.swapaxes(2,1)
-
+    if cell is not None:
+        gradient_positions /= cell.repeat_interleave(gradient_positions.shape[-1]//n_dim)
     # multiply by friction
     try:
         gradient_positions = gradient_positions * torch.sqrt(friction)
@@ -146,14 +146,14 @@ def compute_eigenfunctions(input : torch.Tensor,
     evals, evecs = torch.linalg.eigh(operator)
 
     # eigenfunctions and eigenvalues of generator
-    lambdas = eta - 1 / evals
+    lambdas = eta - 1 / evals.real
     sorting = torch.argsort(-lambdas)
     
     # eigenfunctions of generator
-    eigenfunctions = output @ evecs
+    eigenfunctions = output @ evecs.real
     
     # Ensure normalization of eigenfunctions
-    detached_evecs = evecs.detach()
+    detached_evecs = evecs.detach().real
     detached_evecs /= torch.sqrt( torch.mean( weights.unsqueeze(1) * eigenfunctions**2, axis=0 ) )
     eigenfunctions /= torch.sqrt( torch.mean( weights.unsqueeze(1) * eigenfunctions**2, axis=0 ) )
 
