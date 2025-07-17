@@ -10,22 +10,23 @@ __all__ = ["SmartDerivatives", "compute_descriptors_derivatives"]
 
 class SmartDerivatives(torch.nn.Module):
     """
-    Utils to compute efficently (time and memory wise) the derivatives of q wrt some input descriptors.
+    Utils to compute efficently (time and memory wise) the derivatives of the model output wrt the positions
+    used to compute the input descriptors.
     Rather than computing explicitly the derivatives wrt the positions, we compute those wrt the descriptors (right input)
     and multiply them by the matrix of the derivatives of the descriptors wrt the positions (left input).
 
     Overview
         Preparation:
             - Finds the non-zero entries of the derivatives of the descriptors wrt the positions (left)
-            - Stores such entries in a long 1D tensor
+            - Stores such entries in a big 1D tensor
             - Stores the indeces to find such entries in the original derivatives matrix
-            - Creates a long 1D tensor of indeces that allows properly taking together the contributions
+            - Creates a big 1D tensor of indeces that allows properly taking together the contributions
         Forward:      
             - Use the matrix indeces to retrieve the corresponding elements from the derivatives of output wrt the descriptors (right) 
-              into a long 1D tensor
+              into a big 1D tensor
             - Get the single contributions via element-wise multiplication (i.e., of each atom to the output due 
               to a single descriptor along a single space dimension) 
-            - Scatter the single contributions to global contributions (of each atom to the output along each space dimension)
+            - Scatter the single contributions to global contributions (of each atom to each output along each space dimension)
 
         When working with batches or splits the scatter indeces are rescaled from the whole dataset to the batched entry.
     """
@@ -33,11 +34,9 @@ class SmartDerivatives(torch.nn.Module):
                  setup_device : str = 'cpu',
                  force_all_atoms : bool = False
                  ):
-        """Initialize the fixed matrices for smart derivatives, i.e. matrix of derivatives of descriptors wrt positions.
-        The derivatives wrt positions are recovered by multiplying the derivatives of q wrt the descriptors (right input, computed at each epoch)
-        by the non-zero elements of the derivatives of the descriptors wrt the positions (left input, compute once at the beginning on the whole dataset).
-        The multiplication are done using scatter functions and keeping track of the indeces of the batches, descriptors, atoms and dimensions.
-
+        """Initialize the smart derivatives object.
+        To setup the class, use the `setup` method.
+    
         Parameters
         ----------
         der_desc_wrt_pos : torch.Tensor
@@ -68,7 +67,7 @@ class SmartDerivatives(torch.nn.Module):
               descriptors_batch_size : int = None
               ) -> DictDataset:
         """Setup the smart derivatives object from a dataset and a descriptor function.
-        Returns a properly formatted new datset with the descriptors as data. 
+        Returns a properly formatted new dataset with the descriptors as data. 
 
         Parameters
         ----------
@@ -80,7 +79,7 @@ class SmartDerivatives(torch.nn.Module):
             Number of atoms in the dataset
         separate_boundary_dataset : bool, optional
             Whether to separate the boundary dataset from the variational one, by default False
-            Should be used only for mlcolvar.cvs.committor. 
+            NB: Should be used only for mlcolvar.cvs.committor. 
         positions_noise : float, optional
             Order of magnitude of small noise to be added to the positions to avoid atoms having the exact same coordinates on some dimension and thus zero derivatives, by default 0.
             Ideally the smaller the better, e.g., 1e-6 for single precision, even lower for double precision.
@@ -117,9 +116,11 @@ class SmartDerivatives(torch.nn.Module):
     def _setup_left(self, 
                     left_input : torch.Tensor, 
                     setup_device : str = 'cpu'):
-        """Setup the fixed part of the computation."""
+        """Setup the fixed part of the computation: the non-zero elements of the derivatives of the descriptors wrt the positions and the related indeces
+        """
         with torch.no_grad():
             self.total_dataset_length = len(left_input)
+
             # all the setup should be done on the CPU by default
             left_input = left_input.to(torch.device(setup_device))
 
@@ -142,10 +143,10 @@ class SmartDerivatives(torch.nn.Module):
     def _create_nonzero_left(self, x):
         """Find the indeces of the non-zero elements of the left input (i.e., derivatives of descriptors wrt positions)
         """
-        # find indeces of nonzero entries of d_dist_d_x
+        # find indeces of nonzero entries of the d_desc_d_pos
         mat_ind = x.nonzero(as_tuple=True)
 
-        # it is possible that some atoms are not involved in anything
+        # it is possible that some atoms are not involved in any descriptor
         used_atoms = torch.unique(mat_ind[1])
         n_effective_atoms = len(used_atoms)
 
@@ -158,12 +159,12 @@ class SmartDerivatives(torch.nn.Module):
                 # we use it to add the correct indeces, then we revert it
                 x[:, missing_atoms, 0, :] = x[:, missing_atoms, 0, :] + 10
                 
-                # find indeces of nonzero entries of augmented d_dist_d_x
+                # find indeces of nonzero entries of augmented d_desc_d_pos
                 mat_ind = x.nonzero(as_tuple=True)
                 # find indeces of nonzero entries of flattened augmented matrix
                 vec_ind = x.ravel().nonzero(as_tuple=True)
 
-                # revert
+                # revert the modification
                 x[:, missing_atoms, 0, :] = x[:, missing_atoms, 0, :] - 10
             else:
                 raise ValueError(f"Some of the input atoms are not used in any of the descriptors. The not used atom IDs are : {missing_atoms}. If you want to include all atoms even if not used swtich the force_all_atoms key on. ")
@@ -230,6 +231,9 @@ class SmartDerivatives(torch.nn.Module):
         return shifted_indeces, batch_shift
 
     def _preload_on_device(self, device):
+        """Preloads the tensors used in the forward pass onto the desired device for speeding up.
+        This can be reverted moving everything to cpu using the method `move._to_cpu`.
+        """
         for attr in ["left", "batch_ind", "desc_ind", "scatter_indeces", "batch_shift"]:
             if self.__dict__[attr].device != device:
                 print(f"[SmartDerivatives] Moving {attr} to {device}")
@@ -239,6 +243,7 @@ class SmartDerivatives(torch.nn.Module):
 
 
     def move_to_cpu(self):
+        """Moves the tensors used in the forward pass onto the cpu."""
         for attr in ["left", "batch_ind", "desc_ind", "scatter_indeces", "batch_shift"]:
             print(f"[SmartDerivatives] Moving {attr} to cpu")
             self.__setattr__(attr, self.__dict__[attr].to(torch.device("cpu")))
@@ -265,6 +270,7 @@ class SmartDerivatives(torch.nn.Module):
 
         if ref_idx is None:
             ref_idx = torch.arange(x.size(0), dtype=torch.int, device=x.device)
+
         # =========================== SORT DATA ==========================
         # order by ref_idx, this way it's easier to handle later
         ref_idx, ordering = torch.sort(ref_idx)
@@ -273,8 +279,10 @@ class SmartDerivatives(torch.nn.Module):
         # we store the indeces to properly re-order the output
         revert_ordering = torch.empty_like(ordering)
         revert_ordering[ordering] = torch.arange(ordering.size(0), device=ordering.device)
+        
 
         batch_size = x.size(0)
+
         # =========================== HANDLE BATCHING/SPLITTING ==========================
         # If we have batches we need to get the right: 
         # 1) non-zero elements from self.left
@@ -285,7 +293,6 @@ class SmartDerivatives(torch.nn.Module):
         shifts = torch.zeros_like(self.scatter_indeces)
 
         # check, based on ref_idx, which batch entries are used. If there are no batches, we just get a fully true mask
-        # used_batch = torch.isin(self.batch_ind, ref_idx).to(x.device)
         max_val = max(self.batch_ind.max(), ref_idx.max()) + 1
         lookup = torch.zeros(max_val, dtype=torch.bool, device=self.batch_ind.device)
         lookup[ref_idx] = True
@@ -317,9 +324,6 @@ class SmartDerivatives(torch.nn.Module):
             # Compute exclusive cumulative sum
             n_previous_entries = torch.cat([torch.zeros(1, device=x.device, dtype=torch.int64),
                                             torch.cumsum(group_spans[:-1], dim=0)])
-            # optimized version of:
-            # n_previous_entries = torch.Tensor([torch.max(scatter_indeces[indeces==i] - scatter_indeces[indeces==i].min()) + 1 for i in range(len(uniques))])
-            # n_previous_entries = torch.Tensor([n_previous_entries[:i].sum() for i in range(len(n_previous_entries))]).to(torch.int64).to(x.device)
             
             # get the final shifts tensor, uniques make all of them zero-based, n_previous_entries make shifts them to remove overlaps
             shifts = torch.gather(uniques - n_previous_entries, 0, indeces).to(torch.int64)    
@@ -349,7 +353,7 @@ class SmartDerivatives(torch.nn.Module):
         return out
         
     def _create_right(self, x : torch.Tensor, used_batch : torch.Tensor):        
-        """Create a long 1D tensor with the elements of the derivatives of the output 
+        """Create a big 1D tensor with the elements of the derivatives of the output 
         wrt the descriptors needed to propagate the derivatives to the positions.
         """
         # NOTE: for batching, x here is already batched and doesn't need slicing
@@ -381,7 +385,7 @@ class SmartDerivatives(torch.nn.Module):
                 out = out.reshape((batch_size, self.n_atoms, 3, x.shape[-1]))
 
 
-        # in case somehting's wrong      
+        # in case somehting's wrong, it may be because of vanishing gradient components     
         except RuntimeError as e:
             raise RuntimeError(e, f"""It may be that some descriptor have a zero component because a low precision in the positions.
                                 Try adding a small random noise to the positions by hand or by tweaking the positions_noise key in get_descriptors_and_derivatives or compute_descriptors_derivatives utils""")
