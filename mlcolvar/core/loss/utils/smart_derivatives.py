@@ -381,7 +381,7 @@ class SmartDerivatives(torch.nn.Module):
             
             # multiple outputs case
             else:
-                out = torch.stack( [scatter_sum(x[:, i], self.scatter_indeces) for i in range(x.shape[-1])], dim=1 )
+                out = torch.stack([scatter_sum(x[:, i], scatter_indeces) for i in range(x.shape[-1])], dim=1 )
                 out = out.reshape((batch_size, self.n_atoms, 3, x.shape[-1]))
 
 
@@ -921,11 +921,13 @@ def test_compute_descriptors_and_derivatives():
 
 def test_train_with_smart_derivatives():
     from mlcolvar.core.transform import PairwiseDistances
-    from mlcolvar.data import DictModule
-    from mlcolvar.cvs import Committor
+    from mlcolvar.data import DictModule, DictDataset
+    from mlcolvar.cvs import Committor, Generator
     from mlcolvar.cvs.committor.utils import initialize_committor_masses
+    from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
     import lightning
 
+    # committor
     # full atoms with all distances
     n_atoms = 10
     pos = torch.Tensor([[ 1.4970,  1.3861, -0.0273, -1.4933,  1.5070, -0.1133, -1.4473, -1.4193,
@@ -971,7 +973,75 @@ def test_train_with_smart_derivatives():
     trainer.fit(model, datamodule)
 
 
+    # Generator
+    kT = 2.49432
 
+    # create friction tensor
+    #### This part should be made easier using committor utils TODO
+    masses = torch.Tensor([ 12.011, 12.011, 15.999, 14.0067, 12.011, 12.011, 12.011, 15.999, 14.0067, 12.011])
+    gamma = 1 / 0.05
+    friction = kT / (gamma*masses)
+    ref_weights = torch.ones(len(pos))
+
+    dataset = DictDataset({'data' : pos, 'labels' : labels, 'weights': ref_weights})
+
+    # --------------------------------- TRAIN MODEL ---------------------------------
+    # ------------ Descriptors as input + SmartDerivatives ------------
+    # initialize smart derivatives, we do it explicitly to test different functionalities
+    smart_derivatives = SmartDerivatives()
+    smart_dataset = smart_derivatives.setup(dataset=dataset,
+                                            descriptor_function=ComputeDescriptors,
+                                            n_atoms=n_atoms,
+                                            separate_boundary_dataset=False)
+    
+    datamodule = DictModule(smart_dataset, lengths=[0.8, 0.2], random_split=True, shuffle=True)
+
+    # seed for reproducibility
+    torch.manual_seed(42)
+    options = {"nn": {"activation": "tanh"},
+            "optimizer": {"lr": 1e-3, "weight_decay": 1e-5}
+            }
+    model = Generator(
+        r=3,
+        layers=[45, 20, 20, 1],
+        eta=0.005,
+        alpha=0.01,
+        friction=friction,
+        cell=None,
+        descriptors_derivatives=smart_derivatives,
+        options=options,
+    )
+
+     # save outputs as a reference
+    X = smart_dataset["data"]
+    q = model(X)
+
+    trainer = lightning.Trainer(
+        accelerator='cpu',
+        callbacks=None,
+        max_epochs=6,
+        enable_progress_bar=False,
+        enable_checkpointing=False,
+        logger=False,
+        limit_val_batches=0,
+        num_sanity_val_steps=0,
+    )
+
+    # fit
+    trainer.fit(model, datamodule)
+
+    # save outputs as a reference
+    X = smart_dataset["data"]
+    q = model(X)
+
+    # compute eigenfunctions
+    eigfuncs, eigvals, eigvecs = model.compute_eigenfunctions(dataset=smart_dataset, descriptors_derivatives=smart_derivatives)
+
+    print(eigfuncs.shape)
+    print(eigvals.shape)
+    print(eigvecs.shape)
+
+    
 if __name__ == "__main__":
     test_smart_derivatives()
     test_batched_smart_derivatives()
