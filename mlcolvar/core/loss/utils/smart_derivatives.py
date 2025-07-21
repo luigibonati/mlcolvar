@@ -562,6 +562,10 @@ def test_smart_derivatives():
     from mlcolvar.core.nn import FeedForward
     from mlcolvar.data import DictDataset
     
+    default_dtype = torch.get_default_dtype()
+    # this way tests are less prone to fail on different OS
+    torch.set_default_dtype(torch.float64)
+
     # full atoms with all distances
     n_atoms_1 = 10
     pos_1 = torch.Tensor([[ 1.4970,  1.3861, -0.0273, -1.4933,  1.5070, -0.1133, -1.4473, -1.4193,
@@ -756,6 +760,10 @@ def test_smart_derivatives():
         assert(torch.allclose(smart_out, ref, atol=1e-3))
         assert(torch.allclose(smart_out, Ref, atol=1e-3))
         smart_out.sum().backward()
+    
+    # reset orginal default dtype
+    torch.set_default_dtype(default_dtype)
+
 
             
 def test_batched_smart_derivatives():
