@@ -236,8 +236,7 @@ def compute_fes(
                 fes_i = (
                     -kbt
                     * np.log(kde.evaluate(cartesian(pos)) + eps)
-                    .reshape([num_samples for i in range(dim)])
-                    .T
+                    .reshape([num_samples for i in range(dim)],order="F")
                 )
             else:
                 # automatically adjust eps to avoid nans
@@ -246,8 +245,8 @@ def compute_fes(
                     fes_i = (
                         -kbt
                         * np.log(kde.evaluate(cartesian(pos)) + e)
-                        .reshape([num_samples for i in range(dim)])
-                        .T
+                        .reshape([num_samples for i in range(dim)],order="F")
+
                     )
                     if not np.isnan(fes_i).any():
                         if e>0:
@@ -273,7 +272,7 @@ def compute_fes(
     # compute avg and std
     if blocks > 1:
         # weighted average
-        fes = np.nansum(fes_blocks.T * W_blocks, axis=-1) / np.nansum(W_blocks)
+        fes = (np.nansum(fes_blocks.T * W_blocks, axis=-1) / np.nansum(W_blocks)).T
         # weighted std
         dev = fes_blocks - fes
         blocks_eff = (np.sum(W_blocks)) ** 2 / (np.sum(W_blocks**2))
@@ -281,7 +280,7 @@ def compute_fes(
             blocks_eff / (blocks_eff - 1)
             * (np.nansum((dev**2).T * W_blocks, axis=-1))
             / np.nansum(W_blocks)
-        )
+        ).T
         error = np.sqrt(variance / blocks_eff)
     else:
         fes = fes_blocks[0]
