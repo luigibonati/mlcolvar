@@ -61,67 +61,75 @@ def compute_fes(
 ):
     """Compute the Free Energy Surface using a kernel density estimation (KDE) along the given variables. See notes below.
 
-    Parameters
+        Parameters
     ----------
-    X : array-like, list of arrays
-        data
+    X : array-like or list of arrays
+        Input data of shape (n_samples, n_features), or list of 1D arrays (one per dimension).
     temp : float, optional
-        temperature, by default None
-    fes_units : string, optional
-        units of the FES, by default "kJ/mol"
+        Temperature (in Kelvin). Required if `kbt` is not provided.
+    fes_units : str, optional
+        Units of the FES if using `temp`, by default "kJ/mol".
     kbt : float, optional
-        temperature in energy units (fes_units), by default None
+        Thermal energy in the same units as the FES. Required if `temp` is not provided.
     num_samples : int, optional
-        number of points used along each direction, by default 100
-    bounds : list of lists, optional
-        limit the calculation of the FES to a region, by default equal to the range of values
+        Number of grid points per dimension for FES evaluation, by default 200.
+    bounds : list of tuples, optional
+        List of (min, max) for each dimension. If None, computed from data range.
     bandwidth : float, optional
-        Bandwidth use for the kernels, by default 0.1.
-    kernel: string, optional
-        Kernel type, by default 'gaussian'.
-    weights : array, optional
-        array of samples weights, by default None
-    scale_by : string, optional
-        Standardize each variable by its standard deviation (`std`) or by its range of values, by default None
+        Bandwidth for the kernel density estimation, by default 0.01.
+    kernel : str, optional
+        Kernel type for the KDE. Supported values depend on the backend, by default "gaussian".
+    weights : array-like, optional
+        Weights associated with the data points, shape (n_samples,).
+    scale_by : str or list, optional
+        Standardize each variable before KDE. Use "std" to scale by standard deviation, "range" for range normalization, or provide a list of scaling factors.
     blocks : int, optional
-        number of blocks to be used, by default 1
-    fes_to_zero: int, optional
-        index of the array where to shift the FES to zero (if none the minimum is set to zero)
+        Number of data blocks to use for uncertainty estimation. Default is 1 (no error estimate).
+    fes_to_zero : int or tuple, optional
+        Index (or multi-index) in the grid where FES is shifted to zero. If None, minimum value is subtracted.
     plot : bool, optional
-        Plot the results (only available for 1D and 2D FES), by default False
+        Whether to plot the FES (only for 1D or 2D).
+    plot_color : str, optional
+        Color for 1D FES plot, default "fessa6".
     plot_max_fes : float, optional
-        Maximum value of the FES to be plotted, by default None
-    plot_error_style: string, optional
-        Style of the error bars in the plot (either "errorbar" or "fill_between"), by default "fill_between"
-    ax : matplotlib axis, optional
-        Axis where to plot, default create new figure
-    backend: string, optional
-        Specify the backend for KDE ("KDEpy" or "sklearn")
-    eps: float, optional
-        Add an epsilon in the argument of the log
+        Maximum FES value to plot. Higher values will be masked.
+    plot_error_style : str, optional
+        Style for plotting 1D uncertainty: "fill_between", "errorbar", or None.
+    plot_levels : list or int, optional
+        Contour levels for 2D FES plots. Passed to `matplotlib.contourf`.
+    ax : matplotlib.axes.Axes, optional
+        Axis object to plot into. If None, a new figure is created.
+    backend : str, optional
+        Backend to use for KDE: "KDEpy" or "sklearn". If None, use the best available.
+    eps : float, optional
+        Regularization added to the KDE estimate before taking the log to avoid log(0). If None, auto-tuned.
 
     Returns
     -------
-    fes: np.array
-        free energy
-    grid: np.array or list of arrays (>1D)
-        grid points for plotting
-    bounds: list
-        bounds along each variable
-    std: np.array
-        (weighted) standard deviation along the blocks (only if blocks>1)
+
+    fes : ndarray
+        Free energy surface evaluated on the grid. Shape is (num_samples,) in 1D and (num_samples, num_samples) in 2D.
+    grid : ndarray or list of ndarrays
+        Grid coordinates corresponding to the FES values. A single array in 1D, list of arrays in 2D.
+    bounds : list of tuples
+        Bounds used for each variable, after optional rescaling.
+    error : ndarray or None
+        Standard error estimate from block averaging (only if `blocks` > 1). Same shape as `fes`.
 
     Notes
     -----
-    - This function has two backends to calculate the kernel density estimates, one using KDEpy (default) and the other using sklearn.neighbors.KernelDensity function to construct the estimate of the FES (https://scikit-learn.org/stable/modules/generated/sklearn.neighbors.KernelDensity.html). You can specify all the kernels supported.
+    - The KDE can be computed using either KDEpy (recommended for speed in 2D) or scikit-learn. Use `backend="KDEpy"` or `backend="sklearn"` to specify.
+    - Either `temp` or `kbt` must be provided (not both). If using `temp`, ensure `fes_units` is set correctly.
+    - If `scale_by` is used, input variables are rescaled before KDE. This means that if using ``scale_by='range'`` a bandwidth of 0.01 corresponds to a 1/100 of the range of values assumed by the variable.
+    - If `blocks > 1`, the function performs block averaging to estimate uncertainty [1].
+    - The FES is computed on a regular grid; the grid ordering is consistent with `numpy.meshgrid(..., indexing='xy')`, so no manual transpose is needed for plotting.
 
-    - One between temp and kbt must be specified. In the former case, the free energy units needs to be specified.
+    References
+    ----------
+    [1] Invernizzi, Piaggi, and Parrinello, Phys. Rev. X 10, 041034 (2020)
 
-    - Note that if ``scale_by`` is not none, the bandwidth is not rescaled as well. So if using ``scale_by='range'`` a bandwidth of 0.01 corresponds to a 1/100 of the range of values assumed by the variable.
 
-    - If blocks>1 a (weighted) block analyis is performed [1], which allows also to obtain an estimate of the uncertainty.
 
-    [1] Invernizzi, Piaggi and Parrinello, PRX, 2020,10,4
 
     """
     # check backend for KDE
@@ -236,8 +244,7 @@ def compute_fes(
                 fes_i = (
                     -kbt
                     * np.log(kde.evaluate(cartesian(pos)) + eps)
-                    .reshape([num_samples for i in range(dim)])
-                    .T
+                    .reshape([num_samples for i in range(dim)],order="F")
                 )
             else:
                 # automatically adjust eps to avoid nans
@@ -246,8 +253,8 @@ def compute_fes(
                     fes_i = (
                         -kbt
                         * np.log(kde.evaluate(cartesian(pos)) + e)
-                        .reshape([num_samples for i in range(dim)])
-                        .T
+                        .reshape([num_samples for i in range(dim)],order="F")
+
                     )
                     if not np.isnan(fes_i).any():
                         if e>0:
@@ -273,7 +280,7 @@ def compute_fes(
     # compute avg and std
     if blocks > 1:
         # weighted average
-        fes = np.nansum(fes_blocks.T * W_blocks, axis=-1) / np.nansum(W_blocks)
+        fes = (np.nansum(fes_blocks.T * W_blocks, axis=-1) / np.nansum(W_blocks)).T
         # weighted std
         dev = fes_blocks - fes
         blocks_eff = (np.sum(W_blocks)) ** 2 / (np.sum(W_blocks**2))
@@ -281,7 +288,7 @@ def compute_fes(
             blocks_eff / (blocks_eff - 1)
             * (np.nansum((dev**2).T * W_blocks, axis=-1))
             / np.nansum(W_blocks)
-        )
+        ).T
         error = np.sqrt(variance / blocks_eff)
     else:
         fes = fes_blocks[0]
