@@ -97,7 +97,9 @@ class DictDataset(Dataset):
         """
         stats = {}
         for k in self.keys:
-            stats[k] = Statistics(self._dictionary[k]).to_dict()
+            print("KEY: ", k, end="\n\n\n")
+            if k != "ref_idx":
+                stats[k] = Statistics(self._dictionary[k]).to_dict()
         return stats
 
     def __repr__(self) -> str:
