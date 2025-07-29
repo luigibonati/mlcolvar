@@ -219,32 +219,31 @@ def committor_loss(x: torch.Tensor,
     device = x.device 
 
     # expand mass tensor to [1, n_atoms*spatial_dims]
-    atomic_masses = atomic_masses.to(device)
-    atomic_masses = atomic_masses.repeat_interleave(n_dim) 
+    atomic_masses = atomic_masses.to(device).repeat_interleave(n_dim) 
 
     # squeeze labels
     labels = labels.squeeze()
 
 
     # Create masks to access different states data
-    mask_A = torch.nonzero(labels == 0, as_tuple=True) 
-    mask_B = torch.nonzero(labels == 1, as_tuple=True)
+    mask_A = labels == 0
+    mask_B = labels == 1
 
     # create mask for variational data
     if separate_boundary_dataset:
-        mask_var = torch.nonzero(labels > 1, as_tuple=True) 
+        mask_var = labels > 1
     else: 
-        mask_var = torch.ones(len(labels), dtype=torch.bool)
+        mask_var = torch.ones_like(labels, dtype=torch.bool)
 
 
     # Update weights of basin B using the information on the delta_f
-    delta_f = torch.Tensor([delta_f])
+    delta_f = torch.Tensor([delta_f]).to(device)
     # B higher in energy --> A-B < 0
     if delta_f < 0: 
-        w[mask_B] = w[mask_B] * torch.exp(delta_f.to(device))
+        w[mask_B] *= torch.exp(delta_f)
     # A higher in energy --> A-B > 0
     elif delta_f > 0:
-        w[mask_A] = w[mask_A] * torch.exp(-delta_f.to(device)) 
+        w[mask_A] *= torch.exp(-delta_f) 
 
     # weights should have size [n_batch, 1]
     w = w.unsqueeze(-1)
@@ -292,25 +291,22 @@ def committor_loss(x: torch.Tensor,
     except RuntimeError as e:
         raise RuntimeError(e, """[HINT]: Is you system in 3 dimension? By default the code assumes so, if it's not the case change the n_dim key to the right dimensionality.""")
 
-    # multiply by weights
-    grad_square = grad_square * w[mask_var]
-
     # variational contribution to loss: we sum over the batch
-    loss_var = torch.mean(grad_square)
+    loss_var = torch.mean(grad_square * w[mask_var])
     if log_var:
-        loss_var = torch.log(loss_var + 1)
+        loss_var = torch.log1p(loss_var)
     else:
-        loss_var = gamma*loss_var
+        loss_var *= gamma
 
 
     # 2. ----- BOUNDARY LOSS
-    loss_A = gamma * torch.mean( torch.pow(q[mask_A], 2))
-    loss_B = gamma * torch.mean( torch.pow( (q[mask_B] - 1) , 2))
+    loss_A = gamma * torch.mean( q[mask_A].pow(2) )
+    loss_B = gamma * torch.mean( (q[mask_B] - 1).pow(2) )
 
 
     # 3. ----- OPTIONAL regularization on z
     if z_regularization != 0.0:
-        loss_z_diff = z_regularization * (z.mean().abs() - z.mean().abs()).pow(2)
+        loss_z_diff = z_regularization * (z.max().abs() - z.min().abs()).pow(2)
     else:
         loss_z_diff = 0
    
