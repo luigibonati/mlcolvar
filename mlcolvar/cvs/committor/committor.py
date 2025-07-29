@@ -239,6 +239,49 @@ def test_committor():
     out.sum().backward()
     assert( torch.allclose(out, ref_out, atol=1e-3) )
 
+    # test log loss
+    ref_out = torch.Tensor([[0.7286],[0.6506],[0.5595],[0.6759],[0.7482],[0.6804],[0.7313],[0.6763],[0.6874],[0.6267],
+                            [0.6363],[0.8129],[0.5853],[0.5263],[0.6359],[0.5264],[0.4840],[0.7292],[0.6884],[0.6376],
+                            [0.6232],[0.6997],[0.5906],[0.6248],[0.5876],[0.7198],[0.6356],[0.5933],[0.6229],[0.7093],
+                            [0.5619],[0.5006],[0.7924],[0.6965],[0.6541],[0.5477],[0.6151],[0.7042],[0.6190],[0.5363],
+                            [0.6275],[0.5959],[0.7194],[0.6123],[0.4874],[0.6654],[0.6742],[0.7011],[0.7207],[0.5864],
+                            [0.6041],[0.7643],[0.6696],[0.6424],[0.6886],[0.5776],[0.6620],[0.7105],[0.7517],[0.7387],
+                            [0.7714],[0.5826],[0.6442],[0.5796],[0.6132],[0.5923],[0.7023],[0.5731],[0.7308],[0.6404],
+                            [0.5781],[0.6850],[0.5960],[0.6718],[0.6626],[0.6069],[0.7319],[0.5498],[0.6772],[0.5847]])
+    trainer = lightning.Trainer(max_epochs=5, logger=None, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0)
+    model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0, log_var=True)
+    trainer.fit(model, datamodule)
+    out = model(X)
+    out.sum().backward()
+    assert( torch.allclose(out, ref_out, atol=1e-3) )
+
+    # test z regularization
+    ref_out = torch.Tensor([[0.2878],[0.1591],[0.1665],[0.1166],[0.1349],[0.1053],[0.1544],[0.1113],[0.1435],[0.1232],
+                            [0.1130],[0.1261],[0.1726],[0.2098],[0.2091],[0.1407],[0.1942],[0.1400],[0.1382],[0.1630],
+                            [0.1573],[0.1742],[0.1613],[0.1289],[0.1703],[0.1390],[0.1184],[0.2557],[0.1520],[0.1328],
+                            [0.2220],[0.2254],[0.1823],[0.1426],[0.1744],[0.2594],[0.1105],[0.1390],[0.1557],[0.1985],
+                            [0.1340],[0.1971],[0.1429],[0.1270],[0.2239],[0.1134],[0.1999],[0.1416],[0.1707],[0.2238],
+                            [0.2054],[0.1560],[0.2357],[0.2971],[0.1445],[0.1906],[0.2130],[0.1457],[0.1382],[0.1432],
+                            [0.1337],[0.1444],[0.1603],[0.1396],[0.2043],[0.1964],[0.1459],[0.2243],[0.1930],[0.1893],
+                            [0.2634],[0.1868],[0.1340],[0.2483],[0.1550],[0.1559],[0.1614],[0.2020],[0.1270],[0.2555]])
+    trainer = lightning.Trainer(max_epochs=5, logger=None, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0)
+    model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0, z_regularization=10)
+    trainer.fit(model, datamodule)
+    out = model(X)
+    out.sum().backward()
+    assert( torch.allclose(out, ref_out, atol=1e-3) )
+
+    # test dimension error
+    try:
+        trainer = lightning.Trainer(max_epochs=5, logger=None, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0)
+        model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0, z_regularization=10, n_dim=2)
+        trainer.fit(model, datamodule)
+    except RuntimeError as e:
+        print("[TEST LOG] Checked this error: ", e)
+
+
+
+
 def test_committor_with_derivatives():
     from mlcolvar.cvs.committor.utils import initialize_committor_masses
     from mlcolvar.data import DictModule, DictDataset
@@ -349,7 +392,7 @@ def test_committor_with_derivatives():
             # seed for reproducibility
             torch.manual_seed(42)
             datamodule = DictModule(dataset_desc, lengths=[1.0])
-
+            
             model = Committor(layers=[45, 20, 1],
                             atomic_masses=masses,
                             alpha=1, 
@@ -376,6 +419,28 @@ def test_committor_with_derivatives():
             # this is to check other strategies
             ref_output = model(X)
             assert( (torch.allclose(ref_output, ref_output_check, atol=1e-3)))
+
+            # test errors
+            try:
+                # separate boundary with explicit derivatives
+                model = Committor(layers=[45, 20, 1],
+                            atomic_masses=masses,
+                            alpha=1, 
+                            separate_boundary_dataset=True,
+                            descriptors_derivatives=d_desc_d_pos)
+                trainer = lightning.Trainer(
+                    accelerator='cpu',
+                    callbacks=None,
+                    max_epochs=6,
+                    enable_progress_bar=False,
+                    enable_checkpointing=False,
+                    logger=False,
+                    limit_val_batches=0,
+                    num_sanity_val_steps=0,
+                )
+                trainer.fit(model, datamodule)
+            except ValueError as e:
+                print("[TEST LOG] Checked this error: ", e)
 
 
         # 3 ------------ Descriptors as input + SmartDerivatives ------------
@@ -417,6 +482,25 @@ def test_committor_with_derivatives():
         ref_output = model(X)
         assert( (torch.allclose(ref_output, ref_output_check, atol=1e-3)))
 
+        # test errors
+        try:
+            # no ref_idx!
+            wrong_dataset = DictDataset(data=smart_dataset['data'], labels=smart_dataset['labels'], weights=smart_dataset['weights'])
+            wrong_datamodule = DictModule(wrong_dataset, lengths=[1.0])
+            trainer = lightning.Trainer(
+                accelerator='cpu',
+                callbacks=None,
+                max_epochs=6,
+                enable_progress_bar=False,
+                enable_checkpointing=False,
+                logger=False,
+                limit_val_batches=0,
+                num_sanity_val_steps=0,
+            )
+            trainer.fit(model, wrong_datamodule)
+        except ValueError as e:
+            print("[TEST LOG] Checked this error: ", e)
+
 if __name__ == "__main__":
-    # test_committor()
+    test_committor()
     test_committor_with_derivatives()
