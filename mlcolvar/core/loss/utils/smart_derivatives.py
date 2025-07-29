@@ -949,8 +949,7 @@ def test_train_with_smart_derivatives():
     labels = torch.arange(0, 5, dtype=torch.float32).unsqueeze(-1).repeat(40,1).sort()[0]
     weights = torch.ones_like(labels)
     atomic_masses = initialize_committor_masses(atom_types=[0, 0, 1, 2, 0, 0, 0, 1, 2, 0], 
-                                            masses=[12.011, 15.999, 14.007], 
-                                            n_dims=3)
+                                            masses=[12.011, 15.999, 14.007])
 
     dataset = DictDataset({'data' : pos, 'labels' : labels, 'weights': weights})
 
@@ -972,7 +971,7 @@ def test_train_with_smart_derivatives():
     datamodule = DictModule(dataset=smart_dataset, lengths=[0.8, 0.2], batch_size=80)
     
     model = Committor(layers=[45, 10, 1],
-                      mass=atomic_masses,
+                      atomic_masses=atomic_masses,
                       alpha=1,
                       separate_boundary_dataset=True,
                       descriptors_derivatives=smart_derivatives 
