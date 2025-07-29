@@ -83,6 +83,7 @@ class CommittorLoss(torch.nn.Module):
         self.separate_boundary_dataset = separate_boundary_dataset
         self.log_var = log_var
         self.z_regularization = z_regularization
+        self.n_dim = n_dim
 
     def forward(self, 
                 x: torch.Tensor,
@@ -134,6 +135,7 @@ class CommittorLoss(torch.nn.Module):
                               separate_boundary_dataset=self.separate_boundary_dataset,
                               descriptors_derivatives=self.descriptors_derivatives,
                               ref_idx=ref_idx,
+                              n_dim=self.n_dim
                             )
 
 
