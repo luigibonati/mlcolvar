@@ -16,6 +16,7 @@ __all__ = ["CommittorLoss", "committor_loss"]
 
 import torch
 from typing import Tuple
+from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
 
 # =============================================================================
 # LOSS FUNCTIONS
@@ -206,23 +207,28 @@ def committor_loss(x: torch.Tensor,
     if descriptors_derivatives is not None and ref_idx is None:
         raise ValueError ("Descriptors derivatives need reference indeces from the dataset! Use a dataset with the ref_idx, see docstrign for details")
 
+    # ------------------------ SETUP ------------------------
     # inherit right device
     device = x.device 
 
+    # expand mass tensor to [1, n_atoms*spatial_dims]
+    atomic_masses = atomic_masses.to(device)
+    atomic_masses = atomic_masses.repeat_interleave(n_dim) 
+
+    # squeeze labels
     labels = labels.squeeze()
 
+
     # Create masks to access different states data
-    mask_A = torch.nonzero(labels.squeeze() == 0, as_tuple=True) 
-    mask_B = torch.nonzero(labels.squeeze() == 1, as_tuple=True)
+    mask_A = torch.nonzero(labels == 0, as_tuple=True) 
+    mask_B = torch.nonzero(labels == 1, as_tuple=True)
+
+    # create mask for variational data
     if separate_boundary_dataset:
-        mask_var = torch.nonzero(labels.squeeze() > 1, as_tuple=True) 
+        mask_var = torch.nonzero(labels > 1, as_tuple=True) 
     else: 
         mask_var = torch.ones(len(labels), dtype=torch.bool)
 
-    atomic_masses = atomic_masses.to(device)
-
-    # expand mass tensor to [1, n_atoms*spatial_dims]
-    atomic_masses = atomic_masses.repeat_interleave(n_dim) 
 
     # Update weights of basin B using the information on the delta_f
     delta_f = torch.Tensor([delta_f])
@@ -236,28 +242,40 @@ def committor_loss(x: torch.Tensor,
     # weights should have size [n_batch, 1]
     w = w.unsqueeze(-1)
 
-    # ==============================  LOSS ==============================
+
+    # ------------------------  LOSS ------------------------
     # Each loss contribution is scaled by the number of samples
-    # 1. VARIATIONAL LOSS
+    
+    # 1. ----- VARIATIONAL LOSS
     # Compute gradients of q(x) wrt x
     grad_outputs = torch.ones_like(q[mask_var])
-    grad = torch.autograd.grad(q[mask_var], x, grad_outputs=grad_outputs, retain_graph=True, create_graph=create_graph)[0]
+    grad = torch.autograd.grad(q[mask_var], 
+                               x, 
+                               grad_outputs=grad_outputs, 
+                               retain_graph=True, 
+                               create_graph=create_graph)[0]
     grad = grad[mask_var]
     
-    # TODO this fixes cell size issue
     if cell is not None:
         grad = grad / cell
     
-    if descriptors_derivatives is not None:
+    # in case the input is not positions but descriptors, we need to correct the gradients up to the positions
+    if isinstance(descriptors_derivatives, SmartDerivatives):
         # we use the precomputed derivatives from descriptors to pos
-        grad = descriptors_derivatives(grad, ref_idx[mask_var]).reshape(x[mask_var].shape[0], -1)
+        gradient_positions = descriptors_derivatives(grad, ref_idx[mask_var]).view(x[mask_var].shape[0], -1)
     
+    # If the input was already positions
+    else:
+        gradient_positions = grad
+
     # we do the square
-    grad_square = torch.pow(grad, 2)
+    grad_square = torch.pow(gradient_positions, 2)
     
     # multiply by masses
     try:
-        grad_square = torch.sum((grad_square * (1/atomic_masses)), axis=1, keepdim=True)    
+        grad_square = torch.sum((grad_square * (1/atomic_masses)), 
+                                 axis=1, 
+                                 keepdim=True)    
     except RuntimeError as e:
         raise RuntimeError(e, """[HINT]: Is you system in 3 dimension? By default the code assumes so, if it's not the case change the n_dim key to the right dimensionality.""")
 
@@ -272,18 +290,19 @@ def committor_loss(x: torch.Tensor,
         loss_var = gamma*loss_var
 
 
-    # 2. BOUNDARY LOSS
+    # 2. ----- BOUNDARY LOSS
     loss_A = gamma * torch.mean( torch.pow(q[mask_A], 2))
     loss_B = gamma * torch.mean( torch.pow( (q[mask_B] - 1) , 2))
 
 
-    # 3. OPTIONAL regularization on z
+    # 3. ----- OPTIONAL regularization on z
     if z_regularization != 0.0:
         loss_z_diff = z_regularization * (z.mean().abs() - z.mean().abs()).pow(2)
     else:
         loss_z_diff = 0
-    # 4. TOTAL LOSS
+   
+   
+    # 4. ----- TOTAL LOSS
     loss = loss_var + alpha*(loss_A + loss_B) + loss_z_diff
     
-    # TODO maybe there is no need to detach them for logging
     return loss, loss_var.detach(), alpha*loss_A.detach(), alpha*loss_B.detach()
