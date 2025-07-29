@@ -20,15 +20,18 @@ class Committor(BaseCV, lightning.LightningModule):
     References
     ----------
     .. [*] P. Kang, E. Trizio, and M. Parrinello, "Computing the committor using the committor to study the transition state ensemble", Nat. Comput. Sci., 2024, DOI: 10.1038/s43588-024-00645-0
+    .. [*] E. Trizio, P. Kang and M. Parrinello, "Everything everywhere all at once: a probability-based enhanced sampling approach to rare events", Nat. Comput. Sci., 2025, DOI: 10.1038/s43588-025-00799-5
 
     See also
     --------
-    mlcolvar.core.loss.CommittorLoss
-        Kolmogorov's variational optimization of committor and imposition of boundary conditions
     mlcolvar.cvs.committor.utils.compute_committor_weights
         Utils to compute the appropriate weights for the training set
     mlcolvar.cvs.committor.utils.initialize_committor_masses
         Utils to initialize the masses tensor for the training
+    mlcolvar.core.loss.CommittorLoss
+        Kolmogorov's variational optimization of committor and imposition of boundary conditions
+    mlcolvar.core.loss.utils.SmartDerivatives
+        Class to optimize the gradients calculation imporving speed and memory efficiency.
     """
 
     BLOCKS = ["nn", "sigmoid"]
