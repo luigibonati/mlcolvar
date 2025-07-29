@@ -97,7 +97,7 @@ def compute_committor_weights(dataset : DictDataset,
 
     return dataset
 
-def initialize_committor_masses(atom_types: list, masses: list, n_dims: int = 3):
+def initialize_committor_masses(atom_types: list, masses: list):
     """Initialize the masses tensor with the right shape for committor learning
 
     Parameters
@@ -106,24 +106,19 @@ def initialize_committor_masses(atom_types: list, masses: list, n_dims: int = 3)
         List to map the atoms in the system to the corresponing types, which are specified with the masses keyword. e.g, for water [0, 1, 1]
     masses : list[float]
         List of masses of the different atom types in the system, e.g., for water [15.999, 1.008]
-    n_dims : int
-        Number of spatial dimensions, by default, 3
     Returns
     -------
     atomic_masses
         Atomic masses tensor ready to be used for committor learning.
     """
-    if n_dims > 3:
-        raise(ValueError(f"Number of dimension should be less than 3! Found {n_dims}"))
-    
+
     # put number of atoms for each type and the corresponding atomic mass
     atom_types = np.array(atom_types)
 
     atomic_masses = []
     for i in range(len(atom_types)):
         # each mass has to be repeated for the number of dimensions
-        for n in range(n_dims):
-            atomic_masses.append(masses[atom_types[i]])
+        atomic_masses.append(masses[atom_types[i]])
 
     # make it a tensor
     atomic_masses = torch.Tensor(atomic_masses)

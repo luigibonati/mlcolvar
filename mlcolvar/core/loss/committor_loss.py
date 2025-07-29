@@ -34,7 +34,8 @@ class CommittorLoss(torch.nn.Module):
                 separate_boundary_dataset : bool = True,
                 descriptors_derivatives : torch.nn.Module = None,
                 log_var: bool = False,
-                z_regularization: float = 0.0
+                z_regularization: float = 0.0,
+                n_dim : int = 3,
                  ):
         """Compute Kolmogorov's variational principle loss and impose boundary conditions on the metastable states
 
@@ -66,6 +67,8 @@ class CommittorLoss(torch.nn.Module):
         z_regularization : float, optional
             Introduces a regularization on the learned z space avoiding too large absolute values.
             The magnitude of the regularization is scaled by the given number, by default 0.0
+        n_dim : int
+            Number of dimensions, by default 3.
         """
         super().__init__()
         self.register_buffer("atomic_masses", atomic_masses)
@@ -147,6 +150,7 @@ def committor_loss(x: torch.Tensor,
                    log_var: bool = False,
                    z_regularization: float = 0.0,
                    ref_idx: torch.Tensor = None,
+                   n_dim : int = 3,
                   ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """Compute variational loss for committor optimization with boundary conditions
 
@@ -191,6 +195,8 @@ def committor_loss(x: torch.Tensor,
         when descriptors derivatives are provided, by default None. 
         Ref_idx can be generated automatically using SmartDerivatives or by setting create_ref_idx=True when initializing a DictDataset.
         See also mlcolvar.core.loss.utils.smart_derivatives.SmartDerivatives
+    n_dim : int
+        Number of dimensions, by default 3.
 
     Returns
         -------
@@ -214,9 +220,10 @@ def committor_loss(x: torch.Tensor,
         mask_var = torch.ones(len(labels), dtype=torch.bool)
 
     atomic_masses = atomic_masses.to(device)
-    # mass should have size [1, n_atoms*spatial_dims]
-    # TODO change to have a simpler mass tensor
-    atomic_masses = atomic_masses.unsqueeze(0)
+
+    # expand mass tensor to [1, n_atoms*spatial_dims]
+    atomic_masses = atomic_masses.repeat_interleave(n_dim) 
+
     # Update weights of basin B using the information on the delta_f
     delta_f = torch.Tensor([delta_f])
     # B higher in energy --> A-B < 0
@@ -228,6 +235,7 @@ def committor_loss(x: torch.Tensor,
 
     # weights should have size [n_batch, 1]
     w = w.unsqueeze(-1)
+
     # ==============================  LOSS ==============================
     # Each loss contribution is scaled by the number of samples
     # 1. VARIATIONAL LOSS
@@ -246,7 +254,14 @@ def committor_loss(x: torch.Tensor,
     
     # we do the square
     grad_square = torch.pow(grad, 2)
-    grad_square = torch.sum((grad_square * (1/atomic_masses)), axis=1, keepdim=True)    
+    
+    # multiply by masses
+    try:
+        grad_square = torch.sum((grad_square * (1/atomic_masses)), axis=1, keepdim=True)    
+    except RuntimeError as e:
+        raise RuntimeError(e, """[HINT]: Is you system in 3 dimension? By default the code assumes so, if it's not the case change the n_dim key to the right dimensionality.""")
+
+    # multiply by weights
     grad_square = grad_square * w[mask_var]
 
     # variational contribution to loss: we sum over the batch

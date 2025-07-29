@@ -48,6 +48,7 @@ class Committor(BaseCV, lightning.LightningModule):
         descriptors_derivatives : torch.nn.Module = None,
         log_var: bool = False,
         z_regularization: float = 0.0,
+        n_dim : int = 3,
         options: dict = None,
         **kwargs,
     ):
@@ -79,6 +80,8 @@ class Committor(BaseCV, lightning.LightningModule):
         z_regularization : float, optional
             Introduces a regularization on the learned z space avoiding too large absolute values.
             The magnitude of the regularization is scaled by the given number, by default 0.0
+        n_dim : int
+            Number of dimensions, by default 3.
         options : dict[str, Any], optional
             Options for the building blocks of the model, by default {}.
             Available blocks: ['nn'] .
@@ -94,7 +97,8 @@ class Committor(BaseCV, lightning.LightningModule):
                                      separate_boundary_dataset=separate_boundary_dataset,
                                      descriptors_derivatives=descriptors_derivatives,
                                      log_var=log_var,
-                                     z_regularization=z_regularization
+                                     z_regularization=z_regularization,
+                                     n_dim=n_dim
         )
 
         # ======= OPTIONS =======
