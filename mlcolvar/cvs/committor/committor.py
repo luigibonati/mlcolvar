@@ -39,13 +39,15 @@ class Committor(BaseCV, lightning.LightningModule):
     def __init__(
         self, 
         layers: list,
-        mass: torch.Tensor,
+        atomic_masses: torch.Tensor,
         alpha: float,
         gamma: float = 10000,
         delta_f: float = 0,
         cell: float = None,
         separate_boundary_dataset : bool = True,
         descriptors_derivatives : torch.nn.Module = None,
+        log_var: bool = False,
+        z_regularization: float = 0.0,
         options: dict = None,
         **kwargs,
     ):
@@ -55,7 +57,7 @@ class Committor(BaseCV, lightning.LightningModule):
         ----------
         layers : list
             Number of neurons per layer
-        mass : torch.Tensor
+        atomic_masses : torch.Tensor
             List of masses of all the atoms we are using, for each atom we need to repeat three times for x,y,z.
             The mlcolvar.cvs.committor.utils.initialize_committor_masses can be used to simplify this.
         alpha : float
@@ -72,6 +74,11 @@ class Committor(BaseCV, lightning.LightningModule):
         descriptors_derivatives : torch.nn.Module, optional
             `SmartDerivatives` object to save memory and time when using descriptors.
             See also mlcolvar.core.loss.committor_loss.SmartDerivatives
+        log_var : bool, optional
+            Switch to minimize the log of the variational functional, by default False.
+        z_regularization : float, optional
+            Introduces a regularization on the learned z space avoiding too large absolute values.
+            The magnitude of the regularization is scaled by the given number, by default 0.0
         options : dict[str, Any], optional
             Options for the building blocks of the model, by default {}.
             Available blocks: ['nn'] .
@@ -79,13 +86,15 @@ class Committor(BaseCV, lightning.LightningModule):
         super().__init__(in_features=layers[0], out_features=layers[-1], **kwargs) 
         
         # =======  LOSS  =======
-        self.loss_fn = CommittorLoss(mass=mass,
+        self.loss_fn = CommittorLoss(atomic_masses=atomic_masses,
                                      alpha=alpha,
                                      gamma=gamma,
                                      delta_f=delta_f,
                                      cell=cell,
                                      separate_boundary_dataset=separate_boundary_dataset,
-                                     descriptors_derivatives=descriptors_derivatives
+                                     descriptors_derivatives=descriptors_derivatives,
+                                     log_var=log_var,
+                                     z_regularization=z_regularization
         )
 
         # ======= OPTIONS =======
@@ -105,6 +114,11 @@ class Committor(BaseCV, lightning.LightningModule):
         if (options[o] is not False) and (options[o] is not None):
             self.sigmoid = Custom_Sigmoid(**options[o])
 
+    def forward_nn(self, x):
+        if self.preprocessing is not None:
+            x = self.preprocessing(x)
+        z = self.nn(x)
+        return z
 
     def training_step(self, train_batch, batch_idx):
         torch.set_grad_enabled(True)
@@ -124,17 +138,23 @@ class Committor(BaseCV, lightning.LightningModule):
             ref_idx = None
 
         # =================forward====================
-        # we use forward and not forward_cv to also apply the preprocessing (if present)
-        q = self.forward(x)
+        z = self.forward_nn(x)
+        
+        if self.sigmoid is not None:
+            q = self.sigmoid(z)
+        else:
+            q = z        
+        
         # ===================loss=====================
         if self.training:
             loss, loss_var, loss_bound_A, loss_bound_B = self.loss_fn(
-                x, q, labels, weights, ref_idx 
+                x, z, q, labels, weights, ref_idx 
             )
         else:
             loss, loss_var, loss_bound_A, loss_bound_B = self.loss_fn(
-                x, q, labels, weights, ref_idx 
+                x, z, q, labels, weights, ref_idx 
             )
+
         # ====================log=====================+
         name = "train" if self.training else "valid"
         self.log(f"{name}_loss", loss, on_epoch=True)
@@ -189,7 +209,7 @@ def test_committor():
                              -6.7121, -7.6094, -7.9009, -7.0479, -5.2398, -7.8241, -5.8642, -7.0701,
                              -7.0348, -7.2577, -6.6142, -7.6322, -7.3279, -7.6393, -7.8608, -7.7037,
                              -6.6949, -6.3947, -7.2246, -7.7009, -6.7359, -7.2186, -7.7849, -5.6882])
-    model = Committor(layers=[6, 4, 2, 1], mass=atomic_masses, alpha=1e-1, delta_f=0)
+    model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0)
     trainer.fit(model, datamodule)
     out = model(X)
     out.sum().backward()
@@ -209,7 +229,7 @@ def test_committor():
                             [0.0783],[0.1384],[0.0689],[0.0649],[0.0983],[0.1548],[0.0778],[0.0934],[0.0858],[0.1203],
                             [0.1073],[0.1139],[0.0716],[0.0988],[0.0918],[0.1109],[0.0918],[0.0928],[0.1070],[0.0742]])
     trainer = lightning.Trainer(max_epochs=5, logger=None, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0)
-    model = Committor(layers=[6, 4, 2, 1], mass=atomic_masses, alpha=1e-1, delta_f=0, separate_boundary_dataset=False)
+    model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0, separate_boundary_dataset=False)
     trainer.fit(model, datamodule)
     out = model(X)
     out.sum().backward()
@@ -271,7 +291,7 @@ def test_committor_with_derivatives():
     
         # seed for reproducibility
         model = Committor(layers=[45, 20, 1],
-                        mass=masses,
+                        atomic_masses=masses,
                         alpha=1, 
                         separate_boundary_dataset=separate_boundary_dataset)
 
@@ -324,7 +344,7 @@ def test_committor_with_derivatives():
 
         # seed for reproducibility
         model = Committor(layers=[45, 20, 1],
-                        mass=masses,
+                        atomic_masses=masses,
                         alpha=1, 
                         separate_boundary_dataset=separate_boundary_dataset,
                         descriptors_derivatives=smart_derivatives)
@@ -362,7 +382,7 @@ def test_committor_with_derivatives():
     
         # seed for reproducibility
         model = Committor(layers=[45, 20, 1],
-                        mass=masses,
+                        atomic_masses=masses,
                         alpha=1, 
                         separate_boundary_dataset=separate_boundary_dataset)
 
@@ -415,7 +435,7 @@ def test_committor_with_derivatives():
 
         # seed for reproducibility
         model = Committor(layers=[45, 20, 1],
-                        mass=masses,
+                        atomic_masses=masses,
                         alpha=1, 
                         separate_boundary_dataset=separate_boundary_dataset,
                         descriptors_derivatives=smart_derivatives)
