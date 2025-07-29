@@ -242,7 +242,7 @@ def test_committor():
 def test_committor_with_derivatives():
     from mlcolvar.cvs.committor.utils import initialize_committor_masses
     from mlcolvar.data import DictModule, DictDataset
-    from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
+    from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives, compute_descriptors_derivatives
     from mlcolvar.core.transform import PairwiseDistances
     
     torch.manual_seed(42)
@@ -336,108 +336,60 @@ def test_committor_with_derivatives():
             
         assert( (torch.allclose(ref_output, ref_output_check, atol=1e-3)))
 
-        # 2 ------------ Descriptors as input + SmartDerivatives ------------
-        # initialize smart derivatives, we do it explicitly to test different functionalities
-        smart_derivatives = SmartDerivatives()
-        smart_dataset = smart_derivatives.setup(dataset=dataset,
-                                                descriptor_function=ComputeDistances,
-                                                n_atoms=n_atoms,
-                                                separate_boundary_dataset=separate_boundary_dataset)
-        torch.manual_seed(42)
-        datamodule = DictModule(smart_dataset, lengths=[1.0])
+        if not separate_boundary_dataset:
+            # 2 ------------ Descriptors as input + explicit pass derivatives ------------
+            # get descriptor and their derivatives
+            pos, desc, d_desc_d_pos = compute_descriptors_derivatives(dataset=dataset,
+                                                                    descriptor_function=ComputeDistances,
+                                                                    n_atoms=n_atoms,
+                                                                    separate_boundary_dataset=separate_boundary_dataset)
 
-        # seed for reproducibility
-        model = Committor(layers=[45, 20, 1],
-                        atomic_masses=masses,
-                        alpha=1, 
-                        separate_boundary_dataset=separate_boundary_dataset,
-                        descriptors_derivatives=smart_derivatives)
-        
-        trainer = lightning.Trainer(
-            accelerator='cpu',
-            callbacks=None,
-            max_epochs=6,
-            enable_progress_bar=False,
-            enable_checkpointing=False,
-            logger=False,
-            limit_val_batches=0,
-            num_sanity_val_steps=0,
-        )
+            dataset_desc = DictDataset({"data": desc, "weights": ref_weights, "labels": torch.arange((len(ref_pos)))}, create_ref_idx=True)
 
-        # fit
-        trainer.fit(model, datamodule)
+            # seed for reproducibility
+            torch.manual_seed(42)
+            datamodule = DictModule(dataset_desc, lengths=[1.0])
 
-        # save outputs as a reference
-        X = smart_dataset["data"]
-        
-        # this is to check other strategies
-        ref_output = model(X)
-        assert( (torch.allclose(ref_output, ref_output_check, atol=1e-3)))
-
-
-    # --------------------------------- TRAIN MODELS with ---------------------------------
-    # Train the models: positions as input, desc as input with smartderivatives and passing derivatives
-    for separate_boundary_dataset in [False, True]:
-    
-        # 1 ------------ Positions as input ------------
-        # initialize datamodule
-        torch.manual_seed(42)
-        datamodule = DictModule(dataset, lengths=[1.0])
-    
-        # seed for reproducibility
-        model = Committor(layers=[45, 20, 1],
-                        atomic_masses=masses,
-                        alpha=1, 
-                        separate_boundary_dataset=separate_boundary_dataset)
-
-        # here we use the preprocessing
-        model.preprocessing = ComputeDistances
-
-        trainer = lightning.Trainer(
-            accelerator='cpu',
-            callbacks=None,
-            max_epochs=6,
-            enable_progress_bar=False,
-            enable_checkpointing=False,
-            logger=False,
-            limit_val_batches=0,
-            num_sanity_val_steps=0,
-        )
-
-        # fit
-        trainer.fit(model, datamodule)
-
-        # save outputs as a reference
-        X = dataset["data"]
-        
-        # this is to check other strategies
-        ref_output = model(X)
-        if separate_boundary_dataset:
-            ref_output_check = torch.Tensor([[0.4759],
-                                            [0.4765],
-                                            [0.4828],
-                                            [0.4786],
-                                            [0.4725]])
-        else:
-            ref_output_check = torch.Tensor([[0.4756],
-                                            [0.4762],
-                                            [0.4825],
-                                            [0.4783],
-                                            [0.4723]])
+            model = Committor(layers=[45, 20, 1],
+                            atomic_masses=masses,
+                            alpha=1, 
+                            separate_boundary_dataset=separate_boundary_dataset,
+                            descriptors_derivatives=d_desc_d_pos)
             
-        assert( (torch.allclose(ref_output, ref_output_check, atol=1e-3)))
+            trainer = lightning.Trainer(
+                accelerator='cpu',
+                callbacks=None,
+                max_epochs=6,
+                enable_progress_bar=False,
+                enable_checkpointing=False,
+                logger=False,
+                limit_val_batches=0,
+                num_sanity_val_steps=0,
+            )
 
-        # 2 ------------ Descriptors as input + SmartDerivatives ------------
+            # fit
+            trainer.fit(model, datamodule)
+
+            # save outputs as a reference
+            X = dataset_desc["data"]
+            
+            # this is to check other strategies
+            ref_output = model(X)
+            assert( (torch.allclose(ref_output, ref_output_check, atol=1e-3)))
+
+
+        # 3 ------------ Descriptors as input + SmartDerivatives ------------
         # initialize smart derivatives, we do it explicitly to test different functionalities
         smart_derivatives = SmartDerivatives()
         smart_dataset = smart_derivatives.setup(dataset=dataset,
                                                 descriptor_function=ComputeDistances,
                                                 n_atoms=n_atoms,
                                                 separate_boundary_dataset=separate_boundary_dataset)
+        
+        # seed for reproducibility
         torch.manual_seed(42)
         datamodule = DictModule(smart_dataset, lengths=[1.0])
 
-        # seed for reproducibility
         model = Committor(layers=[45, 20, 1],
                         atomic_masses=masses,
                         alpha=1, 
@@ -464,7 +416,6 @@ def test_committor_with_derivatives():
         # this is to check other strategies
         ref_output = model(X)
         assert( (torch.allclose(ref_output, ref_output_check, atol=1e-3)))
-
 
 if __name__ == "__main__":
     # test_committor()

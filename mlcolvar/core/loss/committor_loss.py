@@ -15,7 +15,7 @@ __all__ = ["CommittorLoss", "committor_loss"]
 # =============================================================================
 
 import torch
-from typing import Tuple
+from typing import Tuple, Union
 from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
 
 # =============================================================================
@@ -33,7 +33,7 @@ class CommittorLoss(torch.nn.Module):
                 gamma: float = 10000.0,
                 delta_f: float = 0.0,
                 separate_boundary_dataset : bool = True,
-                descriptors_derivatives : torch.nn.Module = None,
+                descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None,
                 log_var: bool = False,
                 z_regularization: float = 0.0,
                 n_dim : int = 3,
@@ -55,9 +55,11 @@ class CommittorLoss(torch.nn.Module):
             State B is supposed to be higher in energy.
         separate_boundary_dataset : bool, optional
             Switch to exculde boundary condition labeled data from the variational loss, by default True
-        descriptors_derivatives : torch.nn.Module, optional
-            `SmartDerivatives` object to save memory and time when using descriptors.
-            See also mlcolvar.core.loss.committor_loss.SmartDerivatives
+        descriptors_derivatives : Union[SmartDerivatives, torch.Tensor], optional
+            Derivatives of descriptors wrt atomic positions (if used) to speed up calculation of gradients, by default None. 
+            Can be either:
+                - A `SmartDerivatives` object to save both memory and time, see also mlcolvar.core.loss.committor_loss.SmartDerivatives
+                - A torch.Tensor with the derivatives to save time, memory-wise could be less efficient
         ref_idx: torch.Tensor, optional
             Reference indeces for the unshuffled dataset for properly handling batching/splitting/shuffling
             when descriptors derivatives are provided, by default None. 
@@ -147,7 +149,7 @@ def committor_loss(x: torch.Tensor,
                    create_graph: bool = True,
                    cell: float = None,
                    separate_boundary_dataset: bool = True,
-                   descriptors_derivatives: torch.nn.Module = None,
+                   descriptors_derivatives: Union[SmartDerivatives, torch.Tensor] = None,
                    log_var: bool = False,
                    z_regularization: float = 0.0,
                    ref_idx: torch.Tensor = None,
@@ -183,9 +185,11 @@ def committor_loss(x: torch.Tensor,
         CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, default None 
     separate_boundary_dataset : bool, optional
             Switch to exculde boundary condition labeled data from the variational loss, by default True
-    descriptors_derivatives : torch.nn.Module, optional
-        `SmartDerivatives` object to save memory and time when using descriptors.
-        See also mlcolvar.core.loss.utils.smart_derivatives.SmartDerivatives
+    descriptors_derivatives : Union[SmartDerivatives, torch.Tensor], optional
+        Derivatives of descriptors wrt atomic positions (if used) to speed up calculation of gradients, by default None. 
+        Can be either:
+            - A `SmartDerivatives` object to save both memory and time, see also mlcolvar.core.loss.committor_loss.SmartDerivatives
+            - A torch.Tensor with the derivatives to save time, memory-wise could be less efficient
     log_var : bool, optional
         Switch to minimize the log of the variational functional, by default False.
     z_regularization : float, optional
@@ -207,6 +211,9 @@ def committor_loss(x: torch.Tensor,
     if descriptors_derivatives is not None and ref_idx is None:
         raise ValueError ("Descriptors derivatives need reference indeces from the dataset! Use a dataset with the ref_idx, see docstrign for details")
 
+    if isinstance(descriptors_derivatives, torch.Tensor) and separate_boundary_dataset:
+        raise ValueError ("Descriptors derivatives via explicit tensor are not implemented with separate_boundary_dataset key! Either use SmartDerivatives or deactivate separate_boundary_dataset")
+    
     # ------------------------ SETUP ------------------------
     # inherit right device
     device = x.device 
@@ -264,6 +271,12 @@ def committor_loss(x: torch.Tensor,
         # we use the precomputed derivatives from descriptors to pos
         gradient_positions = descriptors_derivatives(grad, ref_idx[mask_var]).view(x[mask_var].shape[0], -1)
     
+    # --> If we directly pass the matrix d_desc/d_pos
+    elif isinstance(descriptors_derivatives, torch.Tensor): 
+        descriptors_derivatives = descriptors_derivatives.to(device)
+        gradient_positions = torch.einsum("bd,badx->bax", grad, descriptors_derivatives[ref_idx[mask_var]]).contiguous()
+        gradient_positions = gradient_positions.view(x[mask_var].shape[0], -1)
+    
     # If the input was already positions
     else:
         gradient_positions = grad
@@ -301,7 +314,7 @@ def committor_loss(x: torch.Tensor,
     else:
         loss_z_diff = 0
    
-   
+
     # 4. ----- TOTAL LOSS
     loss = loss_var + alpha*(loss_A + loss_B) + loss_z_diff
     
