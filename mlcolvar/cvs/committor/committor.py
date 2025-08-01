@@ -48,6 +48,7 @@ class Committor(BaseCV, lightning.LightningModule):
         descriptors_derivatives : torch.nn.Module = None,
         log_var: bool = False,
         z_regularization: float = 0.0,
+        z_threshold: float = None,
         n_dim : int = 3,
         options: dict = None,
         **kwargs,
@@ -78,8 +79,11 @@ class Committor(BaseCV, lightning.LightningModule):
         log_var : bool, optional
             Switch to minimize the log of the variational functional, by default False.
         z_regularization : float, optional
-            Introduces a regularization on the learned z space avoiding too large absolute values.
+            Scales a regularization on the learned z space preventing it from exceeding the threshold given with 'z_threshold'.
             The magnitude of the regularization is scaled by the given number, by default 0.0
+        z_threshold : float, optional
+            Sets a maximum threshold for the z value during the training, by default None. 
+            The magnitude of the regularization term is scaled via the `z_regularization` key.
         n_dim : int
             Number of dimensions, by default 3.
         options : dict[str, Any], optional
@@ -98,6 +102,7 @@ class Committor(BaseCV, lightning.LightningModule):
                                      descriptors_derivatives=descriptors_derivatives,
                                      log_var=log_var,
                                      z_regularization=z_regularization,
+                                     z_threshold=z_threshold,
                                      n_dim=n_dim
         )
 
@@ -265,16 +270,26 @@ def test_committor():
                             [0.1337],[0.1444],[0.1603],[0.1396],[0.2043],[0.1964],[0.1459],[0.2243],[0.1930],[0.1893],
                             [0.2634],[0.1868],[0.1340],[0.2483],[0.1550],[0.1559],[0.1614],[0.2020],[0.1270],[0.2555]])
     trainer = lightning.Trainer(max_epochs=5, logger=None, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0)
-    model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0, z_regularization=10)
+    model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0, z_regularization=100, z_threshold=0.000001)
     trainer.fit(model, datamodule)
     out = model(X)
     out.sum().backward()
     assert( torch.allclose(out, ref_out, atol=1e-3) )
 
+    # test z_regularization errors
+    trainer = lightning.Trainer(max_epochs=5, logger=None, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0)
+    for z_regularization, z_threshold in zip([10,   0,      -1,     10], 
+                                             [None, 10,      1,     -1]):
+        try:
+            model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0, z_regularization=z_regularization, z_threshold=z_threshold, n_dim=2)
+            trainer.fit(model, datamodule)
+        except ValueError as e:
+            print("[TEST LOG] Checked this error: ", e)
+
     # test dimension error
     try:
         trainer = lightning.Trainer(max_epochs=5, logger=None, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0)
-        model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0, z_regularization=10, n_dim=2)
+        model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0, z_regularization=10, z_threshold=1, n_dim=2)
         trainer.fit(model, datamodule)
     except RuntimeError as e:
         print("[TEST LOG] Checked this error: ", e)
