@@ -36,6 +36,7 @@ class CommittorLoss(torch.nn.Module):
                 descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None,
                 log_var: bool = False,
                 z_regularization: float = 0.0,
+                z_threshold: float = None,
                 n_dim : int = 3,
                  ):
         """Compute Kolmogorov's variational principle loss and impose boundary conditions on the metastable states
@@ -68,8 +69,11 @@ class CommittorLoss(torch.nn.Module):
         log_var : bool, optional
             Switch to minimize the log of the variational functional, by default False.
         z_regularization : float, optional
-            Introduces a regularization on the learned z space avoiding too large absolute values.
+            Scales a regularization on the learned z space preventing it from exceeding the threshold given with 'z_threshold'.
             The magnitude of the regularization is scaled by the given number, by default 0.0
+        z_threshold : float, optional
+            Sets a maximum threshold for the z value during the training, by default None. 
+            The magnitude of the regularization term is scaled via the `z_regularization` key.
         n_dim : int
             Number of dimensions, by default 3.
         """
@@ -83,6 +87,7 @@ class CommittorLoss(torch.nn.Module):
         self.separate_boundary_dataset = separate_boundary_dataset
         self.log_var = log_var
         self.z_regularization = z_regularization
+        self.z_threshold = z_threshold
         self.n_dim = n_dim
 
     def forward(self, 
@@ -134,6 +139,8 @@ class CommittorLoss(torch.nn.Module):
                               cell=self.cell,
                               separate_boundary_dataset=self.separate_boundary_dataset,
                               descriptors_derivatives=self.descriptors_derivatives,
+                              z_regularization=self.z_regularization,
+                              z_threshold=self.z_threshold,
                               ref_idx=ref_idx,
                               n_dim=self.n_dim
                             )
@@ -154,6 +161,7 @@ def committor_loss(x: torch.Tensor,
                    descriptors_derivatives: Union[SmartDerivatives, torch.Tensor] = None,
                    log_var: bool = False,
                    z_regularization: float = 0.0,
+                   z_threshold : float = None,
                    ref_idx: torch.Tensor = None,
                    n_dim : int = 3,
                   ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -195,8 +203,11 @@ def committor_loss(x: torch.Tensor,
     log_var : bool, optional
         Switch to minimize the log of the variational functional, by default False.
     z_regularization : float, optional
-        Introduces a regularization on the learned z space avoiding too large absolute values.
+        Scales a regularization on the learned z space preventing it from exceeding the threshold given with 'z_threshold'.
         The magnitude of the regularization is scaled by the given number, by default 0.0
+    z_threshold : float, optional
+        Sets a maximum threshold for the z value during the training, by default None. 
+        The magnitude of the regularization term is scaled via the `z_regularization` key.
     ref_idx: torch.Tensor, optional
         Reference indeces for the unshuffled dataset for properly handling batching/splitting/shuffling
         when descriptors derivatives are provided, by default None. 
@@ -216,6 +227,9 @@ def committor_loss(x: torch.Tensor,
     if isinstance(descriptors_derivatives, torch.Tensor) and separate_boundary_dataset:
         raise ValueError ("Descriptors derivatives via explicit tensor are not implemented with separate_boundary_dataset key! Either use SmartDerivatives or deactivate separate_boundary_dataset")
     
+    if (z_threshold is not None and (z_regularization == 0 or z_threshold <= 0)) or (z_threshold is None and z_regularization != 0) or z_regularization < 0:
+        raise ValueError(f"To apply the regularization on z space both z_threshold and z_regularization key must be positive. Found {z_threshold} and {z_regularization}!")
+
     # ------------------------ SETUP ------------------------
     # inherit right device
     device = x.device 
@@ -249,7 +263,6 @@ def committor_loss(x: torch.Tensor,
 
     # weights should have size [n_batch, 1]
     w = w.unsqueeze(-1)
-
 
     # ------------------------  LOSS ------------------------
     # Each loss contribution is scaled by the number of samples
@@ -307,11 +320,11 @@ def committor_loss(x: torch.Tensor,
 
 
     # 3. ----- OPTIONAL regularization on z
-    if z_regularization != 0.0:
-        loss_z_diff = z_regularization * (z.max().abs() - z.min().abs()).pow(2)
+    if z_threshold is not None:
+        over_threshold = torch.relu(z.abs() - z_threshold)
+        loss_z_diff = z_regularization  * torch.mean(over_threshold.pow(2))
     else:
         loss_z_diff = 0
-   
 
     # 4. ----- TOTAL LOSS
     loss = loss_var + alpha*(loss_A + loss_B) + loss_z_diff
