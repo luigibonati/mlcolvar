@@ -1014,7 +1014,7 @@ def test_train_with_smart_derivatives():
             }
     model = Generator(
         r=3,
-        model=[45, 20, 20, 1],
+        layers=[45, 20, 20, 1],
         eta=0.005,
         alpha=0.01,
         friction=friction,
