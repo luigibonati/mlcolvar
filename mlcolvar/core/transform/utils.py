@@ -78,7 +78,7 @@ class Statistics(object):
         # Initialize
         if self.mean is None:
             for prop in ["mean", "M2", "std"]:
-                setattr(self, prop, torch.zeros(nfeatures))
+                setattr(self, prop, torch.zeros(nfeatures, device=x.device))
 
         # compute sample mean
         sample_mean = torch.mean(x, dim=0)
@@ -146,7 +146,7 @@ def test_sequential_transform():
     import lightning
 
     masses = initialize_committor_masses(atom_types=[0,0,0,0], masses=[1.008])
-    model = Committor(model=[6,2,1], mass=masses, alpha=1)
+    model = Committor(layers=[6,2,1], atomic_masses=masses, alpha=1)
     model.preprocessing = sequential
 
     pos = torch.rand((5, 4, 3))

@@ -55,6 +55,9 @@ This module implements the loss functions that can be used to optimize CV models
    AutocorrelationLoss
    ReduceEigenvaluesLoss
    TDALoss
+   CommittorLoss
+   GeneratorLoss
+   SmartDerivatives
 
 
 Stats 

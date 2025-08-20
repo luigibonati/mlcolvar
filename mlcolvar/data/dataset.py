@@ -21,6 +21,7 @@ class DictDataset(Dataset):
                  feature_names = None, 
                  metadata: dict = None, 
                  data_type : str = 'descriptors', 
+                 create_ref_idx : bool = False, 
                  **kwargs):
         """Create a Dataset from a dictionary or from a list of kwargs.
 
@@ -94,6 +95,11 @@ class DictDataset(Dataset):
         self.length = len(next(it))
         if not all([len(l) == self.length for l in it]):
             raise ValueError("not all arrays in dictionary have same length!")
+        
+        # add indexing of entries for shuffling and slicing reference
+        if create_ref_idx and "ref_idx" not in self._dictionary.keys():
+            dictionary['ref_idx'] = torch.arange(len(self), dtype=torch.int)
+        
 
     def __getitem__(self, index):
         if isinstance(index, str):
@@ -138,7 +144,9 @@ class DictDataset(Dataset):
             )
         stats = {}
         for k in self.keys:
-            stats[k] = Statistics(self._dictionary[k]).to_dict()
+            print("KEY: ", k, end="\n\n\n")
+            if k != "ref_idx":
+                stats[k] = Statistics(self._dictionary[k]).to_dict()
         return stats
 
     def __repr__(self) -> str:

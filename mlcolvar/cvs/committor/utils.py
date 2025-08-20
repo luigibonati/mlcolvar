@@ -3,7 +3,6 @@ import numpy as np
 from typing import List
 from mlcolvar.core import FeedForward, BaseGNN
 from mlcolvar.utils import _code
-from mlcolvar.core.loss.committor_loss import SmartDerivatives, compute_descriptors_derivatives
 from mlcolvar.data import DictDataset
 
 __all__ = ["KolmogorovBias", "compute_committor_weights", "initialize_committor_masses"]
@@ -68,7 +67,7 @@ class KolmogorovBias(torch.nn.Module):
     
         return bias
 
-def compute_committor_weights(dataset, 
+def compute_committor_weights(dataset : DictDataset, 
                               bias: torch.Tensor, 
                               data_groups: List[int], 
                               beta: float):
@@ -133,7 +132,7 @@ def compute_committor_weights(dataset,
 
     return dataset
 
-def initialize_committor_masses(atom_types: list, masses: list, n_dims: int = 3):
+def initialize_committor_masses(atom_types: list, masses: list):
     """Initialize the masses tensor with the right shape for committor learning
 
     Parameters
@@ -142,90 +141,24 @@ def initialize_committor_masses(atom_types: list, masses: list, n_dims: int = 3)
         List to map the atoms in the system to the corresponing types, which are specified with the masses keyword. e.g, for water [0, 1, 1]
     masses : list[float]
         List of masses of the different atom types in the system, e.g., for water [15.999, 1.008]
-    n_dims : int
-        Number of spatial dimensions, by default, 3
     Returns
     -------
     atomic_masses
         Atomic masses tensor ready to be used for committor learning.
     """
-    if n_dims > 3:
-        raise(ValueError(f"Number of dimension should be less than 3! Found {n_dims}"))
-    
+
     # put number of atoms for each type and the corresponding atomic mass
     atom_types = np.array(atom_types)
 
     atomic_masses = []
     for i in range(len(atom_types)):
         # each mass has to be repeated for the number of dimensions
-        for n in range(n_dims):
-            atomic_masses.append(masses[atom_types[i]])
+        atomic_masses.append(masses[atom_types[i]])
 
     # make it a tensor
     atomic_masses = torch.Tensor(atomic_masses)
 
     return atomic_masses
-
-def get_descriptors_and_derivatives(dataset,
-                                 descriptor_function, 
-                                 n_atoms : int, 
-                                 separate_boundary_dataset=True, 
-                                 setup_device='cpu',
-                                 force_all_atoms : bool = False,
-                                 positions_noise : float = 0.0,
-                                 batch_size : int = None ):
-    """Wrapper function to setup a faster calculation of derivatives computing only once the derivatives of descriptors wrt positions.
-
-    Parameters
-    ----------
-    dataset : DictDataset
-        Dataset to be updated. Dataset['data'] must be positions
-    descriptor_function :
-        Transform function to compute the descriptors from the positions.
-    n_atoms : int
-        Number of atoms in the system
-    separate_boundary_dataset : bool, optional
-        Switch to exculde boundary condition labeled data from the variational loss, by default True
-    setup_device : str, optional
-        Device on which to perform the expensive calculations. Either 'cpu' or 'cuda', by default 'cpu'
-    force_all_atoms : bool
-        Whether to allow the use in SmartDerivatives of atoms that are non involved in the calculation of any descriptor, by default False
-    positions_noise : float
-        Order of magnitude of small noise to be added to the positions to avoid atoms having the exact same coordinates on some dimension and thus zero derivatives, by default 0.
-        Ideally the smaller the better, e.g., 1e-6 for single precision, even lower for double precision.
-    batch_size : int
-        Size of batches to process data, useful for heavy computation to avoid memory overflows, if None a singel batch is used, by default None
-
-    Returns
-    -------
-    smart_derivatives : torch.nn.Module
-        SmartDerivatives object for faster computation of derivatives.
-    smart_dataset : DictDataset
-        Updated dataset. Dataset['data'] are the computed descriptors
-    """
-
-    # apply preprocessing and compute derivatives of descriptors
-    print("Computing descriptors derivatives. This can be heavy, consider using batches by setting batch_size")
-    pos, desc, d_desc_d_x = compute_descriptors_derivatives(dataset=dataset, 
-                                                            descriptor_function=descriptor_function, 
-                                                            n_atoms=n_atoms, 
-                                                            separate_boundary_dataset=separate_boundary_dataset,
-                                                            positions_noise=positions_noise,
-                                                            batch_size=batch_size)
-
-  # this sets up the fixed part of the calculation of the derivatives
-    smart_derivatives = SmartDerivatives(d_desc_d_x, 
-                                        n_atoms=n_atoms, 
-                                        setup_device=setup_device, 
-                                        force_all_atoms=force_all_atoms)
-
-    
-    # update dataset with the descriptors as data
-    smart_dataset = DictDataset({'data' : desc.detach(), 
-                                'labels': torch.clone(dataset['labels']), 
-                                'weights' : torch.clone(dataset['weights'])})
-    
-    return smart_dataset, smart_derivatives
 
 def test_Kolmogorov_bias():
     # test on feed forward
