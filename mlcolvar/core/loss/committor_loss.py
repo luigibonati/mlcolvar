@@ -17,7 +17,6 @@ __all__ = ["CommittorLoss", "committor_loss"]
 import torch
 from typing import Tuple, Union
 from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
-import numpy as np
 import torch_geometric
 import warnings
 
@@ -235,12 +234,13 @@ def committor_loss(x: torch.Tensor,
         raise ValueError(f"To apply the regularization on z space both z_threshold and z_regularization key must be positive. Found {z_threshold} and {z_regularization}!")
     
     # check if input is graph
-    _is_graph_data = False
     if isinstance(x, torch_geometric.data.batch.Batch):
+        _is_graph_data = True
         batch = torch.clone(x['batch'])
         node_types = torch.where(x['node_attrs'])[1]
         x = x['positions']
-        _is_graph_data = True
+    else:
+        _is_graph_data = False
 
     # checks and warnings
     if _is_graph_data and descriptors_derivatives is not None:
@@ -329,7 +329,7 @@ def committor_loss(x: torch.Tensor,
         gradient_positions = grad
     
     if cell is not None:
-        grad = grad / cell
+        gradient_positions = gradient_positions / cell
         
     # we do the square
     grad_square = torch.pow(gradient_positions, 2)
