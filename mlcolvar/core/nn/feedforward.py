@@ -40,6 +40,7 @@ class FeedForward(lightning.LightningModule):
         dropout: Optional[Union[float, list]] = None,
         batchnorm: Union[bool, list] = False,
         last_layer_activation: bool = False,
+        features_dropout: Optional[float] = None,
         **kwargs,
     ):
         """Constructor.
@@ -66,6 +67,10 @@ class FeedForward(lightning.LightningModule):
             (i.e., they are not lists). Otherwise, the output layer will be linear.
             This option is ignored for the arguments among ``activation``, ``dropout``,
             and ``batchnorm`` that are passed as lists.
+        features_dropout : float, optional
+            If specified, the input features will be randomly dropped out with this
+            probability. This is useful to prevent overfitting and relying too much on
+            specific features. This is applied before the first layer.
         **kwargs:
             Optional arguments passed to torch.nn.Module
         """
@@ -86,6 +91,8 @@ class FeedForward(lightning.LightningModule):
 
         # Create network
         modules = []
+        if features_dropout is not None:
+            modules.append(torch.nn.Dropout(p=features_dropout))
         for i in range(len(layers) - 1):
             modules.append(torch.nn.Linear(layers[i], layers[i + 1]))
             activ, drop, norm = activation_list[i], dropout_list[i], batchnorm_list[i]
