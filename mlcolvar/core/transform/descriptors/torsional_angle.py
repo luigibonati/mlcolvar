@@ -44,6 +44,13 @@ class TorsionalAngle(Transform):
         torch.Tensor
             Depending on `mode` selection, the torsional angle in radiants, its sine and its cosine. 
         """
+
+        indices = torch.Tensor(indices).to(torch.long)
+
+        # check indexes are in the correct form
+        if indices.numel() != 4:
+            print(indices.numel)
+            raise ValueError(f"Only the four atom indeces defining this torsional angle must be provided! Found {indices}")
         
         # check mode here to get number of out_features
         for i in mode:
@@ -91,14 +98,14 @@ class TorsionalAngle(Transform):
         CD = dist_components[:, :, 2, 3]
 
         # obtain normal direction 
-        n1 = torch.cross(AB, BC)
-        n2 = torch.cross(BC, CD)
+        n1 = torch.linalg.cross(AB, BC)
+        n2 = torch.linalg.cross(BC, CD)
         # obtain versors
         n1_normalized = n1 / torch.norm(n1, dim=1, keepdim=True)
         n2_normalized = n2 / torch.norm(n2, dim=1, keepdim=True)
         UBC= BC / torch.norm(BC,dim=1,keepdim=True)
 
-        sin = torch.einsum('bij,bij->bj', torch.cross(n1_normalized, n2_normalized).unsqueeze(-1), UBC.unsqueeze(-1))
+        sin = torch.einsum('bij,bij->bj', torch.linalg.cross(n1_normalized, n2_normalized).unsqueeze(-1), UBC.unsqueeze(-1))
         cos = torch.einsum('bij,bij->bj', n1_normalized.unsqueeze(-1), n2_normalized.unsqueeze(-1))
 
         angle = torch.atan2(sin, cos)
@@ -129,9 +136,19 @@ def test_torsional_angle():
     assert(torch.allclose(angle, ref_phi, atol=1e-3))
     angle.sum().backward()
 
-    model = TorsionalAngle([1,3,4,6], n_atoms=10, mode=['angle', 'sin', 'cos'], PBC=True, cell=cell, scaled_coords=False)
+    model = TorsionalAngle(np.array([1,3,4,6]), n_atoms=10, mode=['angle', 'sin', 'cos'], PBC=True, cell=cell, scaled_coords=False)
     angle = model(pos)
     angle.sum().backward()
+    assert(torch.allclose(angle[:, 0].unsqueeze(-1), ref_phi, atol=1e-3))
+    assert(torch.allclose(angle[:, 1].unsqueeze(-1), torch.sin(ref_phi), atol=1e-3))
+    assert(torch.allclose(angle[:, 2].unsqueeze(-1), torch.cos(ref_phi), atol=1e-3))
+
+
+    model = TorsionalAngle(torch.Tensor([1,3,4,6]), n_atoms=10, mode=['sin', 'cos'], PBC=True, cell=cell, scaled_coords=False)
+    angle = model(pos)
+    angle.sum().backward()
+    assert(torch.allclose(angle[:, 0].unsqueeze(-1), torch.sin(ref_phi), atol=1e-3))
+    assert(torch.allclose(angle[:, 1].unsqueeze(-1), torch.cos(ref_phi), atol=1e-3))
 
     # TODO add reference value for check
 

@@ -27,6 +27,9 @@ These are the building blocks which are used to construct the CVs.
    AutocorrelationLoss
    ReduceEigenvaluesLoss
    TDALoss
+   CommittorLoss
+   GeneratorLoss
+   SmartDerivatives
 
 .. rubric:: Stats 
 
