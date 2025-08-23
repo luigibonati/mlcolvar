@@ -220,9 +220,6 @@ class BaseCV:
         # Create the scheduler from the lr_scheduler_kwargs if any
         scheduler_cls = self.lr_scheduler_kwargs['scheduler']
         scheduler_kwargs = {k: v for k, v in self.lr_scheduler_kwargs.items() if k != 'scheduler'}
-        print("So far so good")
-        print(scheduler_cls)
-        print(scheduler_kwargs)
         lr_scheduler = scheduler_cls(optimizer, **scheduler_kwargs)
         lr_scheduler_config = {
             "scheduler": lr_scheduler
