@@ -79,10 +79,10 @@ class FeedForward(lightning.LightningModule):
         n_layers = len(layers) - 1
         # -- activation
         activation_list = parse_nn_options(activation, n_layers, last_layer_activation)
-        # -- dropout
-        dropout_list = parse_nn_options(dropout, n_layers, last_layer_activation)
         # -- batchnorm
         batchnorm_list = parse_nn_options(batchnorm, n_layers, last_layer_activation)
+        # -- dropout
+        dropout_list = parse_nn_options(dropout, n_layers, last_layer_activation)
 
         # Create network
         modules = []
@@ -93,11 +93,11 @@ class FeedForward(lightning.LightningModule):
             if activ is not None:
                 modules.append(get_activation(activ))
 
-            if drop is not None:
-                modules.append(torch.nn.Dropout(p=drop))
-
             if norm:
                 modules.append(torch.nn.BatchNorm1d(layers[i + 1]))
+                
+            if drop is not None:
+                modules.append(torch.nn.Dropout(p=drop))
 
         # store model and attributes
         self.nn = torch.nn.Sequential(*modules)
