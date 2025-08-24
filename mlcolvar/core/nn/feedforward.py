@@ -84,10 +84,10 @@ class FeedForward(lightning.LightningModule):
         n_layers = len(layers) - 1
         # -- activation
         activation_list = parse_nn_options(activation, n_layers, last_layer_activation)
-        # -- dropout
-        dropout_list = parse_nn_options(dropout, n_layers, last_layer_activation)
         # -- batchnorm
         batchnorm_list = parse_nn_options(batchnorm, n_layers, last_layer_activation)
+        # -- dropout
+        dropout_list = parse_nn_options(dropout, n_layers, last_layer_activation)
 
         # Create network
         modules = []
