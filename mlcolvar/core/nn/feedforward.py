@@ -100,11 +100,11 @@ class FeedForward(lightning.LightningModule):
             if activ is not None:
                 modules.append(get_activation(activ))
 
-            if drop is not None:
-                modules.append(torch.nn.Dropout(p=drop))
-
             if norm:
                 modules.append(torch.nn.BatchNorm1d(layers[i + 1]))
+                
+            if drop is not None:
+                modules.append(torch.nn.Dropout(p=drop))
 
         # store model and attributes
         self.nn = torch.nn.Sequential(*modules)
