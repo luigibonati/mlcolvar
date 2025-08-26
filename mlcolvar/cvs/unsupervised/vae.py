@@ -229,6 +229,7 @@ class VariationalAutoEncoderCV(BaseCV, lightning.LightningModule):
         # Log.
         name = "train" if self.training else "valid"
         self.log(f"{name}_loss", loss, on_epoch=True)
+        self.log("lr", self.optimizers().param_groups[0]['lr'], on_epoch=True)
 
         return loss
 
