@@ -35,7 +35,7 @@ class Generator(BaseCV, lightning.LightningModule):
 
     """
 
-    BLOCKS = ["nn"]
+    DEFAULT_BLOCKS = ["nn"]
 
     def __init__(self,
                  r: int,
@@ -79,7 +79,7 @@ class Generator(BaseCV, lightning.LightningModule):
             Options for the building blocks of the model, by default {}.
             Available blocks: ['nn'] .
         """
-        super().__init__(in_features=layers[0], out_features=r, **kwargs)
+        super().__init__(model=layers, **kwargs)
 
         # =======  LOSS  =======
         self.loss_fn = GeneratorLoss(r=r,

@@ -4,3 +4,6 @@ numpy<2
 pandas
 matplotlib
 kdepy
+torch_geometric
+matscipy
+mdtraj
