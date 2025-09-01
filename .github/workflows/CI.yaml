@@ -67,9 +67,9 @@ jobs:
 
       - name: CodeCov
         if: contains( matrix.os, 'ubuntu' )
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          file: ./coverage.xml
+          files: ./coverage.xml
           flags: codecov
           name: codecov-${{ matrix.os }}-py${{ matrix.python-version }}
