@@ -40,6 +40,7 @@ class FeedForward(lightning.LightningModule):
         dropout: Optional[Union[float, list]] = None,
         batchnorm: Union[bool, list] = False,
         last_layer_activation: bool = False,
+        features_dropout: Optional[float] = None,
         **kwargs,
     ):
         """Constructor.
@@ -66,6 +67,10 @@ class FeedForward(lightning.LightningModule):
             (i.e., they are not lists). Otherwise, the output layer will be linear.
             This option is ignored for the arguments among ``activation``, ``dropout``,
             and ``batchnorm`` that are passed as lists.
+        features_dropout : float, optional
+            If specified, the input features will be randomly dropped out with this
+            probability. This is useful to prevent overfitting and relying too much on
+            specific features. This is applied before the first layer.
         **kwargs:
             Optional arguments passed to torch.nn.Module
         """
@@ -79,13 +84,15 @@ class FeedForward(lightning.LightningModule):
         n_layers = len(layers) - 1
         # -- activation
         activation_list = parse_nn_options(activation, n_layers, last_layer_activation)
-        # -- dropout
-        dropout_list = parse_nn_options(dropout, n_layers, last_layer_activation)
         # -- batchnorm
         batchnorm_list = parse_nn_options(batchnorm, n_layers, last_layer_activation)
+        # -- dropout
+        dropout_list = parse_nn_options(dropout, n_layers, last_layer_activation)
 
         # Create network
         modules = []
+        if features_dropout is not None:
+            modules.append(torch.nn.Dropout(p=features_dropout))
         for i in range(len(layers) - 1):
             modules.append(torch.nn.Linear(layers[i], layers[i + 1]))
             activ, drop, norm = activation_list[i], dropout_list[i], batchnorm_list[i]
@@ -93,11 +100,11 @@ class FeedForward(lightning.LightningModule):
             if activ is not None:
                 modules.append(get_activation(activ))
 
-            if drop is not None:
-                modules.append(torch.nn.Dropout(p=drop))
-
             if norm:
                 modules.append(torch.nn.BatchNorm1d(layers[i + 1]))
+                
+            if drop is not None:
+                modules.append(torch.nn.Dropout(p=drop))
 
         # store model and attributes
         self.nn = torch.nn.Sequential(*modules)
