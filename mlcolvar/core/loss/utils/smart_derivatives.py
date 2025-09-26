@@ -141,7 +141,6 @@ class SmartDerivatives(torch.nn.Module):
 
         # check if there are inhomogeneous entries in the derivatives
         # e.g., with only one xyz component that is zero and the others nonzero
-        mat_ind = x != 0
         row_inhomogeneous = ~( x.all(dim=-1) | ~x.any(dim=-1) )
         
         # make them homogeneous 
