@@ -1,7 +1,7 @@
 import torch
 import lightning
 from mlcolvar.cvs import BaseCV
-from mlcolvar.core import FeedForward
+from mlcolvar.core import FeedForward, Normalization
 from mlcolvar.core.loss import CommittorLoss
 from mlcolvar.core.nn.utils import Custom_Sigmoid
 
@@ -34,7 +34,7 @@ class Committor(BaseCV, lightning.LightningModule):
         Class to optimize the gradients calculation imporving speed and memory efficiency.
     """
 
-    BLOCKS = ["nn", "sigmoid"]
+    BLOCKS = ["norm_in", "nn", "sigmoid"]
 
     def __init__(
         self, 
@@ -50,6 +50,7 @@ class Committor(BaseCV, lightning.LightningModule):
         z_regularization: float = 0.0,
         z_threshold: float = None,
         n_dim : int = 3,
+        norm_in : bool = False,
         options: dict = None,
         **kwargs,
     ):
@@ -86,6 +87,8 @@ class Committor(BaseCV, lightning.LightningModule):
             The magnitude of the regularization term is scaled via the `z_regularization` key.
         n_dim : int
             Number of dimensions, by default 3.
+        norm_in : bool
+            Whether to normalize the input of the NN model, by default False.
         options : dict[str, Any], optional
             Options for the building blocks of the model, by default {}.
             Available blocks: ['nn'] .
@@ -111,6 +114,11 @@ class Committor(BaseCV, lightning.LightningModule):
         options = self.parse_options(options)
 
         # ======= BLOCKS =======
+        # Initialize norm_in
+        o = "norm_in"
+        if norm_in and (options[o] is not False) and (options[o] is not None):
+            self.norm_in = Normalization(self.in_features, **options[o])
+
         # initialize NN turning
         o = "nn"
         # set default activation to tanh
@@ -126,6 +134,8 @@ class Committor(BaseCV, lightning.LightningModule):
     def forward_nn(self, x):
         if self.preprocessing is not None:
             x = self.preprocessing(x)
+        if self.norm_in is not None:
+            x = self.norm_in(x)
         z = self.nn(x)
         return z
 
