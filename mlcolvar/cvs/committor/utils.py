@@ -61,8 +61,6 @@ class KolmogorovBias(torch.nn.Module):
                                               x['batch'], 
                                               dim=0)
         
-        print(grads_squared.shape)    
-
         bias = - self.lambd*(1/self.beta)*(torch.log( grads_squared + self.epsilon ) - torch.log(self.epsilon))    
     
         return bias
