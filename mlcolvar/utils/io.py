@@ -318,6 +318,7 @@ def create_dataset_from_trajectories(
     show_progress: bool = True,
     save_names=True,
     lengths_conversion : float = 10.0,
+    delete_download: bool = True,
 ) -> Union[
     DictDataset,
     Tuple[
@@ -368,6 +369,8 @@ def create_dataset_from_trajectories(
     lengths_conversion: float,
         Conversion factor for length units, by default 10.
         MDTraj uses nanometers, the default sends to Angstroms.
+    delete_download: bool, optinal
+        whether to delete the downloaded file after it has been loaded, default True.    
 
     Returns
     -------
@@ -410,7 +413,7 @@ def create_dataset_from_trajectories(
             'Not `environment_selection` given! Cannot define buffer size!'
         )
 
-    # initiliaze simple labels if not provided
+    # initialize simple labels if not provided
     if labels is None:
         labels = [i for i in range(len(trajectories))]
     else:
@@ -418,7 +421,7 @@ def create_dataset_from_trajectories(
             "Number of labels and trajectories must be the same!"
             )
 
-    # check topologies if given
+    # check topologies if given, with xyz it can be None
     if top is not None:
         assert len(trajectories) == len(top) or len(top)==1 or isinstance(top, str), (
             'Either a single topology file or as many as the trajectory files must be provided!'
@@ -430,38 +433,66 @@ def create_dataset_from_trajectories(
     
     # --- Handle topologies input ---
     # Allow top to be None or empty. In that case, create a list of empty strings.
+    shared_top = True
     if isinstance(top, str):
         top = [top for _ in trajectories]
-    if top is None or (isinstance(top, list) and len(top) == 0):
+    elif top is None or (isinstance(top, list) and len(top) == 0):
         top = ["" for _ in trajectories]
     elif len(top) == 1 and len(trajectories) > 1:
         top = [top for _ in trajectories]
-
-    # For each trajectory file (and its associated topology), if the trajectory file
-    # has a ".xyz" extension and no topology is provided, convert it.
-    for i in range(len(trajectories)):
-        if folder is not None:
-            trajectories[i] = os.path.join(folder, trajectories[i])
-            if top[i]:
-                top[i] = os.path.join(folder, top[i])
-        assert isinstance(trajectories[i], str)
-        _, ext = os.path.splitext(trajectories[i])
-        if (ext.lower() == ".xyz") and (not top[i]):
-            pdb_file = trajectories[i].replace('.xyz', '_top.pdb')
-            top[i] = create_pdb_from_xyz(trajectories[i], pdb_file)
-
-    # check if per file args are given, otherwise set to {}
-    if load_args is not None:
-        if (not isinstance(load_args, list)) or (len(trajectories) != len(load_args)):
-            raise TypeError(
-                "load_args should be a list of dictionaries of arguments of same length as trajectories."
-            )
+    else: 
+        shared_top = False
 
 
     # load topologies and trajectories
     topologies = []
     trajectories_in_memory = []
     for i in range(len(trajectories)):
+        # =============== PREPARATION ===============
+        assert isinstance(trajectories[i], str)
+
+        # check if folder is given
+        if folder is not None:
+            trajectories[i] = os.path.join(folder, trajectories[i])
+            if top[i]:
+                top[i] = os.path.join(folder, top[i])
+        
+        # check if trajectories[i] is an url
+        download_traj = False
+        if "http" in trajectories[i]:
+            download_traj = True
+            url = trajectories[i]
+            if delete_download:
+                temp_traj = tempfile.NamedTemporaryFile(suffix=os.path.splitext(trajectories[i])[1].lower() )
+                trajectories[i] = temp_traj.name   
+            else:
+                trajectories[i] = "tmp_" + trajectories[i].split("/")[-1]
+            urllib.request.urlretrieve(url, trajectories[i])
+
+        # check if top[i] is an url
+        download_top = False
+        if "http" in top[i]:
+            download_top = True
+            # check if it is really needed to download or top is shared
+            if shared_top and i > 0: 
+                top[i] = top[0]
+            else:
+                url = top[i]
+                if delete_download:
+                    temp_top = tempfile.NamedTemporaryFile(suffix=os.path.splitext(top[i])[1].lower() )
+                    top[i] = temp_top.name   
+                else:
+                    top[i] = "tmp_" + top[i].split("/")[-1]
+                urllib.request.urlretrieve(url, top[i])
+
+        # check extension of file, if .xyz create topology file
+        _, ext = os.path.splitext(trajectories[i])
+        if (ext.lower() == ".xyz") and (not top[i]):
+            pdb_file = trajectories[i].replace('.xyz', '_top.pdb')
+            top[i] = create_pdb_from_xyz(trajectories[i], pdb_file)
+
+
+        # =============== LOADING ===============
         # load trajectory
         traj = mdtraj.load(trajectories[i], top=top[i])
         traj.top = mdtraj.core.trajectory.load_topology(top[i])
@@ -483,6 +514,20 @@ def create_dataset_from_trajectories(
             traj = traj.atom_slice(subset)
         trajectories_in_memory.append(traj)
         topologies.append(traj.top)
+
+        # remove temporary files from dowload if needed
+        if download_traj:
+            if delete_download:
+                temp_traj.close()
+            else:
+                print(f"downloaded file ({url}) saved as ({trajectories[i]}).")
+
+        if download_top:
+            if shared_top and i == len(trajectories):
+                if delete_download:
+                    temp_top.close()
+                else:
+                    print(f"downloaded file ({url}) saved as ({top[i]}).")
 
     if z_table is None:
         z_table = _z_table_from_top(topologies)
@@ -522,7 +567,6 @@ def create_dataset_from_trajectories(
         return dataset, trajectories_in_memory
     else:
         return dataset
-    
 
 def _names_from_top(top: List[mdtraj.Topology] ):
     it = iter(top)
