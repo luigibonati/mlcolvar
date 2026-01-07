@@ -33,6 +33,8 @@ jobs:
           uname -a
           df -h
           ulimit -a
+      - name: Add MPS fallback for macOS compatibility
+        shell: bash
         if: contains( matrix.os, 'macOS' )
         run: |
           export PYTORCH_ENABLE_MPS_FALLBACK=1     
