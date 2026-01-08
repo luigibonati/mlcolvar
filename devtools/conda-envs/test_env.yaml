@@ -22,7 +22,7 @@ dependencies:
   - pydantic<2
   - lightning
   - matplotlib
-  - scikit-learn
+  - scikit-learn<1.8
   - scipy
    
     # Pip-only installs
