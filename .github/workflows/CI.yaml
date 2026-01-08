@@ -33,9 +33,11 @@ jobs:
           uname -a
           df -h
           ulimit -a
-      - name: Add MPS fallback for macOS compatibility
-        shell: bash
+      # this may be removed in the future when MPS issues will be solved in all torch versions
+      # check https://github.com/pytorch/pytorch/issues/77764
+      - name: Add MPS fallback [macOS only]
         if: contains( matrix.os, 'macOS' )
+        shell: bash
         run: |
           echo "PYTORCH_ENABLE_MPS_FALLBACK=1" >> $GITHUB_ENV     
 
