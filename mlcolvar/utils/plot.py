@@ -168,8 +168,8 @@ def plot_isolines_2D(
                         s = function(xy.unsqueeze(0)).squeeze(0).numpy()
                         function.training = train_mode
                 if component is not None:
-                    s = np.squeeze(s[component])
-                z[i, j] = s
+                    s = s[component]
+                z[i, j] = np.squeeze(s)
     # else apply function directly to grid points
     else:
         z = function(xv, yv)
