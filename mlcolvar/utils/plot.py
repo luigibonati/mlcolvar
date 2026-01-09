@@ -168,7 +168,7 @@ def plot_isolines_2D(
                         s = function(xy.unsqueeze(0)).squeeze(0).numpy()
                         function.training = train_mode
                 if component is not None:
-                    s = s[component]
+                    s = s[int(component)]
                 z[i, j] = s
     # else apply function directly to grid points
     else:
