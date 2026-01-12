@@ -61,6 +61,11 @@ jobs:
         run: |
           python -m pip install -e . --no-deps
           micromamba list
+      
+      - name: Prepare coverage environment
+        if: contains( matrix.os, 'ubuntu' )
+        # Ensures subprocesses inherit coverage settings
+        run: echo "COVERAGE_PROCESS_START=.coveragerc" >> $GITHUB_ENV
 
       - name: Run tests
         # conda setup requires this special shell
@@ -74,6 +79,9 @@ jobs:
         if: contains( matrix.os, 'ubuntu' )
         run: |
           pytest -v --nbmake docs/notebooks/ --ignore=docs/notebooks/tutorials/data/ --cov=mlcolvar --cov-append --cov-report=xml --color=yes 
+          coverage combine
+          coverage report
+          coverage xml
 
       - name: CodeCov
         if: contains( matrix.os, 'ubuntu' )

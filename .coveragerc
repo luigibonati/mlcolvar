@@ -1,0 +1,5 @@
+[run]
+source = mlcolvar
+branch = True
+parallel = True
+concurrency = multiprocessing
