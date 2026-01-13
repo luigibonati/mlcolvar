@@ -1,5 +1,11 @@
 [run]
-source = mlcolvar
 branch = True
 parallel = True
 concurrency = multiprocessing
+source = mlcolvar
+data_file = .coverage
+
+[report]
+show_missing = True
+skip_covered = True
+omit = mlcolvar/tests/*

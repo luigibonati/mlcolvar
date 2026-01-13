@@ -70,13 +70,12 @@ jobs:
           pytest -v --cov=mlcolvar --cov-report=xml --color=yes mlcolvar/tests/
 
       - name: Run tests and notebook [ubuntu only]
-        # change matplotlib backend
-        env:
-          MPLBACKEND: Agg
         # conda setup requires this special shell
         if: contains( matrix.os, 'ubuntu' )
         shell: bash -l {0}
         run: |
+          echo "COVERAGE_FILE=.coverage" >> $GITHUB_ENV
+          echo "COVERAGE_PROCESS_START=.coveragerc" >> $GITHUB_ENV
           pytest -v --nbmake mlcolvar/tests/ docs/notebooks/ --ignore=docs/notebooks/tutorials/data/ --cov=mlcolvar --cov-report=xml --color=yes 
 
       - name: CodeCov
