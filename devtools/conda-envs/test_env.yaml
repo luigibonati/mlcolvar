@@ -14,6 +14,7 @@ dependencies:
   - pytest
   - pytest-cov
   - codecov
+  - coverage
 
     # Package dependencies
   - numpy
