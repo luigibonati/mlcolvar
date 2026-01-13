@@ -61,27 +61,23 @@ jobs:
         run: |
           python -m pip install -e . --no-deps
           micromamba list
-      
-      - name: Prepare coverage environment
-        if: contains( matrix.os, 'ubuntu' )
-        # Ensures subprocesses inherit coverage settings
-        run: echo "COVERAGE_PROCESS_START=.coveragerc" >> $GITHUB_ENV
 
-      - name: Run tests
+      - name: Run tests only [windows, macOS]
+        if: contains( matrix.os, 'windows' ) || contains( matrix.os, 'macos' ) 
         # conda setup requires this special shell
         shell: bash -l {0}
         run: |
           pytest -v --cov=mlcolvar --cov-report=xml --color=yes mlcolvar/tests/
 
-      - name: Run notebook tests
+      - name: Run tests and notebook [ubuntu only]
+        # change matplotlib backend
+        env:
+          MPLBACKEND: Agg
         # conda setup requires this special shell
-        shell: bash -l {0}
         if: contains( matrix.os, 'ubuntu' )
+        shell: bash -l {0}
         run: |
-          pytest -v --nbmake docs/notebooks/ --ignore=docs/notebooks/tutorials/data/ --cov=mlcolvar --cov-append --cov-report=xml --color=yes 
-          coverage combine
-          coverage report
-          coverage xml
+          pytest -v --nbmake mlcolvar/tests/ docs/notebooks/ --ignore=docs/notebooks/tutorials/data/ --cov=mlcolvar --cov-report=xml --color=yes 
 
       - name: CodeCov
         if: contains( matrix.os, 'ubuntu' )
