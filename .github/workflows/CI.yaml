@@ -74,13 +74,9 @@ jobs:
         if: contains( matrix.os, 'ubuntu' )
         shell: bash -l {0}
         run: |
-          pytest -v --nbmake mlcolvar/tests/ docs/notebooks/ --ignore=docs/notebooks/tutorials/data/ --cov=mlcolvar --cov-report=term --color=yes 
-          ls -la .coverage*
-          coverage combine
-          coverage xml
-          ls -la .coverage*
-          coverage report
-
+          echo "COVERAGE_FILE=$PWD/.coverage" >> $GITHUB_ENV
+          echo "COVERAGE_PROCESS_START=$PWD/.coveragerc" >> $GITHUB_ENV
+          pytest -v --nbmake mlcolvar/tests/ docs/notebooks/ --ignore=docs/notebooks/tutorials/data/ --cov=mlcolvar --cov-report=xml --color=yes 
 
       - name: CodeCov
         if: contains( matrix.os, 'ubuntu' )

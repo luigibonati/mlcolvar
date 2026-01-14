@@ -2,8 +2,6 @@
 branch = True
 parallel = True
 concurrency = multiprocessing
-source = mlcolvar
-data_file = .coverage
 
 [report]
 show_missing = True
