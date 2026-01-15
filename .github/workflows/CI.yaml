@@ -21,9 +21,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        # os: [macOS-latest, ubuntu-latest, windows-latest]      # TODO use this when macOS-latest becomes stable again
-        os: [macOS-13, ubuntu-latest, windows-latest]
-        python-version: [3.8, 3.9, "3.10"]
+        os: [ubuntu-latest, windows-latest]      
+        python-version: ["3.11", "3.12", "3.13"]
+        include:
+          - python-version: "3.11"
+            os: macos-latest
+          - python-version: "3.12"
+            os: macos-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -34,11 +38,17 @@ jobs:
           uname -a
           df -h
           ulimit -a
+      # this may be removed in the future when MPS issues will be solved in all torch versions
+      # check https://github.com/pytorch/pytorch/issues/77764
+      - name: Add MPS fallback [macOS only]
+        if: contains( matrix.os, 'macOS' )
+        shell: bash
+        run: |
+          echo "PYTORCH_ENABLE_MPS_FALLBACK=1" >> $GITHUB_ENV     
 
       # More info on options: https://github.com/mamba-org/setup-micromamba
-      - uses: mamba-org/setup-micromamba@v1
+      - uses: mamba-org/setup-micromamba@v2
         with:
-          micromamba-version: '1.5.10-0'
           environment-file: devtools/conda-envs/test_env.yaml
           environment-name: test
           # channels: conda-forge,defaults
