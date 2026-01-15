@@ -400,8 +400,8 @@ def test_load_dataframe():
                                   folder="mlcolvar/tests/data",
                                   load_args=load_args,
                                 )
-    except TypeError:
-        pass
+    except TypeError as e:
+        print("[TEST LOG] Checked this error: ", e)
 
     # test load_args and global key conflict error
     try:
@@ -412,5 +412,5 @@ def test_load_dataframe():
                                   load_args=load_args,
                                   start=10,
                                 )
-    except ValueError:
-        pass
+    except ValueError as e:
+        print("[TEST LOG] Checked this error: ", e)
