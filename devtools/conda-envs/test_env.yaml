@@ -25,7 +25,6 @@ dependencies:
   - matplotlib
   - scikit-learn<1.8
   - scipy
-  - pyg
 
     # Pip-only installs
   - pip:
@@ -33,5 +32,6 @@ dependencies:
     - nbmake
     - mdtraj
     - matscipy
+    - torch_geomtric
 
 
