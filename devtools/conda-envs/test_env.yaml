@@ -32,6 +32,6 @@ dependencies:
     - nbmake
     - mdtraj
     - matscipy
-    - torch_geomtric
+    - torch_geometric
 
 
