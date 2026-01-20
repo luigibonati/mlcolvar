@@ -139,6 +139,7 @@ class CommittorLoss(torch.nn.Module):
                               cell=self.cell,
                               separate_boundary_dataset=self.separate_boundary_dataset,
                               descriptors_derivatives=self.descriptors_derivatives,
+                              log_var=self.log_var,
                               z_regularization=self.z_regularization,
                               z_threshold=self.z_threshold,
                               ref_idx=ref_idx,
