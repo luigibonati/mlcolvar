@@ -34,7 +34,9 @@ dependencies = [
     "pandas",
     "matplotlib",
     "scipy",
-    "KDEpy"
+    "KDEpy",
+    "scikit-learn<1.8", 
+    "pydantic<2"
 ]
 
 [project.urls]
