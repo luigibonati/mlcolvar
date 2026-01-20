@@ -1,7 +1,7 @@
 import pytest
 import urllib
 from mlcolvar.utils.io import load_dataframe
-from mlcolvar.utils.io import test_datasetFromFile
+from mlcolvar.utils.io import test_datasetFromFile, test_load_dataframe
 from mlcolvar.utils.io import test_datasesetFromTrajectories
 from mlcolvar.utils.io import test_create_dataset_from_trajectories
 from mlcolvar.utils.io import test_dataset_from_xyz
@@ -88,4 +88,5 @@ def test_dataset_from_trajectories(text, selection):
 if __name__ == "__main__":
     test_dataset_from_xyz()
     test_datasetFromFile()
-    test_datasesetFromTrajectories()
+    test_datasesetFromTrajectories()    
+    test_load_dataframe()

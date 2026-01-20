@@ -83,8 +83,14 @@ def plumed_to_pandas(filename="./COLVAR"):
     return df
 
 
-def load_dataframe(
-    file_names, start=0, stop=None, stride=1, delete_download=True, **kwargs
+def load_dataframe(file_names: Union[str, list],
+                   folder: str = None, 
+                   start: int = 0, 
+                   stop: int = None, 
+                   stride: int = 1, 
+                   load_args: List[dict] = None, 
+                   delete_download: bool = True, 
+                   **kwargs,
 ):
     """Load dataframe(s) from file(s). It can be used also to open files from internet (if the string contains http).
     In case of PLUMED colvar files automatically handles the column names, otherwise it is just a wrapper for pd.load_csv function.
@@ -93,12 +99,16 @@ def load_dataframe(
     ----------
     filenames : str or list[str]
         filenames to be loaded
+    folder : str, optional
+        Common path for the files to be imported, by default None. If set, filenames become 'folder/file_name'.
     start: int, optional
         read from this row, default 0
     stop: int, optional
         read until this row, default None
     stride: int, optional
         read every this number, default 1
+    load_args: list[dict], optional
+        List of dictionaries with the loading arguments for each file (keys: start,stop,stride and pandas.read_csv options), by default None
     delete_download: bool, optinal
         whether to delete the downloaded file after it has been loaded, default True.
     kwargs:
@@ -114,6 +124,7 @@ def load_dataframe(
     TypeError
         if data is not a valid type
     """
+    default_load_args = {'start' : start, 'stride': stride, 'stop': stop}
 
     # if it is a single string
     if type(file_names) == str:
@@ -122,10 +133,36 @@ def load_dataframe(
         raise TypeError(
             f"only strings or list of strings are supported, not {type(file_names)}."
         )
+    
+    # set file paths
+    if folder is not None:
+        file_names = [os.path.join(folder, fname) for fname in file_names]
+
+    # check if per file args are given, otherwise set to {}
+    if load_args is None:
+        load_args = [default_load_args for _ in file_names]
+    else:
+        if start != 0 or stride != 1 or stop is not None:
+            raise ValueError(
+                "Both global and per-file loading parameters have been specified. Either use load_args for per-file parameters or start, stop, stride keywords for global behavior."
+            )
+        if (not isinstance(load_args, list)) or (len(file_names) != len(load_args)):
+            raise TypeError(
+                "load_args should be a list of dictionaries of arguments of same length as file_names. If you want to use the same args for all file pass them directly as **kwargs."
+            )
+        for i,arg in enumerate(load_args):
+            for key in default_load_args.keys():
+                if key not in arg.keys():
+                    load_args[i][key] = default_load_args[key]
 
     # list of file_names
     df_list = []
     for i, filename in enumerate(file_names):
+        # get correct loading args
+        start = load_args[i]['start']
+        stop = load_args[i]['stop']
+        stride = load_args[i]['stride']
+
         # check if filename is an url
         download = False
         if "http" in filename:
@@ -170,7 +207,7 @@ def create_dataset_from_files(
     file_names: Union[list, str],
     folder: str = None,
     create_labels: bool = None,
-    load_args: list = None,
+    load_args: List[dict] = None,
     filter_args: dict = None,
     modifier_function=None,
     return_dataframe: bool = False,
@@ -735,6 +772,68 @@ def test_datasetFromFile():
         stop=5,
         stride=1,
     )
+
+def test_load_dataframe():
+    # Test naive single file
+    pd_dataframe = load_dataframe(file_names="state_A.dat",
+                                  folder="mlcolvar/tests/data",
+                                  start=0, 
+                                  stop=5,
+                                  stride=1,
+                                )
+    assert(len(pd_dataframe) == 5)
+
+    # Test with global loading parameters
+    pd_dataframe = load_dataframe(file_names=["state_A.dat", "state_B.dat", "state_C.dat"],
+                                  folder="mlcolvar/tests/data",
+                                  start=0, 
+                                  stop=5,
+                                  stride=1,
+                                )
+    assert(len(pd_dataframe) == 15)
+
+    # Test with per-file loading parameters
+    load_args = [{"start": 0, "stop": 5, "stride": 1},
+                 {"start": 0, "stop": 5, "stride": 1},
+                 {"start": 0, "stop": 5, "stride": 1}]
+    pd_dataframe = load_dataframe(file_names=["state_A.dat", "state_B.dat", "state_C.dat"],
+                                  folder="mlcolvar/tests/data",
+                                  load_args=load_args,
+                                )
+    assert(len(pd_dataframe) == 15)
+
+    # Test with per-file loading parameters with default fallback
+    load_args = [{"start": 0, "stop": 6, "stride": 2},
+                 {"start": 0, "stop": 6, "stride": 2},
+                 {"start": 0, "stop": 6}] # this should fall back to default
+    pd_dataframe = load_dataframe(file_names=["state_A.dat", "state_B.dat", "state_C.dat"],
+                                  folder="mlcolvar/tests/data",
+                                  load_args=load_args,
+                                )
+    assert(len(pd_dataframe) == 12)
+
+    # test wrong length error
+    try:
+        load_args = [{"start": 0, "stop": 6, "stride": 2},
+                 {"start": 0, "stop": 6}] # this should fall back to default
+        pd_dataframe = load_dataframe(file_names=["state_A.dat", "state_B.dat", "state_C.dat"],
+                                  folder="mlcolvar/tests/data",
+                                  load_args=load_args,
+                                )
+    except TypeError as e:
+        print("[TEST LOG] Checked this error: ", e)
+
+    # test load_args and global key conflict error
+    try:
+        load_args = [{"start": 0, "stop": 6, "stride": 2},
+                 {"start": 0, "stop": 6}] # this should fall back to default
+        pd_dataframe = load_dataframe(file_names=["state_A.dat", "state_B.dat", "state_C.dat"],
+                                  folder="mlcolvar/tests/data",
+                                  load_args=load_args,
+                                  start=10,
+                                )
+    except ValueError as e:
+        print("[TEST LOG] Checked this error: ", e)
 
 def test_datasesetFromTrajectories():
     create_dataset_from_trajectories(

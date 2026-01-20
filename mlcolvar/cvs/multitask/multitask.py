@@ -143,14 +143,14 @@ class MultiTaskCV:
                 aux_loss = aux_loss_fn(cv, cv_lag, **aux_loss_kwargs)
 
             # Log the auxiliary loss (before the coefficient).
-            self.log(f"{stage}_aux_loss_{loss_idx}", aux_loss.to(float), on_epoch=True)
+            self.log(f"{stage}_aux_loss_{loss_idx}", aux_loss.item(), on_epoch=True)
 
             if self.loss_coefficients is not None:
                 aux_loss = self.loss_coefficients[loss_idx] * aux_loss
             loss = loss + aux_loss
 
         # Log the total loss
-        self.log(f"{stage}_total_loss", loss.to(float), on_epoch=True)
+        self.log(f"{stage}_total_loss", loss.item(), on_epoch=True)
 
         # return loss
         return loss
