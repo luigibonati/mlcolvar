@@ -121,12 +121,12 @@ def get_neighborhood(
 
     if system_indices is not None:
         # Get environment atoms that are neighbors of the system.
-        keep_edge = np.where(np.in1d(receiver, system_indices))[0]
+        keep_edge = np.where(np.isin(receiver, system_indices))[0]
         keep_sender = np.intersect1d(sender[keep_edge], environment_indices)
         keep_atom = np.concatenate((system_indices, np.unique(keep_sender)))
         # Get the edges in the subsystem.
-        keep_sender = np.where(np.in1d(sender, keep_atom))[0]
-        keep_receiver = np.where(np.in1d(receiver, keep_atom))[0]
+        keep_sender = np.where(np.isin(sender, keep_atom))[0]
+        keep_receiver = np.where(np.isin(receiver, keep_atom))[0]
         keep_edge = np.intersect1d(keep_sender, keep_receiver)
         keep_edge_distance = np.where(distances <= cutoff)[0]
         keep_edge = np.intersect1d(keep_edge, keep_edge_distance)

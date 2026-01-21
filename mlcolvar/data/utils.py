@@ -29,7 +29,7 @@ def load_dataset(file_name: str) -> DictDataset:
     file_name: str
         Name of the file to load the dataset from
     """
-    dataset = torch.load(file_name)
+    dataset = torch.load(file_name, weights_only=False)
 
     assert isinstance(dataset, DictDataset)
 
