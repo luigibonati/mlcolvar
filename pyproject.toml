@@ -36,7 +36,10 @@ dependencies = [
     "scipy",
     "KDEpy",
     "scikit-learn<1.8", 
-    "pydantic<2"
+    "pydantic<2",
+    "torch_geometric",
+    "matscipy",
+    "mdtraj"
 ]
 
 [project.urls]
