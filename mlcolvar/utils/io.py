@@ -28,7 +28,7 @@ from mlcolvar.data.graph.atomic import AtomicNumberTable, Configuration, Configu
 from mlcolvar.data.graph.utils import create_dataset_from_configurations
 
 
-__all__ = ["load_dataframe", "plumed_to_pandas", "create_dataset_from_files"]
+__all__ = ["load_dataframe", "plumed_to_pandas", "create_dataset_from_files", "create_dataset_from_configurations", "create_dataset_from_trajectories"]
 
 
 def is_plumed_file(filename):
