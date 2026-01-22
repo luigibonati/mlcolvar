@@ -582,7 +582,7 @@ def create_dataset_from_trajectories(
     # create configurations objects from trajectories
     configurations = []
     for i in range(len(trajectories_in_memory)):
-            configuration = _configures_from_trajectory(
+            configuration = _configurations_from_trajectory(
                 trajectory=trajectories_in_memory[i],
                 label=labels[i],
                 system_selection=system_selection,
@@ -640,7 +640,7 @@ def _z_table_from_top(
     return z_table
 
 
-def _configures_from_trajectory(
+def _configurations_from_trajectory(
     trajectory: mdtraj.Trajectory,
     label: int = None,
     system_selection: str = None,
