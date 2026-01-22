@@ -15,12 +15,6 @@ from typing import Union, List, Tuple
 import mdtraj
 from warnings import warn
 
-# Import ASE for xyz to pdb conversion.
-try:
-    from ase.io import read, write
-    from ase import Atoms
-except ImportError as e:
-    raise ImportError("ASE is required for xyz to pdb conversion.", e)
 
 
 from mlcolvar.data import DictDataset
@@ -325,6 +319,13 @@ def create_pdb_from_xyz(input_filename: str, output_filename: str) -> str:
     Returns:
         The path to the generated PDB file.
     """
+    # Import ASE 
+    try:
+        from ase.io import read, write
+        from ase import Atoms
+    except ImportError as e:
+        raise ImportError("ASE is required for xyz to pdb conversion.", e)
+
     atoms: Atoms = read(input_filename, index=0)
 
     if (atoms.cell == 0).all():
@@ -537,6 +538,10 @@ def create_dataset_from_trajectories(
         # mdtraj does not load cell info from xyz, so we use ASE and add it
         _, ext = os.path.splitext(trajectories[i])
         if (ext.lower() == ".xyz"):
+            try:
+                from ase.io import read
+            except ImportError as e:
+                raise ImportError("ASE is required for creating the graph from a .xyz file.", e)
             ase_atoms = read(trajectories[i], index=':')
             ase_cells = np.array([a.get_cell().array for a in ase_atoms], dtype=float)
             # the pdb for the topology are in nm, ase work in A so we need to scale it
