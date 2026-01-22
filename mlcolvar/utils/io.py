@@ -525,7 +525,7 @@ def create_dataset_from_trajectories(
 
         # check extension of file, if .xyz create topology file
         _, ext = os.path.splitext(trajectories[i])
-        if (ext.lower() == ".xyz") and (not top[i]):
+        if (ext.lower() == ".xyz" or ext.lower() == ".extxyz") and (not top[i]):
             pdb_file = trajectories[i].replace('.xyz', '_top.pdb')
             top[i] = create_pdb_from_xyz(trajectories[i], pdb_file)
 
@@ -537,7 +537,7 @@ def create_dataset_from_trajectories(
         
         # mdtraj does not load cell info from xyz, so we use ASE and add it
         _, ext = os.path.splitext(trajectories[i])
-        if (ext.lower() == ".xyz"):
+        if (ext.lower() == ".xyz" or ext.lower() == ".extxyz"):
             try:
                 from ase.io import read
             except ImportError as e:
