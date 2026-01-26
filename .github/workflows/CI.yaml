@@ -46,21 +46,20 @@ jobs:
         run: |
           echo "PYTORCH_ENABLE_MPS_FALLBACK=1" >> $GITHUB_ENV     
 
-      # More info on options: https://github.com/mamba-org/setup-micromamba
-      - uses: mamba-org/setup-micromamba@v2
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          environment-file: devtools/conda-envs/test_env.yaml
-          environment-name: test
-          # channels: conda-forge,defaults
-          create-args: >-
-            python=${{ matrix.python-version }}
+          python-version: ${{ matrix.python-version }}
+      
+      - name: Upgrade pip
+        run: python -m pip install -U pip
 
       - name: Install package
         # conda setup requires this special shell
         shell: bash -l {0}
         run: |
-          python -m pip install -e . --no-deps
-          micromamba list
+          python -m pip install -e . -r  requirements.txt - r devtools/test_requirements.txt
+          pip list
 
       - name: Run tests
         # conda setup requires this special shell
