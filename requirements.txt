@@ -1,6 +1,0 @@
-lightning
-torch
-numpy<2
-pandas
-matplotlib
-kdepy

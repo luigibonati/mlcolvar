@@ -58,7 +58,7 @@ jobs:
         # conda setup requires this special shell
         shell: bash -l {0}
         run: |
-          python -m pip install -e . -r  requirements.txt -r devtools/test_requirements.txt
+          python -m pip install -e .[test]
           pip list
 
       - name: Run tests

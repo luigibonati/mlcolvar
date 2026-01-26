@@ -1,7 +1,0 @@
-pydantic<2
-scikit-learn<1.8
-scipy
-pytest
-pytest-cov
-codecov
-nbmake
