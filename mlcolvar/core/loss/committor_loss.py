@@ -35,6 +35,7 @@ class CommittorLoss(torch.nn.Module):
                 separate_boundary_dataset : bool = True,
                 descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None,
                 log_var: bool = False,
+                cauchy_var: bool = False,
                 z_regularization: float = 0.0,
                 z_threshold: float = None,
                 n_dim : int = 3,
@@ -68,6 +69,8 @@ class CommittorLoss(torch.nn.Module):
             See also mlcolvar.core.loss.utils.smart_derivatives.SmartDerivatives
         log_var : bool, optional
             Switch to minimize the log of the variational functional, by default False.
+        cauchy_var : bool, optional
+            Switch to minimize the variational functional from Cauchy decomposition, i.e., modulus of gradients to the 4th, by default False. 
         z_regularization : float, optional
             Scales a regularization on the learned z space preventing it from exceeding the threshold given with 'z_threshold'.
             The magnitude of the regularization is scaled by the given number, by default 0.0
@@ -86,6 +89,7 @@ class CommittorLoss(torch.nn.Module):
         self.descriptors_derivatives = descriptors_derivatives
         self.separate_boundary_dataset = separate_boundary_dataset
         self.log_var = log_var
+        self.cauchy_var = cauchy_var
         self.z_regularization = z_regularization
         self.z_threshold = z_threshold
         self.n_dim = n_dim
@@ -140,6 +144,7 @@ class CommittorLoss(torch.nn.Module):
                               separate_boundary_dataset=self.separate_boundary_dataset,
                               descriptors_derivatives=self.descriptors_derivatives,
                               log_var=self.log_var,
+                              cauchy_var=self.cauchy_var,
                               z_regularization=self.z_regularization,
                               z_threshold=self.z_threshold,
                               ref_idx=ref_idx,
@@ -161,6 +166,7 @@ def committor_loss(x: torch.Tensor,
                    separate_boundary_dataset: bool = True,
                    descriptors_derivatives: Union[SmartDerivatives, torch.Tensor] = None,
                    log_var: bool = False,
+                   cauchy_var: bool = False,
                    z_regularization: float = 0.0,
                    z_threshold : float = None,
                    ref_idx: torch.Tensor = None,
@@ -203,6 +209,8 @@ def committor_loss(x: torch.Tensor,
             - A torch.Tensor with the derivatives to save time, memory-wise could be less efficient
     log_var : bool, optional
         Switch to minimize the log of the variational functional, by default False.
+    cauchy_var : bool, optional
+        Switch to minimize the variational functional from Cauchy decomposition, i.e., modulus of gradients to the 4th, by default False. 
     z_regularization : float, optional
         Scales a regularization on the learned z space preventing it from exceeding the threshold given with 'z_threshold'.
         The magnitude of the regularization is scaled by the given number, by default 0.0
@@ -224,6 +232,9 @@ def committor_loss(x: torch.Tensor,
     """
     if descriptors_derivatives is not None and ref_idx is None:
         raise ValueError ("Descriptors derivatives need reference indeces from the dataset! Use a dataset with the ref_idx, see docstrign for details")
+
+    if descriptors_derivatives is not None and cauchy_var:
+        raise ValueError ("Cauchy decomposition of variational loss is used with descriptors as inputs and no derivatives with respect to positions needed! Descriptors_derivatives should be None!")
 
     if isinstance(descriptors_derivatives, torch.Tensor) and separate_boundary_dataset:
         raise ValueError ("Descriptors derivatives via explicit tensor are not implemented with separate_boundary_dataset key! Either use SmartDerivatives or deactivate separate_boundary_dataset")
@@ -307,8 +318,11 @@ def committor_loss(x: torch.Tensor,
     except RuntimeError as e:
         raise RuntimeError(e, """[HINT]: Is you system in 3 dimension? By default the code assumes so, if it's not the case change the n_dim key to the right dimensionality.""")
 
-    # variational contribution to loss: we sum over the batch
-    loss_var = torch.mean(grad_square * w[mask_var])
+    if cauchy_var:
+        grad_square = grad_square**2
+    
+    # variational contribution to loss: we sum over the batch    
+    loss_var = torch.mean( grad_square * w[mask_var])
     if log_var:
         loss_var = torch.log1p(loss_var)
     else:

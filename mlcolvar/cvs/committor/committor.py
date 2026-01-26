@@ -47,6 +47,7 @@ class Committor(BaseCV, lightning.LightningModule):
         separate_boundary_dataset : bool = True,
         descriptors_derivatives : torch.nn.Module = None,
         log_var: bool = False,
+        cauchy_var : bool = False,
         z_regularization: float = 0.0,
         z_threshold: float = None,
         n_dim : int = 3,
@@ -79,6 +80,8 @@ class Committor(BaseCV, lightning.LightningModule):
             See also mlcolvar.core.loss.committor_loss.SmartDerivatives
         log_var : bool, optional
             Switch to minimize the log of the variational functional, by default False.
+        cauchy_var : bool, optional
+            Switch to minimize the variational functional from Cauchy decomposition, i.e., modulus of gradients to the 4th, by default False.
         z_regularization : float, optional
             Scales a regularization on the learned z space preventing it from exceeding the threshold given with 'z_threshold'.
             The magnitude of the regularization is scaled by the given number, by default 0.0
@@ -104,6 +107,7 @@ class Committor(BaseCV, lightning.LightningModule):
                                      separate_boundary_dataset=separate_boundary_dataset,
                                      descriptors_derivatives=descriptors_derivatives,
                                      log_var=log_var,
+                                     cauchy_var=cauchy_var,
                                      z_regularization=z_regularization,
                                      z_threshold=z_threshold,
                                      n_dim=n_dim
