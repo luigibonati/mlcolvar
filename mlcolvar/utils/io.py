@@ -342,7 +342,7 @@ def create_pdb_from_xyz(input_filename: str, output_filename: str) -> str:
 
 def create_dataset_from_trajectories(
     trajectories: Union[List[str], str],
-    top: Union[List[str], str, None],
+    topologies: Union[List[str], str, None],
     cutoff: float,
     buffer: float = 0.0,
     z_table: AtomicNumberTable = None,
@@ -371,7 +371,7 @@ def create_dataset_from_trajectories(
     ----------
     trajectories: Union[List[str], str]
         Paths to trajectories files.
-    top: Union[List[str], str, None]
+    topologies: Union[List[str], str, None]
         Path to topology files. Only for .xyz files it can be set to None or empty to generate automatically a topology file.
     cutoff: float (units: Ang)
         The graph cutoff radius.
@@ -460,8 +460,8 @@ def create_dataset_from_trajectories(
             )
 
     # check topologies if given, with xyz it can be None
-    if top is not None:
-        assert len(trajectories) == len(top) or len(top)==1 or isinstance(top, str), (
+    if topologies is not None:
+        assert len(trajectories) == len(topologies) or len(topologies)==1 or isinstance(topologies, str), (
             'Either a single topology file or as many as the trajectory files must be provided!'
         )
 
@@ -470,20 +470,20 @@ def create_dataset_from_trajectories(
         trajectories = [trajectories]
     
     # --- Handle topologies input ---
-    # Allow top to be None or empty. In that case, create a list of empty strings.
+    # Allow topology to be None or empty. In that case, create a list of empty strings.
     shared_top = True
-    if isinstance(top, str):
-        top = [top for _ in trajectories]
-    elif top is None or (isinstance(top, list) and len(top) == 0):
-        top = ["" for _ in trajectories]
-    elif len(top) == 1 and len(trajectories) > 1:
-        top = [top for _ in trajectories]
+    if isinstance(topologies, str):
+        topologies = [topologies for _ in trajectories]
+    elif topologies is None or (isinstance(topologies, list) and len(topologies) == 0):
+        topologies = ["" for _ in trajectories]
+    elif len(topologies) == 1 and len(trajectories) > 1:
+        topologies = [topologies for _ in trajectories]
     else: 
         shared_top = False
 
 
     # load topologies and trajectories
-    topologies = []
+    topologies_in_memory = []
     trajectories_in_memory = []
     for i in range(len(trajectories)):
         # =============== PREPARATION ===============
@@ -492,8 +492,8 @@ def create_dataset_from_trajectories(
         # check if folder is given
         if folder is not None:
             trajectories[i] = os.path.join(folder, trajectories[i])
-            if top[i]:
-                top[i] = os.path.join(folder, top[i])
+            if topologies[i]:
+                topologies[i] = os.path.join(folder, topologies[i])
         
         # check if trajectories[i] is an url
         download_traj = False
@@ -507,33 +507,33 @@ def create_dataset_from_trajectories(
                 trajectories[i] = "tmp_" + trajectories[i].split("/")[-1]
             urllib.request.urlretrieve(url, trajectories[i])
 
-        # check if top[i] is an url
+        # check if topologies[i] is an url
         download_top = False
-        if "http" in top[i]:
+        if "http" in topologies[i]:
             download_top = True
             # check if it is really needed to download or top is shared
             if shared_top and i > 0: 
-                top[i] = top[0]
+                topologies[i] = topologies[0]
             else:
-                url = top[i]
+                url = topologies[i]
                 if delete_download:
-                    temp_top = tempfile.NamedTemporaryFile(suffix=os.path.splitext(top[i])[1].lower() )
-                    top[i] = temp_top.name   
+                    temp_top = tempfile.NamedTemporaryFile(suffix=os.path.splitext(topologies[i])[1].lower() )
+                    topologies[i] = temp_top.name   
                 else:
-                    top[i] = "tmp_" + top[i].split("/")[-1]
-                urllib.request.urlretrieve(url, top[i])
+                    topologies[i] = "tmp_" + topologies[i].split("/")[-1]
+                urllib.request.urlretrieve(url, topologies[i])
 
         # check extension of file, if .xyz create topology file
         _, ext = os.path.splitext(trajectories[i])
-        if (ext.lower() == ".xyz") and (not top[i]):
+        if (ext.lower() == ".xyz") and (not topologies[i]):
             pdb_file = trajectories[i].replace(ext, '_top.pdb')
-            top[i] = create_pdb_from_xyz(trajectories[i], pdb_file)
+            topologies[i] = create_pdb_from_xyz(trajectories[i], pdb_file)
 
 
         # =============== LOADING ===============
         # load trajectory
-        traj = mdtraj.load(trajectories[i], top=top[i])
-        traj.top = mdtraj.core.trajectory.load_topology(top[i])
+        traj = mdtraj.load(trajectories[i], top=topologies[i])
+        traj.top = mdtraj.core.trajectory.load_topology(topologies[i])
         
         # mdtraj does not load cell info from xyz, so we use ASE and add it
         _, ext = os.path.splitext(trajectories[i])
@@ -545,7 +545,7 @@ def create_dataset_from_trajectories(
             ase_atoms = read(trajectories[i], index=':')
             ase_cells = np.array([a.get_cell().array for a in ase_atoms], dtype=float)
             # the pdb for the topology are in nm, ase work in A so we need to scale it
-            traj.unitcell_vectors = ase_cells/10
+            traj.unitcell_vectors = ase_cells/lengths_conversion
 
         if selection is not None:
             subset = traj.top.select(selection)
@@ -555,7 +555,7 @@ def create_dataset_from_trajectories(
             )
             traj = traj.atom_slice(subset)
         trajectories_in_memory.append(traj)
-        topologies.append(traj.top)
+        topologies_in_memory.append(traj.top)
 
         # remove temporary files from dowload if needed
         if download_traj:
@@ -569,13 +569,13 @@ def create_dataset_from_trajectories(
                 if delete_download:
                     temp_top.close()
                 else:
-                    print(f"downloaded file ({url}) saved as ({top[i]}).")
+                    print(f"downloaded file ({url}) saved as ({topologies[i]}).")
 
     if z_table is None:
-        z_table = _z_table_from_top(topologies)
+        z_table = _z_table_from_top(topologies_in_memory)
 
     if save_names:
-        atom_names = _names_from_top(topologies)
+        atom_names = _names_from_top(topologies_in_memory)
     else:
         atom_names = None
 
