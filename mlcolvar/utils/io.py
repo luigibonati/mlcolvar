@@ -162,12 +162,9 @@ def load_dataframe(file_names: Union[str, list],
         if "http" in filename:
             download = True
             url = filename
-            if delete_download:
-                temp = tempfile.NamedTemporaryFile()
-                filename = temp.name   
-            else:
-                filename = "tmp_" + filename.split("/")[-1]
-            urllib.request.urlretrieve(url, filename)
+            temp, filename = _download_temp_file(file_url=filename, 
+                                                 delete_download=delete_download,  
+                                                 return_name=True)
 
         # check if file is in PLUMED format
         if is_plumed_file(filename):
@@ -499,13 +496,11 @@ def create_dataset_from_trajectories(
         download_traj = False
         if "http" in trajectories[i]:
             download_traj = True
-            url = trajectories[i]
-            if delete_download:
-                temp_traj = tempfile.NamedTemporaryFile(suffix=os.path.splitext(trajectories[i])[1].lower() )
-                trajectories[i] = temp_traj.name   
-            else:
-                trajectories[i] = "tmp_" + trajectories[i].split("/")[-1]
-            urllib.request.urlretrieve(url, trajectories[i])
+            url_traj = trajectories[i]
+            temp_traj, trajectories[i] = _download_temp_file(file_url=url_traj, 
+                                                             delete_download=delete_download, 
+                                                             append_suffix=True, 
+                                                             return_name=True)
 
         # check if topologies[i] is an url
         download_top = False
@@ -515,15 +510,13 @@ def create_dataset_from_trajectories(
             if shared_top and i > 0: 
                 topologies[i] = topologies[0]
             else:
-                url = topologies[i]
-                if delete_download:
-                    temp_top = tempfile.NamedTemporaryFile(suffix=os.path.splitext(topologies[i])[1].lower() )
-                    topologies[i] = temp_top.name   
-                else:
-                    topologies[i] = "tmp_" + topologies[i].split("/")[-1]
-                urllib.request.urlretrieve(url, topologies[i])
+                url_top = topologies[i]
+                temp_top, topologies[i] = _download_temp_file(file_url=url_top, 
+                                                              delete_download=delete_download, 
+                                                              append_suffix=True, 
+                                                              return_name=True)
 
-        # check extension of file, if .xyz create topology file
+        # check extension of file, if .xyz create topology file through ASE
         _, ext = os.path.splitext(trajectories[i])
         if (ext.lower() == ".xyz") and (not topologies[i]):
             pdb_file = trajectories[i].replace(ext, '_top.pdb')
@@ -532,28 +525,10 @@ def create_dataset_from_trajectories(
 
         # =============== LOADING ===============
         # load trajectory
-        traj = mdtraj.load(trajectories[i], top=topologies[i])
-        traj.top = mdtraj.core.trajectory.load_topology(topologies[i])
+        traj = load_traj_with_mdtraj(trajectory=trajectories[i],
+                                     topology=topologies[i],
+                                     selection=selection)
         
-        # mdtraj does not load cell info from xyz, so we use ASE and add it
-        _, ext = os.path.splitext(trajectories[i])
-        if ext.lower() == ".xyz":
-            try:
-                from ase.io import read
-            except ImportError as e:
-                raise ImportError("ASE is required for creating the graph from a .xyz file.", e)
-            ase_atoms = read(trajectories[i], index=':')
-            ase_cells = np.array([a.get_cell().array for a in ase_atoms], dtype=float)
-            # the pdb for the topology are in nm, ase work in A so we need to scale it
-            traj.unitcell_vectors = ase_cells/lengths_conversion
-
-        if selection is not None:
-            subset = traj.top.select(selection)
-            assert len(subset) > 0, (
-                'No atoms will be selected with selection string '
-                + '"{:s}"!'.format(selection)
-            )
-            traj = traj.atom_slice(subset)
         trajectories_in_memory.append(traj)
         topologies_in_memory.append(traj.top)
 
@@ -562,14 +537,14 @@ def create_dataset_from_trajectories(
             if delete_download:
                 temp_traj.close()
             else:
-                print(f"downloaded file ({url}) saved as ({trajectories[i]}).")
+                print(f"downloaded file ({url_traj}) saved as ({trajectories[i]}).")
 
         if download_top:
-            if shared_top and i == len(trajectories):
+            if not shared_top or (shared_top and i == len(trajectories)):
                 if delete_download:
                     temp_top.close()
                 else:
-                    print(f"downloaded file ({url}) saved as ({topologies[i]}).")
+                    print(f"downloaded file ({url_top}) saved as ({topologies[i]}).")
 
     if z_table is None:
         z_table = _z_table_from_top(topologies_in_memory)
@@ -579,11 +554,89 @@ def create_dataset_from_trajectories(
     else:
         atom_names = None
 
+    dataset = dataset_from_mdtraj_trajectories(trajectories=trajectories_in_memory,
+                                               labels=labels,
+                                               cutoff=cutoff, 
+                                               z_table=z_table,
+                                               system_selection=system_selection,
+                                               environment_selection=environment_selection,
+                                               load_args=load_args,
+                                               lengths_conversion=lengths_conversion,
+                                               buffer=buffer,
+                                               atom_names=atom_names,
+                                               remove_isolated_nodes=remove_isolated_nodes,
+                                               show_progress=show_progress)
+
+    if return_trajectories:
+        return dataset, trajectories_in_memory
+    else:
+        return dataset
+
+def _download_temp_file(file_url: str,
+                        delete_download: bool = True,
+                        append_suffix: bool = False,
+                        return_name: bool = False
+                       ):
+    if delete_download:
+        if append_suffix:
+            temp = tempfile.NamedTemporaryFile(suffix=os.path.splitext(file_url)[1].lower() )
+        else:
+            temp = tempfile.NamedTemporaryFile()
+        file_name = temp.name   
+    else:
+        temp = None
+        file_name = "tmp_" + file_url.split("/")[-1]
+    urllib.request.urlretrieve(file_url, file_name)
+    
+    return temp if not return_name else temp, file_name
+
+def load_traj_with_mdtraj(trajectory: str, 
+                          topology: str, 
+                          selection: str):
+    # load trajectory
+        traj = mdtraj.load(trajectory, top=topology)
+        traj.top = mdtraj.core.trajectory.load_topology(topology)
+        
+        # mdtraj does not load cell info from xyz, so we use ASE and add it
+        _, ext = os.path.splitext(trajectory)
+        if ext.lower() == ".xyz":
+            try:
+                from ase.io import read
+            except ImportError as e:
+                raise ImportError("ASE is required for creating the graph from a .xyz file.", e)
+            ase_atoms = read(trajectory, index=':')
+            ase_cells = np.array([a.get_cell().array for a in ase_atoms], dtype=float)
+            # the pdb for the topology are in nm, ase work in A so we need to scale it
+            traj.unitcell_vectors = ase_cells/10
+
+        if selection is not None:
+            subset = traj.top.select(selection)
+            assert len(subset) > 0, (
+                'No atoms will be selected with selection string '
+                + '"{:s}"!'.format(selection)
+            )
+            traj = traj.atom_slice(subset)
+        
+        return traj
+
+def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
+                                     labels: List[int],
+                                     cutoff: float,
+                                     z_table: AtomicNumberTable, 
+                                     system_selection: str = None,
+                                     environment_selection: str = None,
+                                     load_args : dict = None,
+                                     lengths_conversion : float = 10,
+                                     buffer: float = 0.0,
+                                     atom_names: List = None,
+                                     remove_isolated_nodes: bool = False,
+                                     show_progress: bool = True,
+                                     ):
     # create configurations objects from trajectories
     configurations = []
-    for i in range(len(trajectories_in_memory)):
+    for i in range(len(trajectories)):
             configuration = _configurations_from_trajectory(
-                trajectory=trajectories_in_memory[i],
+                trajectory=trajectories[i],
                 label=labels[i],
                 system_selection=system_selection,
                 environment_selection=environment_selection,
@@ -604,11 +657,8 @@ def create_dataset_from_trajectories(
         remove_isolated_nodes=remove_isolated_nodes,
         show_progress=show_progress
     )
+    return dataset
 
-    if return_trajectories:
-        return dataset, trajectories_in_memory
-    else:
-        return dataset
 
 def _names_from_top(top: List[mdtraj.Topology] ):
     it = iter(top)
