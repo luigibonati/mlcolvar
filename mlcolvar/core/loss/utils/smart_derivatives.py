@@ -319,11 +319,11 @@ class SmartDerivatives(torch.nn.Module):
             # we need to shift the indeces of each batch so that they start after the ones of the previous batch
             # Get max and min scatter index for each group
             num_groups = uniques.numel()
-            scatter_min = torch.full((num_groups,), 1e8, device=x.device, dtype=torch.long)
-            scatter_max = torch.full((num_groups,), -1e8, device=x.device, dtype=torch.long)
+            scatter_min = torch.full((num_groups,), 1e8, device=x.device, dtype=torch.int32)
+            scatter_max = torch.full((num_groups,), -1e8, device=x.device, dtype=torch.int32)
 
-            scatter_min.scatter_reduce_(0, indeces, scatter_indeces, reduce='amin', include_self=True)
-            scatter_max.scatter_reduce_(0, indeces, scatter_indeces, reduce='amax', include_self=True)
+            scatter_min.scatter_reduce_(0, indeces, scatter_indeces.to(torch.int32), reduce='amin', include_self=True)
+            scatter_max.scatter_reduce_(0, indeces, scatter_indeces.to(torch.int32), reduce='amax', include_self=True)
 
             # Compute group spans
             group_spans = (scatter_max - scatter_min + 1)
