@@ -1,9 +1,10 @@
 import torch
 import lightning
 from mlcolvar.cvs import BaseCV
-from mlcolvar.core import FeedForward
+from mlcolvar.core import FeedForward, BaseGNN
 from mlcolvar.core.loss import CommittorLoss
 from mlcolvar.core.nn.utils import Custom_Sigmoid
+from typing import Union, List
 
 __all__ = ["Committor"]
 
@@ -13,8 +14,10 @@ class Committor(BaseCV, lightning.LightningModule):
     The committor function q is expressed as the output of a neural network optimized with a self-consistent
     approach based on the Kolmogorov's variational principle for the committor and on the imposition of its boundary conditions. 
 
-    **Data**: for training it requires a DictDataset with the keys 'data', 'labels' and 'weights'
-
+    **Data**: for training it requires a DictDataset containing:
+        - If using descriptors as input, the keys 'data', 'labels' and 'weights'.
+        - If using graphs as input, `torch_geometric.data` with 'graph_labels' and 'weight' in their 'data_list'.
+        
     **Loss**: Minimize Kolmogorov's variational functional of q and impose boundary condition on the metastable states (CommittorLoss)
     
     References
@@ -34,11 +37,12 @@ class Committor(BaseCV, lightning.LightningModule):
         Class to optimize the gradients calculation imporving speed and memory efficiency.
     """
 
-    BLOCKS = ["nn", "sigmoid"]
+    DEFAULT_BLOCKS = ["nn", "sigmoid"]
+    MODEL_BLOCKS = ["nn", "sigmoid"]
 
     def __init__(
         self, 
-        layers: list,
+        model: Union[List[int], FeedForward, BaseGNN],
         atomic_masses: torch.Tensor,
         alpha: float,
         gamma: float = 10000,
@@ -74,7 +78,7 @@ class Committor(BaseCV, lightning.LightningModule):
         separate_boundary_dataset : bool, optional
             Switch to exculde boundary condition labeled data from the variational loss, by default True
         descriptors_derivatives : torch.nn.Module, optional
-            `SmartDerivatives` object to save memory and time when using descriptors.
+            `SmartDerivatives` object to save memory and time when using descriptors. Cannot be used with GNN models.
             See also mlcolvar.core.loss.committor_loss.SmartDerivatives
         log_var : bool, optional
             Switch to minimize the log of the variational functional, by default False.
@@ -88,16 +92,18 @@ class Committor(BaseCV, lightning.LightningModule):
             Number of dimensions, by default 3.
         options : dict[str, Any], optional
             Options for the building blocks of the model, by default {}.
-            Available blocks: ['nn'] .
+            Available blocks: ['nn'].
         """
-        super().__init__(in_features=layers[0], out_features=layers[-1], **kwargs) 
+        super().__init__(model, **kwargs) 
+
+        self.register_buffer('is_committor', torch.tensor(1, dtype=int))
         
         # =======  LOSS  =======
         self.loss_fn = CommittorLoss(atomic_masses=atomic_masses,
                                      alpha=alpha,
+                                     cell=cell,
                                      gamma=gamma,
                                      delta_f=delta_f,
-                                     cell=cell,
                                      separate_boundary_dataset=separate_boundary_dataset,
                                      descriptors_derivatives=descriptors_derivatives,
                                      log_var=log_var,
@@ -111,12 +117,18 @@ class Committor(BaseCV, lightning.LightningModule):
         options = self.parse_options(options)
 
         # ======= BLOCKS =======
-        # initialize NN turning
-        o = "nn"
-        # set default activation to tanh
-        if "activation" not in options[o]: 
-            options[o]["activation"] = "tanh"
-        self.nn = FeedForward(layers, **options[o])
+        if not self._override_model:
+            # initialize NN
+            o = "nn"
+            # set default activation to tanh
+            if "activation" not in options[o]: 
+                options[o]["activation"] = "tanh"
+            self.nn = FeedForward(self.layers, **options[o])
+        elif self._override_model:
+            self.nn = model
+
+        if self.nn.out_features != 1:
+            raise ValueError('Output of the model must be of dimension 1')
 
         # separately add sigmoid activation on last layer, this way it can be deactived
         o = "sigmoid"
@@ -134,13 +146,19 @@ class Committor(BaseCV, lightning.LightningModule):
 
         """Compute and return the training loss and record metrics."""
         # =================get data===================
-        x = train_batch["data"]
-        # check data are have shape (n_data, -1)
-        x = x.reshape((x.shape[0], -1))
-        x.requires_grad = True
+        if isinstance(self.nn, FeedForward):
+            x = train_batch["data"]
+            # check data have shape (n_data, -1)
+            x = x.reshape((x.shape[0], -1))
+            x.requires_grad = True
 
-        labels = train_batch["labels"]
-        weights = train_batch["weights"]
+            labels = train_batch["labels"]
+            weights = train_batch["weights"]
+        elif isinstance(self.nn, BaseGNN):
+            x = self._setup_graph_data(train_batch)
+            labels = x['graph_labels']
+            weights = x['weight'].clone()
+        
         try:
             ref_idx = train_batch["ref_idx"]
         except KeyError:
@@ -172,8 +190,7 @@ class Committor(BaseCV, lightning.LightningModule):
         self.log(f"{name}_loss_bound_B", loss_bound_B, on_epoch=True)
         return loss
 
-
-def test_committor():
+def test_committor_1():
     from mlcolvar.data import DictDataset, DictModule
     from mlcolvar.cvs.committor.utils import initialize_committor_masses, KolmogorovBias
     
@@ -218,7 +235,7 @@ def test_committor():
                              -6.7121, -7.6094, -7.9009, -7.0479, -5.2398, -7.8241, -5.8642, -7.0701,
                              -7.0348, -7.2577, -6.6142, -7.6322, -7.3279, -7.6393, -7.8608, -7.7037,
                              -6.6949, -6.3947, -7.2246, -7.7009, -6.7359, -7.2186, -7.7849, -5.6882])
-    model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0)
+    model = Committor(model=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0)
     trainer.fit(model, datamodule)
     out = model(X)
     out.sum().backward()
@@ -238,7 +255,7 @@ def test_committor():
                             [0.0783],[0.1384],[0.0689],[0.0649],[0.0983],[0.1548],[0.0778],[0.0934],[0.0858],[0.1203],
                             [0.1073],[0.1139],[0.0716],[0.0988],[0.0918],[0.1109],[0.0918],[0.0928],[0.1070],[0.0742]])
     trainer = lightning.Trainer(max_epochs=5, logger=None, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0)
-    model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0, separate_boundary_dataset=False)
+    model = Committor(model=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0, separate_boundary_dataset=False)
     trainer.fit(model, datamodule)
     out = model(X)
     out.sum().backward()
@@ -254,7 +271,7 @@ def test_committor():
                             [0.7757],[0.5703],[0.6464],[0.5825],[0.6061],[0.5842],[0.7049],[0.5703],[0.7346],[0.6371],
                             [0.5740],[0.6844],[0.5948],[0.6675],[0.6640],[0.6047],[0.7321],[0.5453],[0.6755],[0.5813]])
     trainer = lightning.Trainer(max_epochs=5, logger=None, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0)
-    model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0, log_var=True)
+    model = Committor(model=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0, log_var=True)
     trainer.fit(model, datamodule)
     out = model(X)
     out.sum().backward()
@@ -270,7 +287,7 @@ def test_committor():
                             [0.1337],[0.1444],[0.1603],[0.1396],[0.2043],[0.1964],[0.1459],[0.2243],[0.1930],[0.1893],
                             [0.2634],[0.1868],[0.1340],[0.2483],[0.1550],[0.1559],[0.1614],[0.2020],[0.1270],[0.2555]])
     trainer = lightning.Trainer(max_epochs=5, logger=None, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0)
-    model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0, z_regularization=100, z_threshold=0.000001)
+    model = Committor(model=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0, z_regularization=100, z_threshold=0.000001)
     trainer.fit(model, datamodule)
     out = model(X)
     out.sum().backward()
@@ -281,7 +298,7 @@ def test_committor():
     for z_regularization, z_threshold in zip([10,   0,      -1,     10], 
                                              [None, 10,      1,     -1]):
         try:
-            model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0, z_regularization=z_regularization, z_threshold=z_threshold, n_dim=2)
+            model = Committor(model=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0, z_regularization=z_regularization, z_threshold=z_threshold, n_dim=2)
             trainer.fit(model, datamodule)
         except ValueError as e:
             print("[TEST LOG] Checked this error: ", e)
@@ -289,10 +306,91 @@ def test_committor():
     # test dimension error
     try:
         trainer = lightning.Trainer(max_epochs=5, logger=None, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0)
-        model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0, z_regularization=10, z_threshold=1, n_dim=2)
+        model = Committor(model=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0, z_regularization=10, z_threshold=1, n_dim=2)
         trainer.fit(model, datamodule)
     except RuntimeError as e:
         print("[TEST LOG] Checked this error: ", e)
+        
+
+def test_committor_2():
+    from mlcolvar.data import DictDataset, DictModule
+    from mlcolvar.cvs.committor.utils import initialize_committor_masses, KolmogorovBias
+
+    # create two fake atoms and use their fake positions
+    atomic_masses = initialize_committor_masses(atom_types=[0,1], masses=[15.999, 1.008])
+    # create dataset
+    samples = 50
+    X = torch.randn((4*samples, 6))
+    
+    # create labels
+    y = torch.zeros(X.shape[0])
+    y[samples:] += 1
+    y[int(2*samples):] += 1
+    y[int(3*samples):] += 1
+    
+    # create weights
+    w = torch.ones(X.shape[0])
+
+    dataset = DictDataset({"data": X, "labels": y, "weights": w})
+    datamodule = DictModule(dataset, lengths=[1])
+    
+    # train model
+    trainer = lightning.Trainer(max_epochs=5, logger=False, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0)
+    
+    print()
+    print('NORMAL')
+    print()
+    # dataset separation
+    model = Committor(model=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0)
+    trainer.fit(model, datamodule)
+    model(X).sum().backward()
+    bias_model = KolmogorovBias(input_model=model, beta=1, epsilon=1e-6, lambd=1)
+    bias_model(X)
+
+    # naive whole dataset
+    trainer = lightning.Trainer(max_epochs=5, logger=False, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0)
+    model = Committor(model=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0, separate_boundary_dataset=False)
+    trainer.fit(model, datamodule)
+    model(X).sum().backward()
+
+
+    print()
+    print('EXTERNAL FEEDFORWARD')
+    print()
+    # dataset separation
+    ff_model = FeedForward([6, 4, 2, 1])
+    model = Committor(model=ff_model, atomic_masses=atomic_masses, alpha=1e-1, delta_f=0)
+    trainer.fit(model, datamodule)
+    model(X).sum().backward()
+    bias_model = KolmogorovBias(input_model=model, beta=1, epsilon=1e-6, lambd=1)
+    bias_model(X)
+
+    # naive whole dataset
+    trainer = lightning.Trainer(max_epochs=5, logger=False, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0)
+    model = Committor(model=ff_model, atomic_masses=atomic_masses, alpha=1e-1, delta_f=0, separate_boundary_dataset=False)
+    trainer.fit(model, datamodule)
+    model(X).sum().backward()
+
+
+    print()
+    print('EXTERNAL GNN')
+    print()
+    from mlcolvar.core.nn.graph import SchNetModel
+    from mlcolvar.data.graph.utils import create_test_graph_input
+    gnn_model = SchNetModel(1, 0.1, [1, 8])
+
+    model = Committor(model=gnn_model, 
+                      atomic_masses=atomic_masses, 
+                      alpha=1e-1, 
+                      delta_f=0)
+
+    datamodule = create_test_graph_input(output_type='datamodule', n_samples=100, n_states=3, n_atoms=3)
+    trainer = lightning.Trainer(max_epochs=5, logger=False, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0, enable_model_summary=False)
+    trainer.fit(model, datamodule)
+
+    example_input_graph_test = create_test_graph_input(output_type='example', n_atoms=4, n_samples=3, n_states=2)
+
+    model(example_input_graph_test).sum().backward()
 
 
 
@@ -352,7 +450,7 @@ def test_committor_with_derivatives():
         datamodule = DictModule(dataset, lengths=[1.0])
     
         # seed for reproducibility
-        model = Committor(layers=[45, 20, 1],
+        model = Committor(model=[45, 20, 1],
                         atomic_masses=masses,
                         alpha=1, 
                         separate_boundary_dataset=separate_boundary_dataset)
@@ -408,7 +506,7 @@ def test_committor_with_derivatives():
             torch.manual_seed(42)
             datamodule = DictModule(dataset_desc, lengths=[1.0])
             
-            model = Committor(layers=[45, 20, 1],
+            model = Committor(model=[45, 20, 1],
                             atomic_masses=masses,
                             alpha=1, 
                             separate_boundary_dataset=separate_boundary_dataset,
@@ -438,7 +536,7 @@ def test_committor_with_derivatives():
             # test errors
             try:
                 # separate boundary with explicit derivatives
-                model = Committor(layers=[45, 20, 1],
+                model = Committor(model=[45, 20, 1],
                             atomic_masses=masses,
                             alpha=1, 
                             separate_boundary_dataset=True,
@@ -470,7 +568,7 @@ def test_committor_with_derivatives():
         torch.manual_seed(42)
         datamodule = DictModule(smart_dataset, lengths=[1.0])
 
-        model = Committor(layers=[45, 20, 1],
+        model = Committor(model=[45, 20, 1],
                         atomic_masses=masses,
                         alpha=1, 
                         separate_boundary_dataset=separate_boundary_dataset,
@@ -516,6 +614,29 @@ def test_committor_with_derivatives():
         except ValueError as e:
             print("[TEST LOG] Checked this error: ", e)
 
+
+    print()
+    print('EXTERNAL GNN')
+    print()
+    from mlcolvar.core.nn.graph import SchNetModel
+    from mlcolvar.data.graph.utils import create_test_graph_input
+    gnn_model = SchNetModel(1, 0.1, [1, 8])
+
+    model = Committor(model=gnn_model, 
+                      atomic_masses=masses, 
+                      alpha=1e-1, 
+                      delta_f=0)
+
+    datamodule = create_test_graph_input(output_type='datamodule', n_samples=100, n_states=3, n_atoms=3)
+    trainer = lightning.Trainer(max_epochs=5, logger=False, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0, enable_model_summary=False)
+    trainer.fit(model, datamodule)
+
+    example_input_graph_test = create_test_graph_input(output_type='example', n_atoms=4, n_samples=3, n_states=2)
+
+    model(example_input_graph_test).sum().backward()
+
+
 if __name__ == "__main__":
-    test_committor()
+    test_committor_1()
+    test_committor_2()
     test_committor_with_derivatives()

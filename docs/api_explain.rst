@@ -1,11 +1,15 @@
 Explain
 -------
 
-.. rubric:: Sensitivity analysis
+Sensitivity analysis
+^^^^^^^^^^^^^^^^^^^^
 
 Perform sensitivity analysis to identify feature relevances
 
 .. currentmodule:: mlcolvar.explain.sensitivity
+
+Descriptors-based
+""""""""""""""""""
 
 .. autosummary::
    :toctree: autosummary
@@ -14,7 +18,19 @@ Perform sensitivity analysis to identify feature relevances
    sensitivity_analysis 
    plot_sensitivity
 
-.. rubric:: Sparse linear model
+Graph-based
+"""""""""""
+.. currentmodule:: mlcolvar.explain.graph_sensitivity
+
+.. autosummary::
+   :toctree: autosummary
+   :template: custom-class-template.rst
+
+   graph_node_sensitivity
+
+
+Sparse linear models
+^^^^^^^^^^^^^^^^^^^^
 
 Use sparse models to approximate classification/regression tasks
 

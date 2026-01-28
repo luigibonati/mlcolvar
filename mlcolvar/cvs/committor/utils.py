@@ -1,6 +1,8 @@
 import torch
 import numpy as np
 from typing import List
+from mlcolvar.core import FeedForward, BaseGNN
+from mlcolvar.utils import _code
 from mlcolvar.data import DictDataset
 
 __all__ = ["KolmogorovBias", "compute_committor_weights", "initialize_committor_masses"]
@@ -35,12 +37,32 @@ class KolmogorovBias(torch.nn.Module):
         self.epsilon = epsilon
 
     def forward(self, x):
-        x.requires_grad = True
+        if isinstance(self.input_model.nn, FeedForward):
+            x.requires_grad = True
+        
+        elif isinstance(self.input_model.nn, BaseGNN):
+            x['positions'].requires_grad_(True)
+            x['node_attrs'].requires_grad_(True)
+        
         q = self.input_model(x)
         grad_outputs = torch.ones_like(q)
-        grads = torch.autograd.grad(q, x, grad_outputs, retain_graph=True)[0]
+
+        if isinstance(self.input_model.nn, BaseGNN):
+            grads = torch.autograd.grad(q, x['positions'], grad_outputs, retain_graph=True)[0]
+
+        elif isinstance(self.input_model.nn, FeedForward): 
+            grads = torch.autograd.grad(q, x, grad_outputs, retain_graph=True)[0]
+
         grads_squared = torch.sum(torch.pow(grads, 2), 1)
-        bias = - self.lambd*(1/self.beta)*(torch.log( grads_squared + self.epsilon ) - torch.log(self.epsilon))
+
+        # gnn models need an additional scatter
+        if isinstance(self.input_model.nn, BaseGNN):
+            grads_squared = _code.scatter_sum(grads_squared, 
+                                              x['batch'], 
+                                              dim=0)
+        
+        bias = - self.lambd*(1/self.beta)*(torch.log( grads_squared + self.epsilon ) - torch.log(self.epsilon))    
+    
         return bias
 
 def compute_committor_weights(dataset : DictDataset, 
@@ -66,23 +88,29 @@ def compute_committor_weights(dataset : DictDataset,
     -------
         Updated dataset with weights and updated labels
     """
+    if len(dataset) != len(bias):
+        raise ValueError('Dataset and bias have different lenghts!')
 
     if bias.isnan().any():
         raise(ValueError('Found Nan(s) in bias tensor. Check before proceeding! If no bias was applied replace Nan with zero!'))
     
-    n_labels = len(torch.unique(dataset['labels']))
+    if dataset.metadata['data_type'] == 'descriptors':
+        original_labels = dataset['labels']
+    else:
+        original_labels = torch.Tensor([dataset['data_list'][i]['graph_labels'] for i in range(len(dataset))])
+    
+    n_labels = len(torch.unique(original_labels))
     if n_labels != len(data_groups):
         raise(ValueError(f'The number of labels ({n_labels}) and data groups ({len(data_groups)}) do not match! Ensure you are correctly mapping the data in your training set!'))
 
-    # TODO sign if not from committor bias
     weights = torch.exp(beta * bias)
-    new_labels = torch.zeros_like(dataset['labels'])
+    new_labels = torch.zeros_like(original_labels)
 
     data_groups = torch.Tensor(data_groups)
 
     # correct data labels according to iteration
     for j,index in enumerate(data_groups):
-        new_labels[torch.nonzero(dataset['labels'] == j, as_tuple=True)] = index
+        new_labels[torch.nonzero(original_labels == j, as_tuple=True)] = index
 
     for i in np.unique(data_groups):
         # compute average of exp(beta*V) on this simualtions
@@ -90,10 +118,15 @@ def compute_committor_weights(dataset : DictDataset,
         
         # update the weights
         weights[torch.nonzero(new_labels == i, as_tuple=True)] = coeff * weights[torch.nonzero(new_labels == i, as_tuple=True)]
-    
+
     # update dataset
-    dataset['weights'] = weights
-    dataset['labels'] = new_labels
+    if dataset.metadata['data_type'] == 'descriptors':
+        dataset['weights'] = weights
+        dataset['labels'] = new_labels
+    else:
+        for i in range(len(dataset)):    
+            dataset['data_list'][i]['weight'] = weights[i]
+            dataset['data_list'][i]['graph_labels'] = new_labels[i]
 
     return dataset
 
@@ -124,3 +157,71 @@ def initialize_committor_masses(atom_types: list, masses: list):
     atomic_masses = torch.Tensor(atomic_masses)
 
     return atomic_masses
+
+def test_Kolmogorov_bias():
+    # test on feed forward
+    from mlcolvar import DeepTDA
+    model = DeepTDA(n_states=2, 
+                    n_cvs=1, 
+                    target_centers=[-1,1], 
+                    target_sigmas=[0.1, 0.1],
+                    model=[4,2,1])
+    inp = torch.randn((10, 4))
+    model_bias = KolmogorovBias(input_model=model, beta=1.0)
+    model_bias(inp)
+
+    # test on GNN
+    from mlcolvar.core.nn.graph import SchNetModel
+    from mlcolvar.data.graph.utils import create_test_graph_input
+
+    dataset = create_test_graph_input('dataset')
+    inp = dataset.get_graph_inputs()
+
+    gnn_model = SchNetModel(n_out=1, 
+                        cutoff=0.1, 
+                        atomic_numbers=[1,8])
+
+    model = DeepTDA(n_states=2, 
+                    n_cvs=1, 
+                    target_centers=[-1,1], 
+                    target_sigmas=[0.1, 0.1],
+                    model=gnn_model)
+
+    model_bias = KolmogorovBias(input_model=model, beta=1.0)
+    model_bias(inp)
+
+
+def test_compute_committor_weights():
+    # descriptors
+    # create dataset
+    samples = 50
+    X = torch.randn((3*samples, 6))
+    
+    # create labels, bias and weights
+    y = torch.zeros(X.shape[0])
+    y[samples:] += 1
+    y[int(2*samples):] += 1
+    bias = torch.zeros(X.shape[0])
+    w = torch.zeros(X.shape[0])
+
+    # create and edit dataset
+    dataset = DictDataset({"data": X, "labels": y, "weights": w})
+    dataset = compute_committor_weights(dataset=dataset, bias=bias, data_groups=[0,1,2], beta=1.0)
+    print(dataset)
+    assert (torch.allclose(dataset['weights'], torch.ones(X.shape[0])))
+    
+
+    # graphs
+    # create dataset
+    from mlcolvar.data.graph.utils import create_test_graph_input
+    dataset = create_test_graph_input('dataset', n_states=4, random_weights=True)
+    bias = torch.zeros(len(dataset))
+    dataset = compute_committor_weights(dataset=dataset, bias=bias, data_groups=[0,1,2,3], beta=1)
+    aux = []
+    for i in range(len(dataset)):    
+            aux.append(dataset['data_list'][i]['weight'])
+    assert (torch.allclose(torch.ones(len(dataset)), torch.Tensor(aux)))
+
+if __name__ == '__main__':
+    test_Kolmogorov_bias()
+    test_compute_committor_weights()

@@ -29,10 +29,11 @@
 
    .. autosummary::
    
-      ~DeepTDA.BLOCKS
       ~DeepTDA.CHECKPOINT_HYPER_PARAMS_KEY
       ~DeepTDA.CHECKPOINT_HYPER_PARAMS_NAME
       ~DeepTDA.CHECKPOINT_HYPER_PARAMS_TYPE
+      ~DeepTDA.DEFAULT_BLOCKS
+      ~DeepTDA.MODEL_BLOCKS
       ~DeepTDA.T_destination
       ~DeepTDA.automatic_optimization
       ~DeepTDA.call_super_init

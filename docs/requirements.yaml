@@ -26,9 +26,12 @@ dependencies:
   - ipykernel
   - scikit-learn
   - scipy
+  - pyg
 
   # Pip-only installs
   - pip:
     - sphinx-copybutton
     - furo
     - KDEpy
+    - mdtraj
+    - matscipy
