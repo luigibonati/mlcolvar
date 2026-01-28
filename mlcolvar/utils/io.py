@@ -894,8 +894,8 @@ def test_datasesetFromTrajectories():
     create_dataset_from_trajectories(
         trajectories=['r.dcd',
                       'p.dcd'],
-        top=['r.pdb', 
-             'p.pdb'],
+        topologies=['r.pdb', 
+                    'p.pdb'],
         folder="mlcolvar/tests/data",
         cutoff=8.0,  # Ang
         labels=None,
@@ -906,8 +906,8 @@ def test_datasesetFromTrajectories():
     dataset = create_dataset_from_trajectories(
                 trajectories=['r.dcd',
                             'p.dcd'],
-                top=['r.pdb', 
-                    'p.pdb'],
+                topologies=['r.pdb', 
+                            'p.pdb'],
                 folder="mlcolvar/tests/data",
                 cutoff=8.0,  # Ang
                 labels=[0,1],
@@ -921,8 +921,8 @@ def test_datasesetFromTrajectories():
     dataset = create_dataset_from_trajectories(
                 trajectories=['r.dcd', 'r.dcd',
                               'p.dcd', 'p.dcd'],
-                top=['r.pdb', 'r.pdb', 
-                     'p.pdb', 'p.pdb'],
+                topologies=['r.pdb', 'r.pdb', 
+                            'p.pdb', 'p.pdb'],
                 folder="mlcolvar/tests/data",
                 cutoff=8.0,  # Ang
                 labels=[0,1,2,3],
@@ -956,7 +956,7 @@ system_selection: str = None
 
         dataset, trajectories = create_dataset_from_trajectories(
             trajectories=[test_dataset_path, test_dataset_path, test_dataset_path],
-            top=[test_dataset_path, test_dataset_path, test_dataset_path],
+            topologies=[test_dataset_path, test_dataset_path, test_dataset_path],
             cutoff=1.0,
             system_selection=system_selection,
             return_trajectories=True,
@@ -979,7 +979,7 @@ system_selection: str = None
 
         dataset, trajectories = create_dataset_from_trajectories(
             trajectories=[test_dataset_path, test_dataset_path, test_dataset_path],
-            top=test_dataset_path,
+            topologies=test_dataset_path,
             cutoff=1.0,
             labels=None,
             system_selection=system_selection,
@@ -1038,7 +1038,7 @@ system_selection: str = None
 
             dataset = create_dataset_from_trajectories(
                 trajectories=[test_dataset_path, test_dataset_path, test_dataset_path],
-                top=[test_dataset_path, test_dataset_path, test_dataset_path],
+                topologies=[test_dataset_path, test_dataset_path, test_dataset_path],
                 cutoff=1.0,
                 system_selection='type O and {:s}'.format(system_selection),
                 environment_selection='type H and {:s}'.format(system_selection),
@@ -1050,7 +1050,7 @@ system_selection: str = None
 
             dataset = create_dataset_from_trajectories(
                 trajectories=[test_dataset_path, test_dataset_path, test_dataset_path],
-                top=[test_dataset_path, test_dataset_path, test_dataset_path],
+                topologies=[test_dataset_path, test_dataset_path, test_dataset_path],
                 cutoff=1.0,
                 system_selection='name H1 and {:s}'.format(system_selection),
                 environment_selection='name H2 and {:s}'.format(system_selection),
@@ -1090,7 +1090,7 @@ def test_dataset_from_xyz():
     load_args = [{'start' : 0, 'stop' : 2, 'stride' : 1}]
     dataset = create_dataset_from_trajectories(trajectories="Cu.xyz",
                                                folder="mlcolvar/tests/data",
-                                               top=None,
+                                               topologies=None,
                                                cutoff=3.5,  # Ang
                                                labels=None,
                                                system_selection="index 0",
@@ -1107,7 +1107,7 @@ def test_dataset_from_xyz():
                  {'start' : 0, 'stop' : 4, 'stride' : 2}]
     dataset = create_dataset_from_trajectories(trajectories=["Cu.xyz", "Cu.xyz"],
                                                folder="mlcolvar/tests/data",
-                                               top=None,
+                                               topologies=None,
                                                cutoff=3.5,  # Ang
                                                labels=None,
                                                system_selection="index 0 or index 1",
