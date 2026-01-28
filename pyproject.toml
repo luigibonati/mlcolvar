@@ -53,6 +53,7 @@ test = [
   "pytest-cov", 
   "codecov",
   "nbmake",
+  "ase"
 ]
 doc = [
   "sphinx",
