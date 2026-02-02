@@ -285,15 +285,50 @@ def create_timelagged_dataset(
             tprime = tprime_evaluation(t, logweights)
     else:
         tprime = t
+    
+    
+    if logweights is None and reweight_mode is None:
+        # estimate dt
+        dt = float(t[1] - t[0]) if len(t) > 1 else 1.0
 
-    # find pairs of configurations separated by lag_time
-    x_t, x_lag, w_t, w_lag = find_timelagged_configurations(
-        X,
-        tprime,
-        lag_time=lag_time,
-        logweights=logweights if reweight_mode == "weights_t" else None,
-        progress_bar=progress_bar,
-    )
+        # convert lag_time into integer lag steps
+        lag_steps = int(round(lag_time / dt))
+
+        if lag_steps < 1:
+            raise ValueError(
+                f"lag_time={lag_time} is too small. It must be at least one time step dt={dt}."
+            )
+            
+        if lag_steps >= len(X):
+            raise ValueError(
+                f"lag_time={lag_time} is too large for trajectory length N={len(X)}."
+            )
+        
+        # warn user if lag_time is very large
+        if lag_steps > 0.1 * len(X):
+            warnings.warn(
+                f"lag_time={lag_time} is large compared to trajectory length "
+                f"(lag_steps={lag_steps}, N={len(X)}). "
+                "This may reduce the number of available time-lagged pairs."
+            )
+
+        # direct slicing construction
+        x_t = X[:-lag_steps]
+        x_lag = X[lag_steps:]
+
+        # uniform weights
+        w_t = torch.ones(len(x_t)) * dt
+        w_lag = torch.ones(len(x_lag)) * dt
+
+    else:
+        # find pairs of configurations separated by lag_time
+        x_t, x_lag, w_t, w_lag = find_timelagged_configurations(
+            X,
+            tprime,
+            lag_time=lag_time,
+            logweights=logweights if reweight_mode == "weights_t" else None,
+            progress_bar=progress_bar,
+        )
 
     # return only a slice of the data (N. Pedrani)
     if interval is not None:
