@@ -215,7 +215,7 @@ def create_timelagged_dataset(
     References
     ----------
     .. [1] Y. I. Yang and M. Parrinello, “Refining collective coordinates and improving free energy
-        representation in variational enhanced sampling,” JCTC 14, 2889–2894 (2018).
+        representation in variational enhanced sampling,” JCTC 14, 2889-2894 (2018).
     .. [2] J. McCarty and M. Parrinello, "A variational conformational dynamics approach to the selection
         of collective variables in meta- dynamics,” JCP 147, 204109 (2017).
     .. [3] H. Wu, et al. "Variational Koopman models: Slow collective variables and molecular kinetics
@@ -285,49 +285,52 @@ def create_timelagged_dataset(
             tprime = tprime_evaluation(t, logweights)
     else:
         tprime = t
-    
-    
-    if logweights is None and reweight_mode is None:
-        # estimate dt
+        
+    # =========================
+    # Fast slicing shortcut
+    # =========================
+    if reweight_mode is None or reweight_mode == "weights_t":
         dt = float(t[1] - t[0]) if len(t) > 1 else 1.0
-
-        # convert lag_time into integer lag steps
         lag_steps = int(round(lag_time / dt))
 
         if lag_steps < 1:
-            raise ValueError(
-                f"lag_time={lag_time} is too small. It must be at least one time step dt={dt}."
-            )
-            
+            raise ValueError("lag_time too small.")
         if lag_steps >= len(X):
-            raise ValueError(
-                f"lag_time={lag_time} is too large for trajectory length N={len(X)}."
-            )
+            raise ValueError("lag_time too large.")
         
-        # warn user if lag_time is very large
-        if lag_steps > 0.1 * len(X):
-            warnings.warn(
-                f"lag_time={lag_time} is large compared to trajectory length "
-                f"(lag_steps={lag_steps}, N={len(X)}). "
-                "This may reduce the number of available time-lagged pairs."
-            )
-
-        # direct slicing construction
+        # pairs
         x_t = X[:-lag_steps]
         x_lag = X[lag_steps:]
 
-        # uniform weights
-        w_t = torch.ones(len(x_t)) * dt
-        w_lag = torch.ones(len(x_lag)) * dt
+        # weights
+        if reweight_mode is None:
+            w_t = torch.ones(len(x_t)) * dt
+            w_lag = torch.ones(len(x_lag)) * dt
+        else:
+            logweights = torch.tensor(logweights, dtype=torch.float32)
+            weights = torch.exp(logweights)
+            w_t = weights[:-lag_steps]
+            w_lag = weights[lag_steps:]
 
-    else:
-        # find pairs of configurations separated by lag_time
+    # =========================
+    # Full search mode (rescale_time)
+    # =========================
+    elif reweight_mode == 'rescale_time':
         x_t, x_lag, w_t, w_lag = find_timelagged_configurations(
             X,
             tprime,
             lag_time=lag_time,
             logweights=logweights if reweight_mode == "weights_t" else None,
             progress_bar=progress_bar,
+        )
+
+    # =========================
+    # Invalid mode
+    # =========================
+    else:
+        raise ValueError(
+            f"Unknown reweight_mode '{reweight_mode}'. "
+            "Supported modes are: None, 'weights_t', 'rescale_time'."
         )
 
     # return only a slice of the data (N. Pedrani)
