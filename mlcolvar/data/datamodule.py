@@ -234,14 +234,33 @@ class DictModule(lightning.LightningDataModule):
         pass
 
     def __repr__(self) -> str:
-        string = f"DictModule(dataset -> {self.dataset.__repr__()}"
-        string += f",\n\t\t     train_loader -> DictLoader(length={self._lengths[0]}, batch_size={self.batch_size[0]}, shuffle={self.shuffle[0]})"
+        parts = [
+            f"DictModule(dataset -> {self.dataset!r}",
+            (
+                "train_loader -> DictLoader("
+                f"length={self._lengths[0]}, "
+                f"batch_size={self.batch_size[0]}, "
+                f"shuffle={self.shuffle[0]})"
+            ),
+        ]
         if len(self._lengths) >= 2:
-            string += f",\n\t\t     valid_loader -> DictLoader(length={self._lengths[1]}, batch_size={self.batch_size[1]}, shuffle={self.shuffle[1]})"
+            parts.append(
+                "valid_loader -> DictLoader("
+                f"length={self._lengths[1]}, "
+                f"batch_size={self.batch_size[1]}, "
+                f"shuffle={self.shuffle[1]})"
+            )
         if len(self._lengths) >= 3:
-            string += f",\n\t\t\ttest_loader =DictLoader(length={self._lengths[2]}, batch_size={self.batch_size[2]}, shuffle={self.shuffle[2]})"
-        string += f")"
-        return string
+            parts.append(
+                "test_loader =DictLoader("
+                f"length={self._lengths[2]}, "
+                f"batch_size={self.batch_size[2]}, "
+                f"shuffle={self.shuffle[2]})"
+            )
+        return ",\n\t\t     ".join(parts) + ")"
+
+    def __str__(self) -> str:
+        return self.__repr__()
 
     def _split(self, dataset):
         """Perform the random or sequential spliting of a single dataset.
