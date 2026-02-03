@@ -93,7 +93,7 @@ class BaseCV:
                     self.lr_scheduler_config.update(options[o])
                 else:
                     raise ValueError(
-                        f'The key {o} is not available in this class. The available keys are: {", ".join(self.BLOCKS)}, optimizer and lr_scheduler.'
+                        f'The key {o} is not available in this class. The available keys are: {", ".join(self.BLOCKS)}, optimizer, lr_scheduler, and lr_scheduler_config.'
                     )
 
         return options
@@ -218,8 +218,13 @@ class BaseCV:
             return optimizer
         
         # Create the scheduler from the lr_scheduler_kwargs if any
-        scheduler_cls = self.lr_scheduler_kwargs['scheduler']
-        scheduler_kwargs = {k: v for k, v in self.lr_scheduler_kwargs.items() if k != 'scheduler'}
+        if "scheduler" not in self.lr_scheduler_kwargs:
+            raise ValueError("lr_scheduler_kwargs must include a 'scheduler' key with the scheduler class.")
+
+        scheduler_cls = self.lr_scheduler_kwargs["scheduler"]
+        scheduler_kwargs = {
+            k: v for k, v in self.lr_scheduler_kwargs.items() if k != "scheduler"
+        }
         lr_scheduler = scheduler_cls(optimizer, **scheduler_kwargs)
         lr_scheduler_config = {
             "scheduler": lr_scheduler
@@ -227,6 +232,8 @@ class BaseCV:
 
         # Add possible additional config options
         if self.lr_scheduler_config:
+            if "scheduler" in self.lr_scheduler_config:
+                raise ValueError("lr_scheduler_config cannot override the 'scheduler' entry.")
             lr_scheduler_config.update(self.lr_scheduler_config)
         return [optimizer], [lr_scheduler_config]
 
