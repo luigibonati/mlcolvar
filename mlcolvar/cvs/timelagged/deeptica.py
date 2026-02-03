@@ -139,7 +139,10 @@ def test_deep_tica():
     from mlcolvar.utils.timelagged import create_timelagged_dataset
 
     # create dataset
-    X = np.loadtxt("mlcolvar/tests/data/mb-mcmc.dat")
+    from mlcolvar.tests import data_dir
+
+    with data_dir() as data_folder:
+        X = np.loadtxt(data_folder / "mb-mcmc.dat")
     X = torch.Tensor(X)
     dataset = create_timelagged_dataset(X, lag_time=1)
     datamodule = DictModule(dataset, batch_size=10000)
