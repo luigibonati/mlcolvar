@@ -36,6 +36,14 @@ class MetricsCallback(Callback):
                     self.metrics[key].append(val)
                 else:
                     self.metrics[key] = [val]
+            has_scheduler = bool(getattr(trainer, "lr_scheduler_configs", None))
+            if has_scheduler and "lr" not in metrics and trainer.optimizers:
+                lrs = [pg["lr"] for opt in trainer.optimizers for pg in opt.param_groups]
+                lr_val = lrs[0] if len(lrs) == 1 else lrs
+                if "lr" in self.metrics:
+                    self.metrics["lr"].append(lr_val)
+                else:
+                    self.metrics["lr"] = [lr_val]
 
 
 def test_metrics_callbacks():
