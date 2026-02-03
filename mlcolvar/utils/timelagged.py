@@ -354,24 +354,25 @@ def create_timelagged_dataset(
 def test_create_timelagged_dataset():
     in_features = 2
     n_points = 100
+    lag_time = 5
     X = torch.rand(n_points, in_features) * 100
 
     # unbiased case
     t = np.arange(n_points)
-    dataset = create_timelagged_dataset(X, t, lag_time=10)
-    print(len(dataset))
+    dataset = create_timelagged_dataset(X, t, lag_time=lag_time)
+    assert len(dataset) == n_points - lag_time
 
     # reweight mode rescale_time (default)
     logweights = np.random.rand(n_points)
-    dataset = create_timelagged_dataset(X, t, logweights=logweights)
-    print(len(dataset))
+    dataset = create_timelagged_dataset(X, t, lag_time=lag_time, logweights=logweights)
+    assert len(dataset) > 0
 
     # reweight mode weights_t
     logweights = np.random.rand(n_points)
     dataset = create_timelagged_dataset(
-        X, t, logweights=logweights, reweight_mode="weights_t"
+        X, t, logweights=logweights, lag_time=lag_time, reweight_mode="weights_t"
     )
-    print(len(dataset))
+    assert len(dataset) == n_points - lag_time
 
 
 if __name__ == "__main__":
