@@ -88,6 +88,9 @@ where = ["."]
 mlcolvar = [
     "py.typed"
 ]
+"mlcolvar.tests" = [
+    "data/**/*"
+]
 
 [tool.versioningit]
 default-version = "1+unknown"
