@@ -51,6 +51,7 @@ def test_metrics_callbacks():
     import lightning
     from mlcolvar.cvs import AutoEncoderCV
     from mlcolvar.data import DictDataset, DictModule
+    from torch.optim.lr_scheduler import StepLR
 
     X = torch.rand((100, 2))
     dataset = DictDataset({"data": X})
@@ -77,3 +78,24 @@ def test_metrics_callbacks():
         callbacks=metrics,
     )
     trainer.fit(model, datamodule)
+
+    model = AutoEncoderCV(
+        [2, 2, 1],
+        options={
+            "lr_scheduler": {
+                "scheduler": StepLR,
+                "step_size": 1,
+                "gamma": 0.5,
+            }
+        },
+    )
+    metrics = MetricsCallback()
+    trainer = lightning.Trainer(
+        max_epochs=1,
+        log_every_n_steps=2,
+        logger=None,
+        enable_checkpointing=False,
+        callbacks=metrics,
+    )
+    trainer.fit(model, datamodule)
+    assert "lr" in metrics.metrics
