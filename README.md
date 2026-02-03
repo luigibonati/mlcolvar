@@ -45,6 +45,13 @@ The library is available on [PyPi](https://pypi.org/project/mlcolvar/) and can b
 pip install mlcolvar
 ```
 
+To validate your installation, install the test extras and run pytest against the installed package:
+
+```bash
+pip install mlcolvar[test]
+pytest --pyargs mlcolvar.tests
+```
+
 **Clone from GitHub**
 
 The library can also be installed cloning the repository from GitHub. This is the preferred choice for **developers** as it provides more flexibility and allows editable installation.
