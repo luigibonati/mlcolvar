@@ -131,11 +131,11 @@ def test_lr_scheduler_config():
     lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau
     options = {
         "lr_scheduler": {"scheduler": lr_scheduler, "mode": "min", "patience": 1},
-        "lr_scheduler_config": {"monitor": "val_loss"},
+        "lr_scheduler_config": {"monitor": "valid_loss"},
     }
     model = mlcolvar.cvs.RegressionCV(layers=[2, 5, 1], options=options)
 
     optimizers, schedulers = model.configure_optimizers()
     assert isinstance(optimizers, list)
     assert isinstance(schedulers, list)
-    assert schedulers[0]["monitor"] == "val_loss"
+    assert schedulers[0]["monitor"] == "valid_loss"
