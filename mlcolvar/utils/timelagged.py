@@ -304,8 +304,8 @@ def create_timelagged_dataset(
 
         # weights
         if reweight_mode is None:
-            w_t = torch.ones(len(x_t)) * dt
-            w_lag = torch.ones(len(x_lag)) * dt
+            w_t = torch.ones(len(x_t))
+            w_lag = torch.ones(len(x_lag))
         else:
             logweights = torch.tensor(logweights, dtype=torch.float32)
             weights = torch.exp(logweights)
