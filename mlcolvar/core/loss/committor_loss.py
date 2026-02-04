@@ -324,7 +324,7 @@ def committor_loss(x: torch.Tensor,
     # variational contribution to loss: we sum over the batch    
     loss_var = torch.mean( grad_square * w[mask_var])
     if log_var:
-        loss_var = torch.log1p(loss_var)
+        loss_var = gamma*torch.log1p(loss_var)
     else:
         loss_var *= gamma
 
