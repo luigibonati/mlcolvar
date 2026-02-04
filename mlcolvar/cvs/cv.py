@@ -47,6 +47,7 @@ class BaseCV:
         self._optimizer_name = "Adam"
         self.optimizer_kwargs = {}
         self.lr_scheduler_kwargs = {}
+        self.lr_scheduler_config = {}
 
         # PRE/POST
         self.preprocessing = preprocessing
@@ -88,9 +89,11 @@ class BaseCV:
                     self.optimizer_kwargs.update(options[o])
                 elif o == "lr_scheduler":
                     self.lr_scheduler_kwargs.update(options[o])
+                elif o == "lr_scheduler_config":
+                    self.lr_scheduler_config.update(options[o])
                 else:
                     raise ValueError(
-                        f'The key {o} is not available in this class. The available keys are: {", ".join(self.BLOCKS)}, optimizer and lr_scheduler.'
+                        f'The key {o} is not available in this class. The available keys are: {", ".join(self.BLOCKS)}, optimizer, lr_scheduler, and lr_scheduler_config.'
                     )
 
         return options
@@ -192,24 +195,47 @@ class BaseCV:
     def configure_optimizers(self):
         """
         Initialize the optimizer based on self._optimizer_name and self.optimizer_kwargs.
+        It also adds the learning rate scheduler if self.lr_scheduler_kwargs is not empty.
+        The scheduler is given as a dictionary with the key 'scheduler' containing the scheduler class
+        and the rest of the keys are config options for the scheduler.
 
         Returns
         -------
         torch.optim
             Torch optimizer
+            
+        dict, optional
+            Learning rate scheduler configuration (if any)
         """
 
+        # Create the optimizer from the optimizer name and kwargs
         optimizer = getattr(torch.optim, self._optimizer_name)(
             self.parameters(), **self.optimizer_kwargs
         )
-
-        if self.lr_scheduler_kwargs:
-            scheduler_cls = self.lr_scheduler_kwargs['scheduler']
-            scheduler_kwargs = {k: v for k, v in self.lr_scheduler_kwargs.items() if k != 'scheduler'}
-            lr_scheduler = scheduler_cls(optimizer, **scheduler_kwargs)
-            return [optimizer] , [lr_scheduler]
-        else: 
+        
+        # Return just the optimizer if no scheduler is defined
+        if not self.lr_scheduler_kwargs:
             return optimizer
+        
+        # Create the scheduler from the lr_scheduler_kwargs if any
+        if "scheduler" not in self.lr_scheduler_kwargs:
+            raise ValueError("lr_scheduler_kwargs must include a 'scheduler' key with the scheduler class.")
+
+        scheduler_cls = self.lr_scheduler_kwargs["scheduler"]
+        scheduler_kwargs = {
+            k: v for k, v in self.lr_scheduler_kwargs.items() if k != "scheduler"
+        }
+        lr_scheduler = scheduler_cls(optimizer, **scheduler_kwargs)
+        lr_scheduler_config = {
+            "scheduler": lr_scheduler
+        }
+
+        # Add possible additional config options
+        if self.lr_scheduler_config:
+            if "scheduler" in self.lr_scheduler_config:
+                raise ValueError("lr_scheduler_config cannot override the 'scheduler' entry.")
+            lr_scheduler_config.update(self.lr_scheduler_config)
+        return [optimizer], [lr_scheduler_config]
 
     def __setattr__(self, key, value):
         # PyTorch overrides __setattr__ to raise a TypeError when you try to assign

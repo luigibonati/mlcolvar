@@ -297,120 +297,128 @@ def create_dataset_from_files(
 
 
 def test_datasetFromFile():
-    # Test with unlabeled dataset
-    torch_dataset, pd_dataframe = create_dataset_from_files(
-        file_names=["state_A.dat", "state_B.dat", "state_C.dat"],
-        folder="mlcolvar/tests/data",
-        create_labels=False,
-        load_args=None,
-        filter_args=None,
-        return_dataframe=True,
-        start=0,  # kwargs to load_dataframe
-        stop=5,
-        stride=1,
-    )
+    from mlcolvar.tests import data_dir
 
-    # Test no regex on two states
-    create_dataset_from_files(
-        file_names=["state_A.dat", "state_B.dat"],
-        folder="mlcolvar/tests/data",
-        create_labels=True,
-        load_args=None,
-        filter_args=None,
-        return_dataframe=True,
-        start=0,  # kwargs to load_dataframe
-        stop=5,
-        stride=1,
-    )
+    with data_dir() as data_folder:
+        data_folder = str(data_folder)
+        # Test with unlabeled dataset
+        torch_dataset, pd_dataframe = create_dataset_from_files(
+            file_names=["state_A.dat", "state_B.dat", "state_C.dat"],
+            folder=data_folder,
+            create_labels=False,
+            load_args=None,
+            filter_args=None,
+            return_dataframe=True,
+            start=0,  # kwargs to load_dataframe
+            stop=5,
+            stride=1,
+        )
 
-    # Test with filter regex on two states
-    dataset = create_dataset_from_files(
-        file_names=["state_A.dat", "state_B.dat"],
-        folder="mlcolvar/tests/data",
-        create_labels=True,
-        load_args=None,
-        filter_args={"regex": "n|o"},
-        return_dataframe=False,
-        start=0,  # kwargs to load_dataframe
-        stop=5,
-        stride=1,
-    )
+        # Test no regex on two states
+        create_dataset_from_files(
+            file_names=["state_A.dat", "state_B.dat"],
+            folder=data_folder,
+            create_labels=True,
+            load_args=None,
+            filter_args=None,
+            return_dataframe=True,
+            start=0,  # kwargs to load_dataframe
+            stop=5,
+            stride=1,
+        )
 
-    def test_modifier(x):
-        return x**2
+        # Test with filter regex on two states
+        dataset = create_dataset_from_files(
+            file_names=["state_A.dat", "state_B.dat"],
+            folder=data_folder,
+            create_labels=True,
+            load_args=None,
+            filter_args={"regex": "n|o"},
+            return_dataframe=False,
+            start=0,  # kwargs to load_dataframe
+            stop=5,
+            stride=1,
+        )
 
-    # Test with filter regex on two states with modifier
-    create_dataset_from_files(
-        file_names=["state_A.dat", "state_B.dat"],
-        folder="mlcolvar/tests/data",
-        create_labels=True,
-        load_args=None,
-        filter_args={"regex": "n|o"},
-        modifier_function=test_modifier,
-        return_dataframe=True,
-        start=0,  # kwargs to load_dataframe
-        stop=5,
-        stride=1,
-    )
+        def test_modifier(x):
+            return x**2
+
+        # Test with filter regex on two states with modifier
+        create_dataset_from_files(
+            file_names=["state_A.dat", "state_B.dat"],
+            folder=data_folder,
+            create_labels=True,
+            load_args=None,
+            filter_args={"regex": "n|o"},
+            modifier_function=test_modifier,
+            return_dataframe=True,
+            start=0,  # kwargs to load_dataframe
+            stop=5,
+            stride=1,
+        )
 
 def test_load_dataframe():
-    # Test naive single file
-    pd_dataframe = load_dataframe(file_names="state_A.dat",
-                                  folder="mlcolvar/tests/data",
-                                  start=0, 
-                                  stop=5,
-                                  stride=1,
-                                )
-    assert(len(pd_dataframe) == 5)
+    from mlcolvar.tests import data_dir
 
-    # Test with global loading parameters
-    pd_dataframe = load_dataframe(file_names=["state_A.dat", "state_B.dat", "state_C.dat"],
-                                  folder="mlcolvar/tests/data",
-                                  start=0, 
-                                  stop=5,
-                                  stride=1,
-                                )
-    assert(len(pd_dataframe) == 15)
+    with data_dir() as data_folder:
+        data_folder = str(data_folder)
+        # Test naive single file
+        pd_dataframe = load_dataframe(file_names="state_A.dat",
+                                      folder=data_folder,
+                                      start=0, 
+                                      stop=5,
+                                      stride=1,
+                                    )
+        assert(len(pd_dataframe) == 5)
 
-    # Test with per-file loading parameters
-    load_args = [{"start": 0, "stop": 5, "stride": 1},
-                 {"start": 0, "stop": 5, "stride": 1},
-                 {"start": 0, "stop": 5, "stride": 1}]
-    pd_dataframe = load_dataframe(file_names=["state_A.dat", "state_B.dat", "state_C.dat"],
-                                  folder="mlcolvar/tests/data",
-                                  load_args=load_args,
-                                )
-    assert(len(pd_dataframe) == 15)
-
-    # Test with per-file loading parameters with default fallback
-    load_args = [{"start": 0, "stop": 6, "stride": 2},
-                 {"start": 0, "stop": 6, "stride": 2},
-                 {"start": 0, "stop": 6}] # this should fall back to default
-    pd_dataframe = load_dataframe(file_names=["state_A.dat", "state_B.dat", "state_C.dat"],
-                                  folder="mlcolvar/tests/data",
-                                  load_args=load_args,
-                                )
-    assert(len(pd_dataframe) == 12)
-
-    # test wrong length error
-    try:
-        load_args = [{"start": 0, "stop": 6, "stride": 2},
-                 {"start": 0, "stop": 6}] # this should fall back to default
+        # Test with global loading parameters
         pd_dataframe = load_dataframe(file_names=["state_A.dat", "state_B.dat", "state_C.dat"],
-                                  folder="mlcolvar/tests/data",
-                                  load_args=load_args,
-                                )
-    except TypeError as e:
-        print("[TEST LOG] Checked this error: ", e)
+                                      folder=data_folder,
+                                      start=0, 
+                                      stop=5,
+                                      stride=1,
+                                    )
+        assert(len(pd_dataframe) == 15)
 
-    # test load_args and global key conflict error
-    try:
-        load_args = [{"start": 0, "stop": 6, "stride": 2},
-                 {"start": 0, "stop": 6}] # this should fall back to default
+        # Test with per-file loading parameters
+        load_args = [{"start": 0, "stop": 5, "stride": 1},
+                     {"start": 0, "stop": 5, "stride": 1},
+                     {"start": 0, "stop": 5, "stride": 1}]
         pd_dataframe = load_dataframe(file_names=["state_A.dat", "state_B.dat", "state_C.dat"],
-                                  folder="mlcolvar/tests/data",
-                                  load_args=load_args,
-                                  start=10,
-                                )
-    except ValueError as e:
-        print("[TEST LOG] Checked this error: ", e)
+                                      folder=data_folder,
+                                      load_args=load_args,
+                                    )
+        assert(len(pd_dataframe) == 15)
+
+        # Test with per-file loading parameters with default fallback
+        load_args = [{"start": 0, "stop": 6, "stride": 2},
+                     {"start": 0, "stop": 6, "stride": 2},
+                     {"start": 0, "stop": 6}] # this should fall back to default
+        pd_dataframe = load_dataframe(file_names=["state_A.dat", "state_B.dat", "state_C.dat"],
+                                      folder=data_folder,
+                                      load_args=load_args,
+                                    )
+        assert(len(pd_dataframe) == 12)
+
+        # test wrong length error
+        try:
+            load_args = [{"start": 0, "stop": 6, "stride": 2},
+                     {"start": 0, "stop": 6}] # this should fall back to default
+            pd_dataframe = load_dataframe(file_names=["state_A.dat", "state_B.dat", "state_C.dat"],
+                                      folder=data_folder,
+                                      load_args=load_args,
+                                    )
+        except TypeError as e:
+            print("[TEST LOG] Checked this error: ", e)
+
+        # test load_args and global key conflict error
+        try:
+            load_args = [{"start": 0, "stop": 6, "stride": 2},
+                     {"start": 0, "stop": 6}] # this should fall back to default
+            pd_dataframe = load_dataframe(file_names=["state_A.dat", "state_B.dat", "state_C.dat"],
+                                      folder=data_folder,
+                                      load_args=load_args,
+                                      start=10,
+                                    )
+        except ValueError as e:
+            print("[TEST LOG] Checked this error: ", e)

@@ -56,6 +56,7 @@ doc = [
   "nbsphinx",
   "furo",
   "sphinx-copybutton", 
+  "ipython",
 ]
 
 [tool.setuptools]
@@ -87,6 +88,9 @@ where = ["."]
 [tool.setuptools.package-data]
 mlcolvar = [
     "py.typed"
+]
+"mlcolvar.tests" = [
+    "data/**/*"
 ]
 
 [tool.versioningit]

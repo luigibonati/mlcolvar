@@ -65,7 +65,7 @@ jobs:
         # conda setup requires this special shell
         shell: bash -l {0}
         run: |
-          pytest -v --cov=mlcolvar --cov-report=xml --color=yes mlcolvar/tests/
+          pytest -v --pyargs mlcolvar.tests --cov=mlcolvar --cov-report=xml --color=yes
 
       - name: Run notebook tests
         # conda setup requires this special shell
