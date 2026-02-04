@@ -65,7 +65,6 @@ class DeepLDA(BaseCV, lightning.LightningModule):
             Set 'block_name' = None or False to turn off that block
         """
         super().__init__(model=model, **kwargs)
-        self.save_hyperparameters(ignore=['model'])
 
         # =======   LOSS  =======
         # Maximize the sum of all the LDA eigenvalues.

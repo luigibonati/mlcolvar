@@ -69,7 +69,6 @@ class DeepTDA(BaseCV, lightning.LightningModule):
             Set 'block_name' = None or False to turn off that block
         """        
         super().__init__(model, **kwargs)
-        self.save_hyperparameters(ignore=['model'])
 
         # =======   LOSS  =======
         self.loss_fn = TDALoss(
