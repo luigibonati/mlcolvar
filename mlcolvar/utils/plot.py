@@ -365,7 +365,15 @@ def pbar(
     file : TextIO
         The output file.
     """
-    if (use_unicode):
+    if use_unicode:
+        encoding = getattr(file, "encoding", None)
+        if encoding:
+            try:
+                ("█━").encode(encoding)
+            except Exception:
+                use_unicode = False
+
+    if use_unicode:
         c_1 = ''
         c_2 = '█'
         c_3 = '━'
