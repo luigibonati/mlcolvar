@@ -147,26 +147,7 @@ def compute_fes(
         backend = kdelib
 
     # check temperature / units
-    if kbt is not None:
-        if temp is not None:
-            raise ValueError("Only one of kbt and temp can be specified.")
-     
-        fes_units = None
-    else: 
-        if temp is None:
-            raise ValueError("One of kbt and temp must be specified.")
-    
-        if fes_units == "kJ/mol":
-                kb = 0.00831441
-        elif fes_units == "kcal/mol":
-            kb = 0.0019872041
-        elif fes_units == "eV":
-            kb = 8.6173324e-5
-        else:
-            raise ValueError(
-                "fes_units must be one of 'kJ/mol', 'kcal/mol', 'eV'."
-            )
-        kbt = kb * temp
+    kbt, temp, fes_units = _check_kbt_units(kbt, temp, fes_units)
         
     # dataset
     if PANDAS_IS_INSTALLED:
@@ -346,6 +327,8 @@ def compute_fes(
 def compute_deltaG(X: np.ndarray,
                    stateA_bounds: List[float],
                    stateB_bounds: List[float], 
+                   temp=None,
+                   fes_units="kJ/mol",
                    kbt: float = None,
                    nblocks: int = 10, 
                    weights: np.ndarray = None,
@@ -365,8 +348,12 @@ def compute_deltaG(X: np.ndarray,
         Bounds of state A along the CV. 
     stateB_bounds : List[float]
         Bounds of state B along the CV.
+    temp : float, optional
+        Temperature (in Kelvin). Required if `kbt` is not provided.
+    fes_units : str, optional
+        Units of the FES if using `temp`, by default "kJ/mol".
     kbt : float, optional
-        Thermal energy in the same units as the deltaG, by default None.
+        Thermal energy in the same units as the FES. Required if `temp` is not provided.
     nblocks : int, optional
         Number of blocks on whcih the deltaG is progressively computed, by default 10.
     weights : np.ndarray, optional
@@ -390,6 +377,9 @@ def compute_deltaG(X: np.ndarray,
     deltaG: np.array
         DeltaG values computed up to each block, shape is (n_blocks,).
     """
+    # check temperature / units
+    kbt, temp, fes_units = _check_kbt_units(kbt, temp, fes_units)
+
     # for simplicity we increase the number of blocks to return the given number at the end
     nblocks = nblocks + 1 
 
@@ -442,6 +432,33 @@ def compute_deltaG(X: np.ndarray,
         ax.plot(grid, deltaG, color=plot_color)
 
     return grid, deltaG
+
+
+def _check_kbt_units(kbt, temp, fes_units):
+    # check temperature / units
+    if kbt is not None:
+        if temp is not None:
+            raise ValueError("Only one of kbt and temp can be specified.")
+     
+        fes_units = None
+    else: 
+        if temp is None:
+            raise ValueError("One of kbt and temp must be specified.")
+    
+        if fes_units == "kJ/mol":
+                kb = 0.00831441
+        elif fes_units == "kcal/mol":
+            kb = 0.0019872041
+        elif fes_units == "eV":
+            kb = 8.6173324e-5
+        else:
+            raise ValueError(
+                "fes_units must be one of 'kJ/mol', 'kcal/mol', 'eV'."
+            )
+        kbt = kb * temp
+
+    return kbt, temp, fes_units
+
 
 def test_compute_fes():
     X = np.linspace(1, 11, 100)
