@@ -331,8 +331,9 @@ def create_timelagged_dataset(
     is_dataset = isinstance(X, DictDataset)
     if is_dataset:
         index = torch.arange(len(X), dtype=torch.long)
-
-    x_source = index if is_dataset else X
+        x_source = index
+    else:
+        x_source = X
     x_t, x_lag, w_t, w_lag = find_timelagged_configurations(
         x_source,
         tprime,
