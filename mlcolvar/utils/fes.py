@@ -1,10 +1,10 @@
-# __all__ = ["compute_fes"]
-
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.axes
 import torch
 import warnings
+from typing import List
 
 # optional packages
 # pandas
@@ -35,7 +35,6 @@ elif SKLEARN_IS_INSTALLED:
     kdelib = "sklearn"
 else:
     kdelib = None
-
 
 def compute_fes(
     X,
@@ -344,6 +343,105 @@ def compute_fes(
 
     return fes, grid, bounds, error
 
+def compute_deltaG(X: np.ndarray,
+                   stateA_bounds: List[float],
+                   stateB_bounds: List[float], 
+                   kbt: float = None,
+                   nblocks: int = 10, 
+                   weights: np.ndarray = None,
+                   reverse: bool = False,
+                   time: np.ndarray = None,
+                   plot: bool = False,
+                   plot_color: str = "fessa6",
+                   ax: matplotlib.axes = None,
+                  ):
+    """Compute the difference in free energy (deltaG) between two states A and B.
+
+    Parameters
+    ----------
+    X : np.ndarray
+        Input data with the values of the CV used to define the state.
+    stateA_bounds : List[float]
+        Bounds of state A along the CV. 
+    stateB_bounds : List[float]
+        Bounds of state B along the CV.
+    kbt : float, optional
+        Thermal energy in the same units as the deltaG, by default None.
+    nblocks : int, optional
+        Number of blocks on whcih the deltaG is progressively computed, by default 10.
+    weights : np.ndarray, optional
+        Weights associated with the data points, shape (n_samples,), by default None.
+    reverse : bool, optional
+        Switch to reverse the data, by default False.
+    time : np.ndarray, optional
+        Time reference for the input data, by default None.
+    plot : bool, optional
+        Whether to plot the deltaF, by default False.
+    plot_color : str, optional
+        Color for 1D FES plot, by default "fessa6".
+    ax : matplotlib.axes, optional
+        Axis object to plot into. If None, a new figure is created, by default None.
+
+    Returns
+    -------
+    grid: np.ndarray
+        Bounds of the blocks used for computing the deltaG, shape is (n_blocks,). 
+        If `time` is provided, the time bounds are returned.
+    deltaG: np.array
+        DeltaG values computed up to each block, shape is (n_blocks,).
+    """
+    # for simplicity we increase the number of blocks to return the given number at the end
+    nblocks = nblocks + 1 
+
+    if weights is None:
+        weights = np.ones_like(X)
+
+    deltaG = []
+    if reverse:
+        X = np.flip(X, axis=0)
+        weights = np.flip(weights, axis=0)
+
+    # compute the estimate by reweighting the energy in the two basins
+        # compute the delta F on progressive blocks of data
+    mask_A = np.logical_and(X > stateA_bounds[0], X < stateA_bounds[1])
+    mask_B = np.logical_and(X > stateB_bounds[0], X < stateB_bounds[1])
+    
+    # build blocks
+    blocks_len = len(X) / nblocks
+    blocks_bounds = np.arange(0, len(X), blocks_len, dtype=int)
+
+    # we progressively store the data
+    tot_A = 0
+    tot_B = 0
+
+    # iterate over blocks
+    for i in range(nblocks-1):
+        aux_A = weights[blocks_bounds[i]:blocks_bounds[i+1]][mask_A[blocks_bounds[i]:blocks_bounds[i+1]]]
+        aux_B = weights[blocks_bounds[i]:blocks_bounds[i+1]][mask_B[blocks_bounds[i]:blocks_bounds[i+1]]]
+
+        tot_A += np.sum(aux_A)
+        tot_B += np.sum(aux_B)
+
+        G_A = - kbt * np.log(tot_A)
+        G_B = - kbt * np.log(tot_B)
+
+        deltaG.append(G_B - G_A)
+    
+    # switch to time if needed
+    if time is not None:
+        blocks_bounds = time[blocks_bounds]
+
+    # prepare for return
+    deltaG = np.array(deltaG)
+    grid = blocks_bounds[1:]
+
+    # plot if needed
+    if plot:
+        if ax is None:
+            fig, ax = plt.subplots() 
+        ax.plot(grid, deltaG, color=plot_color)
+
+    return grid, deltaG
 
 def test_compute_fes():
     X = np.linspace(1, 11, 100)
@@ -376,3 +474,45 @@ def test_compute_fes():
             blocks=2,
             backend="sklearn",
         )
+
+def test_compute_deltaG():
+    np.random.seed(42)
+
+    # make two fake states with gaussian distribution, to have deltaG=0
+    X_a = np.random.rand(200) - 5
+    X_b = np.random.rand(200) + 5
+    
+    X = np.concatenate((X_a, X_b))
+    X = np.random.permutation(X)
+
+    time = np.arange(len(X))
+    weights = np.random.rand(len(X))
+
+    grid, deltaG = compute_deltaG(X=X,
+                                  stateA_bounds=[-6, -4],
+                                  stateB_bounds=[4, 6], 
+                                  kbt=1,
+                                  nblocks=10, 
+                                  weights=None,
+                                  reverse=False,
+                                  time=None,
+                                  plot=False,
+                                  plot_color="fessa6",
+                                  ax=None,
+                                  )
+    assert np.allclose(deltaG[-1], 0, atol=0.5)
+
+    grid, deltaG = compute_deltaG(X=X,
+                                  stateA_bounds=[-6, -4],
+                                  stateB_bounds=[4, 6], 
+                                  kbt=1,
+                                  nblocks=10, 
+                                  weights=weights,
+                                  reverse=True,
+                                  time=time,
+                                  plot=False,
+                                  plot_color="fessa6",
+                                  ax=None,
+                                  )
+    
+    assert np.allclose(deltaG[-1], 0, atol=0.5)
