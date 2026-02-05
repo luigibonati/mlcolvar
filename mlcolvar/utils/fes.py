@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.axes
 import torch
 import warnings
-from typing import List
+from typing import List, Union
 
 # optional packages
 # pandas
@@ -325,8 +325,8 @@ def compute_fes(
     return fes, grid, bounds, error
 
 def compute_deltaG(X: np.ndarray,
-                   stateA_bounds: List[float],
-                   stateB_bounds: List[float], 
+                   stateA_bounds: Union[ List[float], List[List[float]], np.ndarray ],
+                   stateB_bounds: Union[ List[float], List[List[float]], np.ndarray ], 
                    temp=None,
                    fes_units="kJ/mol",
                    kbt: float = None,
@@ -337,6 +337,7 @@ def compute_deltaG(X: np.ndarray,
                    plot: bool = False,
                    plot_color: str = "fessa6",
                    ax: matplotlib.axes = None,
+                   eps: float = 1e-8,
                   ):
     """Compute the difference in free energy (deltaG) between two states A and B.
 
@@ -368,6 +369,8 @@ def compute_deltaG(X: np.ndarray,
         Color for 1D FES plot, by default "fessa6".
     ax : matplotlib.axes, optional
         Axis object to plot into. If None, a new figure is created, by default None.
+    eps : float, optional
+        Small regularization term to prevent logarithm from having zero argument, by default 1e-8.
 
     Returns
     -------
@@ -377,12 +380,22 @@ def compute_deltaG(X: np.ndarray,
     deltaG: np.array
         DeltaG values computed up to each block, shape is (n_blocks,).
     """
-    
+
     # check that input are consistent with each other
     if weights is not None and len(X) != len(weights):
         raise ValueError(f"Input data and weights must have the same number of entries! Found {len(X)} and {len(weights)}.")
     if time is not None and len(X) != len(time):
         raise ValueError(f"Input data and time must have the same number of entries! Found {len(X)} and {len(time)}.")
+
+    # ensure to have np.ndarrays
+    stateA_bounds = np.array(stateA_bounds)
+    stateB_bounds = np.array(stateB_bounds)
+
+    n_dim = 1
+    if X.shape[-1] == 2:
+        n_dim = 2
+        if stateA_bounds.shape[-1] != n_dim or stateB_bounds.shape[-1] != n_dim:
+            raise ValueError("Input data are 2D, state bounds must be 2D as well!")
 
     # check temperature / units
     kbt, temp, fes_units = _check_kbt_units(kbt, temp, fes_units)
@@ -401,16 +414,22 @@ def compute_deltaG(X: np.ndarray,
 
     # compute the estimate by reweighting the energy in the two basins
         # compute the delta F on progressive blocks of data
-    mask_A = np.logical_and(X > stateA_bounds[0], X < stateA_bounds[1])
-    mask_B = np.logical_and(X > stateB_bounds[0], X < stateB_bounds[1])
-    
+    if n_dim == 1:
+        mask_A = np.logical_and(X > stateA_bounds[0], X < stateA_bounds[1])
+        mask_B = np.logical_and(X > stateB_bounds[0], X < stateB_bounds[1])
+    else:
+        mask_A = np.logical_and(np.logical_and(X[:, 0] > stateA_bounds[0, 0], X[:, 0] < stateA_bounds[0, 1]),
+                                np.logical_and(X[:, 1] > stateA_bounds[1, 0], X[:, 1] < stateA_bounds[1, 1]))
+        mask_B = np.logical_and(np.logical_and(X[:, 0] > stateB_bounds[0, 0], X[:, 0] < stateB_bounds[0, 1]),
+                                np.logical_and(X[:, 1] > stateB_bounds[1, 0], X[:, 1] < stateB_bounds[1, 1]))
+        
     # build blocks
     blocks_len = len(X) / nblocks
     blocks_bounds = np.arange(0, len(X), blocks_len, dtype=int)
 
     # we progressively store the data
-    tot_A = 0
-    tot_B = 0
+    tot_A = eps
+    tot_B = eps
 
     # iterate over blocks
     for i in range(nblocks-1):
@@ -505,7 +524,8 @@ def test_compute_fes():
 
 def test_compute_deltaG():
     np.random.seed(42)
-
+    
+    # test 1D
     # make two fake states with gaussian distribution, to have deltaG=0
     X_a = np.random.rand(200) - 5
     X_b = np.random.rand(200) + 5
@@ -516,6 +536,7 @@ def test_compute_deltaG():
     time = np.arange(len(X))
     weights = np.random.rand(len(X))
 
+    # test vanilla
     grid, deltaG = compute_deltaG(X=X,
                                   stateA_bounds=[-6, -4],
                                   stateB_bounds=[4, 6], 
@@ -530,6 +551,7 @@ def test_compute_deltaG():
                                   )
     assert np.allclose(deltaG[-1], 0, atol=0.5)
 
+    # test keywords
     grid, deltaG = compute_deltaG(X=X,
                                   stateA_bounds=[-6, -4],
                                   stateB_bounds=[4, 6], 
@@ -542,5 +564,29 @@ def test_compute_deltaG():
                                   plot_color="fessa6",
                                   ax=None,
                                   )
-    
     assert np.allclose(deltaG[-1], 0, atol=0.5)
+
+    # test 2D
+    # make two fake states with gaussian distribution, to have deltaG=0
+    X_a = np.random.rand(200, 2) - 5
+    X_b = np.random.rand(200, 2) + 5
+    
+    X = np.concatenate((X_a, X_b), axis=0)
+    X = np.random.permutation(X)
+
+    time = np.arange(len(X))
+    weights = np.random.rand(len(X))
+    grid, deltaG = compute_deltaG(X=X,
+                                  stateA_bounds=[[-6, -4], [-6, -4]],
+                                  stateB_bounds=[[4, 6], [4, 6]], 
+                                  kbt=1,
+                                  nblocks=10, 
+                                  weights=weights,
+                                  reverse=True,
+                                  time=time,
+                                  plot=False,
+                                  plot_color="fessa6",
+                                  ax=None,
+                                  )
+    assert np.allclose(deltaG[-1], 0, atol=0.5)
+
