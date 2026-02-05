@@ -377,12 +377,20 @@ def compute_deltaG(X: np.ndarray,
     deltaG: np.array
         DeltaG values computed up to each block, shape is (n_blocks,).
     """
+    
+    # check that input are consistent with each other
+    if weights is not None and len(X) != len(weights):
+        raise ValueError(f"Input data and weights must have the same number of entries! Found {len(X)} and {len(weights)}.")
+    if time is not None and len(X) != len(time):
+        raise ValueError(f"Input data and time must have the same number of entries! Found {len(X)} and {len(time)}.")
+
     # check temperature / units
     kbt, temp, fes_units = _check_kbt_units(kbt, temp, fes_units)
 
     # for simplicity we increase the number of blocks to return the given number at the end
     nblocks = nblocks + 1 
 
+    # initialize unitary weights if not provided
     if weights is None:
         weights = np.ones_like(X)
 
@@ -430,6 +438,9 @@ def compute_deltaG(X: np.ndarray,
         if ax is None:
             fig, ax = plt.subplots() 
         ax.plot(grid, deltaG, color=plot_color)
+        ax.set_xlabel('Time' if time is not None else "Frame")
+        ax.set_ylabel(f"$\Delta$G [{fes_units}]" if fes_units is not None else "$\Delta$G")
+        
 
     return grid, deltaG
 
