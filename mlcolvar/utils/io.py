@@ -976,7 +976,7 @@ system_selection: str = None
 
         assert len(dataset) == 6
         assert dataset.metadata["cutoff"] == 1.0
-        assert dataset.metadata["z_table"] == [1, 8]
+        assert dataset.metadata["atomic_numbers"] == [1, 8]
         assert len(trajectories[0]) == 2
         assert len(trajectories[1]) == 2
         assert len(trajectories[2]) == 2

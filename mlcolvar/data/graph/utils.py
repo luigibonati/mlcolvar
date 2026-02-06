@@ -191,7 +191,7 @@ def create_dataset_from_configurations(config: atomic.Configurations,
     unique_names = unique_names.tolist()
 
     dataset = DictDataset(dictionary={'data_list': data_list},
-                          metadata={'z_table': z_table.zs,
+                          metadata={'atomic_numbers': z_table.zs,
                                     'cutoff': cutoff,
                                     'used_idx': unique_idx,
                                     'used_names': unique_names},
@@ -689,13 +689,13 @@ def test_from_configuration() -> None:
                                                  show_progress=False)
 
     # check if the labels of the entries are created correctly
-    assert dataset.metadata['z_table'] == [1, 8]
+    assert dataset.metadata['atomic_numbers'] == [1, 8]
     assert (dataset[0]['data_list']['graph_labels'] == torch.tensor([[0.0]])).all()
     assert (dataset[2]['data_list']['graph_labels'] == torch.tensor([[2.0]])).all()
     assert (dataset[4]['data_list']['graph_labels'] == torch.tensor([[4.0]])).all()
 
     # dataset_1 = dataset[np.array([0, -1])]
-    assert dataset.metadata['z_table'] == [1, 8]
+    assert dataset.metadata['atomic_numbers'] == [1, 8]
     assert (dataset[ 0]['data_list']['graph_labels'] == torch.tensor([[0.0]])).all()
     assert (dataset[-1]['data_list']['graph_labels'] == torch.tensor([[9.0]])).all()
 
