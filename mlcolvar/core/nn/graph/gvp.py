@@ -1,5 +1,6 @@
 import functools
 import math
+import numpy as np
 import torch
 from torch import nn
 from torch_geometric.nn import MessagePassing
@@ -861,8 +862,17 @@ def _merge(s: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
 
 
 def test_gvp() -> None:
-    from mlcolvar.core.nn.graph.utils import _test_get_data
-    from mlcolvar.data.graph.utils import create_graph_tracing_example
+    from mlcolvar.data.graph.utils import create_graph_tracing_example, create_test_graph_input
+
+    def _create_test_data_list():
+        batch = create_test_graph_input(
+            output_type='batch',
+            n_atoms=3,
+            n_samples=6,
+            n_states=1,
+            add_noise=False,
+        )
+        return batch['data_list']
 
     torch.manual_seed(0)
     torch.set_default_dtype(torch.float64)
@@ -883,8 +893,8 @@ def test_gvp() -> None:
         activation='SiLU',
     )
 
-    data = _test_get_data()
-    ref_out = torch.tensor([[0.6100070244145421, -0.2559670171962067]] * 6)
+    data = _create_test_data_list()
+    ref_out = torch.tensor([[0.6100070244145421, -0.2559670171962067]] * 5)
     assert ( torch.allclose(model(data), ref_out) )
     
     traced_model = torch.jit.trace(model, example_inputs=create_graph_tracing_example(2))
@@ -906,8 +916,8 @@ def test_gvp() -> None:
         activation='SiLU',
     )
 
-    data = _test_get_data()
-    ref_out = torch.tensor([[-0.3065361946949377, 0.16624918721972567]] * 6)
+    data = _create_test_data_list()
+    ref_out = torch.tensor([[0.5097288781305398, -0.032077559793064814]] * 5)
     assert ( torch.allclose(model(data), ref_out) )
     
     traced_model = torch.jit.trace(model, example_inputs=create_graph_tracing_example(2))

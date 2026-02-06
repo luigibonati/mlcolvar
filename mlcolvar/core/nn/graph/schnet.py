@@ -1,4 +1,5 @@
 import math
+import numpy as np
 import torch
 from torch import nn
 from torch_geometric.nn import MessagePassing
@@ -316,8 +317,18 @@ class ShiftedSoftplus(nn.Module):
     
 
 
-from mlcolvar.core.nn.graph.utils import _test_get_data
-from mlcolvar.data.graph.utils import create_graph_tracing_example
+from mlcolvar.data.graph.utils import create_graph_tracing_example, create_test_graph_input
+
+
+def _create_test_data_list():
+    batch = create_test_graph_input(
+        output_type='batch',
+        n_atoms=3,
+        n_samples=6,
+        n_states=1,
+        add_noise=False,
+    )
+    return batch['data_list']
 
 def test_schnet_1() -> None:
     torch.manual_seed(0)
@@ -333,8 +344,8 @@ def test_schnet_1() -> None:
         n_hidden_channels=16
     )
 
-    data = _test_get_data()
-    ref_out = torch.tensor([[0.40384621527953063, -0.1257513365138969]] * 6)
+    data = _create_test_data_list()
+    ref_out = torch.tensor([[0.40384621527953063, -0.12575133651389694]] * 5)
     assert ( torch.allclose(model(data), ref_out) )
 
     model = SchNetModel(
@@ -348,8 +359,8 @@ def test_schnet_1() -> None:
         pooling_operation='sum',
     )
 
-    data = _test_get_data()
-    ref_out = torch.tensor([[0.5760462255365488, -0.4465858318467991]] * 6)
+    data = _create_test_data_list()
+    ref_out = torch.tensor([[0.15911003978422333, 0.45333821159230125]] * 5)
     assert ( torch.allclose(model(data), ref_out) )
 
     traced_model = torch.jit.trace(model, example_inputs=create_graph_tracing_example(2))
@@ -372,8 +383,8 @@ def test_schnet_2() -> None:
         w_out_after_pool=True
     )
 
-    data = _test_get_data()
-    ref_out = torch.tensor([[0.3654537816221449, -0.0748265132499575]] * 6)
+    data = _create_test_data_list()
+    ref_out = torch.tensor([[0.3654537816221449, -0.0748265132499575]] * 5)
     assert ( torch.allclose(model(data), ref_out) )
     
     torch.set_default_dtype(torch.float32)

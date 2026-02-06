@@ -333,7 +333,7 @@ def create_test_graph_input(output_type: str,
                 [[0.0, 0.0, 0.0], [-0.07, 0.07, 0.0], [0.07, 0.07, 0.0]],
                 [[0.0, 0.0, 0.0], [0.07, -0.07, 0.0], [0.07, 0.07, 0.0]],
                 [[0.0, 0.0, 0.0], [0.0, -0.07, 0.07], [0.0, 0.07, 0.07]],
-                [[0.0, 0.0, 0.0], [0.11, 0.11, 0.11], [-0.07, 0.0, 0.07]],
+                [[0.0, 0.0, 0.0], [0.07, 0.0, 0.07], [-0.07, 0.0, 0.07]],
                 [[0.1, 0.0, 1.1], [0.17, 0.07, 1.1], [0.17, -0.07, 1.1]],
             ],
             dtype=np.float64
@@ -356,7 +356,7 @@ def create_test_graph_input(output_type: str,
     else:
         raise ValueError(f'Example input can be generated either with 3 or 4 atoms, found {n_atoms}')
 
-
+    np.random.seed(0)
     idx = np.random.randint(low=0, high=6, size=(n_samples*n_states))
     positions = _ref_positions[idx, :, :]
 
@@ -368,7 +368,7 @@ def create_test_graph_input(output_type: str,
     cell = np.identity(3, dtype=float) * 0.2
     graph_labels = np.zeros((n_samples*n_states, 1, 1))
     for i in range(1, n_states):
-            graph_labels[n_samples * i :] += 1
+        graph_labels[n_samples * i :] += 1
     z_table = atomic.AtomicNumberTable.from_zs(numbers)
 
     if random_weights:
