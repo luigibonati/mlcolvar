@@ -1,6 +1,5 @@
 import functools
 import math
-import numpy as np
 import torch
 from torch import nn
 from torch_geometric.nn import MessagePassing

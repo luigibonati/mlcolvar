@@ -109,7 +109,7 @@ class DictDataset(Dataset):
             for key, val in self._dictionary.items():
                 try:
                     slice_dict[key] = val[index]
-                except:
+                except Exception:
                     slice_dict[key] = list(itemgetter(*index)(val))
             return slice_dict
 
@@ -205,8 +205,6 @@ def test_DictDataset():
         "weights": weights,
     }
     
-    # this to have the right signature in asserts
-    from mlcolvar.data.dataset import DictDataset
     dataset = DictDataset(dataset_dict)
     print(len(dataset))
     print(dataset[0])
