@@ -75,7 +75,7 @@ class AutoEncoderCV(BaseCV, lightning.LightningModule):
         super().__init__(model=encoder_layers, **kwargs)
         # this makes checkpointing safe, to avoid double model keys
         self.save_hyperparameters(ignore=['model'])
-        self.hparams.pop('model')
+        self.hparams.pop('model', None)
 
 
         # =======   LOSS  =======

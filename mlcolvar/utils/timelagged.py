@@ -95,6 +95,7 @@ def find_timelagged_configurations(
     t: torch.Tensor,
     lag_time: float,
     logweights: torch.Tensor = None,
+    reweight_mode: str = None,
     progress_bar: bool = True,
 ):
     """Searches for all the pairs which are distant 'lag' in time, and returns the weights associated.
@@ -110,6 +111,8 @@ def find_timelagged_configurations(
         lag-time
     logweights : torch.Tensor, optional
         logweights to be returned
+    reweight_mode : str, optional
+        reweighting mode. If None or "weights_t" a fast slicing shortcut is used.
     progress_bar : bool, optional
         display progress bar with tqdm (if installed), by default True
 
@@ -124,6 +127,43 @@ def find_timelagged_configurations(
     w_lag: torch.Tensor
         weights at time t+lag
     """
+
+    # =========================
+    # Fast slicing shortcut
+    # =========================
+    if reweight_mode is None or reweight_mode == "weights_t":
+        dt = float(t[1] - t[0]) if len(t) > 1 else 1.0
+        lag_steps = int(round(lag_time / dt))
+
+        if lag_steps < 1:
+            raise ValueError("lag_time too small.")
+        if lag_steps >= len(x):
+            raise ValueError("lag_time too large.")
+
+        x_t = x[:-lag_steps]
+        x_lag = x[lag_steps:]
+
+        if reweight_mode is None:
+            w_t = torch.ones(len(x_t))
+            w_lag = torch.ones(len(x_lag))
+        else:
+            if logweights is None:
+                raise ValueError("logweights are required for reweight_mode='weights_t'.")
+            logweights = torch.as_tensor(logweights, dtype=torch.float32)
+            weights = torch.exp(logweights)
+            w_t = weights[:-lag_steps]
+            w_lag = weights[lag_steps:]
+
+        return x_t, x_lag, w_t, w_lag
+
+    # =========================
+    # Full search mode (rescale_time)
+    # =========================
+    if reweight_mode != "rescale_time":
+        raise ValueError(
+            f"Unknown reweight_mode '{reweight_mode}'. "
+            "Supported modes are: None, 'weights_t', 'rescale_time'."
+        )
 
     # define lists
     x_t = []
@@ -217,7 +257,7 @@ def create_timelagged_dataset(
     References
     ----------
     .. [1] Y. I. Yang and M. Parrinello, “Refining collective coordinates and improving free energy
-        representation in variational enhanced sampling,” JCTC 14, 2889–2894 (2018).
+        representation in variational enhanced sampling,” JCTC 14, 2889-2894 (2018).
     .. [2] J. McCarty and M. Parrinello, "A variational conformational dynamics approach to the selection
         of collective variables in meta- dynamics,” JCP 147, 204109 (2017).
     .. [3] H. Wu, et al. "Variational Koopman models: Slow collective variables and molecular kinetics
@@ -288,24 +328,20 @@ def create_timelagged_dataset(
     else:
         tprime = t
 
-    # find pairs of configurations separated by lag_time
-    if isinstance(X, torch.Tensor) or isinstance(X, np.ndarray):
-        x_t, x_lag, w_t, w_lag = find_timelagged_configurations(
-            X,
-            tprime,
-            lag_time=lag_time,
-            logweights=logweights if reweight_mode == "weights_t" else None,
-            progress_bar=progress_bar,
-        )
-    elif isinstance(X, DictDataset):
+    is_dataset = isinstance(X, DictDataset)
+    if is_dataset:
         index = torch.arange(len(X), dtype=torch.long)
-        x_t, x_lag, w_t, w_lag = find_timelagged_configurations(
-            index,
-            tprime,
-            lag_time=lag_time,
-            logweights=logweights if reweight_mode == "weights_t" else None,
-            progress_bar=progress_bar,
-        )
+        x_source = index
+    else:
+        x_source = X
+    x_t, x_lag, w_t, w_lag = find_timelagged_configurations(
+        x_source,
+        tprime,
+        lag_time=lag_time,
+        logweights=logweights if reweight_mode == "weights_t" else None,
+        reweight_mode=reweight_mode,
+        progress_bar=progress_bar,
+    )
 
     # return only a slice of the data (N. Pedrani)
     if interval is not None:
@@ -366,7 +402,6 @@ def test_create_timelagged_dataset():
     assert(torch.allclose(lagged_dataset_1['data_lag'], lagged_dataset_2['data_lag']))
     assert(torch.allclose(lagged_dataset_1['weights'], lagged_dataset_2['weights']))
 
-
     # reweight mode rescale_time (default)
     logweights = np.random.rand(n_points)
     lagged_dataset_1 = create_timelagged_dataset(X, t, logweights=logweights)
@@ -392,8 +427,6 @@ def test_create_timelagged_dataset():
     assert(torch.allclose(lagged_dataset_1['data_lag'], lagged_dataset_2['data_lag']))
     assert(torch.allclose(lagged_dataset_1['weights'], lagged_dataset_2['weights']))
 
-
-
     # graph data
     from mlcolvar.data.graph.utils import create_test_graph_input
     dataset = create_test_graph_input('dataset')
@@ -404,7 +437,6 @@ def test_create_timelagged_dataset():
 
     print(len(dataset))
     
-
 
 if __name__ == "__main__":
     test_create_timelagged_dataset()

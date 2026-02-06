@@ -150,16 +150,23 @@ class DictDataset(Dataset):
         return stats
 
     def __repr__(self) -> str:
-        string = "DictDataset("
+        parts = ["DictDataset("]
         for key, val in self._dictionary.items():
             if key in ["data_list", "data_list_lag"]:
-                string += f' "{key}": {len(val)},'
+                parts.append(f' "{key}": {len(val)},')
             else:
-                string += f' "{key}": {list(val.shape)},'
-        for key, val in self.metadata.items():
-            string += f' "{key}": {val},'
-        string = string[:-1] + " )"
-        return string
+                parts.append(f' "{key}": {list(val.shape)},')
+        if self.metadata:
+            parts.append(" metadata={")
+            for key, val in self.metadata.items():
+                parts.append(f' "{key}": {val},')
+            if parts[-1].endswith(","):
+                parts[-1] = parts[-1][:-1]
+            parts.append(" },")
+        if parts[-1].endswith(","):
+            parts[-1] = parts[-1][:-1]
+        parts.append(" )")
+        return "".join(parts)
 
     @property
     def keys(self):
