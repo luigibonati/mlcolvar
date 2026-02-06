@@ -22,6 +22,7 @@
       ~BaseCV.forward_cv
       ~BaseCV.initialize_blocks
       ~BaseCV.initialize_transforms
+      ~BaseCV.parse_model
       ~BaseCV.parse_options
       ~BaseCV.setup
       ~BaseCV.test_step
@@ -37,6 +38,8 @@
 
    .. autosummary::
    
+      ~BaseCV.DEFAULT_BLOCKS
+      ~BaseCV.MODEL_BLOCKS
       ~BaseCV.example_input_array
       ~BaseCV.n_cvs
       ~BaseCV.optimizer_name

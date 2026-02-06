@@ -41,7 +41,7 @@ class AutoEncoderCV(BaseCV, lightning.LightningModule):
         (weighted) Mean Squared Error (MSE) loss function.
     """
 
-    BLOCKS = ["norm_in", "encoder", "decoder"]
+    DEFAULT_BLOCKS = ["norm_in", "encoder", "decoder"]
 
     def __init__(
         self,
@@ -67,9 +67,16 @@ class AutoEncoderCV(BaseCV, lightning.LightningModule):
             Available blocks: ['norm_in', 'encoder','decoder'].
             Set 'block_name' = None or False to turn off that block
         """
-        super().__init__(
-            in_features=encoder_layers[0], out_features=encoder_layers[-1], **kwargs
-        )
+        # external model not supported for autoencoder CVs (yet)
+        if not isinstance(encoder_layers, list):
+            raise NotImplementedError(
+                f"Encoder layer must be a list. found {type(encoder_layers)}"
+                )
+        super().__init__(model=encoder_layers, **kwargs)
+        # this makes checkpointing safe, to avoid double model keys
+        self.save_hyperparameters(ignore=['model'])
+        self.hparams.pop('model', None)
+
 
         # =======   LOSS  =======
         # Reconstruction (MSE) loss

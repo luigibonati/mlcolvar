@@ -64,10 +64,10 @@ def dataset():
 # =============================================================================
 
 @pytest.mark.parametrize("cv_model", [
-    mlcolvar.cvs.DeepLDA(layers=LAYERS, n_states=N_STATES),
-    mlcolvar.cvs.DeepTDA(n_states=N_STATES, n_cvs=1, target_centers=[-1., 1.], target_sigmas=[0.1, 0.1], layers=LAYERS),
-    mlcolvar.cvs.RegressionCV(layers=LAYERS),
-    mlcolvar.cvs.DeepTICA(layers=LAYERS, n_cvs=1),
+    mlcolvar.cvs.DeepLDA(model=LAYERS, n_states=N_STATES),
+    mlcolvar.cvs.DeepTDA(n_states=N_STATES, n_cvs=1, target_centers=[-1., 1.], target_sigmas=[0.1, 0.1], model=LAYERS),
+    mlcolvar.cvs.RegressionCV(model=LAYERS),
+    mlcolvar.cvs.DeepTICA(model=LAYERS, n_cvs=1),
     mlcolvar.cvs.AutoEncoderCV(encoder_layers=LAYERS),
     mlcolvar.cvs.VariationalAutoEncoderCV(n_cvs=1, encoder_layers=LAYERS[:-1]),
 ])
@@ -113,7 +113,7 @@ def test_lr_scheduler():
     initial_lr = 1e-3
     options = {'optimizer' : {'lr' : initial_lr},
                'lr_scheduler' : { 'scheduler' : lr_scheduler, 'gamma' : 0.9999}}
-    model = mlcolvar.cvs.RegressionCV(layers=[2,5,1], options=options)
+    model = mlcolvar.cvs.RegressionCV(model=[2,5,1], options=options)
 
     # check training and lr scheduling
     trainer = lightning.Trainer(max_epochs=10, 
@@ -133,7 +133,7 @@ def test_lr_scheduler_config():
         "lr_scheduler": {"scheduler": lr_scheduler, "mode": "min", "patience": 1},
         "lr_scheduler_config": {"monitor": "valid_loss"},
     }
-    model = mlcolvar.cvs.RegressionCV(layers=[2, 5, 1], options=options)
+    model = mlcolvar.cvs.RegressionCV(model=[2, 5, 1], options=options)
 
     optimizers, schedulers = model.configure_optimizers()
     assert isinstance(optimizers, list)

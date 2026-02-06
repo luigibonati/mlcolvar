@@ -11,11 +11,10 @@ Machine Learning Collective Variables for Enhanced Sampling
 **PAPER** [![paper](https://img.shields.io/badge/JCP-10.1063/5.0156343-blue)](https://doi.org/10.1063/5.0156343)
 [![preprint](https://img.shields.io/badge/arXiv-2305.19980-lightblue)](https://arxiv.org/abs/2305.19980)
 
-The documentation is available at:
-- **stable** version: https://mlcolvar.readthedocs.io
-- **latest** version: https://mlcolvar.readthedocs.io/en/latest/
-
 ---
+---
+
+## Overview
 
 `mlcolvar` is a Python library aimed to help design data-driven collective-variables (CVs) for enhanced sampling simulations. The key features are:
 
@@ -26,20 +25,22 @@ The documentation is available at:
 The library is built upon the [PyTorch](https://pytorch.org/) ML library as well as the [Lightning](https://lightning.ai/) high-level framework. 
 
 ---
-
-Some of the **CVs** which are implemented, organized by learning setting:
-- _Unsupervised_: PCA, (Variational) AutoEncoders [[1](http://dx.doi.org/%2010.1002/jcc.25520),[2](http://dx.doi.org/%2010.1021/acs.jctc.1c00415)]
-- _Supervised_: LDA [[3](http://dx.doi.org/10.1021/acs.jpclett.8b00733)], DeepLDA [[4](http://dx.doi.org/%2010.1021/acs.jpclett.0c00535)], DeepTDA [[5](http://dx.doi.org/%2010.1021/acs.jpclett.1c02317)]
-- _Time-informed_: TICA [[6](http://dx.doi.org/%2010.1063/1.4811489)], DeepTICA/SRVs [[7](http://dx.doi.org/10.1073/pnas.2113533118),[8](http://dx.doi.org/%2010.1063/1.5092521)], VDE [[9](http://dx.doi.org/10.1103/PhysRevE.97.062412)]
-
-And many others can be implemented based on the building blocks or with simple modifications. Check out the [tutorials](https://mlcolvar.readthedocs.io/en/stable/tutorials.html) and the [examples](https://mlcolvar.readthedocs.io/en/stable/examples.html) section of the documentation.
-
 ---
 
 
-**Install with `pip`**
+## Documentation
+The documentation is available at:
+- **stable** version: https://mlcolvar.readthedocs.io
+- **latest** version: https://mlcolvar.readthedocs.io/en/latest/
 
-The library is available on [PyPi](https://pypi.org/project/mlcolvar/) and can be installed with `pip`. This is the preferred choice for **users** as it automatically installs the package requirements. 
+---
+---
+
+## Installation
+
+**1. Install latest stable version with `pip`**
+
+The **latest stable version** of library is available on [PyPi](https://pypi.org/project/mlcolvar/) and can be installed with `pip`. This is the preferred choice for **users** as it automatically installs the package requirements. 
 
 ```bash
 pip install mlcolvar
@@ -52,7 +53,7 @@ pip install mlcolvar[test]
 pytest --pyargs mlcolvar.tests
 ```
 
-**Clone from GitHub**
+**2. Clone repository from GitHub**
 
 The library can also be installed cloning the repository from GitHub. This is the preferred choice for **developers** as it provides more flexibility and allows editable installation.
 
@@ -62,16 +63,52 @@ cd mlcolvar
 pip -e install .
 ```
 
-
-
+---
 ---
 
-**PLUMED interface**: the resulting CVs can be deployed for enhancing sampling with the [PLUMED](https://www.plumed.org/) package via the [pytorch](https://www.plumed.org/doc-master/user-doc/html/PYTORCH_MODEL/) interface, available since version 2.9. 
+## CV methods
+
+Some of the **CVs** which are implemented, organized by learning setting:
+- _Unsupervised_: PCA, (Variational) AutoEncoders [[1](http://dx.doi.org/%2010.1002/jcc.25520),[2](http://dx.doi.org/%2010.1021/acs.jctc.1c00415)]
+- _Supervised_: LDA [[3](http://dx.doi.org/10.1021/acs.jpclett.8b00733)], DeepLDA [[4](http://dx.doi.org/%2010.1021/acs.jpclett.0c00535)], DeepTDA [[5](http://dx.doi.org/%2010.1021/acs.jpclett.1c02317)]
+- _Time-informed_: TICA [[6](http://dx.doi.org/%2010.1063/1.4811489)], DeepTICA/SRVs [[7](http://dx.doi.org/10.1073/pnas.2113533118),[8](http://dx.doi.org/%2010.1063/1.5092521)], VDE [[9](http://dx.doi.org/10.1103/PhysRevE.97.062412)]
+- _Committor-based_ [[10](https://doi.org/10.1038/s43588-024-00645-0),[11](https://doi.org/10.1038/s43588-025-00799-5)]
+- _Multi-task_ [[12](https://doi.org/10.1063/5.0156343)]
+
+And many others can be implemented based on the building blocks or with simple modifications. Check out the [tutorials](https://mlcolvar.readthedocs.io/en/stable/tutorials.html) and the [examples](https://mlcolvar.readthedocs.io/en/stable/examples.html) section of the documentation.
 
 ---
+---
 
-**Notes**: in early versions (`v<=0.2.*`) the library was called `mlcvs`. This is still accessible for compatibility with PLUMED masterclasses in the [releases](https://github.com/luigibonati/mlcolvar/releases) or by cloning the `pre-lightning` branch.
+## Model architectures: feed-forward vs graph-based
 
+- **Feed-forward**: All the CV methods can be used using *standard* neural networks as architecture, either feed-forward or autoencoders. 
+In this case, for the inputs there are two possibilities:
+    - Directly use precomputed physical descriptors, ideally obtained using PLUMED. This options is faster and covers most use cases.
+    - Compute physical descriptors within the model starting from the atomic positions, ideally obtained from PLUMED. This can be done using as a *preprocessing module* the tools available in the **transform** module of the library or implementing your own descriptors. This option is typically slower and, for example, it should be chosen if the desired descriptors are not already available in PLUMED.
+
+- **Graph neural networks**: All the CV methods **not based on autoencoders** can be used also using graph neural networks as architecture and directly **atomic positions** as inputs, following the scheme reported in [[JCTC 2024](https://doi.org/10.1021/acs.jctc.4c01197)]. In this case, the inputs are directly the atomic positions and species.
+
+Note that, in general, feed-forward based methods are faster than those graph-based.
+
+---
+---
+
+### PLUMED interfaces
+ The resulting CVs can be deployed for enhancing sampling with the [PLUMED](https://www.plumed.org/) plugin compiled with `libtorch`. In particular:
+
+- **Feed-forward-based** CV models can be employed via the [pytorch](https://www.plumed.org/doc-master/user-doc/html/PYTORCH_MODEL/) interface, available with the official release of PLUMED since version 2.9.
+    - Note: The transition-state-oriented Kolmogorov bias proposed in [[Nat.Comp.Sci. 2024](https://doi.org/10.1038/s43588-024-00645-0) and [2025](https://doi.org/10.1038/s43588-025-00799-5)], can be employed using the custom interface available at #TODO
+- **Graph-based** models can be employed using the custom interface developed in [[JCTC 2024](https://doi.org/10.1021/acs.jctc.4c01197)] available at #TODO.
+    - Note: This interface already supports the calculation of transition-state-oriented Kolmogorov bias proposed in [[Nat.Comp.Sci. 2024](https://doi.org/10.1038/s43588-024-00645-0) and [2025](https://doi.org/10.1038/s43588-025-00799-5)]
+
+---
+---
+
+## Notes
+In early versions (`v<=0.2.*`) the library was called `mlcvs`. This is still accessible for compatibility with PLUMED masterclasses in the [releases](https://github.com/luigibonati/mlcolvar/releases) or by cloning the `pre-lightning` branch.
+
+---
 ---
 
 Copyright (c) 2023 Luigi Bonati, Enrico Trizio, Andrea Rizzi and Michele Parrinello. 

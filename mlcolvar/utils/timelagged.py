@@ -3,6 +3,8 @@ import numpy as np
 from bisect import bisect_left
 from mlcolvar.data import DictDataset
 import warnings
+from typing import Union
+import copy
 
 # optional packages
 # pandas
@@ -93,6 +95,7 @@ def find_timelagged_configurations(
     t: torch.Tensor,
     lag_time: float,
     logweights: torch.Tensor = None,
+    reweight_mode: str = None,
     progress_bar: bool = True,
 ):
     """Searches for all the pairs which are distant 'lag' in time, and returns the weights associated.
@@ -108,6 +111,8 @@ def find_timelagged_configurations(
         lag-time
     logweights : torch.Tensor, optional
         logweights to be returned
+    reweight_mode : str, optional
+        reweighting mode. If None or "weights_t" a fast slicing shortcut is used.
     progress_bar : bool, optional
         display progress bar with tqdm (if installed), by default True
 
@@ -122,6 +127,43 @@ def find_timelagged_configurations(
     w_lag: torch.Tensor
         weights at time t+lag
     """
+
+    # =========================
+    # Fast slicing shortcut
+    # =========================
+    if reweight_mode is None or reweight_mode == "weights_t":
+        dt = float(t[1] - t[0]) if len(t) > 1 else 1.0
+        lag_steps = int(round(lag_time / dt))
+
+        if lag_steps < 1:
+            raise ValueError("lag_time too small.")
+        if lag_steps >= len(x):
+            raise ValueError("lag_time too large.")
+
+        x_t = x[:-lag_steps]
+        x_lag = x[lag_steps:]
+
+        if reweight_mode is None:
+            w_t = torch.ones(len(x_t))
+            w_lag = torch.ones(len(x_lag))
+        else:
+            if logweights is None:
+                raise ValueError("logweights are required for reweight_mode='weights_t'.")
+            logweights = torch.as_tensor(logweights, dtype=torch.float32)
+            weights = torch.exp(logweights)
+            w_t = weights[:-lag_steps]
+            w_lag = weights[lag_steps:]
+
+        return x_t, x_lag, w_t, w_lag
+
+    # =========================
+    # Full search mode (rescale_time)
+    # =========================
+    if reweight_mode != "rescale_time":
+        raise ValueError(
+            f"Unknown reweight_mode '{reweight_mode}'. "
+            "Supported modes are: None, 'weights_t', 'rescale_time'."
+        )
 
     # define lists
     x_t = []
@@ -193,7 +235,7 @@ def find_timelagged_configurations(
 
 
 def create_timelagged_dataset(
-    X: torch.Tensor,
+    X: Union[torch.Tensor, np.ndarray, DictDataset],
     t: torch.Tensor = None,
     lag_time: float = 1,
     reweight_mode: str = None,
@@ -223,8 +265,8 @@ def create_timelagged_dataset(
 
     Parameters
     ----------
-    X : array-like
-        input descriptors
+    X : torch.Tensor or np.ndarray or DictDataset
+        Input data, graph data can only be provided as DictDataset
     t : array-like, optional
         time series, by default np.arange(len(X))
     reweight_mode: str, optional
@@ -285,53 +327,21 @@ def create_timelagged_dataset(
             tprime = tprime_evaluation(t, logweights)
     else:
         tprime = t
-        
-    # =========================
-    # Fast slicing shortcut
-    # =========================
-    if reweight_mode is None or reweight_mode == "weights_t":
-        dt = float(t[1] - t[0]) if len(t) > 1 else 1.0
-        lag_steps = int(round(lag_time / dt))
 
-        if lag_steps < 1:
-            raise ValueError("lag_time too small.")
-        if lag_steps >= len(X):
-            raise ValueError("lag_time too large.")
-        
-        # pairs
-        x_t = X[:-lag_steps]
-        x_lag = X[lag_steps:]
-
-        # weights
-        if reweight_mode is None:
-            w_t = torch.ones(len(x_t))
-            w_lag = torch.ones(len(x_lag))
-        else:
-            logweights = torch.tensor(logweights, dtype=torch.float32)
-            weights = torch.exp(logweights)
-            w_t = weights[:-lag_steps]
-            w_lag = weights[lag_steps:]
-
-    # =========================
-    # Full search mode (rescale_time)
-    # =========================
-    elif reweight_mode == 'rescale_time':
-        x_t, x_lag, w_t, w_lag = find_timelagged_configurations(
-            X,
-            tprime,
-            lag_time=lag_time,
-            logweights=logweights if reweight_mode == "weights_t" else None,
-            progress_bar=progress_bar,
-        )
-
-    # =========================
-    # Invalid mode
-    # =========================
+    is_dataset = isinstance(X, DictDataset)
+    if is_dataset:
+        index = torch.arange(len(X), dtype=torch.long)
+        x_source = index
     else:
-        raise ValueError(
-            f"Unknown reweight_mode '{reweight_mode}'. "
-            "Supported modes are: None, 'weights_t', 'rescale_time'."
-        )
+        x_source = X
+    x_t, x_lag, w_t, w_lag = find_timelagged_configurations(
+        x_source,
+        tprime,
+        lag_time=lag_time,
+        logweights=logweights if reweight_mode == "weights_t" else None,
+        reweight_mode=reweight_mode,
+        progress_bar=progress_bar,
+    )
 
     # return only a slice of the data (N. Pedrani)
     if interval is not None:
@@ -344,36 +354,90 @@ def create_timelagged_dataset(
             data[i] = data[i][interval[0] : interval[1]]
         x_t, x_lag, w_t, w_lag = data
 
-    dataset = DictDataset(
-        {"data": x_t, "data_lag": x_lag, "weights": w_t, "weights_lag": w_lag}
-    )
-
-    return dataset
+    if isinstance(X, torch.Tensor) or isinstance(X, np.ndarray):
+        dataset = DictDataset({"data": x_t, 
+                               "data_lag": x_lag, 
+                               "weights": w_t, 
+                               "weights_lag": w_lag},
+                               data_type='descriptors')
+        return dataset 
+    
+    elif isinstance(X, DictDataset):
+        if X.metadata["data_type"] == "descriptors":
+            dataset = DictDataset({"data": X['data'][x_t], 
+                               "data_lag": X['data'][x_lag], 
+                               "weights": w_t, 
+                               "weights_lag": w_lag},
+                               data_type='descriptors')
+            
+        elif X.metadata["data_type"] == "graphs":
+            # we use deepcopy to avoid editing the original dataset
+            atomic_numbers = X.metadata.get("atomic_numbers", None)
+            dataset = DictDataset(dictionary={"data_list" : copy.deepcopy(X[x_t.numpy().tolist()]["data_list"]),
+                                            "data_list_lag" : copy.deepcopy(X[x_lag.numpy().tolist()]["data_list"])},
+                                    metadata={"atomic_numbers" : atomic_numbers,
+                                            "cutoff" : X.metadata["cutoff"]},
+                                    data_type="graphs")
+            # update weights
+            for i in range(len(dataset)):
+                dataset['data_list'][i]['weight'] = w_t[i]
+                dataset['data_list_lag'][i]['weight'] = w_lag[i]
+            
+        return dataset
 
 
 def test_create_timelagged_dataset():
     in_features = 2
-    n_points = 100
-    lag_time = 5
+    n_points = 20
     X = torch.rand(n_points, in_features) * 100
+    dataset = DictDataset(data=X, data_type='descriptors')
+
 
     # unbiased case
     t = np.arange(n_points)
-    dataset = create_timelagged_dataset(X, t, lag_time=lag_time)
-    assert len(dataset) == n_points - lag_time
+    lagged_dataset_1 = create_timelagged_dataset(X, t, lag_time=10)
+    print(len(lagged_dataset_1))
+    lagged_dataset_2 = create_timelagged_dataset(dataset, t, lag_time=10)
+    print(len(lagged_dataset_2))
+    assert(torch.allclose(lagged_dataset_1['data'], lagged_dataset_2['data']))
+    assert(torch.allclose(lagged_dataset_1['data_lag'], lagged_dataset_2['data_lag']))
+    assert(torch.allclose(lagged_dataset_1['weights'], lagged_dataset_2['weights']))
 
     # reweight mode rescale_time (default)
     logweights = np.random.rand(n_points)
-    dataset = create_timelagged_dataset(X, t, lag_time=lag_time, logweights=logweights)
-    assert len(dataset) > 0
+    lagged_dataset_1 = create_timelagged_dataset(X, t, logweights=logweights)
+    print(len(lagged_dataset_1))
+    lagged_dataset_2 = create_timelagged_dataset(dataset, t, logweights=logweights)
+    print(len(lagged_dataset_2))
+    assert(torch.allclose(lagged_dataset_1['data'], lagged_dataset_2['data']))
+    assert(torch.allclose(lagged_dataset_1['data_lag'], lagged_dataset_2['data_lag']))
+    assert(torch.allclose(lagged_dataset_1['weights'], lagged_dataset_2['weights']))
+
 
     # reweight mode weights_t
     logweights = np.random.rand(n_points)
-    dataset = create_timelagged_dataset(
-        X, t, logweights=logweights, lag_time=lag_time, reweight_mode="weights_t"
+    lagged_dataset_1 = create_timelagged_dataset(
+        X, t, logweights=logweights, reweight_mode="weights_t"
     )
-    assert len(dataset) == n_points - lag_time
+    print(len(lagged_dataset_1))
+    lagged_dataset_2 = create_timelagged_dataset(
+        dataset, t, logweights=logweights, reweight_mode="weights_t"
+    )
+    print(len(lagged_dataset_2))
+    assert(torch.allclose(lagged_dataset_1['data'], lagged_dataset_2['data']))
+    assert(torch.allclose(lagged_dataset_1['data_lag'], lagged_dataset_2['data_lag']))
+    assert(torch.allclose(lagged_dataset_1['weights'], lagged_dataset_2['weights']))
 
+    # graph data
+    from mlcolvar.data.graph.utils import create_test_graph_input
+    dataset = create_test_graph_input('dataset')
+    print(dataset['data_list'][0])
+    lagged_dataset = create_timelagged_dataset(dataset, logweights=torch.randn(len(dataset)))
+    print(lagged_dataset['data_list'][0])
+    print(dataset['data_list'][0])
+
+    print(len(dataset))
+    
 
 if __name__ == "__main__":
     test_create_timelagged_dataset()

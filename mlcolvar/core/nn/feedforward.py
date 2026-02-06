@@ -15,10 +15,9 @@ __all__ = ["FeedForward"]
 # GLOBAL IMPORTS
 # =============================================================================
 
-from typing import Optional, Union
+from typing import Optional, Union, Any
 
 import torch
-import lightning
 from mlcolvar.core.nn.utils import get_activation, parse_nn_options
 
 
@@ -27,7 +26,7 @@ from mlcolvar.core.nn.utils import get_activation, parse_nn_options
 # =============================================================================
 
 
-class FeedForward(lightning.LightningModule):
+class FeedForward(torch.nn.Module):
     """Define a feedforward neural network given the list of layers.
 
     Optionally dropout and batchnorm can be applied (the order is activation -> dropout -> batchnorm).
@@ -110,3 +109,6 @@ class FeedForward(lightning.LightningModule):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.nn(x)
+    
+    def backward(self, loss: torch.Tensor, *args: Any, **kwargs: Any):
+        return loss.backward()

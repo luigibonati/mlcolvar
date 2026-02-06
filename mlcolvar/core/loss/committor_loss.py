@@ -17,7 +17,10 @@ __all__ = ["CommittorLoss", "committor_loss"]
 import torch
 from typing import Tuple, Union
 from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
+import torch_geometric
+import warnings
 
+from mlcolvar.utils._code import scatter_sum
 # =============================================================================
 # LOSS FUNCTIONS
 # =============================================================================
@@ -91,7 +94,7 @@ class CommittorLoss(torch.nn.Module):
         self.n_dim = n_dim
 
     def forward(self, 
-                x: torch.Tensor,
+                x: Union[torch.Tensor, torch_geometric.data.Batch],
                 z: torch.Tensor,
                 q: torch.Tensor, 
                 labels: torch.Tensor, 
@@ -103,7 +106,7 @@ class CommittorLoss(torch.nn.Module):
 
         Parameters
         ----------
-        x : torch.Tensor
+        x : torch.Tensor or torch_geometric.data.Batch
             Model input, i.e., either positions or descriptors if using descriptors_derivatives
         z : torch.Tensor
             Model unactivated output, i.e., z value
@@ -230,7 +233,23 @@ def committor_loss(x: torch.Tensor,
     
     if (z_threshold is not None and (z_regularization == 0 or z_threshold <= 0)) or (z_threshold is None and z_regularization != 0) or z_regularization < 0:
         raise ValueError(f"To apply the regularization on z space both z_threshold and z_regularization key must be positive. Found {z_threshold} and {z_regularization}!")
+    
+    # check if input is graph
+    if isinstance(x, torch_geometric.data.batch.Batch):
+        _is_graph_data = True
+        batch = torch.clone(x['batch'])
+        node_types = torch.where(x['node_attrs'])[1]
+        x = x['positions']
+    else:
+        _is_graph_data = False
 
+    # checks and warnings
+    if _is_graph_data and descriptors_derivatives is not None:
+        raise ValueError("The descriptors_derivatives key cannot be used with GNN-based models!")
+    
+    if _is_graph_data and separate_boundary_dataset:
+        warnings.warn("Using GNN-based models it may be better to set separate_boundary_dataset to False")
+    
     # ------------------------ SETUP ------------------------
     # inherit right device
     device = x.device 
@@ -243,16 +262,33 @@ def committor_loss(x: torch.Tensor,
 
 
     # Create masks to access different states data
-    mask_A = labels == 0
-    mask_B = labels == 1
+    mask_A = torch.nonzero(labels == 0, as_tuple=True) 
+    mask_B = torch.nonzero(labels == 1, as_tuple=True)
 
     # create mask for variational data
     if separate_boundary_dataset:
-        mask_var = labels > 1
+        mask_var = torch.nonzero(labels > 1, as_tuple=not(_is_graph_data))
     else: 
         mask_var = torch.ones_like(labels, dtype=torch.bool)
 
+    if _is_graph_data:
+        # this needs to be on the batch index, not only the labels
+        aux = torch.where(mask_var)[0].to(device)
+        mask_var_batches = torch.isin(batch, aux)
+        mask_var_batches = batch[mask_var_batches]
+    else:
+        mask_var_batches = mask_var
 
+    # setup atomic masses
+    atomic_masses = atomic_masses.to(device)
+
+    # mass should have size [1, n_atoms*spatial_dims]
+    if _is_graph_data:
+        atomic_masses = atomic_masses[node_types[mask_var_batches]].unsqueeze(-1)
+    else:
+        atomic_masses = atomic_masses.unsqueeze(0)
+
+    
     # Update weights of basin B using the information on the delta_f
     delta_f = torch.Tensor([delta_f]).to(device)
     # B higher in energy --> A-B < 0
@@ -276,44 +312,41 @@ def committor_loss(x: torch.Tensor,
                                grad_outputs=grad_outputs, 
                                retain_graph=True, 
                                create_graph=create_graph)[0]
-    grad = grad[mask_var]
+    grad = grad[mask_var_batches]
+    
+    if descriptors_derivatives is not None:
+        # in case the input is not positions but descriptors, we need to correct the gradients up to the positions
+        if isinstance(descriptors_derivatives, SmartDerivatives):
+            # we use the precomputed derivatives from descriptors to pos
+            gradient_positions = descriptors_derivatives(grad, ref_idx[mask_var]).view(x[mask_var].shape[0], -1)
+        
+        # --> If we directly pass the matrix d_desc/d_pos
+        elif isinstance(descriptors_derivatives, torch.Tensor): 
+            descriptors_derivatives = descriptors_derivatives.to(device)
+            gradient_positions = torch.einsum("bd,badx->bax", grad, descriptors_derivatives[ref_idx[mask_var]]).contiguous()
+            gradient_positions = gradient_positions.view(x[mask_var].shape[0], -1)
+    else:
+        # we get the square of grad(q) and we multiply by the weight
+        gradient_positions = grad
     
     if cell is not None:
-        grad = grad / cell
-    
-    # in case the input is not positions but descriptors, we need to correct the gradients up to the positions
-    if isinstance(descriptors_derivatives, SmartDerivatives):
-        # we use the precomputed derivatives from descriptors to pos
-        gradient_positions = descriptors_derivatives(grad, ref_idx[mask_var]).view(x[mask_var].shape[0], -1)
-    
-    # --> If we directly pass the matrix d_desc/d_pos
-    elif isinstance(descriptors_derivatives, torch.Tensor): 
-        descriptors_derivatives = descriptors_derivatives.to(device)
-        gradient_positions = torch.einsum("bd,badx->bax", grad, descriptors_derivatives[ref_idx[mask_var]]).contiguous()
-        gradient_positions = gradient_positions.view(x[mask_var].shape[0], -1)
-    
-    # If the input was already positions
-    else:
-        gradient_positions = grad
-
+        gradient_positions = gradient_positions / cell
+        
     # we do the square
     grad_square = torch.pow(gradient_positions, 2)
-    
-    # multiply by masses
-    try:
-        grad_square = torch.sum((grad_square * (1/atomic_masses)), 
-                                 axis=1, 
-                                 keepdim=True)    
-    except RuntimeError as e:
-        raise RuntimeError(e, """[HINT]: Is you system in 3 dimension? By default the code assumes so, if it's not the case change the n_dim key to the right dimensionality.""")
 
+    grad_square = torch.sum((grad_square * (1/atomic_masses)), axis=1, keepdim=True)    
+    
+    if _is_graph_data:
+        # we need to sum on the right batch first
+        grad_square = scatter_sum(grad_square, mask_var_batches, dim=0)
+  
     # variational contribution to loss: we sum over the batch
     loss_var = torch.mean(grad_square * w[mask_var])
     if log_var:
         loss_var = torch.log1p(loss_var)
     else:
-        loss_var *= gamma
-
+        loss_var = gamma*loss_var
 
     # 2. ----- BOUNDARY LOSS
     loss_A = gamma * torch.mean( q[mask_A].pow(2) )
@@ -330,4 +363,6 @@ def committor_loss(x: torch.Tensor,
     # 4. ----- TOTAL LOSS
     loss = loss_var + alpha*(loss_A + loss_B) + loss_z_diff
     
+    
+    # TODO maybe there is no need to detach them for logging
     return loss, loss_var.detach(), alpha*loss_A.detach(), alpha*loss_B.detach()

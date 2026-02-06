@@ -3,7 +3,7 @@ import numpy as np
 
 from typing import Union, List
 
-def batch_reshape(t: torch.Tensor, size: torch.Size) -> torch.Tensor:
+def batch_reshape(t: torch.Tensor, size: List[int]) -> torch.Tensor:
     """Return value reshaped according to size.
     In case of batch unsqueeze and expand along the first dimension.
     For single inputs just pass.

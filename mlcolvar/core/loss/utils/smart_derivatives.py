@@ -961,7 +961,7 @@ def test_train_with_smart_derivatives():
     
     datamodule = DictModule(dataset=smart_dataset, lengths=[0.8, 0.2], batch_size=80)
     
-    model = Committor(layers=[45, 10, 1],
+    model = Committor(model=[45, 10, 1],
                       atomic_masses=atomic_masses,
                       alpha=1,
                       separate_boundary_dataset=True,

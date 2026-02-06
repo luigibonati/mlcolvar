@@ -15,7 +15,7 @@ __all__ = ["TDALoss", "tda_loss"]
 # GLOBAL IMPORTS
 # =============================================================================
 
-from typing import Union
+from typing import Union, List, Tuple
 from warnings import warn
 
 import torch
@@ -32,10 +32,10 @@ class TDALoss(torch.nn.Module):
     def __init__(
         self,
         n_states: int,
-        target_centers: Union[list, torch.Tensor],
-        target_sigmas: Union[list, torch.Tensor],
-        alpha: float = 1,
-        beta: float = 100,
+        target_centers: Union[List[float], torch.Tensor],
+        target_sigmas: Union[List[float], torch.Tensor],
+        alpha: float = 1.0,
+        beta: float = 100.0,
     ):
         """Constructor.
 
@@ -66,7 +66,7 @@ class TDALoss(torch.nn.Module):
 
     def forward(
         self, H: torch.Tensor, labels: torch.Tensor, return_loss_terms: bool = False
-    ) -> torch.Tensor:
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         """Compute the value of the loss function.
 
         Parameters
@@ -107,12 +107,12 @@ def tda_loss(
     H: torch.Tensor,
     labels: torch.Tensor,
     n_states: int,
-    target_centers: Union[list, torch.Tensor],
-    target_sigmas: Union[list, torch.Tensor],
+    target_centers: Union[List[float], torch.Tensor],
+    target_sigmas: Union[List[float], torch.Tensor],
     alpha: float = 1,
     beta: float = 100,
     return_loss_terms: bool = False,
-) -> torch.Tensor:
+) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
     """
     Compute a loss function as the distance from a simple Gaussian target distribution.
 
@@ -148,9 +148,9 @@ def tda_loss(
         term associated to the standard deviations of the target Gaussians.
     """
     if not isinstance(target_centers, torch.Tensor):
-        target_centers = torch.Tensor(target_centers)
+        target_centers = torch.tensor(target_centers, dtype=H.dtype)
     if not isinstance(target_sigmas, torch.Tensor):
-        target_sigmas = torch.Tensor(target_sigmas)
+        target_sigmas = torch.tensor(target_sigmas, dtype=H.dtype)
 
     device = H.device
     target_centers = target_centers.to(device)
@@ -165,7 +165,7 @@ def tda_loss(
                 f"State {i} was not represented in this batch! Either use bigger batch_size or a more equilibrated dataset composition!"
             )
         else:
-            H_red = H[torch.nonzero(labels == i, as_tuple=True)]
+            H_red = H[labels == i]
 
             # compute mean and standard deviation over the class i
             mu = torch.mean(H_red, 0)
@@ -173,7 +173,7 @@ def tda_loss(
                 warn(
                     f"There is only one sample for state {i} in this batch! Std is set to 0, this may affect the training! Either use bigger batch_size or a more equilibrated dataset composition!"
                 )
-                sigma = 0
+                sigma = torch.Tensor(0)
             else:
                 sigma = torch.std(H_red, 0)
 
@@ -189,3 +189,18 @@ def tda_loss(
     if return_loss_terms:
         return loss, loss_centers, loss_sigmas
     return loss
+
+def test_tda_loss():
+    H = torch.randn(100)
+    H.requires_grad = True
+    labels = torch.zeros_like(H)
+    labels[-50:] = 1
+
+    Loss = TDALoss(n_states=2, target_centers=[-1, 1], target_sigmas=[0.1, 0.1])
+
+    loss = Loss(H=H, labels=labels, return_loss_terms=True)
+
+    loss[0].backward()
+
+if __name__ == '__main__':
+    test_tda_loss()
