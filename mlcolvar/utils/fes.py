@@ -37,26 +37,26 @@ else:
     kdelib = None
 
 def compute_fes(
-    X,
-    temp=None,
-    fes_units="kJ/mol",
-    kbt=None,
-    num_samples=200,
-    bounds=None,
-    bandwidth=0.01,
-    kernel="gaussian",
-    weights=None,
-    scale_by=None,
-    blocks=1,
-    fes_to_zero=None,
-    plot=False,
-    plot_color = "fessa6",
-    plot_max_fes = None,
-    plot_error_style = "fill_between",
-    plot_levels = None,
-    ax=None,
-    backend=None,
-    eps=None,
+    X: np.ndarray,
+    temp: float = None,
+    fes_units: str = "kJ/mol",
+    kbt: float = None,
+    num_samples: int = 200,
+    bounds: List[float] = None,
+    bandwidth: float = 0.01,
+    kernel: str = "gaussian",
+    weights: np.ndarray = None,
+    scale_by: Union[str, List[float]] = None,
+    blocks: int = 1,
+    fes_to_zero: bool = None,
+    plot: bool =False,
+    plot_color: str = "fessa6",
+    plot_max_fes: float = None,
+    plot_error_style: str = "fill_between",
+    plot_levels: Union[int, List[float]] = None,
+    ax: matplotlib.axes = None,
+    backend: str = None,
+    eps: float = None,
 ):
     """Compute the Free Energy Surface using a kernel density estimation (KDE) along the given variables. See notes below.
 
@@ -465,7 +465,7 @@ def compute_deltaG(X: np.ndarray,
 
 
 def _check_kbt_units(kbt, temp, fes_units):
-    # check temperature / units
+    "Helper function to handle inputs to specify free energy units in free energy utils"
     if kbt is not None:
         if temp is not None:
             raise ValueError("Only one of kbt and temp can be specified.")
