@@ -330,7 +330,7 @@ def compute_deltaG(X: np.ndarray,
                    temp=None,
                    fes_units="kJ/mol",
                    kbt: float = None,
-                   nblocks: int = 10, 
+                   intervals: int = 10, 
                    weights: np.ndarray = None,
                    reverse: bool = False,
                    time: np.ndarray = None,
@@ -355,8 +355,8 @@ def compute_deltaG(X: np.ndarray,
         Units of the FES if using `temp`, by default "kJ/mol".
     kbt : float, optional
         Thermal energy in the same units as the FES. Required if `temp` is not provided.
-    nblocks : int, optional
-        Number of blocks on whcih the deltaG is progressively computed, by default 10.
+    intervals : int, optional
+        Number of intervals on which the deltaG is progressively computed, by default 10.
     weights : np.ndarray, optional
         Weights associated with the data points, shape (n_samples,), by default None.
     reverse : bool, optional
@@ -375,7 +375,7 @@ def compute_deltaG(X: np.ndarray,
     Returns
     -------
     grid: np.ndarray
-        Bounds of the blocks used for computing the deltaG, shape is (n_blocks,). 
+        Bounds of the intervals used for computing the deltaG, shape is (n_blocks,). 
         If `time` is provided, the time bounds are returned.
     deltaG: np.array
         DeltaG values computed up to each block, shape is (n_blocks,).
@@ -400,8 +400,8 @@ def compute_deltaG(X: np.ndarray,
     # check temperature / units
     kbt, temp, fes_units = _check_kbt_units(kbt, temp, fes_units)
 
-    # for simplicity we increase the number of blocks to return the given number at the end
-    nblocks = nblocks + 1 
+    # for simplicity we increase the number of intervals to return the given number at the end
+    intervals = intervals + 1 
 
     # initialize unitary weights if not provided
     if weights is None:
@@ -423,18 +423,18 @@ def compute_deltaG(X: np.ndarray,
         mask_B = np.logical_and(np.logical_and(X[:, 0] > stateB_bounds[0, 0], X[:, 0] < stateB_bounds[0, 1]),
                                 np.logical_and(X[:, 1] > stateB_bounds[1, 0], X[:, 1] < stateB_bounds[1, 1]))
         
-    # build blocks
-    blocks_len = len(X) / nblocks
-    blocks_bounds = np.arange(0, len(X), blocks_len, dtype=int)
+    # build intervals
+    interval_len = len(X) / intervals
+    interval_bounds = np.arange(0, len(X), interval_len, dtype=int)
 
     # we progressively store the data
     tot_A = eps
     tot_B = eps
 
-    # iterate over blocks
-    for i in range(nblocks-1):
-        aux_A = weights[blocks_bounds[i]:blocks_bounds[i+1]][mask_A[blocks_bounds[i]:blocks_bounds[i+1]]]
-        aux_B = weights[blocks_bounds[i]:blocks_bounds[i+1]][mask_B[blocks_bounds[i]:blocks_bounds[i+1]]]
+    # iterate over intervals
+    for i in range(intervals-1):
+        aux_A = weights[interval_bounds[i]:interval_bounds[i+1]][mask_A[interval_bounds[i]:interval_bounds[i+1]]]
+        aux_B = weights[interval_bounds[i]:interval_bounds[i+1]][mask_B[interval_bounds[i]:interval_bounds[i+1]]]
 
         tot_A += np.sum(aux_A)
         tot_B += np.sum(aux_B)
@@ -446,11 +446,11 @@ def compute_deltaG(X: np.ndarray,
     
     # switch to time if needed
     if time is not None:
-        blocks_bounds = time[blocks_bounds]
+        interval_bounds = time[interval_bounds]
 
     # prepare for return
     deltaG = np.array(deltaG)
-    grid = blocks_bounds[1:]
+    grid = interval_bounds[1:]
 
     # plot if needed
     if plot:
@@ -541,7 +541,7 @@ def test_compute_deltaG():
                                   stateA_bounds=[-6, -4],
                                   stateB_bounds=[4, 6], 
                                   kbt=1,
-                                  nblocks=10, 
+                                  intervals=10, 
                                   weights=None,
                                   reverse=False,
                                   time=None,
@@ -556,7 +556,7 @@ def test_compute_deltaG():
                                   stateA_bounds=[-6, -4],
                                   stateB_bounds=[4, 6], 
                                   kbt=1,
-                                  nblocks=10, 
+                                  intervals=10, 
                                   weights=weights,
                                   reverse=True,
                                   time=time,
@@ -580,7 +580,7 @@ def test_compute_deltaG():
                                   stateA_bounds=[[-6, -4], [-6, -4]],
                                   stateB_bounds=[[4, 6], [4, 6]], 
                                   kbt=1,
-                                  nblocks=10, 
+                                  intervals=10, 
                                   weights=weights,
                                   reverse=True,
                                   time=time,
@@ -589,4 +589,3 @@ def test_compute_deltaG():
                                   ax=None,
                                   )
     assert np.allclose(deltaG[-1], 0, atol=0.5)
-
