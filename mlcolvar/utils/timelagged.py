@@ -20,7 +20,7 @@ try:
 except ImportError:
     TQDM_IS_INSTALLED = False
 
-__all__ = ["find_timelagged_configurations", "create_timelagged_dataset"]
+__all__ = ["find_timelagged_configurations", "create_timelagged_dataset", "compute_koopman_weights"]
 
 
 def closest_idx(array, value):
@@ -87,6 +87,100 @@ def tprime_evaluation(t, logweights=None):
 
     return tprime
 
+
+def compute_koopman_weights(
+    X: torch.Tensor,
+    lag_time: int = 1,
+    eps: float = 1e-6,
+):
+    """
+    Compute Koopman reweighting factors from time-lagged data.
+
+    This routine estimates frame-wise weights w(x) such that weighted
+    time-lagged correlations approximate equilibrium expectations.
+    The weight function is assumed to be affine in the input features:
+        w(x) = u_x^T x + c
+
+    References
+    ----------
+    .. [1] H. Wu, et al. "Variational Koopman models: Slow collective variables and molecular kinetics
+        from short off-equilibrium simulations." JCP 146.15 (2017).
+
+    Parameters
+    ----------
+    X : torch.Tensor, shape (T, d)
+        Time series of input features.
+    lag_time : int, optional
+        Lag time (in number of frames) used to construct time-lagged
+        correlations (default: 1).
+    eps : float, optional
+        Threshold for discarding small eigenvalues during whitening
+        of the covariance matrix (default: 1e-6).
+
+    Returns
+    -------
+    weights : torch.Tensor, shape (T,)
+        Koopman reweighting factors for each frame.
+    """
+    from mlcolvar.core.stats.utils import correlation_matrix, compute_average
+
+    if lag_time < 1:
+        raise ValueError("lag_time too small for Koopman reweighting.")
+    if lag_time >= len(X):
+        raise ValueError("lag_time too large for Koopman reweighting.")
+    
+    if isinstance(X, np.ndarray):
+        X = torch.from_numpy(X).float()
+        
+    X0 = X[:-lag_time]
+    Xt = X[lag_time:]
+
+    # 1) remove mean
+    mu0 = compute_average(X0)
+    mut = compute_average(Xt)
+    X0c = X0 - mu0
+    Xtc = Xt - mut
+
+    # 2) estimate covariance and time-lagged covariance matrices
+    C00 = correlation_matrix(X0c, X0c, symmetrize=True)
+    C0t = correlation_matrix(X0c, Xtc, symmetrize=False)
+
+    # 3) whitening transformation based on C00
+    eigvals, eigvecs = torch.linalg.eigh(C00)
+    keep = eigvals > eps
+    if torch.sum(keep) == 0:
+        raise RuntimeError("All eigenvalues discarded during whitening in Koopman reweighting.")
+    R = eigvecs[:, keep] @ torch.diag(eigvals[keep].rsqrt())
+
+    # 4) construct augmented Koopman operator
+    #
+    #    The augmentation includes:
+    #    - a constant basis function
+    #    - a drift term accounting for the mean shift between X0 and Xt
+    K = R.T @ C0t @ R
+    M = K.shape[0]
+    K_aug = torch.zeros((M + 1, M + 1), device=X.device, dtype=X.dtype)
+    K_aug[:M, :M] = K
+    K_aug[M, M] = 1.0
+    K_aug[M, :M] = (mut - mu0) @ R
+
+    # 5) compute invariant mode: left eigenvector of K_aug
+    #    corresponding to eigenvalue 1
+    vals, vecs = torch.linalg.eig(K_aug.T)
+    idx = torch.argmin(torch.abs(vals.real - 1.0))
+    u = vecs[:, idx].real
+
+    # fix gauge by normalizing the constant component
+    u = u / u[-1]  # gauge fixing
+
+    # 6) map invariant mode back to original feature space
+    #    w(x) = u_x^T x + c
+    u_x = R @ u[:-1]
+    c = u[-1] - mu0 @ u_x
+
+    weights = X @ u_x + c
+
+    return weights
 
 def find_timelagged_configurations(
     x: torch.Tensor,
@@ -306,6 +400,7 @@ def create_timelagged_dataset(
         if reweight_mode is None:
             w_t = torch.ones(len(x_t))
             w_lag = torch.ones(len(x_lag))
+            
         else:
             logweights = torch.tensor(logweights, dtype=torch.float32)
             weights = torch.exp(logweights)
