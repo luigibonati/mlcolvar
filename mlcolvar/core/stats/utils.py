@@ -221,6 +221,6 @@ def compute_average(x, w=None):
     if w is not None:
         ave = torch.einsum("ij,i ->j", x, w) / torch.sum(w)
     else:
-        ave = torch.mean(x.T, 1, keepdim=False).T
+        ave = torch.mean(x, dim=0)
 
     return ave

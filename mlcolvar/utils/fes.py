@@ -1,10 +1,10 @@
-# __all__ = ["compute_fes"]
-
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.axes
 import torch
 import warnings
+from typing import List, Union
 
 # optional packages
 # pandas
@@ -36,28 +36,27 @@ elif SKLEARN_IS_INSTALLED:
 else:
     kdelib = None
 
-
 def compute_fes(
-    X,
-    temp=None,
-    fes_units="kJ/mol",
-    kbt=None,
-    num_samples=200,
-    bounds=None,
-    bandwidth=0.01,
-    kernel="gaussian",
-    weights=None,
-    scale_by=None,
-    blocks=1,
-    fes_to_zero=None,
-    plot=False,
-    plot_color = "fessa6",
-    plot_max_fes = None,
-    plot_error_style = "fill_between",
-    plot_levels = None,
-    ax=None,
-    backend=None,
-    eps=None,
+    X: np.ndarray,
+    temp: float = None,
+    fes_units: str = "kJ/mol",
+    kbt: float = None,
+    num_samples: int = 200,
+    bounds: List[float] = None,
+    bandwidth: float = 0.01,
+    kernel: str = "gaussian",
+    weights: np.ndarray = None,
+    scale_by: Union[str, List[float]] = None,
+    blocks: int = 1,
+    fes_to_zero: bool = None,
+    plot: bool =False,
+    plot_color: str = "fessa6",
+    plot_max_fes: float = None,
+    plot_error_style: str = "fill_between",
+    plot_levels: Union[int, List[float]] = None,
+    ax: matplotlib.axes = None,
+    backend: str = None,
+    eps: float = None,
 ):
     """Compute the Free Energy Surface using a kernel density estimation (KDE) along the given variables. See notes below.
 
@@ -148,26 +147,7 @@ def compute_fes(
         backend = kdelib
 
     # check temperature / units
-    if kbt is not None:
-        if temp is not None:
-            raise ValueError("Only one of kbt and temp can be specified.")
-     
-        fes_units = None
-    else: 
-        if temp is None:
-            raise ValueError("One of kbt and temp must be specified.")
-    
-        if fes_units == "kJ/mol":
-                kb = 0.00831441
-        elif fes_units == "kcal/mol":
-            kb = 0.0019872041
-        elif fes_units == "eV":
-            kb = 8.6173324e-5
-        else:
-            raise ValueError(
-                "fes_units must be one of 'kJ/mol', 'kcal/mol', 'eV'."
-            )
-        kbt = kb * temp
+    kbt, temp, fes_units = _check_kbt_units(kbt, temp, fes_units)
         
     # dataset
     if PANDAS_IS_INSTALLED:
@@ -344,6 +324,171 @@ def compute_fes(
 
     return fes, grid, bounds, error
 
+def compute_deltaG(X: np.ndarray,
+                   stateA_bounds: Union[ List[float], List[List[float]], np.ndarray ],
+                   stateB_bounds: Union[ List[float], List[List[float]], np.ndarray ], 
+                   temp=None,
+                   fes_units="kJ/mol",
+                   kbt: float = None,
+                   intervals: int = 10, 
+                   weights: np.ndarray = None,
+                   reverse: bool = False,
+                   time: np.ndarray = None,
+                   plot: bool = False,
+                   plot_color: str = "fessa6",
+                   ax: matplotlib.axes = None,
+                   eps: float = 1e-8,
+                  ):
+    """Compute the difference in free energy (deltaG) between two states A and B.
+
+    Parameters
+    ----------
+    X : np.ndarray
+        Input data with the values of the CV used to define the state.
+    stateA_bounds : List[float]
+        Bounds of state A along the CV. 
+    stateB_bounds : List[float]
+        Bounds of state B along the CV.
+    temp : float, optional
+        Temperature (in Kelvin). Required if `kbt` is not provided.
+    fes_units : str, optional
+        Units of the FES if using `temp`, by default "kJ/mol".
+    kbt : float, optional
+        Thermal energy in the same units as the FES. Required if `temp` is not provided.
+    intervals : int, optional
+        Number of intervals on which the deltaG is progressively computed, by default 10.
+    weights : np.ndarray, optional
+        Weights associated with the data points, shape (n_samples,), by default None.
+    reverse : bool, optional
+        Switch to reverse the data, by default False.
+    time : np.ndarray, optional
+        Time reference for the input data, by default None.
+    plot : bool, optional
+        Whether to plot the deltaF, by default False.
+    plot_color : str, optional
+        Color for 1D FES plot, by default "fessa6".
+    ax : matplotlib.axes, optional
+        Axis object to plot into. If None, a new figure is created, by default None.
+    eps : float, optional
+        Small regularization term to prevent logarithm from having zero argument, by default 1e-8.
+
+    Returns
+    -------
+    grid: np.ndarray
+        Bounds of the intervals used for computing the deltaG, shape is (n_blocks,). 
+        If `time` is provided, the time bounds are returned.
+    deltaG: np.array
+        DeltaG values computed up to each block, shape is (n_blocks,).
+    """
+
+    # check that input are consistent with each other
+    if weights is not None and len(X) != len(weights):
+        raise ValueError(f"Input data and weights must have the same number of entries! Found {len(X)} and {len(weights)}.")
+    if time is not None and len(X) != len(time):
+        raise ValueError(f"Input data and time must have the same number of entries! Found {len(X)} and {len(time)}.")
+
+    # ensure to have np.ndarrays
+    stateA_bounds = np.array(stateA_bounds)
+    stateB_bounds = np.array(stateB_bounds)
+
+    n_dim = 1
+    if X.shape[-1] == 2:
+        n_dim = 2
+        if stateA_bounds.shape[-1] != n_dim or stateB_bounds.shape[-1] != n_dim:
+            raise ValueError("Input data are 2D, state bounds must be 2D as well!")
+
+    # check temperature / units
+    kbt, temp, fes_units = _check_kbt_units(kbt, temp, fes_units)
+
+    # for simplicity we increase the number of intervals to return the given number at the end
+    intervals = intervals + 1 
+
+    # initialize unitary weights if not provided
+    if weights is None:
+        weights = np.ones_like(X)
+
+    deltaG = []
+    if reverse:
+        X = np.flip(X, axis=0)
+        weights = np.flip(weights, axis=0)
+
+    # compute the estimate by reweighting the energy in the two basins
+        # compute the delta F on progressive blocks of data
+    if n_dim == 1:
+        mask_A = np.logical_and(X > stateA_bounds[0], X < stateA_bounds[1])
+        mask_B = np.logical_and(X > stateB_bounds[0], X < stateB_bounds[1])
+    else:
+        mask_A = np.logical_and(np.logical_and(X[:, 0] > stateA_bounds[0, 0], X[:, 0] < stateA_bounds[0, 1]),
+                                np.logical_and(X[:, 1] > stateA_bounds[1, 0], X[:, 1] < stateA_bounds[1, 1]))
+        mask_B = np.logical_and(np.logical_and(X[:, 0] > stateB_bounds[0, 0], X[:, 0] < stateB_bounds[0, 1]),
+                                np.logical_and(X[:, 1] > stateB_bounds[1, 0], X[:, 1] < stateB_bounds[1, 1]))
+        
+    # build intervals
+    interval_len = len(X) / intervals
+    interval_bounds = np.arange(0, len(X), interval_len, dtype=int)
+
+    # we progressively store the data
+    tot_A = eps
+    tot_B = eps
+
+    # iterate over intervals
+    for i in range(intervals-1):
+        aux_A = weights[interval_bounds[i]:interval_bounds[i+1]][mask_A[interval_bounds[i]:interval_bounds[i+1]]]
+        aux_B = weights[interval_bounds[i]:interval_bounds[i+1]][mask_B[interval_bounds[i]:interval_bounds[i+1]]]
+
+        tot_A += np.sum(aux_A)
+        tot_B += np.sum(aux_B)
+
+        G_A = - kbt * np.log(tot_A)
+        G_B = - kbt * np.log(tot_B)
+
+        deltaG.append(G_B - G_A)
+    
+    # switch to time if needed
+    if time is not None:
+        interval_bounds = time[interval_bounds]
+
+    # prepare for return
+    deltaG = np.array(deltaG)
+    grid = interval_bounds[1:]
+
+    # plot if needed
+    if plot:
+        if ax is None:
+            fig, ax = plt.subplots() 
+        ax.plot(grid, deltaG, color=plot_color)
+        ax.set_xlabel('Time' if time is not None else "Frame")
+        ax.set_ylabel(f"$\Delta$G [{fes_units}]" if fes_units is not None else "$\Delta$G")
+        
+
+    return grid, deltaG
+
+
+def _check_kbt_units(kbt, temp, fes_units):
+    "Helper function to handle inputs to specify free energy units in free energy utils"
+    if kbt is not None:
+        if temp is not None:
+            raise ValueError("Only one of kbt and temp can be specified.")
+     
+        fes_units = None
+    else: 
+        if temp is None:
+            raise ValueError("One of kbt and temp must be specified.")
+    
+        if fes_units == "kJ/mol":
+                kb = 0.00831441
+        elif fes_units == "kcal/mol":
+            kb = 0.0019872041
+        elif fes_units == "eV":
+            kb = 8.6173324e-5
+        else:
+            raise ValueError(
+                "fes_units must be one of 'kJ/mol', 'kcal/mol', 'eV'."
+            )
+        kbt = kb * temp
+
+    return kbt, temp, fes_units
+
 
 def test_compute_fes():
     X = np.linspace(1, 11, 100)
@@ -376,3 +521,71 @@ def test_compute_fes():
             blocks=2,
             backend="sklearn",
         )
+
+def test_compute_deltaG():
+    np.random.seed(42)
+    
+    # test 1D
+    # make two fake states with gaussian distribution, to have deltaG=0
+    X_a = np.random.rand(200) - 5
+    X_b = np.random.rand(200) + 5
+    
+    X = np.concatenate((X_a, X_b))
+    X = np.random.permutation(X)
+
+    time = np.arange(len(X))
+    weights = np.random.rand(len(X))
+
+    # test vanilla
+    grid, deltaG = compute_deltaG(X=X,
+                                  stateA_bounds=[-6, -4],
+                                  stateB_bounds=[4, 6], 
+                                  kbt=1,
+                                  intervals=10, 
+                                  weights=None,
+                                  reverse=False,
+                                  time=None,
+                                  plot=False,
+                                  plot_color="fessa6",
+                                  ax=None,
+                                  )
+    assert np.allclose(deltaG[-1], 0, atol=0.5)
+
+    # test keywords
+    grid, deltaG = compute_deltaG(X=X,
+                                  stateA_bounds=[-6, -4],
+                                  stateB_bounds=[4, 6], 
+                                  kbt=1,
+                                  intervals=10, 
+                                  weights=weights,
+                                  reverse=True,
+                                  time=time,
+                                  plot=False,
+                                  plot_color="fessa6",
+                                  ax=None,
+                                  )
+    assert np.allclose(deltaG[-1], 0, atol=0.5)
+
+    # test 2D
+    # make two fake states with gaussian distribution, to have deltaG=0
+    X_a = np.random.rand(200, 2) - 5
+    X_b = np.random.rand(200, 2) + 5
+    
+    X = np.concatenate((X_a, X_b), axis=0)
+    X = np.random.permutation(X)
+
+    time = np.arange(len(X))
+    weights = np.random.rand(len(X))
+    grid, deltaG = compute_deltaG(X=X,
+                                  stateA_bounds=[[-6, -4], [-6, -4]],
+                                  stateB_bounds=[[4, 6], [4, 6]], 
+                                  kbt=1,
+                                  intervals=10, 
+                                  weights=weights,
+                                  reverse=True,
+                                  time=time,
+                                  plot=False,
+                                  plot_color="fessa6",
+                                  ax=None,
+                                  )
+    assert np.allclose(deltaG[-1], 0, atol=0.5)
