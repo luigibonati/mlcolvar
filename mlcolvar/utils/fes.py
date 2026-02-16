@@ -431,7 +431,7 @@ def compute_deltaG(X: np.ndarray,
     tot_B = eps
 
     # iterate over intervals
-    for i in range(intervals-1):
+    for i in range(intervals):
         aux_A = weights[interval_bounds[i]:interval_bounds[i+1]][mask_A[interval_bounds[i]:interval_bounds[i+1]]]
         aux_B = weights[interval_bounds[i]:interval_bounds[i+1]][mask_B[interval_bounds[i]:interval_bounds[i+1]]]
 
