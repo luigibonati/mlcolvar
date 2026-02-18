@@ -400,9 +400,6 @@ def compute_deltaG(X: np.ndarray,
     # check temperature / units
     kbt, temp, fes_units = _check_kbt_units(kbt, temp, fes_units)
 
-    # for simplicity we increase the number of intervals to return the given number at the end
-    intervals = intervals + 1 
-
     # initialize unitary weights if not provided
     if weights is None:
         weights = np.ones_like(X)
@@ -425,14 +422,16 @@ def compute_deltaG(X: np.ndarray,
         
     # build intervals
     interval_len = len(X) / intervals
-    interval_bounds = np.arange(0, len(X), interval_len, dtype=int)
+    interval_bounds = np.arange(0, len(X), interval_len)
+    interval_bounds = np.ceil(interval_bounds).astype('int')
+    interval_bounds = np.concatenate((interval_bounds, np.array([len(X) - 1])))
 
     # we progressively store the data
     tot_A = eps
     tot_B = eps
 
     # iterate over intervals
-    for i in range(intervals-1):
+    for i in range(intervals):
         aux_A = weights[interval_bounds[i]:interval_bounds[i+1]][mask_A[interval_bounds[i]:interval_bounds[i+1]]]
         aux_B = weights[interval_bounds[i]:interval_bounds[i+1]][mask_B[interval_bounds[i]:interval_bounds[i+1]]]
 
