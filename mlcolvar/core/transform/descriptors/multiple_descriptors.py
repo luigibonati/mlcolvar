@@ -72,7 +72,7 @@ class MultipleDescriptors(torch.nn.Module):
         return out
 
 def test_multipledescriptors():
-    from .torsional_angle import TorsionalAngle
+    from .torsional_angles import TorsionalAngles
     from .pairwise_distances import PairwiseDistances
 
     # check using torsional angles and distances in alanine
@@ -100,8 +100,8 @@ def test_multipledescriptors():
     cell = torch.Tensor([3.0233, 3.0233, 3.0233])
 
     # model 1 and 2 for torsional angles, model 3 for distances
-    model_1 = TorsionalAngle(indices=[1,3,4,6], n_atoms=10, mode=['angle'], PBC=False, cell=cell, scaled_coords=False)
-    model_2 = TorsionalAngle(indices=[3,4,6,8], n_atoms=10, mode=['angle'], PBC=False, cell=cell, scaled_coords=False)
+    model_1 = TorsionalAngles(indices=[1,3,4,6], n_atoms=10, mode=['angle'], PBC=False, cell=cell, scaled_coords=False)
+    model_2 = TorsionalAngles(indices=[3,4,6,8], n_atoms=10, mode=['angle'], PBC=False, cell=cell, scaled_coords=False)
     model_3 = PairwiseDistances(n_atoms=10, PBC=True, cell=cell, scaled_coords=False, slicing_pairs=[[0, 1], [0, 2]])
     
     # compute single references

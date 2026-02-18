@@ -6,9 +6,12 @@ from mlcolvar.core.transform.descriptors.utils import compute_distances_matrix, 
 
 from typing import Union
 
-__all__ = ["TorsionalAngle"]
+__all__ = ["TorsionalAngles"]
 
-class TorsionalAngle(Transform):
+def TorsionalAngle(*args, **kwargs):
+    raise DeprecationWarning("The class name TorsionalAngles has been deprecated use TorsionalAngless instead!")
+
+class TorsionalAngles(Transform):
     """
     Torsional angle defined by a set of 4 atoms from their positions.
     Can compute a single angle or multiple angles.
@@ -179,13 +182,13 @@ def test_torsional_angle():
     cell = torch.Tensor([3.0233, 3.0233, 3.0233])
 
     # Test single angle (backward compatible)
-    model = TorsionalAngle(indices=[1,3,4,6], n_atoms=10, mode=['angle'], PBC=True, cell=cell, scaled_coords=False)
+    model = TorsionalAngles(indices=[1,3,4,6], n_atoms=10, mode=['angle'], PBC=True, cell=cell, scaled_coords=False)
     angle = model(pos)
     assert(torch.allclose(angle, ref_phi, atol=1e-3))
     angle.sum().backward()
 
     # Test multiple angles
-    model = TorsionalAngle(indices=[[1,3,4,6], [1,3,4,6]], n_atoms=10, mode=['angle'], PBC=True, cell=cell, scaled_coords=False)
+    model = TorsionalAngles(indices=[[1,3,4,6], [1,3,4,6]], n_atoms=10, mode=['angle'], PBC=True, cell=cell, scaled_coords=False)
     angle = model(pos)
     assert(angle.shape == (2, 2))  # [batch_size, n_angles]
     assert(torch.allclose(angle[:, 0], ref_phi.squeeze(), atol=1e-3))
@@ -193,20 +196,20 @@ def test_torsional_angle():
     angle.sum().backward()
 
     # Test multiple angles with multiple modes
-    model = TorsionalAngle(indices=[[1,3,4,6], [1,3,4,6]], n_atoms=10, mode=['angle', 'sin', 'cos'], PBC=True, cell=cell, scaled_coords=False)
+    model = TorsionalAngles(indices=[[1,3,4,6], [1,3,4,6]], n_atoms=10, mode=['angle', 'sin', 'cos'], PBC=True, cell=cell, scaled_coords=False)
     angle = model(pos)
     assert(angle.shape == (2, 6))  # [batch_size, n_angles * n_modes]
     angle.sum().backward()
 
     # Original tests
-    model = TorsionalAngle(np.array([1,3,4,6]), n_atoms=10, mode=['angle', 'sin', 'cos'], PBC=True, cell=cell, scaled_coords=False)
+    model = TorsionalAngles(np.array([1,3,4,6]), n_atoms=10, mode=['angle', 'sin', 'cos'], PBC=True, cell=cell, scaled_coords=False)
     angle = model(pos)
     angle.sum().backward()
     assert(torch.allclose(angle[:, 0].unsqueeze(-1), ref_phi, atol=1e-3))
     assert(torch.allclose(angle[:, 1].unsqueeze(-1), torch.sin(ref_phi), atol=1e-3))
     assert(torch.allclose(angle[:, 2].unsqueeze(-1), torch.cos(ref_phi), atol=1e-3))
 
-    model = TorsionalAngle(torch.Tensor([1,3,4,6]), n_atoms=10, mode=['sin', 'cos'], PBC=True, cell=cell, scaled_coords=False)
+    model = TorsionalAngles(torch.Tensor([1,3,4,6]), n_atoms=10, mode=['sin', 'cos'], PBC=True, cell=cell, scaled_coords=False)
     angle = model(pos)
     angle.sum().backward()
     assert(torch.allclose(angle[:, 0].unsqueeze(-1), torch.sin(ref_phi), atol=1e-3))
