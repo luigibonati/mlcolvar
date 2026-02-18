@@ -10,7 +10,8 @@ __all__ = ["TorsionalAngle"]
 
 class TorsionalAngle(Transform):
     """
-    Torsional angle defined by a set of 4 atoms from their positions
+    Torsional angle defined by a set of 4 atoms from their positions.
+    Can compute a single angle or multiple angles.
     """
     
     MODES = ["angle", "sin", "cos"]
@@ -22,12 +23,16 @@ class TorsionalAngle(Transform):
                  PBC: bool,
                  cell: Union[float, list],
                  scaled_coords: bool = False) -> torch.Tensor:
-        """Initialize a torsional angle object
+        """Initialize a torsional angle object.
+           Can compute a single angle or multiple angles based on the `indices` key.
 
         Parameters
         ----------
         indices : Union[list, np.ndarray, torch.Tensor]
-            Indices of the ordered atoms defining the torsional angle
+            Indices of the 4 ordered atoms defining the torsional angle(s). 
+            It can be:
+            - A single 4-element list/array: [a1, a2, a3, a4] for one angle
+            - A list of 4-element lists: [[a1, a2, a3, a4], [b1, b2, b3, b4], ...] for multiple angles
         n_atoms : int
             Number of atoms in the positions tensor used in the forward.
         mode : Union[str, list]
@@ -42,79 +47,111 @@ class TorsionalAngle(Transform):
         Returns
         -------
         torch.Tensor
-            Depending on `mode` selection, the torsional angle in radiants, its sine and its cosine. 
+            Depending on `mode` selection, the torsional angle(s) in radiants, their sine and their cosine. 
+            Shape: [batch_size, n_angles * n_modes]
         """
 
-        indices = torch.Tensor(indices).to(torch.long)
-
-        # check indexes are in the correct form
-        if indices.numel() != 4:
-            print(indices.numel)
-            raise ValueError(f"Only the four atom indeces defining this torsional angle must be provided! Found {indices}")
+        # Convert indices to tensor and check format
+        indices = torch.as_tensor(indices, dtype=torch.long)
+        
+        # Check if we have a single angle or multiple angles
+        if indices.ndim == 1:
+            # Single angle: shape should be [4]
+            if indices.numel() != 4:
+                raise ValueError(f"Single angle must have exactly 4 atom indices! Found {indices.numel()}")
+            self.multiple_angles = False
+            self.n_angles = 1
+            # Reshape to [1, 4] for consistent processing
+            indices = indices.unsqueeze(0)
+        elif indices.ndim == 2:
+            # Multiple angles: shape should be [n_angles, 4]
+            if indices.shape[1] != 4:
+                raise ValueError(f"Each angle must have exactly 4 atom indices! Found shape {indices.shape}")
+            self.multiple_angles = True
+            self.n_angles = indices.shape[0]
+        else:
+            raise ValueError(f"Indices must be 1D (single angle) or 2D (multiple angles)! Found shape {indices.shape}")
         
         # check mode here to get number of out_features
+        if isinstance(mode, str):
+            mode = [mode]
+        
         for i in mode:
             if i not in self.MODES:
                 raise ValueError(f'The mode {i} is not available in this class. The available modes are: {", ".join(self.MODES)}.')
 
         mode_idx = []
-
-        for n in mode:
-            if n not in self.MODES:
-                raise(ValueError(f"The given mode : {n} is not available! The available options are {', '.join(self.MODES)}")) 
-
         for i,m in enumerate(self.MODES):
             if m in mode:
                 mode_idx.append(i)
         self.mode_idx = mode_idx
 
         # now we can initialize the mother class
-        super().__init__(in_features=int(n_atoms*3), out_features=len(mode_idx))
+        # out_features = n_angles * n_modes
+        super().__init__(in_features=int(n_atoms*3), out_features=self.n_angles * len(mode_idx))
 
         # initialize class attributes
-        self.indices = indices
+        self.register_buffer('indices', indices)
+        self.register_buffer('cell', torch.as_tensor(cell))
         self.n_atoms = n_atoms
         self.PBC = PBC
-        self.cell = cell
         self.scaled_coords = scaled_coords
 
 
     def compute_torsional_angle(self, pos):
         tors_pos, batch_size = sanitize_positions_shape(pos, self.n_atoms)
 
-        # select relevant atoms only
-        tors_pos = tors_pos[:, self.indices, :]
-
-        dist_components = compute_distances_matrix(pos=tors_pos,
-                                                    n_atoms=4,
-                                                    PBC=self.PBC,
-                                                    cell=self.cell,
-                                                    scaled_coords=self.scaled_coords,
-                                                    vector=True)
-
-        # get AB, BC, CD distances
-        AB = dist_components[:, :, 0, 1]
-        BC = dist_components[:, :, 1, 2]
-        CD = dist_components[:, :, 2, 3]
-
-        # obtain normal direction 
-        n1 = torch.linalg.cross(AB, BC)
-        n2 = torch.linalg.cross(BC, CD)
-        # obtain versors
-        n1_normalized = n1 / torch.norm(n1, dim=1, keepdim=True)
-        n2_normalized = n2 / torch.norm(n2, dim=1, keepdim=True)
-        UBC= BC / torch.norm(BC,dim=1,keepdim=True)
-
-        sin = torch.einsum('bij,bij->bj', torch.linalg.cross(n1_normalized, n2_normalized).unsqueeze(-1), UBC.unsqueeze(-1))
-        cos = torch.einsum('bij,bij->bj', n1_normalized.unsqueeze(-1), n2_normalized.unsqueeze(-1))
-
-        angle = torch.atan2(sin, cos)
+        # Compute all angles
+        all_angles = []
         
-        return torch.hstack([angle, sin, cos])
+        for i in range(self.n_angles):
+            # Get the 4 atoms for this angle
+            angle_indices = self.indices[i]
+            angle_pos = tors_pos[:, angle_indices, :]
+
+            dist_components = compute_distances_matrix(pos=angle_pos,
+                                                        n_atoms=4,
+                                                        PBC=self.PBC,
+                                                        cell=self.cell,
+                                                        scaled_coords=self.scaled_coords,
+                                                        vector=True)
+
+            # get AB, BC, CD distances
+            AB = dist_components[:, :, 0, 1]
+            BC = dist_components[:, :, 1, 2]
+            CD = dist_components[:, :, 2, 3]
+
+            # obtain normal direction 
+            n1 = torch.linalg.cross(AB, BC)
+            n2 = torch.linalg.cross(BC, CD)
+            # obtain versors
+            n1_normalized = n1 / torch.norm(n1, dim=1, keepdim=True)
+            n2_normalized = n2 / torch.norm(n2, dim=1, keepdim=True)
+            UBC = BC / torch.norm(BC, dim=1, keepdim=True)
+
+            sin = torch.einsum('bij,bij->bj', torch.linalg.cross(n1_normalized, n2_normalized).unsqueeze(-1), UBC.unsqueeze(-1))
+            cos = torch.einsum('bij,bij->bj', n1_normalized.unsqueeze(-1), n2_normalized.unsqueeze(-1))
+
+            angle = torch.atan2(sin, cos)
+            
+            # Stack [angle, sin, cos] for this angle
+            all_angles.append(torch.hstack([angle, sin, cos]))
+        
+        # Concatenate all angles: shape [batch_size, n_angles * 3]
+        return torch.cat(all_angles, dim=1)
 
     def forward(self, x):
+        # Ensure x is on the same device as model buffers
+        if isinstance(x, torch.Tensor) and x.device != self.indices.device:
+            x = x.to(self.indices.device)
         out = self.compute_torsional_angle(x)
-        return out[:, self.mode_idx]
+        # Select the requested modes for all angles
+        # out shape: [batch_size, n_angles * 3]
+        # We need to reshape, select modes, and reshape back
+        batch_size = out.shape[0]
+        out_reshaped = out.view(batch_size, self.n_angles, 3)  # [batch_size, n_angles, 3]
+        out_selected = out_reshaped[:, :, self.mode_idx]  # [batch_size, n_angles, n_modes]
+        return out_selected.view(batch_size, -1)  # [batch_size, n_angles * n_modes]
 
 def test_torsional_angle():
     # simple test on alanine phi angle
@@ -131,11 +168,29 @@ def test_torsional_angle():
     ref_phi = torch.Tensor([[-2.3687], [-2.0190]])
     cell = torch.Tensor([3.0233, 3.0233, 3.0233])
 
+    # Test single angle (backward compatible)
     model = TorsionalAngle(indices=[1,3,4,6], n_atoms=10, mode=['angle'], PBC=True, cell=cell, scaled_coords=False)
     angle = model(pos)
+    print(angle)
     assert(torch.allclose(angle, ref_phi, atol=1e-3))
     angle.sum().backward()
 
+    # Test multiple angles
+    model = TorsionalAngle(indices=[[1,3,4,6], [1,3,4,6]], n_atoms=10, mode=['angle'], PBC=True, cell=cell, scaled_coords=False)
+    angle = model(pos)
+    print(angle)
+    assert(angle.shape == (2, 2))  # [batch_size, n_angles]
+    assert(torch.allclose(angle[:, 0], ref_phi.squeeze(), atol=1e-3))
+    assert(torch.allclose(angle[:, 1], ref_phi.squeeze(), atol=1e-3))
+    angle.sum().backward()
+
+    # Test multiple angles with multiple modes
+    model = TorsionalAngle(indices=[[1,3,4,6], [1,3,4,6]], n_atoms=10, mode=['angle', 'sin', 'cos'], PBC=True, cell=cell, scaled_coords=False)
+    angle = model(pos)
+    assert(angle.shape == (2, 6))  # [batch_size, n_angles * n_modes]
+    angle.sum().backward()
+
+    # Original tests
     model = TorsionalAngle(np.array([1,3,4,6]), n_atoms=10, mode=['angle', 'sin', 'cos'], PBC=True, cell=cell, scaled_coords=False)
     angle = model(pos)
     angle.sum().backward()
@@ -143,16 +198,11 @@ def test_torsional_angle():
     assert(torch.allclose(angle[:, 1].unsqueeze(-1), torch.sin(ref_phi), atol=1e-3))
     assert(torch.allclose(angle[:, 2].unsqueeze(-1), torch.cos(ref_phi), atol=1e-3))
 
-
     model = TorsionalAngle(torch.Tensor([1,3,4,6]), n_atoms=10, mode=['sin', 'cos'], PBC=True, cell=cell, scaled_coords=False)
     angle = model(pos)
     angle.sum().backward()
     assert(torch.allclose(angle[:, 0].unsqueeze(-1), torch.sin(ref_phi), atol=1e-3))
     assert(torch.allclose(angle[:, 1].unsqueeze(-1), torch.cos(ref_phi), atol=1e-3))
 
-    # TODO add reference value for check
-
 if __name__ == "__main__":
     test_torsional_angle()
-    
-
