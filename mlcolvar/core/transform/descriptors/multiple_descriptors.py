@@ -19,13 +19,50 @@ class MultipleDescriptors(torch.nn.Module):
         """
         super().__init__()
         self.in_features = n_atoms * 3
-        self.descriptors_list = descriptors_list
+        # Use ModuleList instead of plain list to ensure proper device handling
+        self.descriptors_list = torch.nn.ModuleList(descriptors_list)
 
         self.out_features = 0
         for d in self.descriptors_list:
             self.out_features += d.out_features
 
+    @property
+    def device(self):
+        """Check device consistency and return device"""
+        devices = set()
+
+        # Check module's parameters
+        for p in self.parameters(recurse=False):
+            devices.add(p.device)
+
+        # Check module's buffers
+        for b in self.buffers(recurse=False):
+            devices.add(b.device)
+
+        # Check submodules
+        for d in self.descriptors_list:
+            for p in d.parameters():
+                devices.add(p.device)
+            for b in d.buffers():
+                devices.add(b.device)
+
+        if len(devices) == 0:
+            return torch.device("cpu")
+
+        if len(devices) > 1:
+            raise RuntimeError(
+                f"Inconsistent devices detected in module: {devices}"
+            )
+
+        return next(iter(devices))
+
     def forward(self, pos):
+        # move input to model's device
+        if isinstance(pos, torch.Tensor):
+            model_device = self.device
+            if pos.device != model_device:
+                pos = pos.to(model_device)
+        
         for i,d in enumerate(self.descriptors_list):
             if i == 0:
                 out = d(pos)
