@@ -46,12 +46,10 @@ class PairwiseDistances(Transform):
         # parse args
         self.n_atoms = n_atoms
         self.PBC = PBC
-        self.cell = cell
         self.scaled_coords = scaled_coords
-        if slicing_pairs is not None:
-            self.slicing_pairs = torch.Tensor(slicing_pairs).to(torch.long)
-        else:
-            self.slicing_pairs = slicing_pairs
+        self.register_buffer('cell', torch.as_tensor(cell))
+        self.register_buffer('slicing_pairs', 
+                                torch.tensor(slicing_pairs, dtype=torch.long) if slicing_pairs is not None else None)
 
     def compute_pairwise_distances(self, pos):
         # if we compute all distances we use the matrix trick
