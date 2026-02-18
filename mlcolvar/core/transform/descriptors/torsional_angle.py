@@ -101,44 +101,54 @@ class TorsionalAngle(Transform):
     def compute_torsional_angle(self, pos):
         tors_pos, batch_size = sanitize_positions_shape(pos, self.n_atoms)
 
-        # Compute all angles
-        all_angles = []
-        
-        for i in range(self.n_angles):
-            # Get the 4 atoms for this angle
-            angle_indices = self.indices[i]
-            angle_pos = tors_pos[:, angle_indices, :]
+        # indices: [n_angles, 4]
+        angle_indices = self.indices  # assumed LongTensor
 
-            dist_components = compute_distances_matrix(pos=angle_pos,
-                                                        n_atoms=4,
-                                                        PBC=self.PBC,
-                                                        cell=self.cell,
-                                                        scaled_coords=self.scaled_coords,
-                                                        vector=True)
+        # Gather all torsion atom positions at once
+        # Result: [batch_size, n_angles, 4, 3]
+        angle_pos = tors_pos[:, angle_indices, :]
 
-            # get AB, BC, CD distances
-            AB = dist_components[:, :, 0, 1]
-            BC = dist_components[:, :, 1, 2]
-            CD = dist_components[:, :, 2, 3]
+        # Merge batch and angle dims to reuse your distance function
+        B, A = batch_size, self.n_angles
+        angle_pos_reshaped = angle_pos.reshape(B * A, 4, 3)
 
-            # obtain normal direction 
-            n1 = torch.linalg.cross(AB, BC)
-            n2 = torch.linalg.cross(BC, CD)
-            # obtain versors
-            n1_normalized = n1 / torch.norm(n1, dim=1, keepdim=True)
-            n2_normalized = n2 / torch.norm(n2, dim=1, keepdim=True)
-            UBC = BC / torch.norm(BC, dim=1, keepdim=True)
+        dist_components = compute_distances_matrix(
+            pos=angle_pos_reshaped,
+            n_atoms=4,
+            PBC=self.PBC,
+            cell=self.cell,
+            scaled_coords=self.scaled_coords,
+            vector=True
+        )
 
-            sin = torch.einsum('bij,bij->bj', torch.linalg.cross(n1_normalized, n2_normalized).unsqueeze(-1), UBC.unsqueeze(-1))
-            cos = torch.einsum('bij,bij->bj', n1_normalized.unsqueeze(-1), n2_normalized.unsqueeze(-1))
+        # dist_components: [B*A, 3, 4, 4]
+        AB = dist_components[:, :, 0, 1]
+        BC = dist_components[:, :, 1, 2]
+        CD = dist_components[:, :, 2, 3]
+        # Cross products
+        n1 = torch.linalg.cross(AB, BC, dim=1)
+        n2 = torch.linalg.cross(BC, CD, dim=1)
 
-            angle = torch.atan2(sin, cos)
-            
-            # Stack [angle, sin, cos] for this angle
-            all_angles.append(torch.hstack([angle, sin, cos]))
-        
-        # Concatenate all angles: shape [batch_size, n_angles * 3]
-        return torch.cat(all_angles, dim=1)
+        # Normalize
+        n1_normalized = n1 / torch.norm(n1, dim=1, keepdim=True)
+        n2_normalized = n2 / torch.norm(n2, dim=1, keepdim=True)
+        UBC = BC / torch.norm(BC, dim=1, keepdim=True)
+
+
+        # Compute sin and cos
+        sin = torch.sum(torch.linalg.cross(n1_normalized, n2_normalized, dim=1) * UBC, dim=1)
+        cos = torch.sum(n1_normalized * n2_normalized, dim=1)
+
+
+        angle = torch.atan2(sin, cos)
+
+        # Reshape back to [batch_size, n_angles]
+        angle = angle.view(B, A, 1)
+        sin = sin.view(B, A, 1)
+        cos = cos.view(B, A, 1)
+
+        # Stack as [batch_size, n_angles * 3]
+        return torch.cat([angle, sin, cos], dim=2)
 
     def forward(self, x):
         # Ensure x is on the same device as model buffers
@@ -171,14 +181,12 @@ def test_torsional_angle():
     # Test single angle (backward compatible)
     model = TorsionalAngle(indices=[1,3,4,6], n_atoms=10, mode=['angle'], PBC=True, cell=cell, scaled_coords=False)
     angle = model(pos)
-    print(angle)
     assert(torch.allclose(angle, ref_phi, atol=1e-3))
     angle.sum().backward()
 
     # Test multiple angles
     model = TorsionalAngle(indices=[[1,3,4,6], [1,3,4,6]], n_atoms=10, mode=['angle'], PBC=True, cell=cell, scaled_coords=False)
     angle = model(pos)
-    print(angle)
     assert(angle.shape == (2, 2))  # [batch_size, n_angles]
     assert(torch.allclose(angle[:, 0], ref_phi.squeeze(), atol=1e-3))
     assert(torch.allclose(angle[:, 1], ref_phi.squeeze(), atol=1e-3))
