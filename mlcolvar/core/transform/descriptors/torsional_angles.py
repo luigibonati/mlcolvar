@@ -9,7 +9,7 @@ from typing import Union
 __all__ = ["TorsionalAngles"]
 
 def TorsionalAngle(*args, **kwargs):
-    raise DeprecationWarning("The class name TorsionalAngles has been deprecated use TorsionalAngless instead!")
+    raise DeprecationWarning("The class name TorsionalAngle has been deprecated use TorsionalAngles instead!")
 
 class TorsionalAngles(Transform):
     """
