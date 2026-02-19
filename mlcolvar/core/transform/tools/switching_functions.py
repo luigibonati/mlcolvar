@@ -37,9 +37,7 @@ class SwitchingFunctions(Transform):
         if options is None:
             options = {}
         self.options = options
-        if dmax is not None:
-            dmax = torch.Tensor([dmax])
-        self.dmax = dmax
+        self.dmax = torch.Tensor([dmax]) if dmax is not None else None
        
         if name not in self.SWITCH_FUNCS:
             raise NotImplementedError(f'''The switching function {name} is not implemented in this class. The available options are: {",".join(self.SWITCH_FUNCS)}.
@@ -49,7 +47,7 @@ class SwitchingFunctions(Transform):
         switch_function = getattr(self, f'{self.name}_switch')
         y = switch_function(x, self.cutoff, **self.options)
         if self.dmax is not None:
-            ymax = switch_function(self.dmax, self.cutoff, **self.options)
+            ymax = switch_function(self.dmax.to(x.device), self.cutoff, **self.options)
             y = torch.div((y-ymax), (1-ymax))
         return y
     

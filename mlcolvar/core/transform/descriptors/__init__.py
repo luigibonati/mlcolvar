@@ -1,7 +1,7 @@
-__all__ = ["MultipleDescriptors", "CoordinationNumbers", "EigsAdjMat", "PairwiseDistances", "TorsionalAngle"]
+__all__ = ["MultipleDescriptors", "CoordinationNumbers", "EigsAdjMat", "PairwiseDistances", "TorsionalAngles", "TorsionalAngle"]
 
 from .coordination_numbers import *
 from .eigs_adjacency_matrix import *
 from .pairwise_distances import *
-from .torsional_angle import *
+from .torsional_angles import *
 from .multiple_descriptors import *
