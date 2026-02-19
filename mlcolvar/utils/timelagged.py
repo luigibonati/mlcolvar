@@ -20,7 +20,7 @@ try:
 except ImportError:
     TQDM_IS_INSTALLED = False
 
-__all__ = ["find_timelagged_configurations", "create_timelagged_dataset"]
+__all__ = ["find_timelagged_configurations", "create_timelagged_dataset", "compute_koopman_weights"]
 
 
 def closest_idx(array, value):
@@ -86,6 +86,113 @@ def tprime_evaluation(t, logweights=None):
         tprime = t
 
     return tprime
+
+
+def compute_koopman_weights(
+    X: np.array,
+    lag_time: int = 1,
+    eps: float = 1e-6,
+    min_weight: float = 1e-12,
+):
+    """
+    Compute Koopman reweighting log-factors from time-lagged data (NumPy version).
+
+    This function implements the linear Koopman reweighting scheme proposed in
+    Wu et al. (JCP 2017), estimating frame-wise weights w(x) such that weighted
+    time-lagged correlations approximate equilibrium expectations.
+
+    The weight function is assumed to be affine in the input features:
+        w(x) = u_x^T x + c
+
+    Parameters
+    ----------
+    X : np.ndarray, shape (T, d)
+        Time series of input features.
+    lag_time : int, optional
+        Lag time (in number of frames) used to construct time-lagged
+        correlations (default: 1).
+    eps : float, optional
+        Threshold for discarding small eigenvalues during whitening
+        of the covariance matrix (default: 1e-6).
+    min_weight : float, optional
+        Minimum allowed weight for numerical stability before taking
+        the logarithm (default: 1e-12).
+
+    Returns
+    -------
+    logweights : np.ndarray, shape (T,)
+        Logarithm of Koopman reweighting factors for each frame.
+    """
+    # --- sanity checks ---
+    X = np.asarray(X)
+    if lag_time < 1:
+        raise ValueError("lag_time must be >= 1.")
+    if lag_time >= X.shape[0]:
+        raise ValueError("lag_time too large for the length of X.")
+
+    # ------------------------------------------------------------------
+    # 1) Construct time-lagged pairs and remove mean (unweighted)
+    # ------------------------------------------------------------------
+    X0 = X[:-lag_time]
+    Xt = X[lag_time:]
+
+    mu0 = X0.mean(axis=0)
+    mut = Xt.mean(axis=0)
+
+    X0c = X0 - mu0
+    Xtc = Xt - mut
+
+    # ------------------------------------------------------------------
+    # 2) Covariance and time-lagged covariance matrices
+    # ------------------------------------------------------------------
+    N = X0c.shape[0]
+
+    C00 = (X0c.T @ X0c) / N
+    C00 = 0.5 * (C00 + C00.T)  # enforce symmetry
+    C0t = (X0c.T @ Xtc) / N
+
+    # ------------------------------------------------------------------
+    # 3) Whitening transformation based on C00
+    # ------------------------------------------------------------------
+    eigvals, eigvecs = np.linalg.eigh(C00)
+    keep = eigvals > eps
+    if not np.any(keep):
+        raise RuntimeError("All eigenvalues discarded during whitening.")
+
+    R = eigvecs[:, keep] @ np.diag(1.0 / np.sqrt(eigvals[keep]))
+
+    # ------------------------------------------------------------------
+    # 4) Augmented Koopman operator (constant basis + drift term)
+    # ------------------------------------------------------------------
+    K = R.T @ C0t @ R
+    M = K.shape[0]
+
+    K_aug = np.zeros((M + 1, M + 1))
+    K_aug[:M, :M] = K
+    K_aug[M, M] = 1.0
+    K_aug[M, :M] = (mut - mu0) @ R
+
+    # ------------------------------------------------------------------
+    # 5) Invariant mode: left eigenvector with eigenvalue 1
+    # ------------------------------------------------------------------
+    eigvals_K, eigvecs_K = np.linalg.eig(K_aug.T)
+    idx = np.argmin(np.abs(eigvals_K.real - 1.0))
+    u = eigvecs_K[:, idx].real
+
+    # gauge fixing (normalize constant component)
+    u = u / u[-1]
+
+    # ------------------------------------------------------------------
+    # 6) Map invariant mode back to feature space
+    # ------------------------------------------------------------------
+    u_x = R @ u[:-1]
+    c = u[-1] - mu0 @ u_x
+
+    weights = X @ u_x + c
+    weights = np.clip(weights, min_weight, None)
+    logweights = np.log(weights)
+
+    return logweights
 
 
 def find_timelagged_configurations(
@@ -306,8 +413,9 @@ def create_timelagged_dataset(
         if reweight_mode is None:
             w_t = torch.ones(len(x_t))
             w_lag = torch.ones(len(x_lag))
+            
         else:
-            logweights = torch.tensor(logweights, dtype=torch.float32)
+            logweights = torch.tensor(logweights, dtype=torch.get_default_dtype())
             weights = torch.exp(logweights)
             w_t = weights[:-lag_steps]
             w_lag = weights[lag_steps:]
