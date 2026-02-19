@@ -6,7 +6,7 @@ from mlcolvar.core.transform.descriptors.utils import compute_distances_matrix, 
 
 from typing import Union
 
-__all__ = ["TorsionalAngles"]
+__all__ = ["TorsionalAngles", "TorsionalAngle"]
 
 def TorsionalAngle(*args, **kwargs):
     raise DeprecationWarning("The class name TorsionalAngle has been deprecated use TorsionalAngles instead!")
