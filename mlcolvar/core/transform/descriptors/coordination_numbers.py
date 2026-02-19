@@ -60,22 +60,6 @@ class CoordinationNumbers(Transform):
         """
         super().__init__(in_features=int(n_atoms*3), out_features=len(group_A))
         
-        # parse args
-        self.group_A = group_A
-        self._group_A_size = len(group_A)
-        self.group_B = group_B
-        self._group_B_size = len(group_B)
-        self._n_used_atoms = self._group_A_size + self._group_B_size
-        self._reordering = np.concatenate((self.group_A, self.group_B))
-        self.cutoff = cutoff
-        self.n_atoms = n_atoms
-        self.PBC = PBC
-        self.cell = cell
-        self.scaled_coords = scaled_coords
-        self.mode = mode
-        self.switching_function = switching_function
-        self.dmax = dmax
-
         # do a few checks
         if mode == 'continuous':
             if switching_function is None:
@@ -87,6 +71,32 @@ class CoordinationNumbers(Transform):
         if mode == 'discontinuous':
             if dmax is not None:
                 warn('dmax was set in discontinuous mode, it will likely be ineffective!')
+
+        # parse args
+        self.group_A = group_A
+        self._group_A_size = len(group_A)
+        self.group_B = group_B
+        self._group_B_size = len(group_B)
+        self._n_used_atoms = self._group_A_size + self._group_B_size
+        self.cutoff = cutoff
+        self.n_atoms = n_atoms
+        self.PBC = PBC
+        self.scaled_coords = scaled_coords
+        self.mode = mode
+        self.dmax = dmax
+
+        
+        # register buffers that should move with the model
+        reordering = np.concatenate((self.group_A, self.group_B))
+        self.register_buffer('_reordering', torch.tensor(reordering, dtype=torch.long))
+        self.register_buffer('cell', torch.as_tensor(cell))
+        
+        # register switching_function as submodule if it's a Module
+        if switching_function is not None and isinstance(switching_function, torch.nn.Module):
+            self.add_module('switching_function', switching_function)
+        else:
+            self.switching_function = switching_function
+
         
     def compute_coordination_number(self, pos):
         # move the group A elements to first positions
