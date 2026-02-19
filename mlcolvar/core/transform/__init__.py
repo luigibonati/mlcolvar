@@ -7,8 +7,9 @@ __all__ = ["Transform",
            "EigsAdjMat",
            "ContinuousHistogram",
            "Inverse",
-           "TorsionalAngle",
-           "SequentialTransform"]
+           "TorsionalAngles",
+           "SequentialTransform",
+           "TorsionalAngle"]
 
 from .transform import *
 from .utils import *

@@ -114,7 +114,7 @@ This submodule implements several descriptors that can be computed starting from
    :template: custom-class-template.rst
 
    PairwiseDistances
-   TorsionalAngle
+   TorsionalAngles
    CoordinationNumbers
    EigsAdjMat
    MultipleDescriptors
