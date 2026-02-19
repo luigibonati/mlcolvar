@@ -49,12 +49,14 @@ def sanitize_cell_shape(cell: Union[float, torch.Tensor, list]):
         cell = torch.Tensor([cell])
     elif isinstance(cell, list):    
         cell = torch.Tensor(cell)
+    elif isinstance(cell, torch.Tensor) and cell.shape == torch.Size([]):
+        cell = cell.unsqueeze(0)
+    
 
     if cell.shape[0] != 1 and cell.shape[0] != 3:
         raise ValueError(f"Cell must have either shape (1) or (3). Found {cell.shape} ")
 
     if isinstance(cell, torch.Tensor):
-        # TODO assert size makes sense if you directly pass a tensor
         if len(cell) != 3:
             cell = torch.tile(cell, (3,))
     
@@ -116,15 +118,13 @@ def compute_distances_matrix(pos: torch.Tensor,
     # ======================= CHECKS =======================
     pos, batch_size = sanitize_positions_shape(pos, n_atoms)
     cell = sanitize_cell_shape(cell)
+    _device = pos.device
 
     # Set which cell to be used for PBC
     if scaled_coords:
-        pbc_cell = torch.Tensor([1., 1., 1.])
+        pbc_cell = torch.ones(3, device=_device)
     else:
-        pbc_cell = cell
-
-    _device = pos.device
-    cell = cell.to(_device)
+        pbc_cell = cell.to(_device)
     
     # ======================= COMPUTE =======================
     pos = torch.reshape(pos, (batch_size, n_atoms, 3)) # this preserves the order when the pos are passed as a list
@@ -150,7 +150,7 @@ def compute_distances_matrix(pos: torch.Tensor,
         return dist_components
     else:
         # mask out diagonal --> to keep the derivatives safe
-        mask_diag = ~torch.eye(n_atoms, dtype=bool)
+        mask_diag = ~torch.eye(n_atoms, dtype=bool, device=_device)
         mask_diag = torch.tile(mask_diag, (batch_size, 1, 1))
 
         # sum squared components and get final distance
@@ -198,15 +198,16 @@ def compute_distances_pairs(pos: torch.Tensor,
     # ======================= CHECKS =======================
     pos, batch_size = sanitize_positions_shape(pos, n_atoms)
     cell = sanitize_cell_shape(cell)
+    _device = pos.device
+
+    # Convert slicing_pairs to tensor on device if needed
+    slicing_pairs = torch.as_tensor(slicing_pairs, dtype=torch.long, device=_device)
 
     # Set which cell to be used for PBC
     if scaled_coords:
-        pbc_cell = torch.Tensor([1., 1., 1.])
+        pbc_cell = torch.ones(3, device=_device)
     else:
-        pbc_cell = cell
-
-    _device = pos.device
-    cell = cell.to(_device)
+        pbc_cell = cell.to(_device)
     
     # ======================= COMPUTE =======================
     pos = torch.reshape(pos, (batch_size, n_atoms, 3)) # this preserves the order when the pos are passed as a list
@@ -273,8 +274,9 @@ def apply_cutoff(x: torch.Tensor,
         raise ValueError('switching_function is required to use continuous mode! Set This can be either a user-defined and torch-based function or a method of class switching_functions/SwitchingFunctions')
     
     batch_size = x.shape[0]
+    _device = x.device
     if x.shape[-1] == x.shape[-2]:
-        mask_diag = ~torch.eye(x.shape[-1], dtype=bool)
+        mask_diag = ~torch.eye(x.shape[-1], dtype=bool, device=_device)
         mask_diag = torch.tile(mask_diag, (batch_size, 1, 1))
     else:
         mask_diag = torch.ones_like(x_clone, dtype=torch.bool) 

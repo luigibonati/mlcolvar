@@ -64,7 +64,7 @@ These are the building blocks which are used to construct the CVs.
    :template: custom-class-template.rst
 
    PairwiseDistances
-   TorsionalAngle
+   TorsionalAngles
    CoordinationNumbers
    EigsAdjMat
    MultipleDescriptors
