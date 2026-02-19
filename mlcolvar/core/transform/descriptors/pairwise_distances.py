@@ -9,7 +9,8 @@ __all__ = ["PairwiseDistances"]
 
 class PairwiseDistances(Transform):
     """
-    Non duplicated pairwise distances for a set of atoms from their positions
+    Non duplicated pairwise distances for a set of atoms from their positions.
+    Can compute either all the distances or a subset.
     """
 
     def __init__(self, 
@@ -18,7 +19,8 @@ class PairwiseDistances(Transform):
                  cell: Union[float, list],
                  scaled_coords: bool = False,
                  slicing_pairs: list = None) -> torch.Tensor:
-        """Initialize a pairwise distances matrix object.
+        """Initialize a pairwise distances object.
+        Can compute either all the distances or a subset based on the `slicing_pairs` key.
 
         Parameters
         ----------
@@ -36,7 +38,7 @@ class PairwiseDistances(Transform):
         Returns
         -------
         torch.Tensor
-            Non duplicated pairwise distances between all the atoms
+            Non duplicated pairwise distances
         """
         if slicing_pairs is None:
             super().__init__(in_features=int(n_atoms*3), out_features=int(n_atoms*(n_atoms-1) / 2))
@@ -46,12 +48,10 @@ class PairwiseDistances(Transform):
         # parse args
         self.n_atoms = n_atoms
         self.PBC = PBC
-        self.cell = cell
         self.scaled_coords = scaled_coords
-        if slicing_pairs is not None:
-            self.slicing_pairs = torch.Tensor(slicing_pairs).to(torch.long)
-        else:
-            self.slicing_pairs = slicing_pairs
+        self.register_buffer('cell', torch.as_tensor(cell))
+        self.register_buffer('slicing_pairs', 
+                                torch.tensor(slicing_pairs, dtype=torch.long) if slicing_pairs is not None else None)
 
     def compute_pairwise_distances(self, pos):
         # if we compute all distances we use the matrix trick
