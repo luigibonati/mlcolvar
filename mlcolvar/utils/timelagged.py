@@ -201,6 +201,7 @@ def create_timelagged_dataset(
     tprime: torch.Tensor = None,
     interval: list = None,
     progress_bar: bool = False,
+    walker: torch.Tensor = None,
 ):
     """
     Create a DictDataset of time-lagged configurations.
@@ -239,6 +240,8 @@ def create_timelagged_dataset(
         Range for slicing the returned dataset. Useful to work with batches of same sizes. Recall that with different lag_times one obtains different datasets, with different lengths
     progress_bar: bool
         Display progress bar with tqdm
+    walker : array-like, optional
+        Identifier of the trajectory (walker) to which each configuration belongs.
 
     Returns
     -------
@@ -312,6 +315,16 @@ def create_timelagged_dataset(
             w_t = weights[:-lag_steps]
             w_lag = weights[lag_steps:]
 
+        # walker
+        if walker is not None:
+            walker = torch.as_tensor(walker)
+            valid = walker[:-lag_steps] == walker[lag_steps:]
+
+            x_t   = x_t[valid]
+            x_lag = x_lag[valid]
+            w_t = w_t[valid]
+            w_lag = w_lag[valid]
+
     # =========================
     # Full search mode (rescale_time)
     # =========================
@@ -374,6 +387,12 @@ def test_create_timelagged_dataset():
     )
     assert len(dataset) == n_points - lag_time
 
+    # unbiased multi-walker case
+    walker = np.array([0] * (n_points // 2) + [1] * (n_points // 2))
+    dataset = create_timelagged_dataset(
+        X, t, lag_time=lag_time, walker=walker
+    )
+    assert len(dataset) == n_points - 2 * lag_time
 
 if __name__ == "__main__":
     test_create_timelagged_dataset()
