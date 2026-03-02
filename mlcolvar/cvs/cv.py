@@ -1,7 +1,9 @@
+from pathlib import Path
 import torch
 import lightning
+from lightning.pytorch.core.module import _jit_is_scripting, get_filesystem
 from mlcolvar.core.transform import Transform
-from typing import Union, List
+from typing import Dict, Union, List
 from mlcolvar.core.nn import FeedForward, BaseGNN
 from mlcolvar.data.graph.utils import create_graph_tracing_example
 
@@ -307,3 +309,73 @@ class BaseCV(lightning.LightningModule):
         if isinstance(batch, dict):
             return batch.get("cell", None)
         return None
+
+    @torch.no_grad()
+    def to_torchscript(
+        self,
+        file_path: Optional[Union[str, Path]] = None,
+        method: Optional[str] = "script",
+        example_inputs: Optional[Any] = None,
+        **kwargs: Any,
+    ) -> Union[ScriptModule, Dict[str, torch.ScriptModule]]:
+        """By default compiles the whole model to a `torch.jit.ScriptModule` Tracing can be used with the
+        argument `method='trace'`. In case, you can provide and `example_inputs`, otherwise, the default 
+        `example_input_array` will be used. 
+
+        Args:
+            file_path: Path where to save the torchscript. Default: None (no file saved).
+            method: Whether to use TorchScript's script or trace method. Default: 'script'
+            example_inputs: An input to be used to do tracing when method is set to 'trace'.
+              Default: None (uses :attr:`example_input_array`)
+            **kwargs: Additional arguments that will be passed to the :func:`torch.jit.script` or
+              :func:`torch.jit.trace` function.
+
+        Return:
+            This LightningModule as a torchscript, regardless of whether `file_path` is
+            defined or not.
+        """
+        # check if preprocessing has varible cells
+        if self.preprocessing is not None:
+            if hasattr(self.preprocessing, "cell"):
+                Warning("Found a descriptor-based preprocessing module. If the same descriptors can be computed with PLUMED,"
+                        "it is recommended for performance to export the model without the preprocesing and compute the descriptors with PLUMED."
+                    )
+                if self.preprocessing.cell is None:
+                    raise ValueError(
+                        "Found a descriptor-based preprocessing module without a defined cell, as it was passed at runtime."
+                        "Tracing or scripting of preprocessing modules with variable cells is not supported yet."
+                        "If changing cell is NOT needed, you can set the fixed cell during the inizialization of the descriptor module"
+                        "and overwrite the model.preprocessing with the same module with the fixed cell."
+                    )
+                
+        mode = self.training
+
+        if method == "script":
+            with _jit_is_scripting():
+                torchscript_module = torch.jit.script(self.eval(), **kwargs)
+        elif method == "trace":
+            # if no example inputs are provided, try to see if model has example_input_array set
+            if example_inputs is None:
+                if self.example_input_array is None:
+                    raise ValueError(
+                        "Choosing method=`trace` requires either `example_inputs`"
+                        " or `model.example_input_array` to be defined."
+                    )
+                example_inputs = self.example_input_array
+
+            # automatically send example inputs to the right device and use trace
+            example_inputs = self._on_before_batch_transfer(example_inputs)
+            example_inputs = self._apply_batch_transfer_handler(example_inputs)
+            with _jit_is_scripting():
+                torchscript_module = torch.jit.trace(func=self.eval(), example_inputs=example_inputs, **kwargs)
+        else:
+            raise ValueError(f"The 'method' parameter only supports 'script' or 'trace', but value given was: {method}")
+
+        self.train(mode)
+
+        if file_path is not None:
+            fs = get_filesystem(file_path)
+            with fs.open(file_path, "wb") as f:
+                torch.jit.save(torchscript_module, f)
+
+        return torchscript_module
