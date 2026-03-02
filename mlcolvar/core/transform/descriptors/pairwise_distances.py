@@ -16,7 +16,7 @@ class PairwiseDistances(Transform):
     def __init__(self, 
                  n_atoms: int,
                  PBC: bool,
-                 cell: Union[float, list],
+                 cell: Union[float, list] = None,
                  scaled_coords: bool = False,
                  slicing_pairs: list = None) -> torch.Tensor:
         """Initialize a pairwise distances object.
@@ -49,17 +49,19 @@ class PairwiseDistances(Transform):
         self.n_atoms = n_atoms
         self.PBC = PBC
         self.scaled_coords = scaled_coords
-        self.register_buffer('cell', torch.as_tensor(cell))
+        self.default_cell = cell
         self.register_buffer('slicing_pairs', 
                                 torch.tensor(slicing_pairs, dtype=torch.long) if slicing_pairs is not None else None)
 
-    def compute_pairwise_distances(self, pos):
+    def compute_pairwise_distances(self, pos, cell=None):
+        if cell is None:
+            cell = self.default_cell
         # if we compute all distances we use the matrix trick
         if self.slicing_pairs is None:
             dist = compute_distances_matrix(pos=pos,
                                             n_atoms=self.n_atoms,
                                             PBC=self.PBC,
-                                            cell=self.cell,
+                                            cell=cell,
                                             scaled_coords=self.scaled_coords)
             batch_size = dist.shape[0]
             device = pos.device
@@ -74,7 +76,7 @@ class PairwiseDistances(Transform):
             dist = compute_distances_pairs(pos=pos,
                                            n_atoms=self.n_atoms,
                                            PBC=self.PBC,
-                                           cell=self.cell,
+                                           cell=cell,
                                            scaled_coords=self.scaled_coords,
                                            slicing_pairs=self.slicing_pairs)
         
@@ -82,8 +84,8 @@ class PairwiseDistances(Transform):
         return pairwise_distances
         
 
-    def forward(self, x: torch.Tensor):
-        x = self.compute_pairwise_distances(x)
+    def forward(self, x: torch.Tensor, cell: Union[float, list, torch.Tensor] = None):
+        x = self.compute_pairwise_distances(x, cell=cell)
         return x
 
 def test_pairwise_distances():

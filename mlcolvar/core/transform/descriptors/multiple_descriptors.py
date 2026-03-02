@@ -1,4 +1,5 @@
 import torch
+import inspect
 
 __all__ = ["MultipleDescriptors"]
 
@@ -56,7 +57,16 @@ class MultipleDescriptors(torch.nn.Module):
 
         return next(iter(devices))
 
-    def forward(self, pos):
+    @staticmethod
+    def _apply_descriptor(descriptor, pos, cell=None):
+        if cell is None:
+            return descriptor(pos)
+        signature = inspect.signature(descriptor.forward)
+        if "cell" in signature.parameters:
+            return descriptor(pos, cell=cell)
+        return descriptor(pos)
+
+    def forward(self, pos, cell=None):
         # move input to model's device
         if isinstance(pos, torch.Tensor):
             model_device = self.device
@@ -65,9 +75,9 @@ class MultipleDescriptors(torch.nn.Module):
         
         for i,d in enumerate(self.descriptors_list):
             if i == 0:
-                out = d(pos)
+                out = self._apply_descriptor(d, pos, cell=cell)
             else:
-                aux = d(pos)
+                aux = self._apply_descriptor(d, pos, cell=cell)
                 out = torch.concatenate((out, aux), 1)
         return out
 

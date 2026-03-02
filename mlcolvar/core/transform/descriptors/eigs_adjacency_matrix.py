@@ -17,7 +17,7 @@ class EigsAdjMat(Transform):
                  cutoff: float, 
                  n_atoms: int,
                  PBC: bool,
-                 cell: Union[float, list],
+                 cell: Union[float, list] = None,
                  scaled_coords: bool = False,
                  switching_function = None) -> torch.Tensor:
         """Initialize an eigenvalues of an adjacency matrix object.
@@ -53,7 +53,7 @@ class EigsAdjMat(Transform):
         self.cutoff = cutoff 
         self.n_atoms = n_atoms
         self.PBC = PBC
-        self.cell = cell
+        self.default_cell = cell
         self.scaled_coords = scaled_coords
         # Register switching_function as submodule if it's a module, so it moves with the model
         if switching_function is not None and isinstance(switching_function, torch.nn.Module):
@@ -61,13 +61,15 @@ class EigsAdjMat(Transform):
         else:
             self.switching_function = switching_function
 
-    def compute_adjacency_matrix(self, pos):
+    def compute_adjacency_matrix(self, pos, cell=None):
+        if cell is None:
+            cell = self.default_cell
         pos = compute_adjacency_matrix(pos=pos,
                                         mode=self.mode,
                                         cutoff=self.cutoff, 
                                         n_atoms=self.n_atoms,
                                         PBC=self.PBC,
-                                        cell=self.cell,
+                                        cell=cell,
                                         scaled_coords=self.scaled_coords,
                                         switching_function=self.switching_function)
         return pos
@@ -76,8 +78,8 @@ class EigsAdjMat(Transform):
         eigs = torch.linalg.eigvalsh(x)
         return eigs
 
-    def forward(self, x: torch.Tensor):
-        x = self.compute_adjacency_matrix(x)
+    def forward(self, x: torch.Tensor, cell: Union[float, list, torch.Tensor] = None):
+        x = self.compute_adjacency_matrix(x, cell=cell)
         eigs = self.get_eigenvalues(x)
         return eigs
 

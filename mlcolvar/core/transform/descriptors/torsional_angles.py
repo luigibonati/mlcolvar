@@ -24,7 +24,7 @@ class TorsionalAngles(Transform):
                  n_atoms: int,
                  mode: Union[str, list],
                  PBC: bool,
-                 cell: Union[float, list],
+                 cell: Union[float, list] = None,
                  scaled_coords: bool = False) -> torch.Tensor:
         """Initialize a torsional angle object.
            Can compute a single angle or multiple angles based on the `indices` key.
@@ -95,13 +95,15 @@ class TorsionalAngles(Transform):
 
         # initialize class attributes
         self.register_buffer('indices', indices)
-        self.register_buffer('cell', torch.as_tensor(cell))
+        self.default_cell = cell
         self.n_atoms = n_atoms
         self.PBC = PBC
         self.scaled_coords = scaled_coords
 
 
-    def compute_torsional_angle(self, pos):
+    def compute_torsional_angle(self, pos, cell=None):
+        if cell is None:
+            cell = self.default_cell
         tors_pos, batch_size = sanitize_positions_shape(pos, self.n_atoms)
 
         # indices: [n_angles, 4]
@@ -119,7 +121,7 @@ class TorsionalAngles(Transform):
             pos=angle_pos_reshaped,
             n_atoms=4,
             PBC=self.PBC,
-            cell=self.cell,
+            cell=cell,
             scaled_coords=self.scaled_coords,
             vector=True
         )
@@ -153,11 +155,11 @@ class TorsionalAngles(Transform):
         # Stack as [batch_size, n_angles * 3]
         return torch.cat([angle, sin, cos], dim=2)
 
-    def forward(self, x):
+    def forward(self, x, cell: Union[float, list, torch.Tensor] = None):
         # Ensure x is on the same device as model buffers
         if isinstance(x, torch.Tensor) and x.device != self.indices.device:
             x = x.to(self.indices.device)
-        out = self.compute_torsional_angle(x)
+        out = self.compute_torsional_angle(x, cell=cell)
         # Select the requested modes for all angles
         # out shape: [batch_size, n_angles * 3]
         # We need to reshape, select modes, and reshape back

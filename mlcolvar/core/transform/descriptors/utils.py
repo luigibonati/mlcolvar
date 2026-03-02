@@ -62,6 +62,22 @@ def sanitize_cell_shape(cell: Union[float, torch.Tensor, list]):
     
     return cell
 
+def resolve_cell(
+    cell: Union[float, torch.Tensor, list, None],
+    *,
+    PBC: bool,
+    scaled_coords: bool,
+    device: torch.device,
+) -> torch.Tensor:
+    """Resolve and validate cell information for distance-based descriptors."""
+    if cell is None:
+        if PBC or scaled_coords:
+            raise ValueError(
+                "A `cell` must be provided when `PBC=True` or `scaled_coords=True`."
+            )
+        return torch.ones(3, device=device)
+    return sanitize_cell_shape(cell).to(device)
+
 def _apply_pbc_distances(dist_components, pbc_cell):
     shifts = torch.zeros_like(dist_components)
     # avoid loop if cell is cubic
@@ -83,7 +99,7 @@ def _apply_pbc_distances(dist_components, pbc_cell):
 def compute_distances_matrix(pos: torch.Tensor,
                              n_atoms: int,
                              PBC: bool,
-                             cell: Union[float, list],
+                             cell: Union[float, list, None] = None,
                              vector: bool = False,
                              scaled_coords: bool = False,
                             ) -> torch.Tensor:
@@ -117,14 +133,14 @@ def compute_distances_matrix(pos: torch.Tensor,
     # compute distances components, keep only first element of the output tuple
     # ======================= CHECKS =======================
     pos, batch_size = sanitize_positions_shape(pos, n_atoms)
-    cell = sanitize_cell_shape(cell)
     _device = pos.device
+    cell = resolve_cell(cell, PBC=PBC, scaled_coords=scaled_coords, device=_device)
 
     # Set which cell to be used for PBC
     if scaled_coords:
         pbc_cell = torch.ones(3, device=_device)
     else:
-        pbc_cell = cell.to(_device)
+        pbc_cell = cell
     
     # ======================= COMPUTE =======================
     pos = torch.reshape(pos, (batch_size, n_atoms, 3)) # this preserves the order when the pos are passed as a list
@@ -162,8 +178,8 @@ def compute_distances_matrix(pos: torch.Tensor,
 def compute_distances_pairs(pos: torch.Tensor,
                              n_atoms: int,
                              PBC: bool,
-                             cell: Union[float, list],
-                             slicing_pairs: List[Tuple[int, int]],
+                             cell: Union[float, list, None] = None,
+                             slicing_pairs: List[Tuple[int, int]] = None,
                              vector: bool = False,
                              scaled_coords: bool = False,
                             ) -> torch.Tensor:
@@ -197,8 +213,11 @@ def compute_distances_pairs(pos: torch.Tensor,
     """
     # ======================= CHECKS =======================
     pos, batch_size = sanitize_positions_shape(pos, n_atoms)
-    cell = sanitize_cell_shape(cell)
     _device = pos.device
+    cell = resolve_cell(cell, PBC=PBC, scaled_coords=scaled_coords, device=_device)
+
+    if slicing_pairs is None:
+        raise ValueError("`slicing_pairs` must be provided.")
 
     # Convert slicing_pairs to tensor on device if needed
     slicing_pairs = torch.as_tensor(slicing_pairs, dtype=torch.long, device=_device)
@@ -207,7 +226,7 @@ def compute_distances_pairs(pos: torch.Tensor,
     if scaled_coords:
         pbc_cell = torch.ones(3, device=_device)
     else:
-        pbc_cell = cell.to(_device)
+        pbc_cell = cell
     
     # ======================= COMPUTE =======================
     pos = torch.reshape(pos, (batch_size, n_atoms, 3)) # this preserves the order when the pos are passed as a list
@@ -297,7 +316,7 @@ def compute_adjacency_matrix(pos: torch.Tensor,
                              cutoff: float, 
                              n_atoms: int,
                              PBC: bool,
-                             cell: Union[float, list],
+                             cell: Union[float, list, None] = None,
                              scaled_coords: bool = False,
                              switching_function = None) -> torch.Tensor:
     """Initialize an adjacency matrix object.

@@ -21,8 +21,8 @@ class CoordinationNumbers(Transform):
                  cutoff: float,
                  n_atoms: int,
                  PBC: bool,
-                 cell: Union[float, list],
-                 mode: str,
+                 cell: Union[float, list] = None,
+                 mode: str = 'continuous',
                  scaled_coords: bool = False,
                  switching_function = None, 
                  dmax: float = None) -> torch.Tensor:
@@ -89,7 +89,7 @@ class CoordinationNumbers(Transform):
         # register buffers that should move with the model
         reordering = np.concatenate((self.group_A, self.group_B))
         self.register_buffer('_reordering', torch.tensor(reordering, dtype=torch.long))
-        self.register_buffer('cell', torch.as_tensor(cell))
+        self.default_cell = cell
         
         # register switching_function as submodule if it's a Module
         if switching_function is not None and isinstance(switching_function, torch.nn.Module):
@@ -98,14 +98,16 @@ class CoordinationNumbers(Transform):
             self.switching_function = switching_function
 
         
-    def compute_coordination_number(self, pos):
+    def compute_coordination_number(self, pos, cell=None):
+        if cell is None:
+            cell = self.default_cell
         # move the group A elements to first positions
         pos, batch_size = sanitize_positions_shape(pos, self.n_atoms)
         pos = pos[:, self._reordering, :]
         dist = compute_distances_matrix(pos=pos,
                                         n_atoms=self._n_used_atoms,
                                         PBC=self.PBC,
-                                        cell=self.cell,
+                                        cell=cell,
                                         scaled_coords=self.scaled_coords)
 
         # get mask in case dmax is set
@@ -134,8 +136,8 @@ class CoordinationNumbers(Transform):
 
         return coord_numbers
     
-    def forward(self, pos):
-        coord_numbers = self.compute_coordination_number(pos)
+    def forward(self, pos, cell: Union[float, list, torch.Tensor] = None):
+        coord_numbers = self.compute_coordination_number(pos, cell=cell)
         return coord_numbers    
     
 
