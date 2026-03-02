@@ -9,7 +9,7 @@ from typing import Union, List
 __all__ = ["RegressionCV"]
 
 
-class RegressionCV(BaseCV, lightning.LightningModule):
+class RegressionCV(BaseCV):
     """
     Example of collective variable obtained with a regression task.
     Combine the inputs with a neural-network and optimize it to match a target function.

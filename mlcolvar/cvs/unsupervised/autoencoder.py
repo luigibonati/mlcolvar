@@ -9,7 +9,7 @@ from mlcolvar.core.loss import MSELoss
 __all__ = ["AutoEncoderCV"]
 
 
-class AutoEncoderCV(BaseCV, lightning.LightningModule):
+class AutoEncoderCV(BaseCV):
     """AutoEncoding Collective Variable.
     It is composed by a first neural network (encoder) which projects
     the input data into a latent space (the CVs). Then a second network (decoder) takes

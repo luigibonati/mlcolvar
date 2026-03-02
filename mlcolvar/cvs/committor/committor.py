@@ -9,7 +9,7 @@ from typing import Union, List
 __all__ = ["Committor"]
 
 
-class Committor(BaseCV, lightning.LightningModule):
+class Committor(BaseCV):
     """Base class for data-driven learning of committor function.
     The committor function q is expressed as the output of a neural network optimized with a self-consistent
     approach based on the Kolmogorov's variational principle for the committor and on the imposition of its boundary conditions. 

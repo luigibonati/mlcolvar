@@ -11,7 +11,7 @@ from mlcolvar.data import DictDataset
 __all__ = ["Generator"]
 
 
-class Generator(BaseCV, lightning.LightningModule):
+class Generator(BaseCV):
     """
     Baseclass for learning a representation for the eigenfunctions of the infinitesimal generator.
     The representation is expressed as a concatenation of the output of r neural networks.

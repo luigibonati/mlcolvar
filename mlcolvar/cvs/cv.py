@@ -1,11 +1,12 @@
 import torch
+import lightning
 from mlcolvar.core.transform import Transform
 from typing import Union, List
 from mlcolvar.core.nn import FeedForward, BaseGNN
 from mlcolvar.data.graph.utils import create_graph_tracing_example
 
 
-class BaseCV:
+class BaseCV(lightning.LightningModule):
     """
     Base collective variable class.
 

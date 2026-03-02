@@ -16,7 +16,6 @@ __all__ = ["VariationalAutoEncoderCV"]
 
 from typing import Any, Optional, Tuple
 import torch
-import lightning
 from mlcolvar.cvs import BaseCV
 from mlcolvar.core import FeedForward, Normalization
 from mlcolvar.core.transform.utils import Inverse
@@ -28,7 +27,7 @@ from mlcolvar.core.loss import ELBOGaussiansLoss
 # =============================================================================
 
 
-class VariationalAutoEncoderCV(BaseCV, lightning.LightningModule):
+class VariationalAutoEncoderCV(BaseCV):
     """Variational AutoEncoder Collective Variable.
 
     At training time, the encoder outputs a mean and a variance for each CV

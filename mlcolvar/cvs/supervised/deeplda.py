@@ -11,7 +11,7 @@ from typing import Union, List
 __all__ = ["DeepLDA"]
 
 
-class DeepLDA(BaseCV, lightning.LightningModule):
+class DeepLDA(BaseCV):
     """Deep Linear Discriminant Analysis (Deep-LDA) CV.
     Non-linear generalization of LDA in which a feature map is learned by a neural network optimized
     as to maximize the classes separation. The method is described in [1]_.

@@ -9,7 +9,7 @@ from typing import Union, List
 __all__ = ["DeepTICA"]
 
 
-class DeepTICA(BaseCV, lightning.LightningModule):
+class DeepTICA(BaseCV):
     """Neural network-based time-lagged independent component analysis (Deep-TICA).
 
     It is a non-linear generalization of TICA in which a feature map is learned by a
