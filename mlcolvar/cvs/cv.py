@@ -3,7 +3,8 @@ import torch
 import lightning
 from lightning.pytorch.core.module import _jit_is_scripting, get_filesystem
 from mlcolvar.core.transform import Transform
-from typing import Dict, Union, List
+from typing import Any, Dict, Optional, Union, List
+from torch.jit import ScriptModule
 from mlcolvar.core.nn import FeedForward, BaseGNN
 from mlcolvar.data.graph.utils import create_graph_tracing_example
 

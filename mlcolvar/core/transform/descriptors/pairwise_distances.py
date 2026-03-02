@@ -1,7 +1,7 @@
 import torch
 
 from mlcolvar.core.transform import Transform
-from mlcolvar.core.transform.descriptors.utils import compute_distances_matrix, compute_distances_pairs
+from mlcolvar.core.transform.descriptors.utils import compute_distances_matrix, compute_distances_pairs, _resolve_descriptor_cell, sanitize_cell_shape
 
 from typing import Union
 
@@ -49,13 +49,16 @@ class PairwiseDistances(Transform):
         self.n_atoms = n_atoms
         self.PBC = PBC
         self.scaled_coords = scaled_coords
-        self.default_cell = cell
+        default_cell = None if cell is None else sanitize_cell_shape(cell)
+        self.register_buffer("default_cell", default_cell)
         self.register_buffer('slicing_pairs', 
                                 torch.tensor(slicing_pairs, dtype=torch.long) if slicing_pairs is not None else None)
 
     def compute_pairwise_distances(self, pos, cell=None):
-        if cell is None:
-            cell = self.default_cell
+        cell = _resolve_descriptor_cell(runtime_cell=cell,
+                                       default_cell=self.default_cell,
+                                       require_cell=self.PBC or self.scaled_coords,
+                                    )
         # if we compute all distances we use the matrix trick
         if self.slicing_pairs is None:
             dist = compute_distances_matrix(pos=pos,
@@ -134,6 +137,16 @@ def test_pairwise_distances():
     out = model(pos_scaled)
     assert(torch.allclose(out, ref_distances[:, [0, 1]], atol=1e-3))
     out.sum().backward()
+
+    # runtime cell is allowed only when init cell is None
+    model = PairwiseDistances(n_atoms=10, PBC=True, cell=None, scaled_coords=False)
+    _ = model(pos_abs, cell=cell)
+    model = PairwiseDistances(n_atoms=10, PBC=True, cell=cell, scaled_coords=False)
+    try:
+        _ = model(pos_abs, cell=cell)
+        raise AssertionError("Expected ValueError when passing `cell` both at init and runtime.")
+    except ValueError as e:
+        assert "provided at initialization" in str(e)
 
 
     # ---------------- test varying-cell case (batched cells) ----------------

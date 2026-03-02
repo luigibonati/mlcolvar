@@ -73,6 +73,28 @@ def sanitize_cell_shape(cell: Union[float, torch.Tensor, list]):
     
     return cell
 
+def _resolve_descriptor_cell(runtime_cell: Union[float, torch.Tensor, list, None],
+                            default_cell: Union[torch.Tensor, None],
+                            require_cell: bool = False,
+                        ) -> Union[torch.Tensor, None]:
+    """Resolve descriptor cell coming from init-time default and/or runtime input.
+
+    Rules:
+    - Runtime cell and init-time default cell cannot be provided together.
+    - If `require_cell=True`, one of them must be provided.
+    """
+    if runtime_cell is not None and default_cell is not None:
+        raise ValueError(
+            "`cell` was provided at initialization and cannot be passed again at runtime."
+        )
+
+    cell = default_cell if runtime_cell is None else runtime_cell
+    if require_cell and cell is None:
+        raise ValueError(
+            "No `cell` was provided at initialization or runtime, but it is required for PBC calculations."
+        )
+    return cell
+
 def resolve_cell(
     cell: Union[float, torch.Tensor, list, None],
     *,

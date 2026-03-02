@@ -1,7 +1,7 @@
 import torch
 
 from mlcolvar.core.transform import Transform
-from mlcolvar.core.transform.descriptors.utils import compute_adjacency_matrix
+from mlcolvar.core.transform.descriptors.utils import compute_adjacency_matrix, _resolve_descriptor_cell, sanitize_cell_shape
 
 from typing import Union
 
@@ -53,7 +53,8 @@ class EigsAdjMat(Transform):
         self.cutoff = cutoff 
         self.n_atoms = n_atoms
         self.PBC = PBC
-        self.default_cell = cell
+        default_cell = None if cell is None else sanitize_cell_shape(cell)
+        self.register_buffer("default_cell", default_cell)
         self.scaled_coords = scaled_coords
         # Register switching_function as submodule if it's a module, so it moves with the model
         if switching_function is not None and isinstance(switching_function, torch.nn.Module):
@@ -62,8 +63,10 @@ class EigsAdjMat(Transform):
             self.switching_function = switching_function
 
     def compute_adjacency_matrix(self, pos, cell=None):
-        if cell is None:
-            cell = self.default_cell
+        cell = _resolve_descriptor_cell(runtime_cell=cell,
+                                       default_cell=self.default_cell,
+                                       require_cell=self.PBC or self.scaled_coords,
+                                    )
         pos = compute_adjacency_matrix(pos=pos,
                                         mode=self.mode,
                                         cutoff=self.cutoff, 
@@ -119,6 +122,28 @@ def test_eigs_of_adj_matrix():
     out = model(pos)
     assert(out.shape[-1] == model.out_features)
     out.sum().backward()
+
+    # runtime cell is allowed only when init cell is None
+    model = EigsAdjMat(mode='continuous',
+                       cutoff=cutoff,
+                       n_atoms=n_atoms,
+                       PBC=True,
+                       cell=None,
+                       scaled_coords=False,
+                       switching_function=switching_function)
+    _ = model(torch.einsum('bij,j->bij', pos.clone().detach(), cell), cell=cell)
+    model = EigsAdjMat(mode='continuous',
+                       cutoff=cutoff,
+                       n_atoms=n_atoms,
+                       PBC=True,
+                       cell=cell,
+                       scaled_coords=False,
+                       switching_function=switching_function)
+    try:
+        _ = model(torch.einsum('bij,j->bij', pos.clone().detach(), cell), cell=cell)
+        raise AssertionError("Expected ValueError when passing `cell` both at init and runtime.")
+    except ValueError as e:
+        assert "provided at initialization" in str(e)
 
     # ---------------- mock varying-cell case ----------------
     # 1) Mixed cell sizes in one batch: batched-cell mode should match

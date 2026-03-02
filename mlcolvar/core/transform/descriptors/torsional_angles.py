@@ -2,7 +2,7 @@ import torch
 import numpy as np 
 
 from mlcolvar.core.transform import Transform
-from mlcolvar.core.transform.descriptors.utils import compute_distances_matrix, sanitize_positions_shape
+from mlcolvar.core.transform.descriptors.utils import compute_distances_matrix, _resolve_descriptor_cell, sanitize_cell_shape, sanitize_positions_shape
 
 from typing import Union
 
@@ -95,15 +95,18 @@ class TorsionalAngles(Transform):
 
         # initialize class attributes
         self.register_buffer('indices', indices)
-        self.default_cell = cell
+        default_cell = None if cell is None else sanitize_cell_shape(cell)
+        self.register_buffer("default_cell", default_cell)
         self.n_atoms = n_atoms
         self.PBC = PBC
         self.scaled_coords = scaled_coords
 
 
     def compute_torsional_angle(self, pos, cell=None):
-        if cell is None:
-            cell = self.default_cell
+        cell = _resolve_descriptor_cell(runtime_cell=cell,
+                                       default_cell=self.default_cell,
+                                       require_cell=self.PBC or self.scaled_coords,
+                                    )
         tors_pos, batch_size = sanitize_positions_shape(pos, self.n_atoms)
 
         # indices: [n_angles, 4]
@@ -216,6 +219,16 @@ def test_torsional_angle():
     angle.sum().backward()
     assert(torch.allclose(angle[:, 0].unsqueeze(-1), torch.sin(ref_phi), atol=1e-3))
     assert(torch.allclose(angle[:, 1].unsqueeze(-1), torch.cos(ref_phi), atol=1e-3))
+
+    # runtime cell is allowed only when init cell is None
+    model = TorsionalAngles(np.array([1,3,4,6]), n_atoms=10, mode=['angle'], PBC=True, cell=None, scaled_coords=False)
+    _ = model(pos, cell=cell)
+    model = TorsionalAngles(np.array([1,3,4,6]), n_atoms=10, mode=['angle'], PBC=True, cell=cell, scaled_coords=False)
+    try:
+        _ = model(pos, cell=cell)
+        raise AssertionError("Expected ValueError when passing `cell` both at init and runtime.")
+    except ValueError as e:
+        assert "provided at initialization" in str(e)
 
     # ---------------- test varying-cell case (batched cells) ----------------
     # Mix different cell sizes in the same batch.

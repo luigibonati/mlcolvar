@@ -2,8 +2,7 @@ import torch
 import numpy as np
 
 from mlcolvar.core.transform import Transform
-from mlcolvar.core.transform.descriptors.utils import compute_distances_matrix, apply_cutoff, sanitize_positions_shape
-
+from mlcolvar.core.transform.descriptors.utils import apply_cutoff, compute_distances_matrix, _resolve_descriptor_cell, sanitize_cell_shape, sanitize_positions_shape
 from typing import Union
 
 from warnings import warn
@@ -89,7 +88,8 @@ class CoordinationNumbers(Transform):
         # register buffers that should move with the model
         reordering = np.concatenate((self.group_A, self.group_B))
         self.register_buffer('_reordering', torch.tensor(reordering, dtype=torch.long))
-        self.default_cell = cell
+        default_cell = None if cell is None else sanitize_cell_shape(cell)
+        self.register_buffer("default_cell", default_cell)
         
         # register switching_function as submodule if it's a Module
         if switching_function is not None and isinstance(switching_function, torch.nn.Module):
@@ -99,8 +99,10 @@ class CoordinationNumbers(Transform):
 
         
     def compute_coordination_number(self, pos, cell=None):
-        if cell is None:
-            cell = self.default_cell
+        cell = _resolve_descriptor_cell(runtime_cell=cell,
+                                       default_cell=self.default_cell,
+                                       require_cell=self.PBC or self.scaled_coords,
+                                    )
         # move the group A elements to first positions
         pos, batch_size = sanitize_positions_shape(pos, self.n_atoms)
         pos = pos[:, self._reordering, :]
@@ -262,6 +264,32 @@ def test_coordination_number():
     
     out = model(pos)
     out.sum().backward()
+
+    # runtime cell is allowed only when init cell is None
+    model = CoordinationNumbers(group_A=[2, 3],
+                                group_B=[0, 1, 4, 5, 6, 7, 8, 9, 10, 11],
+                                cutoff=cutoff,
+                                n_atoms=n_atoms,
+                                PBC=True,
+                                cell=None,
+                                mode='continuous',
+                                scaled_coords=False,
+                                switching_function=switching_function)
+    _ = model(pos, cell=torch.tensor([cell]))
+    model = CoordinationNumbers(group_A=[2, 3],
+                                group_B=[0, 1, 4, 5, 6, 7, 8, 9, 10, 11],
+                                cutoff=cutoff,
+                                n_atoms=n_atoms,
+                                PBC=True,
+                                cell=cell,
+                                mode='continuous',
+                                scaled_coords=False,
+                                switching_function=switching_function)
+    try:
+        _ = model(pos, cell=torch.tensor([cell]))
+        raise AssertionError("Expected ValueError when passing `cell` both at init and runtime.")
+    except ValueError as e:
+        assert "provided at initialization" in str(e)
 
 
     # ---------------- mock varying-cell case ----------------
