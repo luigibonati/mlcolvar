@@ -101,11 +101,11 @@ class DeepTICA(BaseCV, lightning.LightningModule):
         o = "tica"
         self.tica = TICA(self.nn.out_features, n_cvs, **options[o])
 
-    def forward_nn(self, x: torch.Tensor) -> torch.Tensor:
+    def forward_nn(self, x: torch.Tensor, cell=None) -> torch.Tensor:
         if not self._override_model:
             if self.norm_in is not None:
-                x = self.norm_in(x)
-        x = self.nn(x)
+                x = self._apply_module(self.norm_in, x, cell=cell)
+        x = self._apply_module(self.nn, x, cell=cell)
         return x
 
     def set_regularization(self, c0_reg=1e-6):
@@ -136,10 +136,11 @@ class DeepTICA(BaseCV, lightning.LightningModule):
             x_lag = self._setup_graph_data(train_batch, key='data_list_lag')
             w_t = x_t['weight']
             w_lag = x_lag['weight']
+        cell = self._get_batch_cell(train_batch)
 
         # =================forward====================
-        f_t = self.forward_nn(x_t)
-        f_lag = self.forward_nn(x_lag)
+        f_t = self.forward_nn(x_t, cell=cell)
+        f_lag = self.forward_nn(x_lag, cell=cell)
         # ===================tica=====================
         eigvals, _ = self.tica.compute(
             data=[f_t, f_lag], weights=[w_t, w_lag], save_params=True

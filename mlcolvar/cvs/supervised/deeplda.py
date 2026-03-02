@@ -103,8 +103,8 @@ class DeepLDA(BaseCV, lightning.LightningModule):
     def forward_nn(self, x: torch.Tensor) -> torch.Tensor:
         if not self._override_model:
             if self.norm_in is not None:
-                x = self.norm_in(x)
-        x = self.nn(x)
+                x = self._apply_module(self.norm_in, x)
+        x = self._apply_module(self.nn, x)
         return x
 
     def set_regularization(self, sw_reg=0.05, lorentzian_reg=None):
@@ -162,6 +162,7 @@ class DeepLDA(BaseCV, lightning.LightningModule):
         elif isinstance(self.nn, BaseGNN):
             x = self._setup_graph_data(train_batch)
             labels = x['graph_labels'].squeeze()
+        cell = self._get_batch_cell(train_batch)
         
         # =================forward====================
         h = self.forward_nn(x)

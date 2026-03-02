@@ -148,7 +148,7 @@ class BaseCV:
             if isinstance(getattr(self, b), Transform):
                 getattr(self, b).setup_from_datamodule(datamodule)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, cell=None) -> torch.Tensor:
         """
         Evaluation of the CV
 
@@ -168,12 +168,12 @@ class BaseCV:
         """
 
         if self.preprocessing is not None:
-            x = self.preprocessing(x)
+            x = self._apply_module(self.preprocessing, x, cell=cell)
 
         x = self.forward_cv(x)
 
         if self.postprocessing is not None:
-            x = self.postprocessing(x)
+            x = self._apply_module(self.postprocessing, x)
 
         return x
 
@@ -197,7 +197,7 @@ class BaseCV:
         for b in self.BLOCKS:
             block = getattr(self, b)
             if block is not None:
-                x = block(x)
+                x = self._apply_module(block, x)
 
         return x
 
@@ -290,4 +290,19 @@ class BaseCV:
             data = train_batch[key]
             data['positions'].requires_grad_(True)
             data['node_attrs'].requires_grad_(True)
+            if "cell" in train_batch and "cell" not in data:
+                data["cell"] = train_batch["cell"]
             return data
+    
+    def _apply_module(self, module: torch.nn.Module, x, cell=None):
+        if module is None:
+            return x
+        if cell is not None:
+            return module(x, cell=cell)
+        return module(x)
+
+    @staticmethod
+    def _get_batch_cell(batch):
+        if isinstance(batch, dict):
+            return batch.get("cell", None)
+        return None

@@ -131,6 +131,7 @@ class DeepTDA(BaseCV, lightning.LightningModule):
         elif isinstance(self.nn, BaseGNN):
             x = self._setup_graph_data(train_batch)
             labels = x['graph_labels'].squeeze()
+        cell = self._get_batch_cell(train_batch)
         
         # =================forward====================
         z = self.forward_cv(x)
@@ -262,4 +263,3 @@ def test_deeptda_cv():
 
 if __name__ == "__main__":
     test_deeptda_cv()
-
