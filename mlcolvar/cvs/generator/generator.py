@@ -86,7 +86,6 @@ class Generator(BaseCV, lightning.LightningModule):
                                      eta=eta, 
                                      alpha=alpha, 
                                      friction=friction, 
-                                     cell=cell,
                                      descriptors_derivatives=descriptors_derivatives,
                                      n_dim=n_dim,
                                      u_stat=u_stat
@@ -229,9 +228,9 @@ class Generator(BaseCV, lightning.LightningModule):
         q = self.forward(x, cell=cell)
         # ===================loss=====================
         if self.training:
-            loss, loss_ef, loss_ortho = self.loss_fn(x, q, weights, ref_idx, cell=cell)
+            loss, loss_ef, loss_ortho = self.loss_fn(x, q, weights, ref_idx)
         else:
-            loss, loss_ef, loss_ortho = self.loss_fn(x, q, weights, ref_idx, cell=cell)
+            loss, loss_ef, loss_ortho = self.loss_fn(x, q, weights, ref_idx)
         # ====================log=====================+
         name = "train" if self.training else "valid"
         self.log(f"{name}_loss", loss, on_epoch=True)

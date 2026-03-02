@@ -47,7 +47,6 @@ class Committor(BaseCV, lightning.LightningModule):
         alpha: float,
         gamma: float = 10000,
         delta_f: float = 0,
-        cell: float = None,
         separate_boundary_dataset : bool = True,
         descriptors_derivatives : torch.nn.Module = None,
         log_var: bool = False,
@@ -73,8 +72,6 @@ class Committor(BaseCV, lightning.LightningModule):
         delta_f : float, optional
             Delta free energy between A (label 0) and B (label 1), units is kBT, by default 0. 
             State B is supposed to be higher in energy.
-        cell : float, optional
-            CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, by default None
         separate_boundary_dataset : bool, optional
             Switch to exculde boundary condition labeled data from the variational loss, by default True
         descriptors_derivatives : torch.nn.Module, optional
@@ -101,7 +98,6 @@ class Committor(BaseCV, lightning.LightningModule):
         # =======  LOSS  =======
         self.loss_fn = CommittorLoss(atomic_masses=atomic_masses,
                                      alpha=alpha,
-                                     cell=cell,
                                      gamma=gamma,
                                      delta_f=delta_f,
                                      separate_boundary_dataset=separate_boundary_dataset,
@@ -177,11 +173,11 @@ class Committor(BaseCV, lightning.LightningModule):
         # ===================loss=====================
         if self.training:
             loss, loss_var, loss_bound_A, loss_bound_B = self.loss_fn(
-                x, z, q, labels, weights, ref_idx, cell=cell
+                x, z, q, labels, weights, ref_idx
             )
         else:
             loss, loss_var, loss_bound_A, loss_bound_B = self.loss_fn(
-                x, z, q, labels, weights, ref_idx, cell=cell
+                x, z, q, labels, weights, ref_idx
             )
 
         # ====================log=====================+
