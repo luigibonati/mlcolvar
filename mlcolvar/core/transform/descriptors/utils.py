@@ -52,13 +52,24 @@ def sanitize_cell_shape(cell: Union[float, torch.Tensor, list]):
     elif isinstance(cell, torch.Tensor) and cell.shape == torch.Size([]):
         cell = cell.unsqueeze(0)
     
+    # Extra check to ensure that cell is now a tensor and has the right shape
+    if not isinstance(cell, torch.Tensor):
+        raise ValueError(f"Cell should be a torch.Tensor after parsing, found {type(cell)}")
 
-    if cell.shape[0] != 1 and cell.shape[0] != 3:
-        raise ValueError(f"Cell must have either shape (1) or (3). Found {cell.shape} ")
-
-    if isinstance(cell, torch.Tensor):
-        if len(cell) != 3:
+    # Single float for cubic cell, or 3 floats for orthorombic cell
+    if cell.ndim == 1:
+        if cell.shape[0] not in (1, 3):
+            raise ValueError(f"Cell must have shape (1), (3), (BatchSize,1) or (BatchSize,3). Found {cell.shape}.")
+        if cell.shape[0] == 1:
             cell = torch.tile(cell, (3,))
+    # Batch of single floats for cubic cells, or batch of 3 floats for orthorombic cells
+    elif cell.ndim == 2:
+        if cell.shape[1] not in (1, 3):
+            raise ValueError(f"Cell must have shape (1), (3), (BatchSize,1) or (BatchSize,3). Found {cell.shape}.")
+        if cell.shape[1] == 1:
+            cell = torch.tile(cell, (1, 3))
+    else:
+        raise ValueError(f"Cell must have shape (1), (3), (BatchSize,1) or (BatchSize,3). Found {cell.shape}.")
     
     return cell
 
@@ -68,6 +79,7 @@ def resolve_cell(
     PBC: bool,
     scaled_coords: bool,
     device: torch.device,
+    batch_size: int,
 ) -> torch.Tensor:
     """Resolve and validate cell information for distance-based descriptors."""
     if cell is None:
@@ -75,22 +87,50 @@ def resolve_cell(
             raise ValueError(
                 "A `cell` must be provided when `PBC=True` or `scaled_coords=True`."
             )
-        return torch.ones(3, device=device)
-    return sanitize_cell_shape(cell).to(device)
+        return torch.ones((batch_size, 3), device=device)
+
+    cell = sanitize_cell_shape(cell).to(device)
+    if cell.ndim == 1:
+        return cell
+    if cell.shape[0] not in (1, batch_size):
+        raise ValueError(
+            f"Batch cell size mismatch: got {cell.shape[0]} cells for batch size {batch_size}."
+        )
+    return cell
 
 def _apply_pbc_distances(dist_components, pbc_cell):
-    shifts = torch.zeros_like(dist_components)
-    # avoid loop if cell is cubic
-    if pbc_cell[0]==pbc_cell[1] and pbc_cell[1]==pbc_cell[2]:
-        shifts = torch.div(dist_components, pbc_cell[0]/2, rounding_mode='trunc') 
-        shifts = torch.div(shifts + 1*torch.sign(shifts), 2, rounding_mode='trunc' )*pbc_cell[0]
+    # Normalize cell to batched shape [B,3] so single and batched cell inputs share the same logic.
+    batch_size = dist_components.shape[0]
+    if pbc_cell.ndim == 1:
+        pbc_cell = pbc_cell.unsqueeze(0)
+    if pbc_cell.shape[0] not in (1, batch_size):
+        raise ValueError(
+            f"Batch cell size mismatch: got {pbc_cell.shape[0]} cells for batch size {batch_size}."
+        )
 
-    else: 
-        # loop over dimensions of the pbc_cell
-        # NB when using distances matrices actually it has 4 dimensions but the slicing still holds implicitly
+    # Mixed cubic/non-cubic batches are not supported.
+    is_cubic = (pbc_cell[:, 0] == pbc_cell[:, 1]) & (pbc_cell[:, 1] == pbc_cell[:, 2])
+    if not torch.all(is_cubic) and not torch.all(~is_cubic):
+        raise ValueError("Mixed cubic and non-cubic cells in the same batch are not supported.")
+
+    shifts = torch.zeros_like(dist_components)
+    
+    # For cubic cells we can apply the minimum image convention in one step
+    if torch.all(is_cubic):
+        c = pbc_cell[:, 0]
+        while c.ndim < dist_components.ndim:
+            c = c.unsqueeze(-1)
+        shifts = torch.div(dist_components, c / 2, rounding_mode='trunc')
+        shifts = torch.div(shifts + 1 * torch.sign(shifts), 2, rounding_mode='trunc') * c
+    # For non-cubic cells we need to apply the minimum image convention separately for each dimension
+    else:
+        # Loop over cell dimensions. Works for both matrix and pairwise distance tensors.
         for d in range(3):
-            shifts[:, d, :] = torch.div(dist_components[:, d, :], pbc_cell[d]/2, rounding_mode='trunc')
-            shifts[:, d, :] = torch.div(shifts[:, d, :] + 1*torch.sign(shifts[:, d, :]), 2, rounding_mode='trunc' )*pbc_cell[d]/2
+            c = pbc_cell[:, d]
+            while c.ndim < dist_components[:, d, :].ndim:
+                c = c.unsqueeze(-1)
+            shifts[:, d, :] = torch.div(dist_components[:, d, :], c / 2, rounding_mode='trunc')
+            shifts[:, d, :] = torch.div(shifts[:, d, :] + 1 * torch.sign(shifts[:, d, :]), 2, rounding_mode='trunc') * c / 2
 
     # apply shifts
     dist_components = dist_components - shifts
@@ -134,11 +174,17 @@ def compute_distances_matrix(pos: torch.Tensor,
     # ======================= CHECKS =======================
     pos, batch_size = sanitize_positions_shape(pos, n_atoms)
     _device = pos.device
-    cell = resolve_cell(cell, PBC=PBC, scaled_coords=scaled_coords, device=_device)
+    cell = resolve_cell(
+        cell,
+        PBC=PBC,
+        scaled_coords=scaled_coords,
+        device=_device,
+        batch_size=batch_size,
+    )
 
     # Set which cell to be used for PBC
     if scaled_coords:
-        pbc_cell = torch.ones(3, device=_device)
+        pbc_cell = torch.ones_like(cell, device=_device)
     else:
         pbc_cell = cell
     
@@ -160,7 +206,10 @@ def compute_distances_matrix(pos: torch.Tensor,
 
     # if we used scaled coords we need to get back to real distances
     if scaled_coords:
-        dist_components = torch.einsum('bijk,i->bijk', dist_components, cell)
+        if cell.ndim == 1:
+            dist_components = torch.einsum('bijk,i->bijk', dist_components, cell)
+        else:
+            dist_components = dist_components * cell[:, :, None, None]
 
     if vector: 
         return dist_components
@@ -214,7 +263,13 @@ def compute_distances_pairs(pos: torch.Tensor,
     # ======================= CHECKS =======================
     pos, batch_size = sanitize_positions_shape(pos, n_atoms)
     _device = pos.device
-    cell = resolve_cell(cell, PBC=PBC, scaled_coords=scaled_coords, device=_device)
+    cell = resolve_cell(
+        cell,
+        PBC=PBC,
+        scaled_coords=scaled_coords,
+        device=_device,
+        batch_size=batch_size,
+    )
 
     if slicing_pairs is None:
         raise ValueError("`slicing_pairs` must be provided.")
@@ -224,7 +279,7 @@ def compute_distances_pairs(pos: torch.Tensor,
 
     # Set which cell to be used for PBC
     if scaled_coords:
-        pbc_cell = torch.ones(3, device=_device)
+        pbc_cell = torch.ones_like(cell, device=_device)
     else:
         pbc_cell = cell
     
@@ -252,7 +307,10 @@ def compute_distances_pairs(pos: torch.Tensor,
 
     # if we used scaled coords we need to get back to real distances
     if scaled_coords:
-        dist_components = torch.einsum('bij,i->bij', dist_components, cell)
+        if cell.ndim == 1:
+            dist_components = torch.einsum('bij,i->bij', dist_components, cell)
+        else:
+            dist_components = dist_components * cell[:, :, None]
 
     if vector:
         distances = dist_components
