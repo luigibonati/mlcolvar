@@ -136,5 +136,43 @@ def test_pairwise_distances():
     out.sum().backward()
 
 
+    # ---------------- test varying-cell case (batched cells) ----------------
+    # Mix different cell sizes in the same batch.
+    scales = torch.tensor([1.0, 3.7, 11.0], dtype=pos_abs.dtype)
+    cell_batched = torch.stack([(cell * s).repeat(3) for s in scales], dim=0)
+
+    # Absolute coordinates: keep reduced coordinates fixed by scaling positions with each cell.
+    pos_abs_batched = torch.cat([pos_abs * s for s in scales], dim=0)
+    pos_abs_batched = pos_abs_batched.clone().detach().requires_grad_(True)
+
+    model = PairwiseDistances(n_atoms=10, PBC=True, cell=None, scaled_coords=False)
+    out = model(pos_abs_batched, cell=cell_batched)
+    ref_batched = torch.cat([ref_distances * s for s in scales], dim=0)
+    assert(out.reshape(pos_abs_batched.shape[0], -1).shape[-1] == model.out_features)
+    assert(torch.allclose(out, ref_batched, atol=2e-3))
+    out.sum().backward()
+
+    model = PairwiseDistances(n_atoms=10, PBC=True, cell=None, scaled_coords=False, slicing_pairs=[[0, 1], [0, 2]])
+    out = model(pos_abs_batched, cell=cell_batched)
+    assert(torch.allclose(out, ref_batched[:, [0, 1]], atol=2e-3))
+    out.sum().backward()
+
+    # Scaled coordinates: physical distances scale with cell.
+    pos_scaled_batched = torch.cat([pos_abs * s / (cell * s) for s in scales], dim=0)
+    pos_scaled_batched = pos_scaled_batched.clone().detach().requires_grad_(True)
+
+    model = PairwiseDistances(n_atoms=10, PBC=True, cell=None, scaled_coords=True)
+    out = model(pos_scaled_batched, cell=cell_batched)
+    ref_scaled_batched = torch.cat([ref_distances * s for s in scales], dim=0)
+    assert(out.reshape(pos_scaled_batched.shape[0], -1).shape[-1] == model.out_features)
+    assert(torch.allclose(out, ref_scaled_batched, atol=2e-3))
+    out.sum().backward()
+
+    model = PairwiseDistances(n_atoms=10, PBC=True, cell=None, scaled_coords=True, slicing_pairs=[[0, 1], [0, 2]])
+    out = model(pos_scaled_batched, cell=cell_batched)
+    assert(torch.allclose(out, ref_scaled_batched[:, [0, 1]], atol=2e-3))
+    out.sum().backward()
+
+
 if __name__ == "__main__":
     test_pairwise_distances()
