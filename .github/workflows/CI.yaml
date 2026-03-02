@@ -6,9 +6,11 @@ on:
   push:
     branches:
       - "main"
+      - "release/2.0"
   pull_request:
     branches:
       - "main"
+      - "release/2.0"
   schedule:
     # Weekly tests run on main by default:
     #   Scheduled workflows run on the latest commit on the default or base branch.
