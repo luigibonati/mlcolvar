@@ -372,7 +372,7 @@ def test_create_timelagged_dataset():
 
     # unbiased case
     t = np.arange(n_points)
-    dataset = create_timelagged_dataset(X, t, lag_time=lag_time)
+    dataset = create_timelagged_dataset(X, t, lag_time=lag_time, walker=None)
     assert len(dataset) == n_points - lag_time
 
     # reweight mode rescale_time (default)
