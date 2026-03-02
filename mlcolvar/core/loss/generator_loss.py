@@ -66,7 +66,8 @@ class GeneratorLoss(torch.nn.Module):
                 input : torch.Tensor,
                 output : torch.Tensor, 
                 weights : torch.Tensor,
-                ref_idx : torch.Tensor = None
+                ref_idx : torch.Tensor = None,
+                cell: float = None
                 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         
         # preload descriptors matrix on device
@@ -81,7 +82,7 @@ class GeneratorLoss(torch.nn.Module):
                               alpha=self.alpha,
                               friction=self.friction,
                               lambdas=self.lambdas,
-                              cell=self.cell,
+                              cell=self.cell if cell is None else cell,
                               descriptors_derivatives=self.descriptors_derivatives,
                               ref_idx=ref_idx,
                               n_dim=self.n_dim,

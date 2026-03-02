@@ -135,9 +135,9 @@ class Committor(BaseCV, lightning.LightningModule):
         if (options[o] is not False) and (options[o] is not None):
             self.sigmoid = Custom_Sigmoid(**options[o])
 
-    def forward_nn(self, x):
+    def forward_nn(self, x, cell=None):
         if self.preprocessing is not None:
-            x = self.preprocessing(x)
+            x = self._apply_module(self.preprocessing, x, cell=cell)
         z = self.nn(x)
         return z
 
@@ -164,8 +164,10 @@ class Committor(BaseCV, lightning.LightningModule):
         except KeyError:
             ref_idx = None
 
+        cell = self._get_batch_cell(train_batch)
+
         # =================forward====================
-        z = self.forward_nn(x)
+        z = self.forward_nn(x, cell=cell)
         
         if self.sigmoid is not None:
             q = self.sigmoid(z)
@@ -175,11 +177,11 @@ class Committor(BaseCV, lightning.LightningModule):
         # ===================loss=====================
         if self.training:
             loss, loss_var, loss_bound_A, loss_bound_B = self.loss_fn(
-                x, z, q, labels, weights, ref_idx 
+                x, z, q, labels, weights, ref_idx, cell=cell
             )
         else:
             loss, loss_var, loss_bound_A, loss_bound_B = self.loss_fn(
-                x, z, q, labels, weights, ref_idx 
+                x, z, q, labels, weights, ref_idx, cell=cell
             )
 
         # ====================log=====================+

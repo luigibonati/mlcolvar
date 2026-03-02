@@ -100,6 +100,7 @@ class CommittorLoss(torch.nn.Module):
                 labels: torch.Tensor, 
                 w: torch.Tensor, 
                 ref_idx: torch.Tensor = None, 
+                cell: float = None,
                 create_graph: bool = True
                 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """Committor loss forward pass
@@ -139,7 +140,7 @@ class CommittorLoss(torch.nn.Module):
                               gamma=self.gamma,
                               delta_f=self.delta_f,
                               create_graph=create_graph,
-                              cell=self.cell,
+                              cell=self.cell if cell is None else cell,
                               separate_boundary_dataset=self.separate_boundary_dataset,
                               descriptors_derivatives=self.descriptors_derivatives,
                               log_var=self.log_var,

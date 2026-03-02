@@ -172,7 +172,7 @@ class Generator(BaseCV, lightning.LightningModule):
         input.requires_grad = True
         
         # get output
-        output = self.forward(input)
+        output = self.forward(input, cell=cell)
 
         # If the calculation has not been done previously, or we want to compute again the eigenpairs due to a change of parameters
         if (recompute or self.evecs is None): 
@@ -217,6 +217,7 @@ class Generator(BaseCV, lightning.LightningModule):
         x.requires_grad = True
 
         weights = train_batch["weights"]
+        cell = self._get_batch_cell(train_batch)
 
         try:
             ref_idx = train_batch["ref_idx"]
@@ -225,12 +226,12 @@ class Generator(BaseCV, lightning.LightningModule):
 
         # =================forward====================
         # we use forward and not forward_cv to also apply the preprocessing (if present)
-        q = self.forward(x)
+        q = self.forward(x, cell=cell)
         # ===================loss=====================
         if self.training:
-            loss, loss_ef, loss_ortho = self.loss_fn(x, q, weights, ref_idx)
+            loss, loss_ef, loss_ortho = self.loss_fn(x, q, weights, ref_idx, cell=cell)
         else:
-            loss, loss_ef, loss_ortho = self.loss_fn(x, q, weights, ref_idx)
+            loss, loss_ef, loss_ortho = self.loss_fn(x, q, weights, ref_idx, cell=cell)
         # ====================log=====================+
         name = "train" if self.training else "valid"
         self.log(f"{name}_loss", loss, on_epoch=True)
