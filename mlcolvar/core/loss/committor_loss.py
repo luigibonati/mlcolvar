@@ -32,7 +32,6 @@ class CommittorLoss(torch.nn.Module):
     def __init__(self,
                 atomic_masses: torch.Tensor,
                 alpha: float,
-                cell: float = None,
                 gamma: float = 10000.0,
                 delta_f: float = 0.0,
                 separate_boundary_dataset : bool = True,
@@ -50,8 +49,6 @@ class CommittorLoss(torch.nn.Module):
             Atomic masses of the atoms in the system
         alpha : float
             Hyperparamer that scales the boundary conditions contribution to loss, i.e. alpha*(loss_bound_A + loss_bound_B)
-        cell : float, optional
-            CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, by default None
         gamma : float, optional
             Hyperparamer that scales the whole loss to avoid too small numbers, i.e. gamma*(loss_var + loss_bound), by default 10000
         delta_f : float, optional
@@ -83,7 +80,6 @@ class CommittorLoss(torch.nn.Module):
         super().__init__()
         self.register_buffer("atomic_masses", atomic_masses)
         self.alpha = alpha
-        self.cell = cell
         self.gamma = gamma
         self.delta_f = delta_f
         self.descriptors_derivatives = descriptors_derivatives
@@ -100,7 +96,6 @@ class CommittorLoss(torch.nn.Module):
                 labels: torch.Tensor, 
                 w: torch.Tensor, 
                 ref_idx: torch.Tensor = None, 
-                cell: float = None,
                 create_graph: bool = True
                 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """Committor loss forward pass
@@ -140,7 +135,6 @@ class CommittorLoss(torch.nn.Module):
                               gamma=self.gamma,
                               delta_f=self.delta_f,
                               create_graph=create_graph,
-                              cell=self.cell if cell is None else cell,
                               separate_boundary_dataset=self.separate_boundary_dataset,
                               descriptors_derivatives=self.descriptors_derivatives,
                               log_var=self.log_var,
@@ -161,7 +155,6 @@ def committor_loss(x: torch.Tensor,
                    gamma: float = 10000,
                    delta_f: float = 0,
                    create_graph: bool = True,
-                   cell: float = None,
                    separate_boundary_dataset: bool = True,
                    descriptors_derivatives: Union[SmartDerivatives, torch.Tensor] = None,
                    log_var: bool = False,
@@ -196,8 +189,6 @@ def committor_loss(x: torch.Tensor,
         Delta free energy between A (label 0) and B (label 1), units is kBT, by default 0. 
     create_graph : bool
         Make loss backwardable, deactivate for validation to save memory, default True
-    cell : float
-        CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, default None 
     separate_boundary_dataset : bool, optional
             Switch to exculde boundary condition labeled data from the variational loss, by default True
     descriptors_derivatives : Union[SmartDerivatives, torch.Tensor], optional
@@ -329,9 +320,6 @@ def committor_loss(x: torch.Tensor,
     else:
         # we get the square of grad(q) and we multiply by the weight
         gradient_positions = grad
-    
-    if cell is not None:
-        gradient_positions = gradient_positions / cell
         
     # we do the square
     grad_square = torch.pow(gradient_positions, 2)
