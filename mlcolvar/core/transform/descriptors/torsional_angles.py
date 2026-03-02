@@ -217,5 +217,40 @@ def test_torsional_angle():
     assert(torch.allclose(angle[:, 0].unsqueeze(-1), torch.sin(ref_phi), atol=1e-3))
     assert(torch.allclose(angle[:, 1].unsqueeze(-1), torch.cos(ref_phi), atol=1e-3))
 
+    # ---------------- test varying-cell case (batched cells) ----------------
+    # Mix different cell sizes in the same batch.
+    scales = torch.tensor([0.9, 1.0, 1.1], dtype=pos.dtype)
+    pos_base = pos.clone().detach()
+    pos_abs_batched = torch.cat([pos_base * s for s in scales], dim=0).clone().detach().requires_grad_(True)
+    frame_scales = scales.repeat_interleave(pos_base.shape[0])
+    cell_batched = torch.stack([cell * s for s in frame_scales], dim=0)
+
+    # Absolute coordinates: torsional quantities are invariant to uniform scaling.
+    model = TorsionalAngles(np.array([1,3,4,6]), n_atoms=10, mode=['angle', 'sin', 'cos'], PBC=True, cell=None, scaled_coords=False)
+    out = model(pos_abs_batched, cell=cell_batched)
+    out_single = torch.cat(
+        [model(pos_abs_batched[i:i+1], cell=cell_batched[i]) for i in range(pos_abs_batched.shape[0])],
+        dim=0,
+    )
+    assert(torch.allclose(out, out_single, atol=1e-6))
+    ref_stack = torch.cat([torch.cat([ref_phi, torch.sin(ref_phi), torch.cos(ref_phi)], dim=1) for _ in scales], dim=0)
+    assert(torch.allclose(out, ref_stack, atol=1e-3))
+    out.sum().backward()
+
+    # Scaled coordinates with varying cells: same invariance.
+    pos_scaled_batched = torch.cat(
+        [(pos_base * s).reshape(-1, 10, 3) / (cell * s) for s in scales],
+        dim=0,
+    ).reshape(-1, 30).clone().detach().requires_grad_(True)
+    model = TorsionalAngles(np.array([1,3,4,6]), n_atoms=10, mode=['angle', 'sin', 'cos'], PBC=True, cell=None, scaled_coords=True)
+    out = model(pos_scaled_batched, cell=cell_batched)
+    out_single = torch.cat(
+        [model(pos_scaled_batched[i:i+1], cell=cell_batched[i]) for i in range(pos_scaled_batched.shape[0])],
+        dim=0,
+    )
+    assert(torch.allclose(out, out_single, atol=1e-6))
+    assert(torch.allclose(out, ref_stack, atol=1e-3))
+    out.sum().backward()
+
 if __name__ == "__main__":
     test_torsional_angle()

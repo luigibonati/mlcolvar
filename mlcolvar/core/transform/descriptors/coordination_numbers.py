@@ -264,7 +264,39 @@ def test_coordination_number():
     out.sum().backward()
 
 
-    # TODO add reference value for check
+    # ---------------- mock varying-cell case ----------------
+    # Mixed cell sizes in the same batch: check batched-cell behavior is
+    # consistent with frame-wise evaluation for fixed cutoff.
+    pos_base = pos.clone().detach()
+    scales = torch.tensor([0.9, 1.0, 1.1], dtype=pos_base.dtype)
+    pos_batched = torch.cat([pos_base * s for s in scales], dim=0).clone().detach().requires_grad_(True)
+    frame_scales = scales.repeat_interleave(pos_base.shape[0])
+    cell_batched = (cell * frame_scales).unsqueeze(-1)
+
+    switching_function = SwitchingFunctions(
+        in_features=n_atoms * 3,
+        name='Rational',
+        cutoff=cutoff,
+        options={'n': 2, 'm': 6, 'eps': 1e0},
+    )
+    model = CoordinationNumbers(
+        group_A=[2, 3],
+        group_B=[0, 1, 4, 5, 6, 7, 8, 9, 10, 11],
+        cutoff=cutoff,
+        n_atoms=n_atoms,
+        PBC=True,
+        cell=None,
+        mode='continuous',
+        scaled_coords=False,
+        switching_function=switching_function,
+    )
+    out_batched = model(pos_batched, cell=cell_batched)
+    out_frames = torch.cat(
+        [model(pos_batched[i:i + 1], cell=cell_batched[i]) for i in range(pos_batched.shape[0])],
+        dim=0,
+    )
+    assert torch.allclose(out_batched, out_frames, atol=1e-6)
+    out_batched.sum().backward()
 
 if __name__ == "__main__":
     test_coordination_number()

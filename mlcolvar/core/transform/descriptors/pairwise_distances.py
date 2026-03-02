@@ -137,8 +137,9 @@ def test_pairwise_distances():
 
 
     # ---------------- test varying-cell case (batched cells) ----------------
-    # Mix different cell sizes in the same batch.
-    scales = torch.tensor([1.0, 3.7, 11.0], dtype=pos_abs.dtype)
+    # Mixed cell sizes in the same batch: check batched-cell behavior is
+    # consistent with frame-wise evaluation for fixed cutoff.    scales = torch.tensor([1.0, 3.7, 11.0], dtype=pos_abs.dtype)
+    scales = torch.tensor([0.9, 1.0, 1.1], dtype=pos_abs.dtype)
     cell_batched = torch.stack([(cell * s).repeat(3) for s in scales], dim=0)
 
     # Absolute coordinates: keep reduced coordinates fixed by scaling positions with each cell.
@@ -147,14 +148,20 @@ def test_pairwise_distances():
 
     model = PairwiseDistances(n_atoms=10, PBC=True, cell=None, scaled_coords=False)
     out = model(pos_abs_batched, cell=cell_batched)
-    ref_batched = torch.cat([ref_distances * s for s in scales], dim=0)
+    ref_batched_single = torch.cat(
+        [model(pos_abs_batched[i:i+1], cell=cell_batched[i]) for i in range(len(scales))],
+        dim=0,
+    )
+    ref_batched_scaled = torch.cat([ref_distances * s for s in scales], dim=0)
     assert(out.reshape(pos_abs_batched.shape[0], -1).shape[-1] == model.out_features)
-    assert(torch.allclose(out, ref_batched, atol=2e-3))
+    assert(torch.allclose(out, ref_batched_single, atol=2e-3))
+    assert(torch.allclose(out, ref_batched_scaled, atol=2e-3))
     out.sum().backward()
 
     model = PairwiseDistances(n_atoms=10, PBC=True, cell=None, scaled_coords=False, slicing_pairs=[[0, 1], [0, 2]])
     out = model(pos_abs_batched, cell=cell_batched)
-    assert(torch.allclose(out, ref_batched[:, [0, 1]], atol=2e-3))
+    assert(torch.allclose(out, ref_batched_single[:, [0, 1]], atol=2e-3))
+    assert(torch.allclose(out, ref_batched_scaled[:, [0, 1]], atol=2e-3))
     out.sum().backward()
 
     # Scaled coordinates: physical distances scale with cell.
@@ -163,14 +170,20 @@ def test_pairwise_distances():
 
     model = PairwiseDistances(n_atoms=10, PBC=True, cell=None, scaled_coords=True)
     out = model(pos_scaled_batched, cell=cell_batched)
-    ref_scaled_batched = torch.cat([ref_distances * s for s in scales], dim=0)
+    ref_scaled_batched_single = torch.cat(
+        [model(pos_scaled_batched[i:i+1], cell=cell_batched[i]) for i in range(len(scales))],
+        dim=0,
+    )
+    ref_scaled_batched_scaled = torch.cat([ref_distances * s for s in scales], dim=0)
     assert(out.reshape(pos_scaled_batched.shape[0], -1).shape[-1] == model.out_features)
-    assert(torch.allclose(out, ref_scaled_batched, atol=2e-3))
+    assert(torch.allclose(out, ref_scaled_batched_single, atol=2e-3))
+    assert(torch.allclose(out, ref_scaled_batched_scaled, atol=2e-3))
     out.sum().backward()
 
     model = PairwiseDistances(n_atoms=10, PBC=True, cell=None, scaled_coords=True, slicing_pairs=[[0, 1], [0, 2]])
     out = model(pos_scaled_batched, cell=cell_batched)
-    assert(torch.allclose(out, ref_scaled_batched[:, [0, 1]], atol=2e-3))
+    assert(torch.allclose(out, ref_scaled_batched_single[:, [0, 1]], atol=2e-3))
+    assert(torch.allclose(out, ref_scaled_batched_scaled[:, [0, 1]], atol=2e-3))
     out.sum().backward()
 
 
