@@ -58,6 +58,7 @@ class BaseCV(lightning.LightningModule):
         # PRE/POST
         self.preprocessing = preprocessing
         self.postprocessing = postprocessing
+        self._preprocessing_training_warning_shown = False
 
     @property
     def n_cvs(self):
@@ -217,6 +218,33 @@ class BaseCV(lightning.LightningModule):
         Equal to training step if not overridden. Different behaviors for train/valid step can be enforced in training_step() based on the self.training variable.
         """
         self.training_step(test_batch, batch_idx)
+
+    def on_fit_start(self):
+        self._warn_preprocessing_training_recommendations()
+
+    def _warn_preprocessing_training_recommendations(self):
+        if self.preprocessing is None or self._preprocessing_training_warning_shown:
+            return
+
+        class_name = self.__class__.__name__
+        is_position_dependent_cv = ("Committor" in class_name) or ("Generator" in class_name)
+
+        if is_position_dependent_cv:
+                warn(
+                    "Found a preprocessing module during training. For position-dependent losses "
+                    "(Committor/Generator), this is valid, but it is recommended to use "
+                    "`descriptors_derivatives` (e.g., `SmartDerivatives`) for efficiency and potentially "
+                    "large computational savings."
+                )
+        else:
+            raise ValueError(
+                "Found a preprocessing module during training. For this CV class, it is generally "
+                "recommended to precompute descriptors from the position-based dataset and train "
+                "directly on the descriptor-based dataset instead of keeping preprocessing in the loop. "
+                "This choice typically provides large computational savings."
+            )
+
+        self._preprocessing_training_warning_shown = True
 
     @property
     def optimizer_name(self) -> str:
