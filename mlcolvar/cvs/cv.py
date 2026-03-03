@@ -294,8 +294,6 @@ class BaseCV(lightning.LightningModule):
             data = train_batch[key]
             data['positions'].requires_grad_(True)
             data['node_attrs'].requires_grad_(True)
-            if "cell" in train_batch and "cell" not in data:
-                data["cell"] = train_batch["cell"]
             return data
     
     def _apply_module(self, module: torch.nn.Module, x, cell=None):
