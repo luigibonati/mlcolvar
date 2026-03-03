@@ -132,7 +132,6 @@ class MultiTaskCV:
             aux_loss_kwargs = {
                 k: v for k, v in dataset_batch.items() if not k.startswith("data")
             }
-            cell = dataset_batch.get("cell", None)
 
             # Forward data of this dataset (and eventually the time-lagged one).
             cv = self.forward_cv(dataset_batch["data"])

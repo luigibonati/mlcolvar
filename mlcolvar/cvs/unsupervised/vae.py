@@ -152,7 +152,7 @@ class VariationalAutoEncoderCV(BaseCV):
         o = "decoder"
         self.decoder = FeedForward([n_cvs] + decoder_layers, **options[o])
 
-    def forward_cv(self, x: torch.Tensor, cell=None) -> torch.Tensor:
+    def forward_cv(self, x: torch.Tensor) -> torch.Tensor:
         """Compute the value of the CV from preprocessed input.
 
         Return the mean output (ignoring the variance output) of the encoder
@@ -171,14 +171,14 @@ class VariationalAutoEncoderCV(BaseCV):
             encoder (the variance output is discarded).
         """
         if self.norm_in is not None:
-            x = self._apply_module(self.norm_in, x, cell=cell)
-        x = self._apply_module(self.encoder, x, cell=cell)
+            x = self._apply_module(self.norm_in, x)
+        x = self._apply_module(self.encoder, x)
 
         # Take only the means and ignore the log variances.
         return self.mean_nn(x)
 
     def encode_decode(
-        self, x: torch.Tensor, cell=None
+        self, x: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Run a pass of encoding + decoding.
 
@@ -206,10 +206,10 @@ class VariationalAutoEncoderCV(BaseCV):
         """
         # Normalize inputs.
         if self.norm_in is not None:
-            x = self._apply_module(self.norm_in, x, cell=cell)
+            x = self._apply_module(self.norm_in, x)
 
         # Encode input into a Gaussian distribution.
-        x = self._apply_module(self.encoder, x, cell=cell)
+        x = self._apply_module(self.encoder, x)
         mean, log_variance = self.mean_nn(x), self.log_var_nn(x)
 
         # Clamp the log_variance to prevent it from becoming -inf (numerical stability).
@@ -220,7 +220,7 @@ class VariationalAutoEncoderCV(BaseCV):
         z = torch.distributions.Normal(mean, std).rsample()
 
         # Decode sample.
-        x_hat = self._apply_module(self.decoder, z, cell=cell)
+        x_hat = self._apply_module(self.decoder, z)
         if self.norm_in is not None:
             x_hat = self.norm_in.inverse(x_hat)
 
@@ -229,13 +229,12 @@ class VariationalAutoEncoderCV(BaseCV):
     def training_step(self, train_batch, batch_idx):
         """Single training step performed by the PyTorch Lightning Trainer."""
         x = train_batch["data"]
-        cell = self._get_batch_cell(train_batch)
         loss_kwargs = {}
         if "weights" in train_batch:
             loss_kwargs["weights"] = train_batch["weights"]
 
         # Encode/decode.
-        mean, log_variance, x_hat = self.encode_decode(x, cell=cell)
+        mean, log_variance, x_hat = self.encode_decode(x)
 
         # Reference output (compare with a 'target' key if any, otherwise with input 'data')
         if "target" in train_batch:

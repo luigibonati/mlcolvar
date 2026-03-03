@@ -89,7 +89,6 @@ class RegressionCV(BaseCV):
             labels = x['graph_labels'].squeeze()
             if "weights" in x:
                 loss_kwargs["weights"] = x["weights"]
-        cell = self._get_batch_cell(train_batch)
     
         # =================forward====================
         y = self.forward_cv(x)

@@ -105,17 +105,17 @@ class AutoEncoderCV(BaseCV):
         o = "decoder"
         self.decoder = FeedForward(decoder_layers, **options[o])
 
-    def forward_cv(self, x: torch.Tensor, cell=None) -> torch.Tensor:
+    def forward_cv(self, x: torch.Tensor) -> torch.Tensor:
         """Evaluate the CV without pre or post/processing modules."""
         if self.norm_in is not None:
-            x = self._apply_module(self.norm_in, x, cell=cell)
-        x = self._apply_module(self.encoder, x, cell=cell)
+            x = self._apply_module(self.norm_in, x)
+        x = self._apply_module(self.encoder, x)
         return x
 
-    def encode_decode(self, x: torch.Tensor, cell=None) -> torch.Tensor:
+    def encode_decode(self, x: torch.Tensor) -> torch.Tensor:
         """Pass the inputs through both the encoder and the decoder networks."""
-        x = self.forward_cv(x, cell=cell)
-        x = self._apply_module(self.decoder, x, cell=cell)
+        x = self.forward_cv(x)
+        x = self._apply_module(self.decoder, x)
         if self.norm_in is not None:
             x = self.norm_in.inverse(x)
         return x
@@ -124,12 +124,11 @@ class AutoEncoderCV(BaseCV):
         """Compute and return the training loss and record metrics."""
         # =================get data===================
         x = train_batch["data"]
-        cell = self._get_batch_cell(train_batch)
         loss_kwargs = {}
         if "weights" in train_batch:
             loss_kwargs["weights"] = train_batch["weights"]
         # =================forward====================
-        x_hat = self.encode_decode(x, cell=cell)
+        x_hat = self.encode_decode(x)
         # ===================loss=====================
         # Reference output (compare with a 'target' key
         # if any, otherwise with input 'data')

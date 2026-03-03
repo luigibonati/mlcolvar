@@ -131,7 +131,6 @@ class DeepTDA(BaseCV):
         elif isinstance(self.nn, BaseGNN):
             x = self._setup_graph_data(train_batch)
             labels = x['graph_labels'].squeeze()
-        cell = self._get_batch_cell(train_batch)
         
         # =================forward====================
         z = self.forward_cv(x)
