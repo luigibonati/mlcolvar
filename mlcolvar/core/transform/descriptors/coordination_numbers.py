@@ -20,13 +20,17 @@ class CoordinationNumbers(Transform):
                  cutoff: float,
                  n_atoms: int,
                  PBC: bool,
-                 cell: Union[float, list] = None,
+                 cell: Union[float, list, None] = None,
                  mode: str = 'continuous',
                  scaled_coords: bool = False,
                  switching_function = None, 
                  dmax: float = None) -> torch.Tensor:
         """Initialize a coordination number object between two groups of atoms A and B.
-
+           The cell size to be used for PBC and/or scaled coordinates needs to be provided.
+           This can be done in one of two ways, exclusively:
+           - At initialization, for a fixed cell only. This mode supports torchscript of the preprocessing module.
+           - At runtime, for varying cells. This mode *doesn't* support torchscript of the preprocessing module.
+        
         Parameters
         ----------
         group_A : list
@@ -39,8 +43,10 @@ class CoordinationNumbers(Transform):
             Total number of atoms in the system
         PBC : bool
             Switch for Periodic Boundary Conditions use
-        cell : Union[float, list]
-            Dimensions of the real cell, orthorombic-like cells only
+        cell : Union[float, list, None]
+            Dimensions of the real cell for fixed cell mode, orthorombic-like cells only.
+            For varying cell mode, this argument must be left as None and the cell must be provided at runtime.
+            Note that only fixed cell mode supports torchscript of the preprocessing module.
         mode : str
             Mode for cutoff application, either:
             - 'continuous': applies a switching function to the distances which can be specified with switching_function keyword, has stable derivatives

@@ -17,10 +17,14 @@ class EigsAdjMat(Transform):
                  cutoff: float, 
                  n_atoms: int,
                  PBC: bool,
-                 cell: Union[float, list] = None,
+                 cell: Union[float, list, None] = None,
                  scaled_coords: bool = False,
                  switching_function = None) -> torch.Tensor:
         """Initialize an eigenvalues of an adjacency matrix object.
+           The cell size to be used for PBC and/or scaled coordinates needs to be provided.
+           This can be done in one of two ways, exclusively:
+           - At initialization, for a fixed cell only. This mode supports torchscript of the preprocessing module.
+           - At runtime, for varying cells. This mode *doesn't* support torchscript of the preprocessing module.
 
         Parameters
         ----------
@@ -34,8 +38,10 @@ class EigsAdjMat(Transform):
             Number of atoms in the system
         PBC : bool
             Switch for Periodic Boundary Conditions use
-        cell : Union[float, list]
-            Dimensions of the real cell, orthorombic-like cells only
+        cell : Union[float, list, None]
+            Dimensions of the real cell for fixed cell mode, orthorombic-like cells only.
+            For varying cell mode, this argument must be left as None and the cell must be provided at runtime.
+            Note that only fixed cell mode supports torchscript of the preprocessing module.
         scaled_coords : bool
             Switch for coordinates scaled on cell's vectors use, by default False
         switching_function : _type_, optional

@@ -28,6 +28,10 @@ class TorsionalAngles(Transform):
                  scaled_coords: bool = False) -> torch.Tensor:
         """Initialize a torsional angle object.
            Can compute a single angle or multiple angles based on the `indices` key.
+           The cell size to be used for PBC and/or scaled coordinates needs to be provided.
+           This can be done in one of two ways, exclusively:
+           - At initialization, for a fixed cell only. This mode supports torchscript of the preprocessing module.
+           - At runtime, for varying cells. This mode *doesn't* support torchscript of the preprocessing module.
 
         Parameters
         ----------
@@ -42,8 +46,10 @@ class TorsionalAngles(Transform):
             Which quantities to return among 'angle', 'sin' and 'cos'
         PBC : bool
             Switch for Periodic Boundary Conditions use
-        cell : Union[float, list]
-            Dimensions of the real cell, orthorombic-like cells only
+        cell : Union[float, list, None]
+            Dimensions of the real cell for fixed cell mode, orthorombic-like cells only.
+            For varying cell mode, this argument must be left as None and the cell must be provided at runtime.
+            Note that only fixed cell mode supports torchscript of the preprocessing module.
         scaled_coords : bool, optional
             Switch for coordinates scaled on cell's vectors use, by default False
 
