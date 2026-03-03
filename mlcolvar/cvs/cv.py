@@ -2,10 +2,11 @@ from pathlib import Path
 import torch
 import lightning
 from lightning.pytorch.core.module import _jit_is_scripting, get_filesystem
-from mlcolvar.core.transform import Transform
 from typing import Any, Dict, Optional, Union, List
+from warnings import warn
 from torch.jit import ScriptModule
 from mlcolvar.core.nn import FeedForward, BaseGNN
+from mlcolvar.core.transform import Transform
 from mlcolvar.data.graph.utils import create_graph_tracing_example
 
 
@@ -335,11 +336,11 @@ class BaseCV(lightning.LightningModule):
         """
         # check if preprocessing has varible cells
         if self.preprocessing is not None:
-            if hasattr(self.preprocessing, "cell"):
-                Warning("Found a descriptor-based preprocessing module. If the same descriptors can be computed with PLUMED,"
+            if hasattr(self.preprocessing, "default_cell"):
+                warn("Found a descriptor-based preprocessing module. If the same descriptors can be computed with PLUMED,"
                         "it is recommended for performance to export the model without the preprocessing and compute the descriptors with PLUMED."
                     )
-                if self.preprocessing.cell is None:
+                if self.preprocessing.default_cell is None:
                     raise ValueError(
                         "Found a descriptor-based preprocessing module without a defined cell, as it was passed at runtime."
                         "Tracing or scripting of preprocessing modules with variable cells is not supported yet."
