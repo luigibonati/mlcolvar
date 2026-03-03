@@ -337,7 +337,7 @@ class BaseCV(lightning.LightningModule):
         if self.preprocessing is not None:
             if hasattr(self.preprocessing, "cell"):
                 Warning("Found a descriptor-based preprocessing module. If the same descriptors can be computed with PLUMED,"
-                        "it is recommended for performance to export the model without the preprocesing and compute the descriptors with PLUMED."
+                        "it is recommended for performance to export the model without the preprocessing and compute the descriptors with PLUMED."
                     )
                 if self.preprocessing.cell is None:
                     raise ValueError(
