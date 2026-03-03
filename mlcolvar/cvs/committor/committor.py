@@ -634,7 +634,109 @@ def test_committor_with_derivatives():
     model(example_input_graph_test).sum().backward()
 
 
+def test_committor_runtime_cell_training():
+    """Integration tests for runtime-cell descriptor preprocessing in committor training."""
+    from mlcolvar.data import DictDataset, DictModule
+    from mlcolvar.core.transform import PairwiseDistances
+    from mlcolvar.cvs.committor.utils import initialize_committor_masses
+    import pytest
+
+    torch.manual_seed(42)
+
+    n_atoms = 2
+    n_samples = 16
+
+    # Positions in a flattened (B, n_atoms*3) format.
+    x = torch.rand((n_samples, n_atoms * 3))
+    w = torch.ones(n_samples)
+
+    # Labels with two boundary regions and intermediate data.
+    y = torch.zeros(n_samples)
+    y[n_samples // 4:] += 1
+    y[n_samples // 2:] += 1
+    y[3 * n_samples // 4:] += 1
+
+    # Runtime cells (batch, 3), with a mild frame-to-frame variation.
+    cell = torch.ones((n_samples, 3))
+    cell[:, 0] *= torch.linspace(0.95, 1.05, n_samples)
+    cell[:, 1] *= 1.0
+    cell[:, 2] *= 1.1
+
+    dataset = DictDataset({"data": x, "labels": y, "weights": w, "cell": cell})
+    datamodule = DictModule(dataset, lengths=[1.0], batch_size=8)
+
+    preprocessing = PairwiseDistances(
+        n_atoms=n_atoms,
+        PBC=True,
+        cell=None,
+        scaled_coords=False,
+        slicing_pairs=[[0, 1]],
+    )
+
+    masses = initialize_committor_masses(atom_types=[0, 1], masses=[12.011, 1.008])
+    model = Committor(model=[1, 8, 1], atomic_masses=masses, alpha=1e-1, delta_f=0)
+    model.preprocessing = preprocessing
+
+    trainer = lightning.Trainer(
+        accelerator="cpu",
+        max_epochs=1,
+        logger=False,
+        enable_checkpointing=False,
+        limit_val_batches=0,
+        num_sanity_val_steps=0,
+        enable_progress_bar=False,
+        enable_model_summary=False,
+    )
+    trainer.fit(model, datamodule)
+
+    out = model(x, cell=cell)
+    assert torch.isfinite(out).all()
+
+    # -------- negative case: missing runtime cell should fail --------
+    torch.manual_seed(42)
+
+    n_atoms = 2
+    n_samples = 12
+
+    x = torch.rand((n_samples, n_atoms * 3))
+    w = torch.ones(n_samples)
+    y = torch.zeros(n_samples)
+    y[n_samples // 3:] += 1
+    y[2 * n_samples // 3:] += 1
+
+    # Intentionally no "cell" key.
+    dataset = DictDataset({"data": x, "labels": y, "weights": w})
+    datamodule = DictModule(dataset, lengths=[1.0], batch_size=6)
+
+    preprocessing = PairwiseDistances(
+        n_atoms=n_atoms,
+        PBC=True,
+        cell=None,
+        scaled_coords=False,
+        slicing_pairs=[[0, 1]],
+    )
+
+    masses = initialize_committor_masses(atom_types=[0, 1], masses=[12.011, 1.008])
+    model = Committor(model=[1, 8, 1], atomic_masses=masses, alpha=1e-1, delta_f=0)
+    model.preprocessing = preprocessing
+
+    trainer = lightning.Trainer(
+        accelerator="cpu",
+        max_epochs=1,
+        logger=False,
+        enable_checkpointing=False,
+        limit_val_batches=0,
+        num_sanity_val_steps=0,
+        enable_progress_bar=False,
+        enable_model_summary=False,
+    )
+
+    with pytest.raises(ValueError, match="cell"):
+        trainer.fit(model, datamodule)
+
+
 if __name__ == "__main__":
     test_committor_1()
     test_committor_2()
     test_committor_with_derivatives()
+    test_committor_runtime_cell_training()

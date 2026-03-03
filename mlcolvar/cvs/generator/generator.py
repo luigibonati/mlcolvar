@@ -479,5 +479,97 @@ def test_generator():
     assert( torch.allclose(eigvals, ref_eigvals, atol=1e-3) )
     assert( torch.allclose(eigvecs, ref_eigvecs, atol=1e-1) ) # eigvecs are larger numbers
 
+
+def test_generator_runtime_cell_training():
+    """Integration tests for runtime-cell descriptor preprocessing in generator training."""
+    from mlcolvar.data import DictDataset, DictModule
+    from mlcolvar.core.transform import PairwiseDistances
+    import pytest
+
+    torch.manual_seed(42)
+
+    n_atoms = 2
+    n_samples = 12
+
+    # Positions in a flattened (B, n_atoms*3) format and positive weights.
+    x = torch.rand((n_samples, n_atoms * 3))
+    w = torch.ones(n_samples)
+
+    # Runtime cells (batch, 3), with mild variation.
+    cell = torch.ones((n_samples, 3))
+    cell[:, 0] *= torch.linspace(0.95, 1.05, n_samples)
+    cell[:, 1] *= 1.0
+    cell[:, 2] *= 1.1
+
+    # Friction for 2 atoms.
+    friction = torch.tensor([0.2, 0.3])
+
+    preprocessing = PairwiseDistances(
+        n_atoms=n_atoms,
+        PBC=True,
+        cell=None,
+        scaled_coords=False,
+        slicing_pairs=[[0, 1]],
+    )
+
+    options = {"nn": {"activation": "tanh"}}
+    model = Generator(
+        r=2,
+        layers=[1, 8, 1],
+        eta=0.01,
+        alpha=0.01,
+        friction=friction,
+        cell=None,
+        descriptors_derivatives=None,
+        options=options,
+    )
+    model.preprocessing = preprocessing
+
+    trainer = lightning.Trainer(
+        accelerator="cpu",
+        max_epochs=1,
+        logger=False,
+        enable_checkpointing=False,
+        limit_val_batches=0,
+        num_sanity_val_steps=0,
+        enable_progress_bar=False,
+        enable_model_summary=False,
+    )
+
+    # -------- positive case: runtime cell in batch --------
+    dataset = DictDataset({"data": x, "weights": w, "cell": cell})
+    datamodule = DictModule(dataset, lengths=[1.0], batch_size=6)
+    trainer.fit(model, datamodule)
+    out = model(x, cell=cell)
+    assert torch.isfinite(out).all()
+
+    # -------- negative case: missing runtime cell should fail --------
+    dataset_missing_cell = DictDataset({"data": x, "weights": w})
+    datamodule_missing_cell = DictModule(dataset_missing_cell, lengths=[1.0], batch_size=6)
+    model_missing_cell = Generator(
+        r=2,
+        layers=[1, 8, 1],
+        eta=0.01,
+        alpha=0.01,
+        friction=friction,
+        cell=None,
+        descriptors_derivatives=None,
+        options=options,
+    )
+    model_missing_cell.preprocessing = preprocessing
+    trainer_missing_cell = lightning.Trainer(
+        accelerator="cpu",
+        max_epochs=1,
+        logger=False,
+        enable_checkpointing=False,
+        limit_val_batches=0,
+        num_sanity_val_steps=0,
+        enable_progress_bar=False,
+        enable_model_summary=False,
+    )
+    with pytest.raises(ValueError, match="cell"):
+        trainer_missing_cell.fit(model_missing_cell, datamodule_missing_cell)
+
 if __name__ == '__main__':
     test_generator()
+    test_generator_runtime_cell_training()
