@@ -637,74 +637,84 @@ def test_smart_derivatives():
                  aux_do_check,
                  aux_batch_size)
     
-    for pos,ref_distances,n_atoms,force_all_atoms,slicing_pairs,do_check,batch_size in zipped: 
-        pos = pos.repeat(4, 1)
-        labels = torch.arange(0, 4)
-        if not do_check:
-            labels[-1] = 0
-        weights = torch.ones_like(labels)
-
-        dataset = DictDataset({'data' : pos, 'labels' : labels, 'weights': weights})
-
-        cell = torch.Tensor([3.0233])
-        ref_distances = ref_distances.repeat(4, 1)
-    
-        ComputeDescriptors = PairwiseDistances(n_atoms=n_atoms,
-                                PBC=True,
-                                cell=cell,
-                                scaled_coords=False,
-                                slicing_pairs=slicing_pairs)
+    for pos_original,ref_distances_original,n_atoms,force_all_atoms,slicing_pairs,do_check,batch_size in zipped: 
+        for cell_mode in ["fixed", "varying"]:
         
-        for separate_boundary_dataset in [False, True]:
-            if separate_boundary_dataset:
-                mask = [labels > 1]
-            else: 
-                mask = torch.ones_like(labels, dtype=torch.bool)
+            pos = pos_original.repeat(4, 1)
+            labels = torch.arange(0, 4)
+            if not do_check:
+                labels[-1] = 0
+            weights = torch.ones_like(labels)
 
-            pos, desc, d_desc_d_x = compute_descriptors_derivatives(dataset=dataset, 
-                                                                    descriptor_function=ComputeDescriptors, 
-                                                                    n_atoms=n_atoms, 
-                                                                    separate_boundary_dataset=separate_boundary_dataset)
+            if cell_mode == 'fixed':
+                cell = torch.Tensor([3.0233])
+                dataset = DictDataset({'data' : pos, 'labels' : labels, 'weights': weights})            
+                ComputeDescriptors = PairwiseDistances(n_atoms=n_atoms,
+                                        PBC=True,
+                                        cell=cell,
+                                        scaled_coords=False,
+                                        slicing_pairs=slicing_pairs)
+            elif cell_mode == 'varying':
+                cell = torch.Tensor([3.0233]).repeat(len(pos), 1)
+                dataset = DictDataset({'data' : pos, 'labels' : labels, 'weights': weights, 'cell': cell})
+                ComputeDescriptors = PairwiseDistances(n_atoms=n_atoms,
+                                        PBC=True,
+                                        cell=None,
+                                        scaled_coords=False,
+                                        slicing_pairs=slicing_pairs)
+                
+            ref_distances = ref_distances_original.repeat(4, 1)
             
-            if do_check:
-                assert(torch.allclose(desc, ref_distances, atol=1e-3))
+            for separate_boundary_dataset in [False, True]:
+                if separate_boundary_dataset:
+                    mask = [labels > 1]
+                else: 
+                    mask = torch.ones_like(labels, dtype=torch.bool)
 
-            # compute descriptors outside to have their derivatives for checks
-            pos.requires_grad = True
-            desc = ComputeDescriptors(pos)
+                pos, desc, d_desc_d_x = compute_descriptors_derivatives(dataset=dataset, 
+                                                                        descriptor_function=ComputeDescriptors, 
+                                                                        n_atoms=n_atoms, 
+                                                                        separate_boundary_dataset=separate_boundary_dataset)
+                
+                if do_check:
+                    assert(torch.allclose(desc, ref_distances, atol=1e-3))
 
-            # apply simple NN
-            NN = FeedForward(layers = [desc.shape[-1], 2, 1])
-            out = NN(desc)
+                # compute descriptors outside to have their derivatives for checks
+                pos.requires_grad = True
+                desc = ComputeDescriptors(pos, cell=cell if cell_mode == 'varying' else None)
 
-            # compute derivatives of out wrt input
-            d_out_d_x = torch.autograd.grad(out, pos, grad_outputs=torch.ones_like(out), retain_graph=True, create_graph=False )[0]
-            # compute derivatives of out wrt descriptors
-            d_out_d_d = torch.autograd.grad(out, desc, grad_outputs=torch.ones_like(out), retain_graph=True, create_graph=True )[0]
-            ref = torch.einsum('badx,bd->bax ',d_desc_d_x,d_out_d_d[mask])
-            Ref = d_out_d_x[mask]
+                # apply simple NN
+                NN = FeedForward(layers = [desc.shape[-1], 2, 1])
+                out = NN(desc)
 
-            # apply smart derivatives
-            smart_derivatives = SmartDerivatives(force_all_atoms=force_all_atoms)
-            smart_dataset = smart_derivatives.setup(dataset=dataset,
-                                                    descriptor_function=ComputeDescriptors,
-                                                    n_atoms=n_atoms,
-                                                    separate_boundary_dataset=separate_boundary_dataset,
-                                                    descriptors_batch_size=batch_size
-                                                    )
-            # check dataset has the right data
-            assert(torch.allclose(smart_dataset['data'], desc, atol=1e-3))
+                # compute derivatives of out wrt input
+                d_out_d_x = torch.autograd.grad(out, pos, grad_outputs=torch.ones_like(out), retain_graph=True, create_graph=False )[0]
+                # compute derivatives of out wrt descriptors
+                d_out_d_d = torch.autograd.grad(out, desc, grad_outputs=torch.ones_like(out), retain_graph=True, create_graph=True )[0]
+                ref = torch.einsum('badx,bd->bax ',d_desc_d_x,d_out_d_d[mask])
+                Ref = d_out_d_x[mask]
 
-            # check forward
-            right_input = d_out_d_d.squeeze(-1)
-            smart_out = smart_derivatives(right_input, smart_dataset['ref_idx'][mask])
-            
-            # do checks
-            if do_check:
-                assert(torch.allclose(smart_out, ref))
-                assert(torch.allclose(smart_out, Ref))
+                # apply smart derivatives
+                smart_derivatives = SmartDerivatives(force_all_atoms=force_all_atoms)
+                smart_dataset = smart_derivatives.setup(dataset=dataset,
+                                                        descriptor_function=ComputeDescriptors,
+                                                        n_atoms=n_atoms,
+                                                        separate_boundary_dataset=separate_boundary_dataset,
+                                                        descriptors_batch_size=batch_size
+                                                        )
+                # check dataset has the right data
+                assert(torch.allclose(smart_dataset['data'], desc, atol=1e-3))
 
-            smart_out.sum().backward()
+                # check forward
+                right_input = d_out_d_d.squeeze(-1)
+                smart_out = smart_derivatives(right_input, smart_dataset['ref_idx'][mask])
+                
+                # do checks
+                if do_check:
+                    assert(torch.allclose(smart_out, ref))
+                    assert(torch.allclose(smart_out, Ref))
+
+                smart_out.sum().backward()
 
 
     # Test with multiple outputs
