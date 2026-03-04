@@ -1014,6 +1014,82 @@ def test_compute_descriptors_and_derivatives():
         assert torch.allclose(d_desc_d_x_fix, d_desc_d_x_rep, atol=1e-8)
 
 
+def test_compute_descriptors_and_derivatives_varying_cell():
+    from mlcolvar.core.transform import PairwiseDistances
+
+    torch.manual_seed(42)
+    n_atoms = 2
+    n_frames = 6
+
+    # Reduced coordinates for two atoms and corresponding frame-dependent cells.
+    pos_reduced = torch.rand((n_frames, n_atoms, 3))
+    pos_reduced[:, 0, :] = 0.1
+    pos_reduced[:, 1, :] = 0.9
+
+    cell = torch.stack(
+        [
+            torch.tensor([2.5, 2.5, 2.5]),
+            torch.tensor([3.0, 3.0, 3.0]),
+            torch.tensor([3.5, 3.5, 3.5]),
+            torch.tensor([2.8, 2.8, 2.8]),
+            torch.tensor([3.2, 3.2, 3.2]),
+            torch.tensor([2.2, 2.2, 2.2]),
+        ],
+        dim=0,
+    )
+    pos_abs = (pos_reduced * cell[:, None, :]).reshape(n_frames, -1)
+
+    labels = torch.arange(n_frames)
+    weights = torch.ones_like(labels)
+    dataset = DictDataset({"data": pos_abs, "labels": labels, "weights": weights, "cell": cell})
+
+    descriptor = PairwiseDistances(
+        n_atoms=n_atoms,
+        PBC=True,
+        cell=None,
+        scaled_coords=False,
+        slicing_pairs=[[0, 1]],
+    )
+
+    for separate_boundary_dataset in [False, True]:
+        if separate_boundary_dataset:
+            mask = labels > 1
+        else:
+            mask = torch.ones_like(labels, dtype=torch.bool)
+
+        pos, desc, d_desc_d_x = compute_descriptors_derivatives(
+            dataset=dataset,
+            descriptor_function=descriptor,
+            n_atoms=n_atoms,
+            separate_boundary_dataset=separate_boundary_dataset,
+            batch_size=2,
+        )
+
+        # Descriptor values should match frame-wise runtime-cell evaluation.
+        desc_ref = torch.cat(
+            [descriptor(pos[i : i + 1], cell=cell[i]) for i in range(n_frames)],
+            dim=0,
+        )
+        assert torch.allclose(desc, desc_ref, atol=1e-8)
+
+        # Derivatives should match direct autograd on variational subset.
+        pos_var = pos[mask].clone().detach().requires_grad_(True)
+        cell_var = cell[mask]
+        desc_var = descriptor(pos_var, cell=cell_var)
+        aux = []
+        for i in range(desc_var.shape[1]):
+            aux_der = torch.autograd.grad(
+                desc_var[:, i],
+                pos_var,
+                grad_outputs=torch.ones_like(desc_var[:, i]),
+                retain_graph=True,
+            )[0]
+            aux.append(aux_der.detach())
+        d_desc_d_x_ref = torch.stack(aux, axis=2)
+
+        assert torch.allclose(d_desc_d_x, d_desc_d_x_ref, atol=1e-8)
+
+
 def test_train_with_smart_derivatives():
     from mlcolvar.core.transform import PairwiseDistances
     from mlcolvar.data import DictModule, DictDataset
