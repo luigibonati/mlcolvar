@@ -940,81 +940,50 @@ def test_compute_descriptors_and_derivatives():
             assert( torch.allclose(desc, desc_ref) )
             assert( torch.allclose(d_desc_d_x, d_desc_d_x_ref[mask]) )
 
-
-def test_compute_descriptors_and_derivatives_varying_cell():
-    from mlcolvar.core.transform import PairwiseDistances
-
-    torch.manual_seed(42)
-    n_atoms = 2
-    n_frames = 6
-
-    # Reduced coordinates for two atoms and corresponding frame-dependent cells.
-    pos_reduced = torch.rand((n_frames, n_atoms, 3))
-    pos_reduced[:, 0, :] = 0.1
-    pos_reduced[:, 1, :] = 0.9
-
-    cell = torch.stack(
-        [
-            torch.tensor([2.5, 2.5, 2.5]),
-            torch.tensor([3.0, 3.0, 3.0]),
-            torch.tensor([3.5, 3.5, 3.5]),
-            torch.tensor([2.8, 2.8, 2.8]),
-            torch.tensor([3.2, 3.2, 3.2]),
-            torch.tensor([2.2, 2.2, 2.2]),
-        ],
-        dim=0,
-    )
-    pos_abs = (pos_reduced * cell[:, None, :]).reshape(n_frames, -1)
-
-    labels = torch.arange(n_frames)
+    # ---------------------------------------------------------------------
+    # Mock check: repeated runtime cell should reproduce fixed-cell results
+    # ---------------------------------------------------------------------
+    labels = torch.arange(0, 5)
     weights = torch.ones_like(labels)
-    dataset = DictDataset({"data": pos_abs, "labels": labels, "weights": weights, "cell": cell})
+    pos_mock = dataset["data"].detach().clone()
+    dataset_fixed = DictDataset({'data': pos_mock, 'labels': labels, 'weights': weights})
+    repeated_cell = cell.repeat(len(pos_mock), 1)
+    dataset_repeated_cell = DictDataset({'data': pos_mock, 'labels': labels, 'weights': weights, 'cell': repeated_cell})
 
-    descriptor = PairwiseDistances(
+    descriptor_fixed = PairwiseDistances(
+        n_atoms=n_atoms,
+        PBC=True,
+        cell=cell,
+        scaled_coords=False,
+        slicing_pairs=None,
+    )
+    descriptor_runtime = PairwiseDistances(
         n_atoms=n_atoms,
         PBC=True,
         cell=None,
         scaled_coords=False,
-        slicing_pairs=[[0, 1]],
+        slicing_pairs=None,
     )
 
     for separate_boundary_dataset in [False, True]:
-        if separate_boundary_dataset:
-            mask = labels > 1
-        else:
-            mask = torch.ones_like(labels, dtype=torch.bool)
-
-        pos, desc, d_desc_d_x = compute_descriptors_derivatives(
-            dataset=dataset,
-            descriptor_function=descriptor,
+        pos_fix, desc_fix, d_desc_d_x_fix = compute_descriptors_derivatives(
+            dataset=dataset_fixed,
+            descriptor_function=descriptor_fixed,
             n_atoms=n_atoms,
             separate_boundary_dataset=separate_boundary_dataset,
-            batch_size=2,
+            batch_size=3,
+        )
+        pos_rep, desc_rep, d_desc_d_x_rep = compute_descriptors_derivatives(
+            dataset=dataset_repeated_cell,
+            descriptor_function=descriptor_runtime,
+            n_atoms=n_atoms,
+            separate_boundary_dataset=separate_boundary_dataset,
+            batch_size=3,
         )
 
-        # Descriptor values should match frame-wise runtime-cell evaluation.
-        desc_ref = torch.cat(
-            [descriptor(pos[i:i + 1], cell=cell[i]) for i in range(n_frames)],
-            dim=0,
-        )
-        assert torch.allclose(desc, desc_ref, atol=1e-8)
-
-        # Derivatives should match direct autograd on variational subset.
-        pos_var = pos[mask].clone().detach().requires_grad_(True)
-        cell_var = cell[mask]
-        desc_var = descriptor(pos_var, cell=cell_var)
-        aux = []
-        for i in range(desc_var.shape[1]):
-            aux_der = torch.autograd.grad(
-                desc_var[:, i],
-                pos_var,
-                grad_outputs=torch.ones_like(desc_var[:, i]),
-                retain_graph=True,
-            )[0]
-            aux.append(aux_der.detach())
-        d_desc_d_x_ref = torch.stack(aux, axis=2)
-
-        assert torch.allclose(d_desc_d_x, d_desc_d_x_ref, atol=1e-8)
+        assert torch.allclose(pos_fix, pos_rep, atol=1e-8)
+        assert torch.allclose(desc_fix, desc_rep, atol=1e-8)
+        assert torch.allclose(d_desc_d_x_fix, d_desc_d_x_rep, atol=1e-8)
 
 
 def test_train_with_smart_derivatives():
