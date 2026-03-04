@@ -43,7 +43,7 @@ class Generator(BaseCV):
                  eta: float,
                  alpha: float,
                  friction: torch.Tensor,
-                 cell: float = None,
+                 rescaling_cell: float = None,
                  descriptors_derivatives: Union[SmartDerivatives, torch.Tensor] = None,
                  n_dim: int = 3,
                  u_stat:bool = True,
@@ -64,7 +64,7 @@ class Generator(BaseCV):
             Hyperparamer that scales the contribution of orthonormality loss to the total loss, i.e., L = L_ef + alpha*L_ortho        
         friction: torch.Tensor
             Langevin friction, i.e., $\sqrt{k_B*T/(gamma*m_i)}$
-        cell : float, optional
+        rescaling_cell : float, optional
             CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, by default None
         descriptors_derivatives : Union[SmartDerivatives, torch.Tensor], optional
             Derivatives of descriptors wrt atomic positions (if used) to speed up calculation of gradients, by default None. 
@@ -93,7 +93,7 @@ class Generator(BaseCV):
         self.r = r
         self.eta = eta
         self.friction = friction
-        self.cell = cell
+        self.rescaling_cell = rescaling_cell
         self.n_dim=n_dim
 
         # check layers
@@ -124,7 +124,7 @@ class Generator(BaseCV):
                                dataset : DictDataset,        
                                eta : float = None, 
                                friction : float = None,      
-                               cell : float = None,      
+                               rescaling_cell : float = None,      
                                tikhonov_reg : float = 1e-4,      
                                recompute : bool = False,        
                                descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None
@@ -141,12 +141,17 @@ class Generator(BaseCV):
             Set only if different from the one used in training, Hyperparameter for the shift to define the resolvent, i.e., $(\eta I-_mathcal{L})^{-1}$
         friction:torch.tensor, optional
             Set only if different from the one used in training, Langevin friction, i.e., $\sqrt{k_B*T/(gamma*m_i)}$
-        cell : float, optional
+        rescaling_cell : float, optional
             Set only if different form the one used in training, CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, by default None
         tikhonov_reg: float, optional
             Hyperparameter for the regularization of the inverse (Ridge regression parameter)
         recompute: Boolean, optional
             Whether to recompute the eigenfucntions or not, by default False
+        descriptors_derivatives : Union[SmartDerivatives, torch.Tensor], optional
+            Derivatives of descriptors wrt atomic positions (if used) to speed up calculation of gradients, by default None. 
+            Can be either:
+                - A `SmartDerivatives` object to save both memory and time, see also mlcolvar.core.loss.committor_loss.SmartDerivatives
+                - A torch.Tensor with the derivatives to save time, memory-wise could be less efficient
 
         Returns
         -------
@@ -162,16 +167,18 @@ class Generator(BaseCV):
             friction = self.friction
         if eta is None:
             eta = self.eta
-        if cell is None:
-            cell = self.cell
+        if rescaling_cell is None:
+            rescaling_cell = self.rescaling_cell
         
         # get data
         input = dataset["data"]
         weights = dataset['weights']
+        cell_preprocessing = self._get_batch_cell(dataset)
+
         input.requires_grad = True
         
         # get output
-        output = self.forward(input, cell=cell)
+        output = self.forward(input, cell=cell_preprocessing)
 
         # If the calculation has not been done previously, or we want to compute again the eigenpairs due to a change of parameters
         if (recompute or self.evecs is None): 
@@ -183,7 +190,7 @@ class Generator(BaseCV):
                 r=self.r,
                 eta=eta,
                 friction=friction,
-                cell=cell,
+                rescaling_cell=rescaling_cell,
                 tikhonov_reg=tikhonov_reg,
                 descriptors_derivatives=descriptors_derivatives,
                 n_dim=self.n_dim
@@ -308,7 +315,7 @@ def test_generator():
         eta=0.005,
         alpha=0.01,
         friction=friction,
-        cell=None,
+        rescaling_cell=None,
         descriptors_derivatives=None,
         options=options,
     )
@@ -390,7 +397,7 @@ def test_generator():
         eta=0.005,
         alpha=0.01,
         friction=friction,
-        cell=None,
+        rescaling_cell=None,
         descriptors_derivatives=d_desc_d_pos,
         options=options,
     )
@@ -444,7 +451,7 @@ def test_generator():
         eta=0.005,
         alpha=0.01,
         friction=friction,
-        cell=None,
+        rescaling_cell=None,
         descriptors_derivatives=smart_derivatives,
         options=options,
     )
@@ -519,7 +526,7 @@ def test_generator_runtime_cell_training():
         eta=0.01,
         alpha=0.01,
         friction=friction,
-        cell=None,
+        rescaling_cell=None,
         descriptors_derivatives=None,
         options=options,
     )
@@ -552,7 +559,7 @@ def test_generator_runtime_cell_training():
         eta=0.01,
         alpha=0.01,
         friction=friction,
-        cell=None,
+        rescaling_cell=None,
         descriptors_derivatives=None,
         options=options,
     )

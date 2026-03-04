@@ -11,7 +11,7 @@ def compute_eigenfunctions(input : torch.Tensor,
                            r : int,
                            eta : float,
                            friction : torch.Tensor,
-                           cell: float = None,
+                           rescaling_cell: float = None,
                            tikhonov_reg : float = 1e-4,
                            descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None,
                            n_dim : int = 3,
@@ -36,7 +36,7 @@ def compute_eigenfunctions(input : torch.Tensor,
         Hyperparameter for the shift to define the resolvent, i.e., $(\eta I-_mathcal{L})^{-1}$
     friction : torch.Tensor
         Langevin friction, i.e., $\sqrt{k_B*T/(gamma*m_i)}$
-    cell : float, optional
+    rescaling_cell : float, optional
         CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, by default None
     tikhonov_reg : float, optional
         Hyperparameter for the regularization of the inverse (Ridge regression parameter), by default 1e-4
@@ -113,8 +113,8 @@ def compute_eigenfunctions(input : torch.Tensor,
 
     # this is to make the following computation easier to write
     gradient_positions = gradient_positions.swapaxes(2,1)
-    if cell is not None:
-        gradient_positions /= cell.repeat_interleave(gradient_positions.shape[-1]//n_dim)
+    if rescaling_cell is not None:
+        gradient_positions /= rescaling_cell.repeat_interleave(gradient_positions.shape[-1]//n_dim)
     # multiply by friction
     try:
         gradient_positions = gradient_positions * torch.sqrt(friction)
