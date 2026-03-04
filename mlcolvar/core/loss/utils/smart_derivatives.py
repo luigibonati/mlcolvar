@@ -435,7 +435,7 @@ def compute_descriptors_derivatives(dataset,
                             PBC=descriptor_function.PBC, 
                             scaled_coords=descriptor_function.scaled_coords,
                             device=pos.device,
-                            n_frames=len(pos))
+                            batch_size=len(pos))
     pos = sanitize_positions_shape(pos=pos, n_atoms=n_atoms)[0]
     
     # get_device 
