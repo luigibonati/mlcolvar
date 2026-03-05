@@ -28,9 +28,9 @@ class CoordinationNumbers(Transform):
         """Initialize a coordination number object between two groups of atoms A and B.
            The cell size to be used for PBC and/or scaled coordinates needs to be provided.
            This can be done in one of two ways, exclusively:
-           - Fixed cell, at initialization, using the `cell` keyword, for a fixed cell only. 
+           - Fixed cell (e.g., NVT simulations), at initialization, using the `cell` keyword, for a fixed cell only. 
              This mode supports torchscript of the preprocessing module and can be used with the `PLUMED` interface.
-           - Varying cells, at runtime, using the `cell` entry in the `forward` method or adding the `cell` data in the dataset used for training. 
+           - Varying cells, at runtime (e.g., NPT simulations), using the `cell` entry in the `forward` method or adding the `cell` data in the dataset used for training. 
              This mode **doesn't** support torchscript of the preprocessing module, as it is not supported in the `PLUMED` interface.
         
         Parameters
