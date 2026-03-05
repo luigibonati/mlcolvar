@@ -1181,7 +1181,7 @@ def test_train_with_smart_derivatives():
         eta=0.005,
         alpha=0.01,
         friction=friction,
-        cell=None,
+        rescaling_cell=None,
         descriptors_derivatives=smart_derivatives,
         options=options,
     )
