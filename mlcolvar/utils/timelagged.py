@@ -242,6 +242,7 @@ def create_timelagged_dataset(
         Display progress bar with tqdm
     walker : array-like, optional
         Identifier of the trajectory (walker) to which each configuration belongs.
+        This can only be used when `reweight_mode` is set to `weights_t`. 
 
     Returns
     -------
@@ -281,7 +282,16 @@ def create_timelagged_dataset(
             raise ValueError(
                 f"The length of t ({len(t)}) is different from the one of X ({len(X)}) "
             )
-
+    if walker is not None:
+        if reweight_mode == "rescale_time":
+            raise ValueError(
+                "The `walker` argument is not compatible with `reweight_mode='rescale_time'`."
+            )
+        if len(walker) != len(X):
+            raise ValueError(
+                f"The length of walker ({len(walker)}) is different from the one of X ({len(X)}) "
+            )
+        
     # define tprime if not given:
     if reweight_mode == "rescale_time":
         if tprime is None:
