@@ -11,7 +11,7 @@ from mlcolvar.data import DictDataset
 __all__ = ["Generator"]
 
 
-class Generator(BaseCV, lightning.LightningModule):
+class Generator(BaseCV):
     """
     Baseclass for learning a representation for the eigenfunctions of the infinitesimal generator.
     The representation is expressed as a concatenation of the output of r neural networks.
@@ -43,7 +43,6 @@ class Generator(BaseCV, lightning.LightningModule):
                  eta: float,
                  alpha: float,
                  friction: torch.Tensor,
-                 cell: float = None,
                  descriptors_derivatives: Union[SmartDerivatives, torch.Tensor] = None,
                  n_dim: int = 3,
                  u_stat:bool = True,
@@ -64,8 +63,6 @@ class Generator(BaseCV, lightning.LightningModule):
             Hyperparamer that scales the contribution of orthonormality loss to the total loss, i.e., L = L_ef + alpha*L_ortho        
         friction: torch.Tensor
             Langevin friction, i.e., $\sqrt{k_B*T/(gamma*m_i)}$
-        cell : float, optional
-            CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, by default None
         descriptors_derivatives : Union[SmartDerivatives, torch.Tensor], optional
             Derivatives of descriptors wrt atomic positions (if used) to speed up calculation of gradients, by default None. 
             Can be either:
@@ -86,7 +83,6 @@ class Generator(BaseCV, lightning.LightningModule):
                                      eta=eta, 
                                      alpha=alpha, 
                                      friction=friction, 
-                                     cell=cell,
                                      descriptors_derivatives=descriptors_derivatives,
                                      n_dim=n_dim,
                                      u_stat=u_stat
@@ -94,7 +90,6 @@ class Generator(BaseCV, lightning.LightningModule):
         self.r = r
         self.eta = eta
         self.friction = friction
-        self.cell = cell
         self.n_dim=n_dim
 
         # check layers
@@ -125,7 +120,6 @@ class Generator(BaseCV, lightning.LightningModule):
                                dataset : DictDataset,        
                                eta : float = None, 
                                friction : float = None,      
-                               cell : float = None,      
                                tikhonov_reg : float = 1e-4,      
                                recompute : bool = False,        
                                descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None
@@ -142,12 +136,15 @@ class Generator(BaseCV, lightning.LightningModule):
             Set only if different from the one used in training, Hyperparameter for the shift to define the resolvent, i.e., $(\eta I-_mathcal{L})^{-1}$
         friction:torch.tensor, optional
             Set only if different from the one used in training, Langevin friction, i.e., $\sqrt{k_B*T/(gamma*m_i)}$
-        cell : float, optional
-            Set only if different form the one used in training, CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, by default None
         tikhonov_reg: float, optional
             Hyperparameter for the regularization of the inverse (Ridge regression parameter)
         recompute: Boolean, optional
             Whether to recompute the eigenfucntions or not, by default False
+        descriptors_derivatives : Union[SmartDerivatives, torch.Tensor], optional
+            Derivatives of descriptors wrt atomic positions (if used) to speed up calculation of gradients, by default None. 
+            Can be either:
+                - A `SmartDerivatives` object to save both memory and time, see also mlcolvar.core.loss.committor_loss.SmartDerivatives
+                - A torch.Tensor with the derivatives to save time, memory-wise could be less efficient
 
         Returns
         -------
@@ -163,16 +160,16 @@ class Generator(BaseCV, lightning.LightningModule):
             friction = self.friction
         if eta is None:
             eta = self.eta
-        if cell is None:
-            cell = self.cell
         
         # get data
         input = dataset["data"]
         weights = dataset['weights']
+        cell_preprocessing = self._get_batch_cell(dataset)
+
         input.requires_grad = True
         
         # get output
-        output = self.forward(input)
+        output = self.forward(input, cell=cell_preprocessing)
 
         # If the calculation has not been done previously, or we want to compute again the eigenpairs due to a change of parameters
         if (recompute or self.evecs is None): 
@@ -184,7 +181,6 @@ class Generator(BaseCV, lightning.LightningModule):
                 r=self.r,
                 eta=eta,
                 friction=friction,
-                cell=cell,
                 tikhonov_reg=tikhonov_reg,
                 descriptors_derivatives=descriptors_derivatives,
                 n_dim=self.n_dim
@@ -217,6 +213,7 @@ class Generator(BaseCV, lightning.LightningModule):
         x.requires_grad = True
 
         weights = train_batch["weights"]
+        cell = self._get_batch_cell(train_batch)
 
         try:
             ref_idx = train_batch["ref_idx"]
@@ -225,7 +222,7 @@ class Generator(BaseCV, lightning.LightningModule):
 
         # =================forward====================
         # we use forward and not forward_cv to also apply the preprocessing (if present)
-        q = self.forward(x)
+        q = self.forward(x, cell=cell)
         # ===================loss=====================
         if self.training:
             loss, loss_ef, loss_ortho = self.loss_fn(x, q, weights, ref_idx)
@@ -308,7 +305,6 @@ def test_generator():
         eta=0.005,
         alpha=0.01,
         friction=friction,
-        cell=None,
         descriptors_derivatives=None,
         options=options,
     )
@@ -390,7 +386,6 @@ def test_generator():
         eta=0.005,
         alpha=0.01,
         friction=friction,
-        cell=None,
         descriptors_derivatives=d_desc_d_pos,
         options=options,
     )
@@ -444,7 +439,6 @@ def test_generator():
         eta=0.005,
         alpha=0.01,
         friction=friction,
-        cell=None,
         descriptors_derivatives=smart_derivatives,
         options=options,
     )
@@ -479,5 +473,95 @@ def test_generator():
     assert( torch.allclose(eigvals, ref_eigvals, atol=1e-3) )
     assert( torch.allclose(eigvecs, ref_eigvecs, atol=1e-1) ) # eigvecs are larger numbers
 
+
+def test_generator_runtime_cell_training():
+    """Integration tests for runtime-cell descriptor preprocessing in generator training."""
+    from mlcolvar.data import DictDataset, DictModule
+    from mlcolvar.core.transform import PairwiseDistances
+    import pytest
+
+    torch.manual_seed(42)
+
+    n_atoms = 2
+    n_samples = 12
+
+    # Positions in a flattened (B, n_atoms*3) format and positive weights.
+    x = torch.rand((n_samples, n_atoms * 3))
+    w = torch.ones(n_samples)
+
+    # Runtime cells (batch, 3), with mild variation.
+    cell = torch.ones((n_samples, 3))
+    cell[:, 0] *= torch.linspace(0.95, 1.05, n_samples)
+    cell[:, 1] *= 1.0
+    cell[:, 2] *= 1.1
+
+    # Friction for 2 atoms.
+    friction = torch.tensor([0.2, 0.3])
+
+    preprocessing = PairwiseDistances(
+        n_atoms=n_atoms,
+        PBC=True,
+        cell=None,
+        scaled_coords=False,
+        slicing_pairs=[[0, 1]],
+    )
+
+    options = {"nn": {"activation": "tanh"}}
+    model = Generator(
+        r=2,
+        layers=[1, 8, 1],
+        eta=0.01,
+        alpha=0.01,
+        friction=friction,
+        descriptors_derivatives=None,
+        options=options,
+    )
+    model.preprocessing = preprocessing
+
+    trainer = lightning.Trainer(
+        accelerator="cpu",
+        max_epochs=1,
+        logger=False,
+        enable_checkpointing=False,
+        limit_val_batches=0,
+        num_sanity_val_steps=0,
+        enable_progress_bar=False,
+        enable_model_summary=False,
+    )
+
+    # -------- positive case: runtime cell in batch --------
+    dataset = DictDataset({"data": x, "weights": w, "cell": cell})
+    datamodule = DictModule(dataset, lengths=[1.0], batch_size=6)
+    trainer.fit(model, datamodule)
+    out = model(x, cell=cell)
+    assert torch.isfinite(out).all()
+
+    # -------- negative case: missing runtime cell should fail --------
+    dataset_missing_cell = DictDataset({"data": x, "weights": w})
+    datamodule_missing_cell = DictModule(dataset_missing_cell, lengths=[1.0], batch_size=6)
+    model_missing_cell = Generator(
+        r=2,
+        layers=[1, 8, 1],
+        eta=0.01,
+        alpha=0.01,
+        friction=friction,
+        descriptors_derivatives=None,
+        options=options,
+    )
+    model_missing_cell.preprocessing = preprocessing
+    trainer_missing_cell = lightning.Trainer(
+        accelerator="cpu",
+        max_epochs=1,
+        logger=False,
+        enable_checkpointing=False,
+        limit_val_batches=0,
+        num_sanity_val_steps=0,
+        enable_progress_bar=False,
+        enable_model_summary=False,
+    )
+    with pytest.raises(ValueError, match="cell"):
+        trainer_missing_cell.fit(model_missing_cell, datamodule_missing_cell)
+
 if __name__ == '__main__':
     test_generator()
+    test_generator_runtime_cell_training()

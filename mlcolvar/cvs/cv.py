@@ -1,11 +1,16 @@
+from pathlib import Path
 import torch
-from mlcolvar.core.transform import Transform
-from typing import Union, List
+import lightning
+from lightning.pytorch.core.module import _jit_is_scripting, get_filesystem
+from typing import Any, Dict, Optional, Union, List
+from warnings import warn
+from torch.jit import ScriptModule
 from mlcolvar.core.nn import FeedForward, BaseGNN
+from mlcolvar.core.transform import Transform
 from mlcolvar.data.graph.utils import create_graph_tracing_example
 
 
-class BaseCV:
+class BaseCV(lightning.LightningModule):
     """
     Base collective variable class.
 
@@ -53,6 +58,7 @@ class BaseCV:
         # PRE/POST
         self.preprocessing = preprocessing
         self.postprocessing = postprocessing
+        self._preprocessing_training_warning_shown = False
 
     @property
     def n_cvs(self):
@@ -148,7 +154,7 @@ class BaseCV:
             if isinstance(getattr(self, b), Transform):
                 getattr(self, b).setup_from_datamodule(datamodule)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, cell=None) -> torch.Tensor:
         """
         Evaluation of the CV
 
@@ -168,12 +174,12 @@ class BaseCV:
         """
 
         if self.preprocessing is not None:
-            x = self.preprocessing(x)
+            x = self._apply_module(self.preprocessing, x, cell=cell)
 
         x = self.forward_cv(x)
 
         if self.postprocessing is not None:
-            x = self.postprocessing(x)
+            x = self._apply_module(self.postprocessing, x)
 
         return x
 
@@ -197,7 +203,7 @@ class BaseCV:
         for b in self.BLOCKS:
             block = getattr(self, b)
             if block is not None:
-                x = block(x)
+                x = self._apply_module(block, x)
 
         return x
 
@@ -212,6 +218,33 @@ class BaseCV:
         Equal to training step if not overridden. Different behaviors for train/valid step can be enforced in training_step() based on the self.training variable.
         """
         self.training_step(test_batch, batch_idx)
+
+    def on_fit_start(self):
+        self._warn_preprocessing_training_recommendations()
+
+    def _warn_preprocessing_training_recommendations(self):
+        if self.preprocessing is None or self._preprocessing_training_warning_shown:
+            return
+
+        class_name = self.__class__.__name__
+        is_position_dependent_cv = ("Committor" in class_name) or ("Generator" in class_name)
+
+        if is_position_dependent_cv:
+                warn(
+                    "Found a preprocessing module during training. For position-dependent losses "
+                    "(Committor/Generator), this is valid, but it is recommended to use "
+                    "`descriptors_derivatives` (e.g., `SmartDerivatives`) for efficiency and potentially "
+                    "large computational savings."
+                )
+        else:
+            raise ValueError(
+                "Found a preprocessing module during training. For this CV class, it is generally "
+                "recommended to precompute descriptors from the position-based dataset and train "
+                "directly on the descriptor-based dataset instead of keeping preprocessing in the loop. "
+                "This choice typically provides large computational savings."
+            )
+
+        self._preprocessing_training_warning_shown = True
 
     @property
     def optimizer_name(self) -> str:
@@ -291,3 +324,86 @@ class BaseCV:
             data['positions'].requires_grad_(True)
             data['node_attrs'].requires_grad_(True)
             return data
+    
+    def _apply_module(self, module: torch.nn.Module, x, cell=None):
+        if module is None:
+            return x
+        if cell is not None:
+            return module(x, cell=cell)
+        return module(x)
+
+    @staticmethod
+    def _get_batch_cell(batch):
+        if isinstance(batch, dict):
+            return batch.get("cell", None)
+        return None
+
+    @torch.no_grad()
+    def to_torchscript(
+        self,
+        file_path: Optional[Union[str, Path]] = None,
+        method: Optional[str] = "script",
+        example_inputs: Optional[Any] = None,
+        **kwargs: Any,
+    ) -> Union[ScriptModule, Dict[str, torch.ScriptModule]]:
+        """By default compiles the whole model to a `torch.jit.ScriptModule` Tracing can be used with the
+        argument `method='trace'`. In case, you can provide and `example_inputs`, otherwise, the default 
+        `example_input_array` will be used. 
+
+        Args:
+            file_path: Path where to save the torchscript. Default: None (no file saved).
+            method: Whether to use TorchScript's script or trace method. Default: 'script'
+            example_inputs: An input to be used to do tracing when method is set to 'trace'.
+              Default: None (uses :attr:`example_input_array`)
+            **kwargs: Additional arguments that will be passed to the :func:`torch.jit.script` or
+              :func:`torch.jit.trace` function.
+
+        Return:
+            This LightningModule as a torchscript, regardless of whether `file_path` is
+            defined or not.
+        """
+        # check if preprocessing has varible cells
+        if self.preprocessing is not None:
+            if hasattr(self.preprocessing, "default_cell"):
+                warn("Found a descriptor-based preprocessing module. If the same descriptors can be computed with PLUMED,"
+                        "it is recommended for performance to export the model without the preprocessing and compute the descriptors with PLUMED."
+                    )
+                if self.preprocessing.default_cell is None:
+                    raise ValueError(
+                        "Found a descriptor-based preprocessing module without a defined cell, as it was passed at runtime."
+                        "Tracing or scripting of preprocessing modules with variable cells is not supported yet."
+                        "If changing cell is NOT needed, you can set the fixed cell during the inizialization of the descriptor module"
+                        "and overwrite the model.preprocessing with the same module with the fixed cell."
+                    )
+                
+        mode = self.training
+
+        if method == "script":
+            with _jit_is_scripting():
+                torchscript_module = torch.jit.script(self.eval(), **kwargs)
+        elif method == "trace":
+            # if no example inputs are provided, try to see if model has example_input_array set
+            if example_inputs is None:
+                if self.example_input_array is None:
+                    raise ValueError(
+                        "Choosing method=`trace` requires either `example_inputs`"
+                        " or `model.example_input_array` to be defined."
+                    )
+                example_inputs = self.example_input_array
+
+            # automatically send example inputs to the right device and use trace
+            example_inputs = self._on_before_batch_transfer(example_inputs)
+            example_inputs = self._apply_batch_transfer_handler(example_inputs)
+            with _jit_is_scripting():
+                torchscript_module = torch.jit.trace(func=self.eval(), example_inputs=example_inputs, **kwargs)
+        else:
+            raise ValueError(f"The 'method' parameter only supports 'script' or 'trace', but value given was: {method}")
+
+        self.train(mode)
+
+        if file_path is not None:
+            fs = get_filesystem(file_path)
+            with fs.open(file_path, "wb") as f:
+                torch.jit.save(torchscript_module, f)
+
+        return torchscript_module

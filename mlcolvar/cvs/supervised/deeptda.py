@@ -8,7 +8,7 @@ from typing import Union, List
 
 __all__ = ["DeepTDA"]
 
-class DeepTDA(BaseCV, lightning.LightningModule):
+class DeepTDA(BaseCV):
     """
     Deep Targeted Discriminant Analysis (Deep-TDA) CV.
     Combine the inputs with a neural-network and optimize it in a way such that
@@ -262,4 +262,3 @@ def test_deeptda_cv():
 
 if __name__ == "__main__":
     test_deeptda_cv()
-

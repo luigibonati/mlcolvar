@@ -16,7 +16,6 @@ __all__ = ["VariationalAutoEncoderCV"]
 
 from typing import Any, Optional, Tuple
 import torch
-import lightning
 from mlcolvar.cvs import BaseCV
 from mlcolvar.core import FeedForward, Normalization
 from mlcolvar.core.transform.utils import Inverse
@@ -28,7 +27,7 @@ from mlcolvar.core.loss import ELBOGaussiansLoss
 # =============================================================================
 
 
-class VariationalAutoEncoderCV(BaseCV, lightning.LightningModule):
+class VariationalAutoEncoderCV(BaseCV):
     """Variational AutoEncoder Collective Variable.
 
     At training time, the encoder outputs a mean and a variance for each CV
@@ -172,8 +171,8 @@ class VariationalAutoEncoderCV(BaseCV, lightning.LightningModule):
             encoder (the variance output is discarded).
         """
         if self.norm_in is not None:
-            x = self.norm_in(x)
-        x = self.encoder(x)
+            x = self._apply_module(self.norm_in, x)
+        x = self._apply_module(self.encoder, x)
 
         # Take only the means and ignore the log variances.
         return self.mean_nn(x)
@@ -207,10 +206,10 @@ class VariationalAutoEncoderCV(BaseCV, lightning.LightningModule):
         """
         # Normalize inputs.
         if self.norm_in is not None:
-            x = self.norm_in(x)
+            x = self._apply_module(self.norm_in, x)
 
         # Encode input into a Gaussian distribution.
-        x = self.encoder(x)
+        x = self._apply_module(self.encoder, x)
         mean, log_variance = self.mean_nn(x), self.log_var_nn(x)
 
         # Clamp the log_variance to prevent it from becoming -inf (numerical stability).
@@ -221,7 +220,7 @@ class VariationalAutoEncoderCV(BaseCV, lightning.LightningModule):
         z = torch.distributions.Normal(mean, std).rsample()
 
         # Decode sample.
-        x_hat = self.decoder(z)
+        x_hat = self._apply_module(self.decoder, z)
         if self.norm_in is not None:
             x_hat = self.norm_in.inverse(x_hat)
 
