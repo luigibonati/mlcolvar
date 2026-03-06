@@ -41,11 +41,9 @@ class PCA(Stats):
         self.in_features = in_features
         self.out_features = in_features if out_features is None else out_features
 
-        # create eigenvector buffer
+        # create eigenvector and eigenvalue buffer
         self.register_buffer("evecs", torch.eye(in_features, self.out_features))
-
-        # initialize other attributes
-        self.evals = None
+        self.register_buffer("evals", torch.zeros(self.out_features))
 
     def extra_repr(self) -> str:
         repr = f"in_features={self.in_features}, out_features={self.out_features}"
