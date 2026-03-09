@@ -237,5 +237,3 @@ def test_deep_tica():
         s = model(example_input_graph_test).numpy()
     print(X.shape, "-->", s.shape)
 
-if __name__ == "__main__":
-    test_deep_tica()

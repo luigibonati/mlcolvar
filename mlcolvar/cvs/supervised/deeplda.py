@@ -278,7 +278,3 @@ def test_deeplda(n_states=2):
         s = model(example_input_graph_test).numpy()
     print(s)
 
-
-if __name__ == "__main__":
-    test_deeplda(n_states=2)
-    test_deeplda(n_states=3)

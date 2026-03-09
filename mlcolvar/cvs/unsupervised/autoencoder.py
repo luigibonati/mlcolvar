@@ -208,7 +208,3 @@ def test_autoencodercv():
         max_epochs=1, log_every_n_steps=2, logger=None, enable_checkpointing=False
     )
     trainer.fit(model, datamodule)
-
-
-if __name__ == "__main__":
-    test_autoencodercv()

@@ -313,6 +313,3 @@ def test_DictDataset():
     for i in [0,1,2]:
         assert( torch.allclose(out['data_list'][i]['positions'], torch.Tensor(positions+0.1*i))) 
 
-
-if __name__ == "__main__":
-    test_DictDataset()

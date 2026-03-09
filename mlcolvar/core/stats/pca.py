@@ -154,7 +154,3 @@ def test_pca():
     assert s.shape[1] == n_components
     assert len(pca.explained_variance) == n_components
     assert len(pca.cumulative_explained_variance) == n_components
-
-
-if __name__ == "__main__":
-    test_pca()

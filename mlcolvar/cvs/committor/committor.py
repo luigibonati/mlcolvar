@@ -634,9 +634,3 @@ def test_committor_with_derivatives():
     example_input_graph_test = create_test_graph_input(output_type='example', n_atoms=4, n_samples=3, n_states=2)
 
     model(example_input_graph_test).sum().backward()
-
-
-if __name__ == "__main__":
-    test_committor_1()
-    test_committor_2()
-    test_committor_with_derivatives()
