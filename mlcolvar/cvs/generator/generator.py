@@ -478,6 +478,3 @@ def test_generator():
     assert( torch.allclose(eigfuncs, ref_eigfuncs, atol=1e-3) )
     assert( torch.allclose(eigvals, ref_eigvals, atol=1e-3) )
     assert( torch.allclose(eigvecs, ref_eigvecs, atol=1e-1) ) # eigvecs are larger numbers
-
-if __name__ == '__main__':
-    test_generator()

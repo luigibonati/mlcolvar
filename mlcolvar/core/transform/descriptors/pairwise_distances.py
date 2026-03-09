@@ -132,7 +132,3 @@ def test_pairwise_distances():
     out = model(pos_scaled)
     assert(torch.allclose(out, ref_distances[:, [0, 1]], atol=1e-3))
     out.sum().backward()
-
-
-if __name__ == "__main__":
-    test_pairwise_distances()

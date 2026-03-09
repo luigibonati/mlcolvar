@@ -117,6 +117,3 @@ def test_eigs_of_adj_matrix():
     out = model(pos)
     assert(out.shape[-1] == model.out_features)
     out.sum().backward()
-
-if __name__ == "__main__":
-    test_eigs_of_adj_matrix()

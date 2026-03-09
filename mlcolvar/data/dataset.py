@@ -152,7 +152,3 @@ def test_DictDataset():
     loader = DictLoader(dataset, batch_size=1)
     batch = next(iter(loader))
     print(batch)
-
-
-if __name__ == "__main__":
-    test_DictDataset()
