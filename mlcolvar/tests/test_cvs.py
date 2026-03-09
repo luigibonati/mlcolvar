@@ -144,10 +144,10 @@ def test_lr_scheduler_config():
 def test_basecv_error_and_print(dataset):
     # Unknown option key in parse_options.
     with pytest.raises(ValueError):
-        mlcolvar.cvs.RegressionCV(layers=[2, 4, 1], options={"unknown_key": {}})
+        mlcolvar.cvs.RegressionCV(model=[2, 4, 1], options={"unknown_key": {}})
 
     model = mlcolvar.cvs.RegressionCV(
-        layers=[N_DESCRIPTORS, 5, 1],
+        model=[N_DESCRIPTORS, 5, 1],
         preprocessing=torch.nn.Identity(),
         postprocessing=torch.nn.Identity(),
     )
