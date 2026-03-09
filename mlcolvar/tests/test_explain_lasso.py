@@ -54,7 +54,7 @@ def test_sparsity_scoring():
     assert np.isclose(recovered_accuracy, 0.98)
 
 
-def test_lasso_classification():
+def test_lasso_classification_2():
     # Case 1: binary and multiclass runs return populated feature/coeff dictionaries.
     for number_of_states in (2, 3):
         dataset = _classification_dataset(number_of_states=number_of_states, number_of_samples=60)
@@ -100,7 +100,7 @@ def test_lasso_classification():
         lasso_classification(dataset_without_feature_names, print_info=False, plot=False)
 
 
-def test_lasso_regression():
+def test_lasso_regression_2():
     # Case 1: nominal regression with plotting disabled.
     dataset = _regression_dataset()
     regressor, selected_features, selected_coefficients = lasso_regression(
@@ -136,6 +136,43 @@ def test_lasso_regression():
     dataset_with_invalid_target_shape.feature_names = np.asarray(["f1", "f2", "f3"])
     with pytest.raises(ValueError):
         lasso_regression(dataset_with_invalid_target_shape, print_info=False, plot=False)
+
+
+def test_lasso_print(capsys):
+    classification_dataset = _classification_dataset(number_of_states=2, number_of_samples=50)
+    lasso_classification(
+        classification_dataset,
+        min_features=1,
+        Cs=np.logspace(-2, 1, 6),
+        print_info=True,
+        plot=False,
+    )
+    classification_stdout = capsys.readouterr().out
+    assert "LASSO results" in classification_stdout
+    assert "Features:" in classification_stdout
+
+    regression_dataset = _regression_dataset(number_of_samples=60)
+    lasso_regression(
+        regression_dataset,
+        alphas=np.logspace(-3, -1, 6),
+        print_info=True,
+        plot=False,
+    )
+    regression_stdout = capsys.readouterr().out
+    assert "LASSO results" in regression_stdout
+    assert "Relevant features" in regression_stdout
+
+    single_c_classifier, single_c_features, single_c_coefficients = lasso_classification(
+        classification_dataset, Cs=[0.1], min_features=0, print_info=False, plot=False
+    )
+    plot_lasso_classification(single_c_classifier, single_c_features, single_c_coefficients)
+    assert "Plotting is not available" in capsys.readouterr().out
+
+    single_alpha_regressor, single_alpha_features, single_alpha_coefficients = lasso_regression(
+        regression_dataset, alphas=[0.1], print_info=False, plot=False
+    )
+    plot_lasso_regression(single_alpha_regressor, single_alpha_features, single_alpha_coefficients)
+    assert "Plotting is not available" in capsys.readouterr().out
 
 if __name__ == "__main__":
     test_lasso_classification()
