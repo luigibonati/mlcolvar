@@ -263,7 +263,3 @@ def test_coordination_number():
 
 
     # TODO add reference value for check
-
-if __name__ == "__main__":
-    test_coordination_number()
-        

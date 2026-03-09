@@ -190,7 +190,3 @@ def test_deeptda_cv():
         )
         model.eval()
         assert torch.allclose(model(X), traced_model(X))
-
-
-if __name__ == "__main__":
-    test_deeptda_cv()

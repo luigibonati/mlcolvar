@@ -372,9 +372,3 @@ def _to_dict_dataset(d):
             "The data must be of type dict, DictDataset or Subset[DictDataset]."
         )
     return d
-
-
-if __name__ == "__main__":
-    import doctest
-
-    doctest.testmod()

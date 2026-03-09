@@ -403,6 +403,3 @@ def test_create_timelagged_dataset():
         X, t, lag_time=lag_time, walker=walker
     )
     assert len(dataset) == n_points - 2 * lag_time
-
-if __name__ == "__main__":
-    test_create_timelagged_dataset()

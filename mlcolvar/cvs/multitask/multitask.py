@@ -149,9 +149,3 @@ class MultiTaskCV:
 
         # return loss
         return loss
-
-
-if __name__ == "__main__":
-    import doctest
-
-    doctest.testmod()

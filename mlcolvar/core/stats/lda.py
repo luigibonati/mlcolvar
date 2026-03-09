@@ -216,7 +216,3 @@ def test_lda():
     print(hlda)
     hlda.compute(X, y)
     s = lda(X)
-
-
-if __name__ == "__main__":
-    test_lda()
