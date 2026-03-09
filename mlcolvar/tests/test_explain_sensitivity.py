@@ -6,7 +6,7 @@ import pytest
 import torch
 
 from mlcolvar.data import DictDataset
-from mlcolvar.explain.sensitivity import plot_sensitivity, sensitivity_analysis
+from mlcolvar.explain.sensitivity import plot_sensitivity, sensitivity_analysis, test_sensitivity_analysis
 
 
 def _sensitivity_dataset(with_labels: bool = True) -> DictDataset:
@@ -106,3 +106,6 @@ def test_plot_sensitivity():
     )
     with pytest.raises(KeyError):
         plot_sensitivity(dataset_only_results, mode="barh", per_class=True)
+
+if __name__ == "__main__":
+    test_sensitivity_analysis()

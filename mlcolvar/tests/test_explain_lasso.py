@@ -6,7 +6,15 @@ import pytest
 import torch
 
 from mlcolvar.data import DictDataset
-from mlcolvar.explain.lasso import SparsityScoring, lasso_classification, lasso_regression, plot_lasso_classification, plot_lasso_regression
+from mlcolvar.explain.lasso import (
+    SparsityScoring,
+    test_lasso_classification,
+    test_lasso_regression,
+    lasso_classification,
+    lasso_regression,
+    plot_lasso_classification,
+    plot_lasso_regression,
+)
 
 
 def _classification_dataset(number_of_states: int = 2, number_of_samples: int = 60) -> DictDataset:
@@ -128,3 +136,7 @@ def test_lasso_regression():
     dataset_with_invalid_target_shape.feature_names = np.asarray(["f1", "f2", "f3"])
     with pytest.raises(ValueError):
         lasso_regression(dataset_with_invalid_target_shape, print_info=False, plot=False)
+
+if __name__ == "__main__":
+    test_lasso_classification()
+    test_lasso_regression()

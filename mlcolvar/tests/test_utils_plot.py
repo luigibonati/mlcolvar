@@ -7,6 +7,7 @@ import torch
 
 from mlcolvar.data.dataset import DictDataset
 from mlcolvar.utils import plot as plot_utils
+from mlcolvar.utils.plot import test_utils_plot
 
 
 def _make_dataset(with_labels: bool = True) -> DictDataset:
@@ -126,3 +127,7 @@ def test_feature_distribution():
     with pytest.raises(ValueError):
         plot_utils.plot_features_distribution(ds, ["a", "b"], axs=axs)
     plt.close(fig)
+
+
+if __name__ == "__main__":
+    test_utils_plot()

@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from mlcolvar.utils import plot as _plot_utils  # register fessa colormap/colors
-from mlcolvar.utils.fes import SKLEARN_IS_INSTALLED, compute_deltaG, compute_fes
+from mlcolvar.utils.fes import SKLEARN_IS_INSTALLED, test_compute_fes, test_compute_deltaG, compute_deltaG, compute_fes
 
 
 def test_fes():
@@ -155,3 +155,7 @@ def test_delta_g():
     assert grid2.shape == (10,)
     assert delta_g2.shape == (10,)
     assert np.allclose(delta_g2[-1], 0.0, atol=0.8)
+
+if __name__ == "__main__":
+    test_compute_fes()
+    test_compute_deltaG()
