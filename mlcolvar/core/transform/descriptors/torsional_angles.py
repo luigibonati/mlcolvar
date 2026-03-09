@@ -272,6 +272,3 @@ def test_torsional_angle():
     assert(torch.allclose(out, out_single, atol=1e-6))
     assert(torch.allclose(out, ref_stack, atol=1e-3))
     out.sum().backward()
-
-if __name__ == "__main__":
-    test_torsional_angle()

@@ -206,7 +206,3 @@ def test_pairwise_distances():
     assert(torch.allclose(out, ref_scaled_batched_single[:, [0, 1]], atol=2e-3))
     assert(torch.allclose(out, ref_scaled_batched_scaled[:, [0, 1]], atol=2e-3))
     out.sum().backward()
-
-
-if __name__ == "__main__":
-    test_pairwise_distances()

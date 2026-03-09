@@ -1216,10 +1216,3 @@ def test_train_with_smart_derivatives():
 
     # check that sensitivity works
     sensitivity_analysis(model=model, dataset=smart_dataset)
-
-    
-if __name__ == "__main__":
-    test_smart_derivatives()
-    test_batched_smart_derivatives()
-    test_compute_descriptors_and_derivatives()
-    test_train_with_smart_derivatives()

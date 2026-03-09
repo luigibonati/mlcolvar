@@ -260,5 +260,3 @@ def test_deeptda_cv():
         example_input_graph_test = create_test_graph_input(output_type='example', n_atoms=4, n_samples=3, n_states=2)
         assert torch.allclose(model(example_input_graph_test), traced_model(example_input_graph_test))
 
-if __name__ == "__main__":
-    test_deeptda_cv()

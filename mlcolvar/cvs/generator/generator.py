@@ -561,7 +561,3 @@ def test_generator_runtime_cell_training():
     )
     with pytest.raises(ValueError, match="cell"):
         trainer_missing_cell.fit(model_missing_cell, datamodule_missing_cell)
-
-if __name__ == '__main__':
-    test_generator()
-    test_generator_runtime_cell_training()

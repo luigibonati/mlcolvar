@@ -733,10 +733,3 @@ def test_committor_runtime_cell_training():
 
     with pytest.raises(ValueError, match="cell"):
         trainer.fit(model, datamodule)
-
-
-if __name__ == "__main__":
-    test_committor_1()
-    test_committor_2()
-    test_committor_with_derivatives()
-    test_committor_runtime_cell_training()

@@ -187,6 +187,3 @@ def test_eigs_of_adj_matrix():
     )
     assert torch.allclose(out_batched, out_frames, atol=1e-6)
     out_batched.sum().backward()
-
-if __name__ == "__main__":
-    test_eigs_of_adj_matrix()

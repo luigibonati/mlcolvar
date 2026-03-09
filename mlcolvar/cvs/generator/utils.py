@@ -273,6 +273,3 @@ def test_forecast_state_occupation():
     
     # check we are all good
     assert torch.allclose(occupation_numbers, ref_occupation_numbers, atol=1e-2)
-
-if __name__ == '__main__':
-    test_forecast_state_occupation()

@@ -398,8 +398,3 @@ def _accumulate(iterable, fn=lambda x, y: x + y):
     for element in it:
         total = fn(total, element)
         yield total
-
-if __name__ == "__main__":
-    import doctest
-
-    doctest.testmod()

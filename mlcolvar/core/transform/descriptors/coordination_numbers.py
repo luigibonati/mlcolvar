@@ -333,7 +333,4 @@ def test_coordination_number():
     )
     assert torch.allclose(out_batched, out_frames, atol=1e-6)
     out_batched.sum().backward()
-
-if __name__ == "__main__":
-    test_coordination_number()
         

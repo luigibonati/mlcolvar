@@ -487,7 +487,3 @@ def test_adjacency_matrix():
     switching_function=SwitchingFunctions(in_features=n_atoms*3, name='Fermi', cutoff=cutoff, options={'q' : 0.01})
   
     compute_adjacency_matrix(pos=pos, mode='continuous', cutoff=cutoff,  n_atoms=n_atoms, PBC=True, cell=cell, scaled_coords=False, switching_function=switching_function)
-
-if __name__ == "__main__":
-    test_applycutoff()
-    test_adjacency_matrix()

@@ -82,7 +82,3 @@ def test_switchingfunctions():
 
     switch = SwitchingFunctions(in_features=len(x), name='Rational', cutoff=cutoff, options = {'n' : 6, 'm' : 12})
     switch(x)
-
-
-if __name__ == "__main__":
-    test_switchingfunctions()

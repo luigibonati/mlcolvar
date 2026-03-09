@@ -168,7 +168,3 @@ def test_tica():
     X2 = X[0]
     s2 = tica(X2)
     print(X2.shape, "-->", s2.shape)
-
-
-if __name__ == "__main__":
-    test_tica()
