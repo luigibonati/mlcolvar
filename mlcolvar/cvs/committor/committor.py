@@ -9,7 +9,7 @@ from typing import Union, List
 __all__ = ["Committor"]
 
 
-class Committor(BaseCV, lightning.LightningModule):
+class Committor(BaseCV):
     """Base class for data-driven learning of committor function.
     The committor function q is expressed as the output of a neural network optimized with a self-consistent
     approach based on the Kolmogorov's variational principle for the committor and on the imposition of its boundary conditions. 
@@ -47,7 +47,6 @@ class Committor(BaseCV, lightning.LightningModule):
         alpha: float,
         gamma: float = 10000,
         delta_f: float = 0,
-        cell: float = None,
         separate_boundary_dataset : bool = True,
         descriptors_derivatives : torch.nn.Module = None,
         log_var: bool = False,
@@ -73,8 +72,6 @@ class Committor(BaseCV, lightning.LightningModule):
         delta_f : float, optional
             Delta free energy between A (label 0) and B (label 1), units is kBT, by default 0. 
             State B is supposed to be higher in energy.
-        cell : float, optional
-            CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, by default None
         separate_boundary_dataset : bool, optional
             Switch to exculde boundary condition labeled data from the variational loss, by default True
         descriptors_derivatives : torch.nn.Module, optional
@@ -101,7 +98,6 @@ class Committor(BaseCV, lightning.LightningModule):
         # =======  LOSS  =======
         self.loss_fn = CommittorLoss(atomic_masses=atomic_masses,
                                      alpha=alpha,
-                                     cell=cell,
                                      gamma=gamma,
                                      delta_f=delta_f,
                                      separate_boundary_dataset=separate_boundary_dataset,
@@ -135,9 +131,9 @@ class Committor(BaseCV, lightning.LightningModule):
         if (options[o] is not False) and (options[o] is not None):
             self.sigmoid = Custom_Sigmoid(**options[o])
 
-    def forward_nn(self, x):
+    def forward_nn(self, x, cell=None):
         if self.preprocessing is not None:
-            x = self.preprocessing(x)
+            x = self._apply_module(self.preprocessing, x, cell=cell)
         z = self.nn(x)
         return z
 
@@ -164,8 +160,10 @@ class Committor(BaseCV, lightning.LightningModule):
         except KeyError:
             ref_idx = None
 
+        cell = self._get_batch_cell(train_batch)
+
         # =================forward====================
-        z = self.forward_nn(x)
+        z = self.forward_nn(x, cell=cell)
         
         if self.sigmoid is not None:
             q = self.sigmoid(z)
@@ -175,11 +173,11 @@ class Committor(BaseCV, lightning.LightningModule):
         # ===================loss=====================
         if self.training:
             loss, loss_var, loss_bound_A, loss_bound_B = self.loss_fn(
-                x, z, q, labels, weights, ref_idx 
+                x, z, q, labels, weights, ref_idx
             )
         else:
             loss, loss_var, loss_bound_A, loss_bound_B = self.loss_fn(
-                x, z, q, labels, weights, ref_idx 
+                x, z, q, labels, weights, ref_idx
             )
 
         # ====================log=====================+
@@ -634,3 +632,104 @@ def test_committor_with_derivatives():
     example_input_graph_test = create_test_graph_input(output_type='example', n_atoms=4, n_samples=3, n_states=2)
 
     model(example_input_graph_test).sum().backward()
+
+
+def test_committor_runtime_cell_training():
+    """Integration tests for runtime-cell descriptor preprocessing in committor training."""
+    from mlcolvar.data import DictDataset, DictModule
+    from mlcolvar.core.transform import PairwiseDistances
+    from mlcolvar.cvs.committor.utils import initialize_committor_masses
+    import pytest
+
+    torch.manual_seed(42)
+
+    n_atoms = 2
+    n_samples = 16
+
+    # Positions in a flattened (B, n_atoms*3) format.
+    x = torch.rand((n_samples, n_atoms * 3))
+    w = torch.ones(n_samples)
+
+    # Labels with two boundary regions and intermediate data.
+    y = torch.zeros(n_samples)
+    y[n_samples // 4:] += 1
+    y[n_samples // 2:] += 1
+    y[3 * n_samples // 4:] += 1
+
+    # Runtime cells (batch, 3), with a mild frame-to-frame variation.
+    cell = torch.ones((n_samples, 3))
+    cell[:, 0] *= torch.linspace(0.95, 1.05, n_samples)
+    cell[:, 1] *= 1.0
+    cell[:, 2] *= 1.1
+
+    dataset = DictDataset({"data": x, "labels": y, "weights": w, "cell": cell})
+    datamodule = DictModule(dataset, lengths=[1.0], batch_size=8)
+
+    preprocessing = PairwiseDistances(
+        n_atoms=n_atoms,
+        PBC=True,
+        cell=None,
+        scaled_coords=False,
+        slicing_pairs=[[0, 1]],
+    )
+
+    masses = initialize_committor_masses(atom_types=[0, 1], masses=[12.011, 1.008])
+    model = Committor(model=[1, 8, 1], atomic_masses=masses, alpha=1e-1, delta_f=0)
+    model.preprocessing = preprocessing
+
+    trainer = lightning.Trainer(
+        accelerator="cpu",
+        max_epochs=1,
+        logger=False,
+        enable_checkpointing=False,
+        limit_val_batches=0,
+        num_sanity_val_steps=0,
+        enable_progress_bar=False,
+        enable_model_summary=False,
+    )
+    trainer.fit(model, datamodule)
+
+    out = model(x, cell=cell)
+    assert torch.isfinite(out).all()
+
+    # -------- negative case: missing runtime cell should fail --------
+    torch.manual_seed(42)
+
+    n_atoms = 2
+    n_samples = 12
+
+    x = torch.rand((n_samples, n_atoms * 3))
+    w = torch.ones(n_samples)
+    y = torch.zeros(n_samples)
+    y[n_samples // 3:] += 1
+    y[2 * n_samples // 3:] += 1
+
+    # Intentionally no "cell" key.
+    dataset = DictDataset({"data": x, "labels": y, "weights": w})
+    datamodule = DictModule(dataset, lengths=[1.0], batch_size=6)
+
+    preprocessing = PairwiseDistances(
+        n_atoms=n_atoms,
+        PBC=True,
+        cell=None,
+        scaled_coords=False,
+        slicing_pairs=[[0, 1]],
+    )
+
+    masses = initialize_committor_masses(atom_types=[0, 1], masses=[12.011, 1.008])
+    model = Committor(model=[1, 8, 1], atomic_masses=masses, alpha=1e-1, delta_f=0)
+    model.preprocessing = preprocessing
+
+    trainer = lightning.Trainer(
+        accelerator="cpu",
+        max_epochs=1,
+        logger=False,
+        enable_checkpointing=False,
+        limit_val_batches=0,
+        num_sanity_val_steps=0,
+        enable_progress_bar=False,
+        enable_model_summary=False,
+    )
+
+    with pytest.raises(ValueError, match="cell"):
+        trainer.fit(model, datamodule)

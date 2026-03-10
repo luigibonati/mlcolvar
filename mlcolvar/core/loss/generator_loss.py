@@ -17,7 +17,6 @@ class GeneratorLoss(torch.nn.Module):
                  eta: float, 
                  friction: torch.Tensor, 
                  alpha: float,
-                 cell: float = None,  
                  descriptors_derivatives: Union[SmartDerivatives, torch.Tensor] = None,
                  n_dim: int = 3,
                  u_stat: bool = True,
@@ -34,8 +33,6 @@ class GeneratorLoss(torch.nn.Module):
             Langevin friction, i.e., $\sqrt{k_B*T/(gamma*m_i)}$
         alpha : float
             Hyperparamer that scales the contribution of orthonormality loss to the total loss, i.e., L = L_ef + alpha*L_ortho
-        cell : float, optional
-            CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, by default None 
         descriptors_derivatives : Union[SmartDerivatives, torch.Tensor], optional
             Derivatives of descriptors wrt atomic positions (if used) to speed up calculation of gradients, by default None. 
             Can be either:
@@ -57,7 +54,6 @@ class GeneratorLoss(torch.nn.Module):
         self.register_buffer("friction", friction)
         self.lambdas = torch.nn.Parameter(10 * torch.randn(r), requires_grad=True)
         self.alpha = alpha
-        self.cell = cell
         self.descriptors_derivatives = descriptors_derivatives
         self.n_dim = n_dim
         self.u_stat=u_stat
@@ -81,7 +77,6 @@ class GeneratorLoss(torch.nn.Module):
                               alpha=self.alpha,
                               friction=self.friction,
                               lambdas=self.lambdas,
-                              cell=self.cell,
                               descriptors_derivatives=self.descriptors_derivatives,
                               ref_idx=ref_idx,
                               n_dim=self.n_dim,
@@ -108,7 +103,6 @@ def generator_loss(input : torch.Tensor,
                    alpha : float,
                    friction : torch.Tensor,
                    lambdas : torch.Tensor,
-                   cell : float = None,
                    descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None,
                    ref_idx : torch.Tensor = None,
                    n_dim : int = 3,
@@ -132,8 +126,6 @@ def generator_loss(input : torch.Tensor,
         Langevin friction, i.e., $\sqrt{k_B*T/(gamma*m_i)}$
     lambdas : torch.Tensor
         Trainable parameters. After training, they should correspond to the resolvent eigenvalues.
-    cell : float, optional
-        CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, by default None
     descriptors_derivatives : Union[SmartDerivatives, torch.Tensor], optional
         Derivatives of descriptors wrt atomic positions (if used) to speed up calculation of gradients, by default None. 
         Can be either:
@@ -207,9 +199,6 @@ def generator_loss(input : torch.Tensor,
 
     # this is to make the following computation easier to write
     gradient_positions = gradient_positions.transpose(2,1).contiguous()
-    if cell is not None:
-        gradient_positions /= cell.repeat_interleave(gradient_positions.shape[-1]//n_dim)
-
     # multiply by friction
     try:
         gradient_positions = gradient_positions * torch.sqrt(friction)

@@ -1,7 +1,7 @@
 import torch
 
 from mlcolvar.core.transform import Transform
-from mlcolvar.core.transform.descriptors.utils import compute_distances_matrix, compute_distances_pairs
+from mlcolvar.core.transform.descriptors.utils import compute_distances_matrix, compute_distances_pairs, _resolve_descriptor_cell, sanitize_cell_shape
 
 from typing import Union
 
@@ -16,11 +16,17 @@ class PairwiseDistances(Transform):
     def __init__(self, 
                  n_atoms: int,
                  PBC: bool,
-                 cell: Union[float, list],
+                 cell: Union[float, list, None] = None,
                  scaled_coords: bool = False,
                  slicing_pairs: list = None) -> torch.Tensor:
         """Initialize a pairwise distances object.
         Can compute either all the distances or a subset based on the `slicing_pairs` key.
+        The cell size to be used for PBC and/or scaled coordinates needs to be provided.
+        This can be done in one of two ways, exclusively:
+        - Fixed cell (e.g., NVT simulations), at initialization, using the `cell` keyword, for a fixed cell only. 
+          This mode supports torchscript of the preprocessing module and can be used with the `PLUMED` interface.
+        - Varying cells, at runtime (e.g., NPT simulations), using the `cell` entry in the `forward` method or adding the `cell` data in the dataset used for training. 
+          This mode **doesn't** support torchscript of the preprocessing module, as it is not supported in the `PLUMED` interface.
 
         Parameters
         ----------
@@ -28,8 +34,10 @@ class PairwiseDistances(Transform):
             Number of atoms in the system
         PBC : bool
             Switch for Periodic Boundary Conditions use
-        cell : Union[float, list]
-            Dimensions of the real cell, orthorombic-like cells only
+        cell : Union[float, list, None]
+            Dimensions of the real cell for fixed cell mode, orthorombic-like cells only.
+            For varying cell mode, this argument must be left as None and the cell must be provided at runtime.
+            Note that only fixed cell mode supports torchscript of the preprocessing module.
         scaled_coords : bool
             Switch for coordinates scaled on cell's vectors use, by default False
         slicing_pairs : list
@@ -49,17 +57,22 @@ class PairwiseDistances(Transform):
         self.n_atoms = n_atoms
         self.PBC = PBC
         self.scaled_coords = scaled_coords
-        self.register_buffer('cell', torch.as_tensor(cell))
+        default_cell = None if cell is None else sanitize_cell_shape(cell)
+        self.register_buffer("default_cell", default_cell)
         self.register_buffer('slicing_pairs', 
                                 torch.tensor(slicing_pairs, dtype=torch.long) if slicing_pairs is not None else None)
 
-    def compute_pairwise_distances(self, pos):
+    def compute_pairwise_distances(self, pos, cell=None):
+        cell = _resolve_descriptor_cell(runtime_cell=cell,
+                                       default_cell=self.default_cell,
+                                       require_cell=self.PBC or self.scaled_coords,
+                                    )
         # if we compute all distances we use the matrix trick
         if self.slicing_pairs is None:
             dist = compute_distances_matrix(pos=pos,
                                             n_atoms=self.n_atoms,
                                             PBC=self.PBC,
-                                            cell=self.cell,
+                                            cell=cell,
                                             scaled_coords=self.scaled_coords)
             batch_size = dist.shape[0]
             device = pos.device
@@ -74,7 +87,7 @@ class PairwiseDistances(Transform):
             dist = compute_distances_pairs(pos=pos,
                                            n_atoms=self.n_atoms,
                                            PBC=self.PBC,
-                                           cell=self.cell,
+                                           cell=cell,
                                            scaled_coords=self.scaled_coords,
                                            slicing_pairs=self.slicing_pairs)
         
@@ -82,8 +95,8 @@ class PairwiseDistances(Transform):
         return pairwise_distances
         
 
-    def forward(self, x: torch.Tensor):
-        x = self.compute_pairwise_distances(x)
+    def forward(self, x: torch.Tensor, cell: Union[float, list, torch.Tensor] = None):
+        x = self.compute_pairwise_distances(x, cell=cell)
         return x
 
 def test_pairwise_distances():
@@ -131,4 +144,65 @@ def test_pairwise_distances():
     model = PairwiseDistances(n_atoms=10, PBC=True, cell=cell, scaled_coords=True, slicing_pairs=[[0, 1], [0, 2]])
     out = model(pos_scaled)
     assert(torch.allclose(out, ref_distances[:, [0, 1]], atol=1e-3))
+    out.sum().backward()
+
+    # runtime cell is allowed only when init cell is None
+    model = PairwiseDistances(n_atoms=10, PBC=True, cell=None, scaled_coords=False)
+    _ = model(pos_abs, cell=cell)
+    model = PairwiseDistances(n_atoms=10, PBC=True, cell=cell, scaled_coords=False)
+    try:
+        _ = model(pos_abs, cell=cell)
+        raise AssertionError("Expected ValueError when passing `cell` both at init and runtime.")
+    except ValueError as e:
+        assert "provided at initialization" in str(e)
+
+
+    # ---------------- test varying-cell case (batched cells) ----------------
+    # Mixed cell sizes in the same batch: check batched-cell behavior is
+    # consistent with frame-wise evaluation for fixed cutoff.    scales = torch.tensor([1.0, 3.7, 11.0], dtype=pos_abs.dtype)
+    scales = torch.tensor([0.9, 1.0, 1.1], dtype=pos_abs.dtype)
+    cell_batched = torch.stack([(cell * s).repeat(3) for s in scales], dim=0)
+
+    # Absolute coordinates: keep reduced coordinates fixed by scaling positions with each cell.
+    pos_abs_batched = torch.cat([pos_abs * s for s in scales], dim=0)
+    pos_abs_batched = pos_abs_batched.clone().detach().requires_grad_(True)
+
+    model = PairwiseDistances(n_atoms=10, PBC=True, cell=None, scaled_coords=False)
+    out = model(pos_abs_batched, cell=cell_batched)
+    ref_batched_single = torch.cat(
+        [model(pos_abs_batched[i:i+1], cell=cell_batched[i]) for i in range(len(scales))],
+        dim=0,
+    )
+    ref_batched_scaled = torch.cat([ref_distances * s for s in scales], dim=0)
+    assert(out.reshape(pos_abs_batched.shape[0], -1).shape[-1] == model.out_features)
+    assert(torch.allclose(out, ref_batched_single, atol=2e-3))
+    assert(torch.allclose(out, ref_batched_scaled, atol=2e-3))
+    out.sum().backward()
+
+    model = PairwiseDistances(n_atoms=10, PBC=True, cell=None, scaled_coords=False, slicing_pairs=[[0, 1], [0, 2]])
+    out = model(pos_abs_batched, cell=cell_batched)
+    assert(torch.allclose(out, ref_batched_single[:, [0, 1]], atol=2e-3))
+    assert(torch.allclose(out, ref_batched_scaled[:, [0, 1]], atol=2e-3))
+    out.sum().backward()
+
+    # Scaled coordinates: physical distances scale with cell.
+    pos_scaled_batched = torch.cat([pos_abs * s / (cell * s) for s in scales], dim=0)
+    pos_scaled_batched = pos_scaled_batched.clone().detach().requires_grad_(True)
+
+    model = PairwiseDistances(n_atoms=10, PBC=True, cell=None, scaled_coords=True)
+    out = model(pos_scaled_batched, cell=cell_batched)
+    ref_scaled_batched_single = torch.cat(
+        [model(pos_scaled_batched[i:i+1], cell=cell_batched[i]) for i in range(len(scales))],
+        dim=0,
+    )
+    ref_scaled_batched_scaled = torch.cat([ref_distances * s for s in scales], dim=0)
+    assert(out.reshape(pos_scaled_batched.shape[0], -1).shape[-1] == model.out_features)
+    assert(torch.allclose(out, ref_scaled_batched_single, atol=2e-3))
+    assert(torch.allclose(out, ref_scaled_batched_scaled, atol=2e-3))
+    out.sum().backward()
+
+    model = PairwiseDistances(n_atoms=10, PBC=True, cell=None, scaled_coords=True, slicing_pairs=[[0, 1], [0, 2]])
+    out = model(pos_scaled_batched, cell=cell_batched)
+    assert(torch.allclose(out, ref_scaled_batched_single[:, [0, 1]], atol=2e-3))
+    assert(torch.allclose(out, ref_scaled_batched_scaled[:, [0, 1]], atol=2e-3))
     out.sum().backward()

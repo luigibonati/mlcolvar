@@ -60,7 +60,7 @@ class MockAuxLoss(torch.nn.Module):
         return self.task_specific_nn(data).sum()
 
 
-class MockCV(BaseCV, lightning.LightningModule):
+class MockCV(BaseCV):
     """Mock CV for mock testing."""
 
     DEFAULT_BLOCKS = []

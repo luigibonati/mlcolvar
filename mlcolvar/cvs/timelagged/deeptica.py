@@ -9,7 +9,7 @@ from typing import Union, List
 __all__ = ["DeepTICA"]
 
 
-class DeepTICA(BaseCV, lightning.LightningModule):
+class DeepTICA(BaseCV):
     """Neural network-based time-lagged independent component analysis (Deep-TICA).
 
     It is a non-linear generalization of TICA in which a feature map is learned by a
@@ -104,8 +104,8 @@ class DeepTICA(BaseCV, lightning.LightningModule):
     def forward_nn(self, x: torch.Tensor) -> torch.Tensor:
         if not self._override_model:
             if self.norm_in is not None:
-                x = self.norm_in(x)
-        x = self.nn(x)
+                x = self._apply_module(self.norm_in, x)
+        x = self._apply_module(self.nn, x)
         return x
 
     def set_regularization(self, c0_reg=1e-6):

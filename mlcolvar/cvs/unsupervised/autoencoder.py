@@ -9,7 +9,7 @@ from mlcolvar.core.loss import MSELoss
 __all__ = ["AutoEncoderCV"]
 
 
-class AutoEncoderCV(BaseCV, lightning.LightningModule):
+class AutoEncoderCV(BaseCV):
     """AutoEncoding Collective Variable.
     It is composed by a first neural network (encoder) which projects
     the input data into a latent space (the CVs). Then a second network (decoder) takes
@@ -108,14 +108,14 @@ class AutoEncoderCV(BaseCV, lightning.LightningModule):
     def forward_cv(self, x: torch.Tensor) -> torch.Tensor:
         """Evaluate the CV without pre or post/processing modules."""
         if self.norm_in is not None:
-            x = self.norm_in(x)
-        x = self.encoder(x)
+            x = self._apply_module(self.norm_in, x)
+        x = self._apply_module(self.encoder, x)
         return x
 
     def encode_decode(self, x: torch.Tensor) -> torch.Tensor:
         """Pass the inputs through both the encoder and the decoder networks."""
         x = self.forward_cv(x)
-        x = self.decoder(x)
+        x = self._apply_module(self.decoder, x)
         if self.norm_in is not None:
             x = self.norm_in.inverse(x)
         return x

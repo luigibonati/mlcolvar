@@ -2,7 +2,7 @@ import torch
 import numpy as np 
 
 from mlcolvar.core.transform import Transform
-from mlcolvar.core.transform.descriptors.utils import compute_distances_matrix, sanitize_positions_shape
+from mlcolvar.core.transform.descriptors.utils import compute_distances_matrix, _resolve_descriptor_cell, sanitize_cell_shape, sanitize_positions_shape
 
 from typing import Union
 
@@ -24,10 +24,16 @@ class TorsionalAngles(Transform):
                  n_atoms: int,
                  mode: Union[str, list],
                  PBC: bool,
-                 cell: Union[float, list],
+                 cell: Union[float, list] = None,
                  scaled_coords: bool = False) -> torch.Tensor:
         """Initialize a torsional angle object.
            Can compute a single angle or multiple angles based on the `indices` key.
+           The cell size to be used for PBC and/or scaled coordinates needs to be provided.
+           This can be done in one of two ways, exclusively:
+           - Fixed cell (e.g., NVT simulations), at initialization, using the `cell` keyword, for a fixed cell only. 
+             This mode supports torchscript of the preprocessing module and can be used with the `PLUMED` interface.
+           - Varying cells, at runtime (e.g., NPT simulations), using the `cell` entry in the `forward` method or adding the `cell` data in the dataset used for training. 
+             This mode **doesn't** support torchscript of the preprocessing module, as it is not supported in the `PLUMED` interface.
 
         Parameters
         ----------
@@ -42,8 +48,10 @@ class TorsionalAngles(Transform):
             Which quantities to return among 'angle', 'sin' and 'cos'
         PBC : bool
             Switch for Periodic Boundary Conditions use
-        cell : Union[float, list]
-            Dimensions of the real cell, orthorombic-like cells only
+        cell : Union[float, list, None]
+            Dimensions of the real cell for fixed cell mode, orthorombic-like cells only.
+            For varying cell mode, this argument must be left as None and the cell must be provided at runtime.
+            Note that only fixed cell mode supports torchscript of the preprocessing module.
         scaled_coords : bool, optional
             Switch for coordinates scaled on cell's vectors use, by default False
 
@@ -95,13 +103,18 @@ class TorsionalAngles(Transform):
 
         # initialize class attributes
         self.register_buffer('indices', indices)
-        self.register_buffer('cell', torch.as_tensor(cell))
+        default_cell = None if cell is None else sanitize_cell_shape(cell)
+        self.register_buffer("default_cell", default_cell)
         self.n_atoms = n_atoms
         self.PBC = PBC
         self.scaled_coords = scaled_coords
 
 
-    def compute_torsional_angle(self, pos):
+    def compute_torsional_angle(self, pos, cell=None):
+        cell = _resolve_descriptor_cell(runtime_cell=cell,
+                                       default_cell=self.default_cell,
+                                       require_cell=self.PBC or self.scaled_coords,
+                                    )
         tors_pos, batch_size = sanitize_positions_shape(pos, self.n_atoms)
 
         # indices: [n_angles, 4]
@@ -119,7 +132,7 @@ class TorsionalAngles(Transform):
             pos=angle_pos_reshaped,
             n_atoms=4,
             PBC=self.PBC,
-            cell=self.cell,
+            cell=cell,
             scaled_coords=self.scaled_coords,
             vector=True
         )
@@ -153,11 +166,11 @@ class TorsionalAngles(Transform):
         # Stack as [batch_size, n_angles * 3]
         return torch.cat([angle, sin, cos], dim=2)
 
-    def forward(self, x):
+    def forward(self, x, cell: Union[float, list, torch.Tensor] = None):
         # Ensure x is on the same device as model buffers
         if isinstance(x, torch.Tensor) and x.device != self.indices.device:
             x = x.to(self.indices.device)
-        out = self.compute_torsional_angle(x)
+        out = self.compute_torsional_angle(x, cell=cell)
         # Select the requested modes for all angles
         # out shape: [batch_size, n_angles * 3]
         # We need to reshape, select modes, and reshape back
@@ -214,3 +227,48 @@ def test_torsional_angle():
     angle.sum().backward()
     assert(torch.allclose(angle[:, 0].unsqueeze(-1), torch.sin(ref_phi), atol=1e-3))
     assert(torch.allclose(angle[:, 1].unsqueeze(-1), torch.cos(ref_phi), atol=1e-3))
+
+    # runtime cell is allowed only when init cell is None
+    model = TorsionalAngles(np.array([1,3,4,6]), n_atoms=10, mode=['angle'], PBC=True, cell=None, scaled_coords=False)
+    _ = model(pos, cell=cell)
+    model = TorsionalAngles(np.array([1,3,4,6]), n_atoms=10, mode=['angle'], PBC=True, cell=cell, scaled_coords=False)
+    try:
+        _ = model(pos, cell=cell)
+        raise AssertionError("Expected ValueError when passing `cell` both at init and runtime.")
+    except ValueError as e:
+        assert "provided at initialization" in str(e)
+
+    # ---------------- test varying-cell case (batched cells) ----------------
+    # Mix different cell sizes in the same batch.
+    scales = torch.tensor([0.9, 1.0, 1.1], dtype=pos.dtype)
+    pos_base = pos.clone().detach()
+    pos_abs_batched = torch.cat([pos_base * s for s in scales], dim=0).clone().detach().requires_grad_(True)
+    frame_scales = scales.repeat_interleave(pos_base.shape[0])
+    cell_batched = torch.stack([cell * s for s in frame_scales], dim=0)
+
+    # Absolute coordinates: torsional quantities are invariant to uniform scaling.
+    model = TorsionalAngles(np.array([1,3,4,6]), n_atoms=10, mode=['angle', 'sin', 'cos'], PBC=True, cell=None, scaled_coords=False)
+    out = model(pos_abs_batched, cell=cell_batched)
+    out_single = torch.cat(
+        [model(pos_abs_batched[i:i+1], cell=cell_batched[i]) for i in range(pos_abs_batched.shape[0])],
+        dim=0,
+    )
+    assert(torch.allclose(out, out_single, atol=1e-6))
+    ref_stack = torch.cat([torch.cat([ref_phi, torch.sin(ref_phi), torch.cos(ref_phi)], dim=1) for _ in scales], dim=0)
+    assert(torch.allclose(out, ref_stack, atol=1e-3))
+    out.sum().backward()
+
+    # Scaled coordinates with varying cells: same invariance.
+    pos_scaled_batched = torch.cat(
+        [(pos_base * s).reshape(-1, 10, 3) / (cell * s) for s in scales],
+        dim=0,
+    ).reshape(-1, 30).clone().detach().requires_grad_(True)
+    model = TorsionalAngles(np.array([1,3,4,6]), n_atoms=10, mode=['angle', 'sin', 'cos'], PBC=True, cell=None, scaled_coords=True)
+    out = model(pos_scaled_batched, cell=cell_batched)
+    out_single = torch.cat(
+        [model(pos_scaled_batched[i:i+1], cell=cell_batched[i]) for i in range(pos_scaled_batched.shape[0])],
+        dim=0,
+    )
+    assert(torch.allclose(out, out_single, atol=1e-6))
+    assert(torch.allclose(out, ref_stack, atol=1e-3))
+    out.sum().backward()

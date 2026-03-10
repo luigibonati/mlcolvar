@@ -11,7 +11,7 @@ from typing import Union, List
 __all__ = ["DeepLDA"]
 
 
-class DeepLDA(BaseCV, lightning.LightningModule):
+class DeepLDA(BaseCV):
     """Deep Linear Discriminant Analysis (Deep-LDA) CV.
     Non-linear generalization of LDA in which a feature map is learned by a neural network optimized
     as to maximize the classes separation. The method is described in [1]_.
@@ -103,8 +103,8 @@ class DeepLDA(BaseCV, lightning.LightningModule):
     def forward_nn(self, x: torch.Tensor) -> torch.Tensor:
         if not self._override_model:
             if self.norm_in is not None:
-                x = self.norm_in(x)
-        x = self.nn(x)
+                x = self._apply_module(self.norm_in, x)
+        x = self._apply_module(self.nn, x)
         return x
 
     def set_regularization(self, sw_reg=0.05, lorentzian_reg=None):
