@@ -75,7 +75,7 @@ def _create_pyg_data_from_configuration(
         system_masks[config.system, 0] = 1
     else:
         n_system     = torch.tensor( [[one_hot.shape[0]]], dtype=torch.get_default_dtype() )
-        system_masks = None
+        system_masks = torch.ones((one_hot.shape[0], 1), dtype=torch.bool)
 
     # set n_env
     n_env   = torch.tensor( [[one_hot.shape[0] - n_system.to(torch.int).item()]], dtype=torch.get_default_dtype() )
@@ -299,7 +299,8 @@ def create_test_graph_input(output_type: str,
                             n_samples: int = 60, 
                             n_states: int = 2,
                             random_weights = False,
-                            add_noise = True):
+                            add_noise = True,
+                            environment: bool = False):
     """
     Util function to generate several types of mock graph data objects for testing purposes.
     The graphs are created drawing positions from a predefined set of positions that cover most use cases.
@@ -319,13 +320,17 @@ def create_test_graph_input(output_type: str,
         If to assign random weights to the entries, otherwise unitary weights are given, by default False
     add_noise : bool, optional
         If to add a random noise for each entry to the predefined positions, by default True
-
+    environment : bool, optional
+        Whether to include environment nodes in the graph, by default False
+    
     Returns
     -------
         Graph data object of the chosen type
     """
     if n_atoms == 3:
         numbers = [8, 1, 1]
+        system_atoms = [0,1] if environment else None
+        environment_atoms = [3] if environment else None
         node_labels = np.array([[0], [1], [1]])
         _ref_positions = np.array(
             [
@@ -341,6 +346,8 @@ def create_test_graph_input(output_type: str,
 
     elif n_atoms == 4:
         numbers = [8, 1, 1, 8]
+        system_atoms = [0,1,2] if environment else None
+        environment_atoms = [3] if environment else None
         node_labels = np.array([[0], [1], [1], [0]])
         _ref_positions = np.array(
             [
@@ -383,7 +390,9 @@ def create_test_graph_input(output_type: str,
             pbc=[True] * 3,
             node_labels=node_labels,
             graph_labels=graph_labels[i],
-            weight=weights[i]
+            weight=weights[i],
+            system=system_atoms,
+            environment=environment_atoms
         ) for i in range(0, n_samples*n_states)
     ]
 
@@ -420,7 +429,8 @@ def create_test_graph_input(output_type: str,
     
     return None
 
-def create_graph_tracing_example(n_species : int):
+def create_graph_tracing_example(n_species: int,
+                                 environment: bool = False) -> dict:
     """
     Util to create a tracing example for graph based models.
 
@@ -428,6 +438,8 @@ def create_graph_tracing_example(n_species : int):
     ----------
     n_species : int
         Number of chemical species to be considered in the model.
+    environment : bool, optional
+        Whether to include environment nodes in the graph, by default False.
 
     Returns
     -------
@@ -454,7 +466,10 @@ def create_graph_tracing_example(n_species : int):
     graph_labels = np.zeros((1, 1, 1))
     
     z_table = atomic.AtomicNumberTable.from_zs(numbers)
-
+    
+    system_atoms = [0,1] if environment else None
+    environment_atoms = [2] if environment else None
+    
     weights = np.ones((1, 1, 1))
     config = [
         atomic.Configuration(
@@ -464,7 +479,9 @@ def create_graph_tracing_example(n_species : int):
             pbc=[True] * 3,
             node_labels=node_labels,
             graph_labels=graph_labels[i],
-            weight=weights[i]
+            weight=weights[i],
+            system=system_atoms,
+            environment=environment_atoms
         ) for i in range(0, 1)
     ]
 
@@ -488,6 +505,9 @@ def create_graph_tracing_example(n_species : int):
     example = example.to_dict()
     example['node_attrs'] = torch.cat((example['node_attrs'], torch.zeros(3, n_species - 1)), 1)
     return example
+
+
+
 
 # ===============================================================================
 # ===============================================================================

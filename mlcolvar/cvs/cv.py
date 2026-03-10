@@ -75,7 +75,7 @@ class BaseCV(lightning.LightningModule):
                 else self.preprocessing.in_features
             )
         else:
-            return create_graph_tracing_example(n_species=len(self.atomic_numbers))
+            return create_graph_tracing_example(n_species=len(self.atomic_numbers), environment=True)
 
 
     # TODO add general torch.nn.Module
