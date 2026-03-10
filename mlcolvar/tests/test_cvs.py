@@ -1,19 +1,3 @@
-#!/usr/bin/env python
-
-
-# =============================================================================
-# MODULE DOCSTRING
-# =============================================================================
-
-"""
-Shared tests for the objects and functions in the mlcolvar.cvs package.
-"""
-
-
-# =============================================================================
-# GLOBAL IMPORTS
-# =============================================================================
-
 import os
 import tempfile
 
@@ -173,3 +157,65 @@ def test_basecv_error_and_print(dataset):
     model.lr_scheduler_config = {"scheduler": "forbidden_override"}
     with pytest.raises(ValueError):
         model.configure_optimizers()
+
+def test_trace_descriptor_based():
+    "Test if a simple CV model can be tested with the to_torchscript method."
+    # initialize model
+    model = mlcolvar.cvs.RegressionCV(model=LAYERS)
+    
+    # create fake dataset
+    X = torch.randn((100, N_DESCRIPTORS))
+    y = X.square().sum(1)
+    dataset = DictDataset({"data": X, "target": y})
+    datamodule = DictModule(dataset, lengths=[0.75, 0.2, 0.05], batch_size=25)
+    
+    # fake training to initialize the model parameters
+    trainer = lightning.Trainer(max_epochs=1, enable_checkpointing=False, logger=False, enable_progress_bar=False, enable_model_summary=False)
+    trainer.fit(model, datamodule)
+
+    # trace the model
+    example = model.to_torchscript(method='trace')
+    assert isinstance(example, torch.jit.ScriptModule)
+
+    # check that the example has the same output as the original model
+    x = torch.randn((1, N_DESCRIPTORS))
+    assert torch.allclose(model(x), example(x))
+
+
+
+def test_trace_graph_based():
+    "Test if a simple GNN-based CV model can be tested with the to_torchscript method."
+    
+    # initialize GNN-based model
+    from mlcolvar.core.nn.graph.schnet import SchNetModel 
+    from mlcolvar.data.graph.utils import create_graph_tracing_example, create_test_graph_input
+    for environment in [False, True]:
+        # create fake dataset
+        dataset = create_test_graph_input(n_samples=50, 
+                                          output_type='dataset', 
+                                          environment=environment)
+        datamodule = DictModule(dataset, lengths=[0.75, 0.2, 0.05], batch_size=25)
+
+        # initialzie GNN-based model
+        gnn_model = SchNetModel(1, 
+                                10,
+                                atomic_numbers=dataset.metadata['atomic_numbers'])
+        model = mlcolvar.cvs.RegressionCV(model=gnn_model)
+        
+        # fake training to initialize the model parameters
+        trainer = lightning.Trainer(max_epochs=1, enable_checkpointing=False, logger=False, enable_progress_bar=False, enable_model_summary=False)
+        trainer.fit(model, datamodule)
+        
+        # trace the model
+        example = model.to_torchscript(method='trace')
+        assert isinstance(example, torch.jit.ScriptModule)
+
+        # check that the example has the same output as the original model
+        for check_environment in [False, True]:
+            x = create_graph_tracing_example(n_species=len(dataset.metadata['atomic_numbers']), 
+                                             environment=check_environment)
+            assert torch.allclose(model(x), example(x))
+
+if __name__=="__main__":
+    test_trace_descriptor_based()
+    test_trace_graph_based()
