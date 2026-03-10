@@ -221,7 +221,3 @@ def test_compute_committor_weights():
     for i in range(len(dataset)):    
             aux.append(dataset['data_list'][i]['weight'])
     assert (torch.allclose(torch.ones(len(dataset)), torch.Tensor(aux)))
-
-if __name__ == '__main__':
-    test_Kolmogorov_bias()
-    test_compute_committor_weights()

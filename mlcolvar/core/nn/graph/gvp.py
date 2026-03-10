@@ -924,6 +924,3 @@ def test_gvp() -> None:
 
 
     torch.set_default_dtype(torch.float32)
-
-if __name__ == '__main__':
-    test_gvp()

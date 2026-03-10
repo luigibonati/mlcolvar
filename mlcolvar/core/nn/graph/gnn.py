@@ -235,6 +235,3 @@ def test_get_edge_vectors_and_lengths() -> None:
         )
 
     torch.set_default_dtype(dtype)
-
-if __name__ == "__main__":
-    test_get_edge_vectors_and_lengths()

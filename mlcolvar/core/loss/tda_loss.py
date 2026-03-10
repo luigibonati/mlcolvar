@@ -201,6 +201,3 @@ def test_tda_loss():
     loss = Loss(H=H, labels=labels, return_loss_terms=True)
 
     loss[0].backward()
-
-if __name__ == '__main__':
-    test_tda_loss()

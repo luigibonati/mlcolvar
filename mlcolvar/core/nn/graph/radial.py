@@ -373,9 +373,3 @@ def test_radial_embedding_block():
 
     torch.set_default_dtype(dtype)
 
-
-if __name__ == '__main__':
-    test_bessel_basis()
-    test_gaussian_basis()
-    test_polynomial_cutoff()
-    test_radial_embedding_block()

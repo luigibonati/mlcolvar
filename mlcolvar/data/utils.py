@@ -148,5 +148,3 @@ def test_save_dataset():
     with tempfile.TemporaryDirectory() as tmpdir:
         save_dataset_configurations_as_extyz(dataset=dataset, file_name=f'{tmpdir}/saved_dataset')
         
-if __name__ == "__main__":
-    test_save_dataset()

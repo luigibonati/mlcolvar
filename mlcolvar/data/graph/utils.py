@@ -839,8 +839,3 @@ def test_from_configurations() -> None:
     assert(data['unit_shifts'] == torch.tensor([[0.0, 1.0, 0.0], 
                                                 [0.0, -1.0, 0.0]])
         ).all()
-
-if __name__ == '__main__':
-    test_to_one_hot()
-    test_from_configuration()
-    test_from_configurations()

@@ -146,6 +146,3 @@ def test_atomic_number_table() -> None:
     table_1 = AtomicNumberTable.from_zs([6] * 3 + [1] * 10 + [7] * 3 + [8] * 2)
     assert table_1.zs == table.zs
 
-
-if __name__ == '__main__':
-    test_atomic_number_table()
