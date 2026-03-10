@@ -221,6 +221,3 @@ def test_normalization():
     norm = Normalization(
         in_features, mean=stats["mean"], range=stats["std"], mode="min_max"
     )
-
-if __name__ == "__main__":
-    test_normalization()

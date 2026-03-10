@@ -214,6 +214,3 @@ def test_torsional_angle():
     angle.sum().backward()
     assert(torch.allclose(angle[:, 0].unsqueeze(-1), torch.sin(ref_phi), atol=1e-3))
     assert(torch.allclose(angle[:, 1].unsqueeze(-1), torch.cos(ref_phi), atol=1e-3))
-
-if __name__ == "__main__":
-    test_torsional_angle()

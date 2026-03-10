@@ -126,7 +126,3 @@ def test_regression_cv():
     model = RegressionCV(layers=[2, 10, 10, 1])
     model.loss_fn = lambda y, y_ref: (y - y_ref).abs().mean()
     trainer.fit(model, datamodule)
-
-
-if __name__ == "__main__":
-    test_regression_cv()

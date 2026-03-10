@@ -164,7 +164,3 @@ def test_deep_tica():
     with torch.no_grad():
         s = model(X).numpy()
     print(X.shape, "-->", s.shape)
-
-
-if __name__ == "__main__":
-    test_deep_tica()

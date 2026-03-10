@@ -515,7 +515,3 @@ def test_committor_with_derivatives():
             trainer.fit(model, wrong_datamodule)
         except ValueError as e:
             print("[TEST LOG] Checked this error: ", e)
-
-if __name__ == "__main__":
-    test_committor()
-    test_committor_with_derivatives()

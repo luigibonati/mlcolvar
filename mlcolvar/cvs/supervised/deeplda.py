@@ -199,8 +199,3 @@ def test_deeplda(n_states=2):
     model.eval()
     with torch.no_grad():
         s = model(X).numpy()
-
-
-if __name__ == "__main__":
-    test_deeplda(n_states=2)
-    test_deeplda(n_states=3)
