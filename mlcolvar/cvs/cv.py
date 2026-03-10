@@ -239,9 +239,9 @@ class BaseCV(lightning.LightningModule):
         else:
             raise ValueError(
                 "Found a preprocessing module during training. For this CV class, it is generally "
-                "recommended to precompute descriptors from the position-based dataset and train "
-                "directly on the descriptor-based dataset instead of keeping preprocessing in the loop. "
-                "This choice typically provides large computational savings."
+                "recommended to compute descriptors and store them in a DictDataset instead of  "
+                "re-applying the preprocessing at each training step. This choice typically provides" 
+                "large computational savings."
             )
 
         self._preprocessing_training_warning_shown = True
