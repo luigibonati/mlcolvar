@@ -388,5 +388,3 @@ def test_schnet_2() -> None:
     
     torch.set_default_dtype(torch.float32)
 
-if __name__ == "__main__":
-    test_schnet_1()

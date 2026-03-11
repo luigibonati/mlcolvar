@@ -271,7 +271,3 @@ def test_graph_sensitivity():
 
     # print results
     print(test_sensitivity)
-
-if __name__ == '__main__':
-    test_graph_sensitivity()
-    test_get_cv_values_graph()
