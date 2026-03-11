@@ -125,6 +125,7 @@ class Configuration:
     weight: Optional[float] = 1.0       # shape: []
     system: Optional[np.ndarray] = None       # shape: [n_system_atoms]
     environment: Optional[np.ndarray] = None  # shape: [n_environment_atoms]
+    subsystem: Optional[np.ndarray] = None    # shape: [n_subsystem]
 
 
 Configurations = List[Configuration]

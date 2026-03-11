@@ -95,6 +95,7 @@ class BaseCV(lightning.LightningModule):
             if isinstance(model, BaseGNN):
                 self.register_buffer('n_out', model.n_out)    
                 self.register_buffer('cutoff', model.cutoff)
+                self.register_buffer('cutoff_l', model.cutoff_l)
                 self.register_buffer('atomic_numbers', model.atomic_numbers)
         else:
             raise ValueError(

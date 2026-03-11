@@ -21,6 +21,7 @@ def _create_pyg_data_from_configuration(
     z_table: atomic.AtomicNumberTable,
     cutoff: float,
     buffer: float = 0.0,
+    cutoff_l: float = -1.0,
 ) -> torch_geometric.data.Data:
     """Build the torch_geometric graph data object from a configuration.
 
@@ -36,9 +37,13 @@ def _create_pyg_data_from_configuration(
         Buffer size used in finding active environment atoms if 
         restricting the neighborhood to a subsystem (i.e., system + environment), 
         `see also mlcolvar.data.grap.neighborhood.get_neighborhood`
+    cutoff_l: float
+        The long graph cutoff radius between subsystem atoms.
     """
 
     assert config.graph_labels is None or len(config.graph_labels.shape) == 2
+
+    assert not ((config.subsystem is not None) ^ (cutoff_l > 0))
 
     # NOTE: here we do not take care about the nodes that are not taking part
     # the graph, like, we don't even change the node indices in `edge_index`.
@@ -52,6 +57,33 @@ def _create_pyg_data_from_configuration(
                                                        environment_indices=config.environment,
                                                        buffer=buffer
                                                     )
+    
+    if config.subsystem is not None:
+        config.subsystem = np.array(config.subsystem)
+        edge_index_l, shifts_l, unit_shifts_l = get_neighborhood(
+            positions=config.positions[config.subsystem],
+            cutoff=cutoff_l,
+            cell=config.cell,
+            pbc=config.pbc,
+        )
+        edge_index_l = np.vstack([
+            config.subsystem[edge_index_l[0]],
+            config.subsystem[edge_index_l[1]]
+        ])
+        edge_index = np.hstack([
+            edge_index,
+            edge_index_l
+        ])
+
+        shifts = np.vstack([
+            shifts,
+            shifts_l
+        ])
+
+        unit_shifts = np.vstack([
+            unit_shifts,
+            unit_shifts_l
+        ])
     
     edge_index  = torch.tensor( edge_index, dtype=torch.long )
     shifts      = torch.tensor( shifts, dtype=torch.get_default_dtype() )
@@ -77,6 +109,16 @@ def _create_pyg_data_from_configuration(
         n_system     = torch.tensor( [[one_hot.shape[0]]], dtype=torch.get_default_dtype() )
         system_masks = torch.ones((one_hot.shape[0], 1), dtype=torch.bool)
 
+    # set subsystem_masks and edge_masks_le
+    if config.subsystem is not None:
+        subsystem_masks = torch.zeros((one_hot.shape[0], 1), dtype=torch.bool)
+        subsystem_masks[config.subsystem, 0] = 1
+        edge_masks_le = torch.zeros((edge_index.shape[1], 1), dtype=torch.bool)
+        edge_masks_le[-edge_index_l.shape[1]:, 0] = 1
+    else:
+        subsystem_masks = torch.zeros((one_hot.shape[0], 1), dtype=torch.bool)
+        edge_masks_le = torch.zeros((edge_index.shape[1], 1), dtype=torch.bool)
+
     # set n_env
     n_env   = torch.tensor( [[one_hot.shape[0] - n_system.to(torch.int).item()]], dtype=torch.get_default_dtype() )
 
@@ -93,6 +135,8 @@ def _create_pyg_data_from_configuration(
                                          n_env=n_env,
                                          system_masks=system_masks,
                                          weight=weight,
+                                         subsystem_masks=subsystem_masks,
+                                         edge_masks_le=edge_masks_le,
                                         )
     
     return pyg_data
@@ -102,6 +146,7 @@ def create_dataset_from_configurations(config: atomic.Configurations,
                                        z_table: atomic.AtomicNumberTable,
                                        cutoff: float,
                                        buffer: float = 0.0,
+                                       cutoff_l: float = -1.0,
                                        atom_names: List = None,
                                        remove_isolated_nodes: bool = False,
                                        show_progress: bool = True
@@ -120,6 +165,8 @@ def create_dataset_from_configurations(config: atomic.Configurations,
         Buffer size used in finding active environment atoms if 
         restricting the neighborhood to a subsystem (i.e., system + environment), 
         `see also mlcolvar.data.grap.neighborhood.get_neighborhood`
+    cutoff_l: float
+        The long graph cutoff radius.
     remove_isolated_nodes: bool
         If to remove isolated nodes from the dataset
     show_progress: bool
@@ -135,6 +182,7 @@ def create_dataset_from_configurations(config: atomic.Configurations,
                                                       z_table=z_table, 
                                                       cutoff=cutoff, 
                                                       buffer=buffer, 
+                                                      cutoff_l=cutoff_l,
                                                      ) for c in items
                 ]
 
@@ -193,6 +241,7 @@ def create_dataset_from_configurations(config: atomic.Configurations,
     dataset = DictDataset(dictionary={'data_list': data_list},
                           metadata={'atomic_numbers': z_table.zs,
                                     'cutoff': cutoff,
+                                    'cutoff_l': cutoff_l,
                                     'used_idx': unique_idx,
                                     'used_names': unique_names},
                           data_type='graphs')
@@ -720,6 +769,233 @@ def test_from_configuration() -> None:
     assert (dataset[-1]['data_list']['graph_labels'] == torch.tensor([[9.0]])).all()
 
 
+def test_from_configuration_long_cutoff() -> None:
+    # fake atomic numbers, positions, cell, graph label, node labels
+    numbers = [8, 1, 1]
+    positions = np.array([[0.0, 0.0, 0.0], 
+                          [0.07, 0.07, 0.0], 
+                          [0.07, -0.08, 0.0]],
+                        dtype=float
+                        )
+    cell = np.identity(3, dtype=float) * 0.2
+    graph_labels = np.array([[1]])
+    node_labels = np.array([[0], [1], [1]])
+
+    # init AtomicNumber object
+    z_table = atomic.AtomicNumberTable.from_zs(numbers)
+
+    # initialize configuration using all atoms
+    config = atomic.Configuration(
+        atomic_numbers=numbers,
+        positions=positions,
+        cell=cell,
+        pbc=[True] * 3,
+        node_labels=node_labels,
+        graph_labels=graph_labels,
+        system=[1, 2],
+        environment=[0],
+        subsystem=[1, 2],
+    )
+
+    # create dataset from a configuration
+    data = _create_pyg_data_from_configuration(
+        config, z_table, 0.1, cutoff_l=0.11
+    )
+
+    # check edges and shifts are created correctly
+    assert (
+        data['edge_index'] == torch.tensor(
+            [[0, 1, 1, 2, 1, 2], [1, 0, 2, 1, 2, 1]]
+        )
+    ).all()
+    assert (
+        data['shifts'] == torch.tensor([
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.2, 0.0],
+            [0.0, -0.2, 0.0],
+            [0.0, 0.2, 0.0],
+            [0.0, -0.2, 0.0],
+        ])
+    ).all()
+    assert (
+        data['unit_shifts'] == torch.tensor([
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, -1.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, -1.0, 0.0],
+        ])
+    ).all()
+    assert (
+        data['positions'] == torch.tensor([
+            [0.0, 0.0, 0.0],
+            [0.07, 0.07, 0.0],
+            [0.07, -0.08, 0.0],
+        ])
+    ).all()
+    assert (
+        data['cell'] == torch.tensor([
+            [0.2, 0.0, 0.0],
+            [0.0, 0.2, 0.0],
+            [0.0, 0.0, 0.2],
+        ])
+    ).all()
+    assert (
+        data['node_attrs'] == torch.tensor([
+            [0.0, 1.0], [1.0, 0.0], [1.0, 0.0]
+        ])
+    ).all()
+    assert (data['edge_masks_le'] == torch.tensor([[0]] * 4 + [[1]] * 2)).all()
+    assert (data['node_labels'] == torch.tensor([[0.0], [1.0], [1.0]])).all()
+    assert (data['graph_labels'] == torch.tensor([[1.0]])).all()
+    assert (data['edge_masks_le'] == torch.tensor([[0]] * 4 + [[1]] * 2)).all()
+    assert (data['system_masks'] == torch.tensor([[0], [1], [1]])).all()
+    assert (data['subsystem_masks'] == torch.tensor([[0], [1], [1]])).all()
+    assert data['weight'] == 1.0
+
+    # initialize configuration using all atoms
+    config = atomic.Configuration(
+        atomic_numbers=numbers,
+        positions=positions,
+        cell=cell,
+        pbc=[True] * 3,
+        node_labels=node_labels,
+        graph_labels=graph_labels,
+        system=[0, 2],
+        environment=[1],
+        subsystem=[0, 2],
+    )
+
+    # create dataset from a configuration
+    data = _create_pyg_data_from_configuration(
+        config, z_table, 0.1, cutoff_l=0.11
+    )
+
+    # check edges and shifts are created correctly
+    assert (
+        data['edge_index'] == torch.tensor(
+            [[0, 1, 1, 2, 0, 2], [1, 0, 2, 1, 2, 0]]
+        )
+    ).all()
+    assert (data['edge_masks_le'] == torch.tensor([[0]] * 4 + [[1]] * 2)).all()
+    assert (data['system_masks'] == torch.tensor([[1], [0], [1]])).all()
+    assert (data['subsystem_masks'] == torch.tensor([[1], [0], [1]])).all()
+
+    # fake atomic numbers, positions, cell, graph label, node labels
+    numbers = [8, 1, 1, 8, 1, 1]
+    positions = np.array(
+        [
+            [0.0, 0.0, 0.0], [0.07, 0.07, 0.0], [0.07, -0.07, 0.0],
+            [0.0, 0.8, 0.0], [0.07, 0.88, 0.0], [0.07, 0.73, 0.0],
+        ],
+        dtype=float
+    )
+    cell = np.identity(3, dtype=float)
+    graph_labels = np.array([[1]])
+    node_labels = np.array([[0], [1], [1], [0], [1], [1]])
+    z_table = atomic.AtomicNumberTable.from_zs(numbers)
+
+    # initialize configuration using all atoms
+    config = atomic.Configuration(
+        atomic_numbers=numbers,
+        positions=positions,
+        cell=cell,
+        pbc=[True] * 3,
+        node_labels=node_labels,
+        graph_labels=graph_labels,
+        system=[0, 3],
+        environment=[1, 2, 4, 5],
+        subsystem=[0, 3],
+    )
+
+    # create dataset from a configuration
+    data = _create_pyg_data_from_configuration(
+        config, z_table, 0.1, cutoff_l=0.4
+    )
+
+    # check edges and shifts are created correctly
+    assert (
+        data['edge_index'] == torch.tensor([
+            [[0, 0, 1, 2, 3, 5, 0, 3], [2, 1, 0, 0, 5, 3, 3, 0]]
+        ])
+    ).all()
+    assert (
+        data['shifts'] == torch.tensor([
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, -1.0, 0.0],
+            [0.0, 1.0, 0.0],
+        ])
+    ).all()
+    assert (
+        data['unit_shifts'] == torch.tensor([
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, -1.0, 0.0],
+            [0.0, 1.0, 0.0],
+        ])
+    ).all()
+    assert (data['edge_masks_le'] == torch.tensor(
+        [[0]] * 6 + [[1]] * 2
+    )).all()
+    assert (data['subsystem_masks'] == torch.tensor(
+        [[1], [0], [0], [1], [0], [0]]
+    )).all()
+
+    # create dataset from a configuration
+    data = _create_pyg_data_from_configuration(
+        config, z_table, 0.1, buffer=0.011, cutoff_l=0.4
+    )
+
+    # check edges and shifts are created correctly
+    assert (
+        data['edge_index'] == torch.tensor([
+            [0, 0, 1, 2, 2, 3, 4, 5, 0, 3],
+            [2, 1, 0, 4, 0, 5, 2, 3, 3, 0]
+        ])
+    ).all()
+    assert (
+        data['shifts'] == torch.tensor([
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, -1.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, -1.0, 0.0],
+            [0.0, 1.0, 0.0],
+        ])
+    ).all()
+    assert (
+        data['unit_shifts'] == torch.tensor([
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, -1.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, -1.0, 0.0],
+            [0.0, 1.0, 0.0],
+        ])
+    ).all()
+    assert (data['edge_masks_le'] == torch.tensor(
+        [[0]] * 8 + [[1]] * 2
+    )).all()
+
 
 def test_from_configurations() -> None:
     # fake atomic numbers, positions, cell, graph label, node labels
@@ -839,3 +1115,141 @@ def test_from_configurations() -> None:
     assert(data['unit_shifts'] == torch.tensor([[0.0, 1.0, 0.0], 
                                                 [0.0, -1.0, 0.0]])
         ).all()
+
+
+def test_from_configurations_long_cutoff() -> None:
+    # fake atomic numbers, positions, cell, graph label, node labels
+    numbers = [8, 1, 1, 8, 1, 1]
+    positions = np.array(
+        [
+            [0.0, 0.0, 0.0], [0.07, 0.07, 0.0], [0.07, -0.07, 0.0],
+            [0.0, 0.0, 0.9], [0.07, 0.08, 0.9], [0.07, -0.07, 0.9],
+        ],
+        dtype=float
+    )
+    cell = np.identity(3, dtype=float) * 1.1
+    graph_labels = np.array([[1]])
+    node_labels = np.array([[0], [1], [1], [0], [1], [1]])
+
+    # init AtomicNumber object
+    z_table = atomic.AtomicNumberTable.from_zs(numbers)
+
+    # initialize configuration using all atoms
+    config = atomic.Configuration(
+        atomic_numbers=numbers,
+        positions=positions,
+        cell=cell,
+        pbc=[True] * 3,
+        node_labels=node_labels,
+        graph_labels=graph_labels,
+        system=[0, 3],
+        environment=[1, 2, 4, 5],
+        subsystem=[0, 3],
+    )
+
+    # create dataset from a configuration, even if single is the multiple function
+    dataset = create_dataset_from_configurations(
+        [config],
+        z_table,
+        cutoff=0.11,
+        cutoff_l=0.4,
+        remove_isolated_nodes=True,
+        show_progress=False
+    )[0]
+
+    # take data entry from the DictDataset
+    data = dataset['data_list']
+
+    # check edges and shifts are created correctly
+    assert (
+        data['edge_index'] == torch.tensor([
+            [[0, 0, 1, 2, 3, 3, 4, 5, 0, 3], [2, 1, 0, 0, 5, 4, 3, 3, 3, 0]]
+        ])
+    ).all()
+    assert (
+        data['shifts'] == torch.tensor([
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, -1.1],
+            [0.0, 0.0, 1.1],
+        ])
+    ).all()
+    assert (
+        data['unit_shifts'] == torch.tensor([
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, -1.0],
+            [0.0, 0.0, 1.0],
+        ])
+    ).all()
+    assert (data['edge_masks_le'] == torch.tensor(
+        [[0]] * 8 + [[1]] * 2
+    )).all()
+
+    # create dataset from a configuration, even if single is the multiple function
+    dataset = create_dataset_from_configurations(
+        [config],
+        z_table,
+        cutoff=0.1,
+        cutoff_l=0.4,
+        remove_isolated_nodes=True,
+        show_progress=False
+    )[0]
+
+    # take data entry from the DictDataset
+    data = dataset['data_list']
+
+    # check edges and shifts are created correctly
+    assert (
+        data['edge_index'] == torch.tensor([
+            [[0, 0, 1, 2, 3, 4, 0, 3], [2, 1, 0, 0, 4, 3, 3, 0]]
+        ])
+    ).all()
+    assert (
+        data['shifts'] == torch.tensor([
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, -1.1],
+            [0.0, 0.0, 1.1],
+        ])
+    ).all()
+    assert (
+        data['unit_shifts'] == torch.tensor([
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, -1.0],
+            [0.0, 0.0, 1.0],
+        ])
+    ).all()
+    assert (data['edge_masks_le'] == torch.tensor(
+        [[0]] * 6 + [[1]] * 2
+    )).all()
+    assert (
+        data['positions'] == torch.tensor([
+            [0.0, 0.0, 0.0],
+            [0.07, 0.07, 0.0],
+            [0.07, -0.07, 0.0],
+            [0.0, 0.0, 0.9],
+            [0.07, -0.07, 0.9]
+        ])
+    ).all()

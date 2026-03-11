@@ -404,7 +404,8 @@ def create_timelagged_dataset(
             dataset = DictDataset(dictionary={"data_list" : copy.deepcopy(X[x_t.numpy().tolist()]["data_list"]),
                                             "data_list_lag" : copy.deepcopy(X[x_lag.numpy().tolist()]["data_list"])},
                                     metadata={"atomic_numbers" : atomic_numbers,
-                                            "cutoff" : X.metadata["cutoff"]},
+                                            "cutoff" : X.metadata["cutoff"],
+                                            "cutoff_l": X.metadata["cutoff_l"]},
                                     data_type="graphs")
             # update weights
             for i in range(len(dataset)):
