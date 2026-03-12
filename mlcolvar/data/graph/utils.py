@@ -21,7 +21,7 @@ def _create_pyg_data_from_configuration(
     z_table: atomic.AtomicNumberTable,
     cutoff: float,
     buffer: float = 0.0,
-    cutoff_l: float = -1.0,
+    long_range_cutoff: float = -1.0,
 ) -> torch_geometric.data.Data:
     """Build the torch_geometric graph data object from a configuration.
 
@@ -37,13 +37,14 @@ def _create_pyg_data_from_configuration(
         Buffer size used in finding active environment atoms if 
         restricting the neighborhood to a subsystem (i.e., system + environment), 
         `see also mlcolvar.data.grap.neighborhood.get_neighborhood`
-    cutoff_l: float
-        The long graph cutoff radius between subsystem atoms.
+    long_range_cutoff : float
+            Cutoff radius for the long-range edges defined on subsystem atoms. 
+            If negative, no long-range interactions are considered, by default -1.0
     """
 
     assert config.graph_labels is None or len(config.graph_labels.shape) == 2
 
-    assert not ((config.subsystem is not None) ^ (cutoff_l > 0))
+    assert not ((config.subsystem is not None) ^ (long_range_cutoff > 0))
 
     # NOTE: here we do not take care about the nodes that are not taking part
     # the graph, like, we don't even change the node indices in `edge_index`.
@@ -60,30 +61,20 @@ def _create_pyg_data_from_configuration(
     
     if config.subsystem is not None:
         config.subsystem = np.array(config.subsystem)
-        edge_index_l, shifts_l, unit_shifts_l = get_neighborhood(
+        edge_index_lr, shifts_lr, unit_shifts_lr = get_neighborhood(
             positions=config.positions[config.subsystem],
-            cutoff=cutoff_l,
+            cutoff=long_range_cutoff,
             cell=config.cell,
             pbc=config.pbc,
         )
-        edge_index_l = np.vstack([
-            config.subsystem[edge_index_l[0]],
-            config.subsystem[edge_index_l[1]]
-        ])
-        edge_index = np.hstack([
-            edge_index,
-            edge_index_l
-        ])
-
-        shifts = np.vstack([
-            shifts,
-            shifts_l
-        ])
-
-        unit_shifts = np.vstack([
-            unit_shifts,
-            unit_shifts_l
-        ])
+        edge_index_lr = np.vstack([config.subsystem[edge_index_lr[0]],
+                                   config.subsystem[edge_index_lr[1]]])
+        edge_index = np.hstack([edge_index, 
+                                edge_index_lr])
+        shifts = np.vstack([shifts,
+                            shifts_lr])
+        unit_shifts = np.vstack([unit_shifts,
+                                 unit_shifts_lr])
     
     edge_index  = torch.tensor( edge_index, dtype=torch.long )
     shifts      = torch.tensor( shifts, dtype=torch.get_default_dtype() )
@@ -109,15 +100,15 @@ def _create_pyg_data_from_configuration(
         n_system     = torch.tensor( [[one_hot.shape[0]]], dtype=torch.get_default_dtype() )
         system_masks = torch.ones((one_hot.shape[0], 1), dtype=torch.bool)
 
-    # set subsystem_masks and edge_masks_le
+    # set subsystem_masks and edge_masks_lr
     if config.subsystem is not None:
         subsystem_masks = torch.zeros((one_hot.shape[0], 1), dtype=torch.bool)
         subsystem_masks[config.subsystem, 0] = 1
-        edge_masks_le = torch.zeros((edge_index.shape[1], 1), dtype=torch.bool)
-        edge_masks_le[-edge_index_l.shape[1]:, 0] = 1
+        edge_masks_lr = torch.zeros((edge_index.shape[1], 1), dtype=torch.bool)
+        edge_masks_lr[-edge_index_lr.shape[1]:, 0] = 1
     else:
         subsystem_masks = torch.zeros((one_hot.shape[0], 1), dtype=torch.bool)
-        edge_masks_le = torch.zeros((edge_index.shape[1], 1), dtype=torch.bool)
+        edge_masks_lr = torch.zeros((edge_index.shape[1], 1), dtype=torch.bool)
 
     # set n_env
     n_env   = torch.tensor( [[one_hot.shape[0] - n_system.to(torch.int).item()]], dtype=torch.get_default_dtype() )
@@ -136,7 +127,7 @@ def _create_pyg_data_from_configuration(
                                          system_masks=system_masks,
                                          weight=weight,
                                          subsystem_masks=subsystem_masks,
-                                         edge_masks_le=edge_masks_le,
+                                         edge_masks_lr=edge_masks_lr,
                                         )
     
     return pyg_data
@@ -146,7 +137,7 @@ def create_dataset_from_configurations(config: atomic.Configurations,
                                        z_table: atomic.AtomicNumberTable,
                                        cutoff: float,
                                        buffer: float = 0.0,
-                                       cutoff_l: float = -1.0,
+                                       long_range_cutoff: float = -1.0,
                                        atom_names: List = None,
                                        remove_isolated_nodes: bool = False,
                                        show_progress: bool = True
@@ -165,8 +156,9 @@ def create_dataset_from_configurations(config: atomic.Configurations,
         Buffer size used in finding active environment atoms if 
         restricting the neighborhood to a subsystem (i.e., system + environment), 
         `see also mlcolvar.data.grap.neighborhood.get_neighborhood`
-    cutoff_l: float
-        The long graph cutoff radius.
+    long_range_cutoff : float
+            Cutoff radius for the long-range edges defined on subsystem atoms. 
+            If negative, no long-range interactions are considered, by default -1.0
     remove_isolated_nodes: bool
         If to remove isolated nodes from the dataset
     show_progress: bool
@@ -182,7 +174,7 @@ def create_dataset_from_configurations(config: atomic.Configurations,
                                                       z_table=z_table, 
                                                       cutoff=cutoff, 
                                                       buffer=buffer, 
-                                                      cutoff_l=cutoff_l,
+                                                      long_range_cutoff=long_range_cutoff,
                                                      ) for c in items
                 ]
 
@@ -241,7 +233,7 @@ def create_dataset_from_configurations(config: atomic.Configurations,
     dataset = DictDataset(dictionary={'data_list': data_list},
                           metadata={'atomic_numbers': z_table.zs,
                                     'cutoff': cutoff,
-                                    'cutoff_l': cutoff_l,
+                                    'long_range_cutoff': long_range_cutoff,
                                     'used_idx': unique_idx,
                                     'used_names': unique_names},
                           data_type='graphs')
@@ -799,7 +791,7 @@ def test_from_configuration_long_cutoff() -> None:
 
     # create dataset from a configuration
     data = _create_pyg_data_from_configuration(
-        config, z_table, 0.1, cutoff_l=0.11
+        config, z_table, 0.1, long_range_cutoff=0.11
     )
 
     # check edges and shifts are created correctly
@@ -847,10 +839,10 @@ def test_from_configuration_long_cutoff() -> None:
             [0.0, 1.0], [1.0, 0.0], [1.0, 0.0]
         ])
     ).all()
-    assert (data['edge_masks_le'] == torch.tensor([[0]] * 4 + [[1]] * 2)).all()
+    assert (data['edge_masks_lr'] == torch.tensor([[0]] * 4 + [[1]] * 2)).all()
     assert (data['node_labels'] == torch.tensor([[0.0], [1.0], [1.0]])).all()
     assert (data['graph_labels'] == torch.tensor([[1.0]])).all()
-    assert (data['edge_masks_le'] == torch.tensor([[0]] * 4 + [[1]] * 2)).all()
+    assert (data['edge_masks_lr'] == torch.tensor([[0]] * 4 + [[1]] * 2)).all()
     assert (data['system_masks'] == torch.tensor([[0], [1], [1]])).all()
     assert (data['subsystem_masks'] == torch.tensor([[0], [1], [1]])).all()
     assert data['weight'] == 1.0
@@ -870,7 +862,7 @@ def test_from_configuration_long_cutoff() -> None:
 
     # create dataset from a configuration
     data = _create_pyg_data_from_configuration(
-        config, z_table, 0.1, cutoff_l=0.11
+        config, z_table, 0.1, long_range_cutoff=0.11
     )
 
     # check edges and shifts are created correctly
@@ -879,7 +871,7 @@ def test_from_configuration_long_cutoff() -> None:
             [[0, 1, 1, 2, 0, 2], [1, 0, 2, 1, 2, 0]]
         )
     ).all()
-    assert (data['edge_masks_le'] == torch.tensor([[0]] * 4 + [[1]] * 2)).all()
+    assert (data['edge_masks_lr'] == torch.tensor([[0]] * 4 + [[1]] * 2)).all()
     assert (data['system_masks'] == torch.tensor([[1], [0], [1]])).all()
     assert (data['subsystem_masks'] == torch.tensor([[1], [0], [1]])).all()
 
@@ -912,7 +904,7 @@ def test_from_configuration_long_cutoff() -> None:
 
     # create dataset from a configuration
     data = _create_pyg_data_from_configuration(
-        config, z_table, 0.1, cutoff_l=0.4
+        config, z_table, 0.1, long_range_cutoff=0.4
     )
 
     # check edges and shifts are created correctly
@@ -945,7 +937,7 @@ def test_from_configuration_long_cutoff() -> None:
             [0.0, 1.0, 0.0],
         ])
     ).all()
-    assert (data['edge_masks_le'] == torch.tensor(
+    assert (data['edge_masks_lr'] == torch.tensor(
         [[0]] * 6 + [[1]] * 2
     )).all()
     assert (data['subsystem_masks'] == torch.tensor(
@@ -954,7 +946,7 @@ def test_from_configuration_long_cutoff() -> None:
 
     # create dataset from a configuration
     data = _create_pyg_data_from_configuration(
-        config, z_table, 0.1, buffer=0.011, cutoff_l=0.4
+        config, z_table, 0.1, buffer=0.011, long_range_cutoff=0.4
     )
 
     # check edges and shifts are created correctly
@@ -992,7 +984,7 @@ def test_from_configuration_long_cutoff() -> None:
             [0.0, 1.0, 0.0],
         ])
     ).all()
-    assert (data['edge_masks_le'] == torch.tensor(
+    assert (data['edge_masks_lr'] == torch.tensor(
         [[0]] * 8 + [[1]] * 2
     )).all()
 
@@ -1152,7 +1144,7 @@ def test_from_configurations_long_cutoff() -> None:
         [config],
         z_table,
         cutoff=0.11,
-        cutoff_l=0.4,
+        long_range_cutoff=0.4,
         remove_isolated_nodes=True,
         show_progress=False
     )[0]
@@ -1194,7 +1186,7 @@ def test_from_configurations_long_cutoff() -> None:
             [0.0, 0.0, 1.0],
         ])
     ).all()
-    assert (data['edge_masks_le'] == torch.tensor(
+    assert (data['edge_masks_lr'] == torch.tensor(
         [[0]] * 8 + [[1]] * 2
     )).all()
 
@@ -1203,7 +1195,7 @@ def test_from_configurations_long_cutoff() -> None:
         [config],
         z_table,
         cutoff=0.1,
-        cutoff_l=0.4,
+        long_range_cutoff=0.4,
         remove_isolated_nodes=True,
         show_progress=False
     )[0]
@@ -1241,7 +1233,7 @@ def test_from_configurations_long_cutoff() -> None:
             [0.0, 0.0, 1.0],
         ])
     ).all()
-    assert (data['edge_masks_le'] == torch.tensor(
+    assert (data['edge_masks_lr'] == torch.tensor(
         [[0]] * 6 + [[1]] * 2
     )).all()
     assert (

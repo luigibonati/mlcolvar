@@ -13,7 +13,10 @@ class GaussianBasis(torch.nn.Module):
     """
     Gaussian basis functions.
     """
-    def __init__(self, cutoff: float, cutoff_l: float = -1.0, n_bases=32) -> None:
+    def __init__(self, 
+                 cutoff: float, 
+                 long_range_cutoff: float = -1.0, 
+                 n_bases=32) -> None:
         """Initialize a Gaussian basis function
 
         Parameters
@@ -22,8 +25,8 @@ class GaussianBasis(torch.nn.Module):
             Cutoff radius of the basis set
         n_bases : int, optional
             Size of the basis set, by default 32
-        cutoff_l: float
-            The long cutoff.
+        long_range_cutoff: float
+            Long range cutoff for interaction between subsystem atoms, not used if negative, by default -1.0
         """
         super().__init__()
 
@@ -40,34 +43,34 @@ class GaussianBasis(torch.nn.Module):
         )
         self.register_buffer('offset', offset)
 
-        if cutoff_l > 0:
-            offset_l = torch.linspace(
+        if long_range_cutoff > 0:
+            offset_lr = torch.linspace(
                 start=0.0,
-                end=cutoff_l,
+                end=long_range_cutoff,
                 steps=n_bases,
                 dtype=torch.get_default_dtype(),
             )
-            coeff_l = -0.5 / (offset_l[1] - offset_l[0]).item() ** 2
+            coeff_lr = -0.5 / (offset_lr[1] - offset_lr[0]).item() ** 2
             self.register_buffer(
-                'coeff_l',
-                torch.tensor(coeff_l, dtype=torch.get_default_dtype())
+                'coeff_lr',
+                torch.tensor(coeff_lr, dtype=torch.get_default_dtype())
             )
-            self.register_buffer('offset_l', offset_l)
+            self.register_buffer('offset_lr', offset_lr)
         else:
-            self.register_buffer('coeff_l', torch.zeros((1, 1)))
-            self.register_buffer('offset_l', torch.zeros((1, 1)))
+            self.register_buffer('coeff_lr', torch.zeros((1, 1)))
+            self.register_buffer('offset_lr', torch.zeros((1, 1)))
 
         self.register_buffer(
             'cutoff',
             torch.tensor(cutoff, dtype=torch.get_default_dtype())
         )
         self.register_buffer(
-            'cutoff_l',
-            torch.tensor(cutoff_l, dtype=torch.get_default_dtype())
+            'long_range_cutoff',
+            torch.tensor(long_range_cutoff, dtype=torch.get_default_dtype())
         )
 
     def forward(
-        self, x: torch.Tensor, edge_masks_le: torch.Tensor = None
+        self, x: torch.Tensor, edge_masks_lr: torch.Tensor = None
     ) -> torch.Tensor:
 
         x = x.view(-1, 1)
@@ -75,13 +78,13 @@ class GaussianBasis(torch.nn.Module):
         dist = x - self.offset.view(1, -1)
         values = torch.exp(self.coeff * dist.pow(2))
 
-        if edge_masks_le is None:
+        if edge_masks_lr is None:
             return values
 
-        dist_l = x - self.offset_l.view(1, -1)
-        values_l = torch.exp(self.coeff_l * dist_l.pow(2))
+        dist_l = x - self.offset_lr.view(1, -1)
+        values_l = torch.exp(self.coeff_lr * dist_l.pow(2))
 
-        mask = edge_masks_le.view(-1, 1)
+        mask = edge_masks_lr.view(-1, 1)
         return torch.where(mask, values_l, values)
 
     def __repr__(self) -> str:
@@ -92,9 +95,9 @@ class GaussianBasis(torch.nn.Module):
         result = result + '| '
         data_string = '\033[32m{:f}\033[0m\033[36m 󰳁 \033[0m'
         result = result + data_string.format(self.cutoff)
-        if self.cutoff_l > 0:
+        if self.long_range_cutoff > 0:
             data_string = '\033[32m{:f}\033[0m\033[36m 󰳁 \033[0m'
-            result = result + data_string.format(self.cutoff_l)
+            result = result + data_string.format(self.long_range_cutoff)
         result = result + ']'
 
         return result
@@ -115,7 +118,7 @@ class BesselBasis(torch.nn.Module):
     def __init__(
             self, 
             cutoff: float, 
-            cutoff_l: float = -1.0, 
+            long_range_cutoff: float = -1.0, 
             n_bases=8, 
             trainable=False
         ) -> None:
@@ -125,8 +128,8 @@ class BesselBasis(torch.nn.Module):
         ----------
         cutoff: float
             Cutoff radius of the basis set
-        cutoff_l: float
-            The long cutoff.
+        long_range_cutoff: float
+            Long range cutoff for interaction between subsystem atoms, not used if negative, by default -1.0
         n_bases: int
             Size of the basis set, by default 8
         trainable: bool
@@ -156,10 +159,10 @@ class BesselBasis(torch.nn.Module):
             )
         )
 
-        if cutoff_l > 0:
-            bessel_weights_l = (
+        if long_range_cutoff > 0:
+            bessel_weights_lr = (
                 np.pi
-                / cutoff_l
+                / long_range_cutoff
                 * torch.linspace(
                     start=1.0,
                     end=n_bases,
@@ -168,41 +171,42 @@ class BesselBasis(torch.nn.Module):
                 )
             )
             if trainable:
-                self.bessel_weights_l = torch.nn.Parameter(bessel_weights_l)
+                self.bessel_weights_lr = torch.nn.Parameter(bessel_weights_lr)
             else:
-                self.register_buffer('bessel_weights_l', bessel_weights_l)
+                self.register_buffer('bessel_weights_lr', bessel_weights_lr)
 
             self.register_buffer(
-                'prefactor_l',
+                'prefactor_lr',
                 torch.tensor(
-                    np.sqrt(2.0 / cutoff_l), dtype=torch.get_default_dtype()
+                    np.sqrt(2.0 / long_range_cutoff), dtype=torch.get_default_dtype()
                 )
             )
         else:
-            self.register_buffer('bessel_weights_l', torch.zeros(1))
-            self.register_buffer('prefactor_l', torch.zeros(1))
+            self.register_buffer('bessel_weights_lr', torch.zeros(1))
+            self.register_buffer('prefactor_lr', torch.zeros(1))
 
         self.register_buffer(
             'cutoff', torch.tensor(cutoff, dtype=torch.get_default_dtype())
         )
         self.register_buffer(
-            'cutoff_l',
-            torch.tensor(cutoff_l, dtype=torch.get_default_dtype())
+            'long_range_cutoff',
+            torch.tensor(long_range_cutoff, dtype=torch.get_default_dtype())
         )
 
-    def forward(
-        self, x: torch.Tensor, edge_masks_le: torch.Tensor = None
-    ) -> torch.Tensor:
+    def forward(self, 
+                x: torch.Tensor, 
+                edge_masks_lr: torch.Tensor = None
+               ) -> torch.Tensor:
         numerator = torch.sin(self.bessel_weights * x)
         values = self.prefactor * (numerator / x)
 
-        if edge_masks_le is not None:
+        if edge_masks_lr is not None:
 
-            numerator_l = torch.sin(self.bessel_weights_l * x)
-            values_l = self.prefactor_l * (numerator_l / x)
+            numerator_lr = torch.sin(self.bessel_weights_lr * x)
+            values_lr = self.prefactor_lr * (numerator_lr / x)
 
-            mask = edge_masks_le.view(-1,1)
-            values = torch.where(mask, values_l, values)
+            mask = edge_masks_lr.view(-1,1)
+            values = torch.where(mask, values_lr, values)
 
         return values
 
@@ -214,9 +218,9 @@ class BesselBasis(torch.nn.Module):
         result = result + '| '
         data_string = '\033[32m{:f}\033[0m\033[36m 󰳁 \033[0m'
         result = result + data_string.format(self.cutoff)
-        if self.cutoff_l > 0:
+        if self.long_range_cutoff > 0:
             data_string = '\033[32m{:f}\033[0m\033[36m 󰳁 \033[0m'
-            result = result + data_string.format(self.cutoff_l)
+            result = result + data_string.format(self.long_range_cutoff)
         if self.bessel_weights.requires_grad:
             result = result + '|\033[36m TRAINABLE \033[0m'
         result = result + ']'
@@ -236,19 +240,21 @@ class PolynomialCutoff(torch.nn.Module):
     """
     p: torch.Tensor
     cutoff: torch.Tensor
-    cutoff_l: torch.Tensor
+    long_range_cutoff: torch.Tensor
 
-    def __init__(
-        self, cutoff: float, cutoff_l: float = -1.0, p: int = 6
-    ) -> None:
-        """initilalizes a polynomial cutoff function.
+    def __init__(self, 
+                 cutoff: float, 
+                 long_range_cutoff: float = -1.0, 
+                 p: int = 6
+                ) -> None:
+        """Initializes a polynomial cutoff function.
 
         Parameters
         ----------
         cutoff: float
             The cutoff radius.
-        cutoff_l: float
-            The long cutoff.
+        long_range_cutoff: float
+            Long range cutoff for interaction between subsystem atoms, not used if negative, by default -1.0
         p: int
             Order of the polynomial, by default 6
         """
@@ -260,16 +266,17 @@ class PolynomialCutoff(torch.nn.Module):
             'cutoff', torch.tensor(cutoff, dtype=torch.get_default_dtype())
         )
         self.register_buffer(
-            'cutoff_l', torch.tensor(cutoff_l, dtype=torch.get_default_dtype())
+            'long_range_cutoff', torch.tensor(long_range_cutoff, dtype=torch.get_default_dtype())
         )
 
-    def forward(
-        self, x: torch.Tensor, edge_masks_le: torch.Tensor = None
-    ) -> torch.Tensor:
-        if edge_masks_le is None:
+    def forward(self, 
+                x: torch.Tensor, 
+                edge_masks_lr: torch.Tensor = None
+                ) -> torch.Tensor:
+        if edge_masks_lr is None:
             c = self.cutoff
         else:
-            c = self.cutoff * ~edge_masks_le + self.cutoff_l * edge_masks_le
+            c = self.cutoff * ~edge_masks_lr + self.long_range_cutoff * edge_masks_lr
         # fmt: off
         envelope = (
             1.0
@@ -293,9 +300,9 @@ class PolynomialCutoff(torch.nn.Module):
         result = result + '| '
         data_string = '\033[32m{:f}\033[0m\033[36m 󰳁 \033[0m'
         result = result + data_string.format(self.cutoff)
-        if self.cutoff_l > 0:
+        if self.long_range_cutoff > 0:
             data_string = '\033[32m{:f}\033[0m\033[36m 󰳁 \033[0m'
-            result = result + data_string.format(self.cutoff_l)
+            result = result + data_string.format(self.long_range_cutoff)
         result = result + ']'
 
         return result
@@ -314,7 +321,7 @@ class RadialEmbeddingBlock(torch.nn.Module):
     def __init__(
         self,
         cutoff: float,
-        cutoff_l: float = -1.0,
+        long_range_cutoff: float = -1.0,
         n_bases: int = 8,
         n_polynomials: int = 6,
         basis_type: str = 'bessel',
@@ -325,8 +332,8 @@ class RadialEmbeddingBlock(torch.nn.Module):
         ----------
         cutoff : float
             Cutoff radius.
-        cutoff_l: float
-            The long cutoff.
+        long_range_cutoff: float
+            Long range cutoff for interaction between subsystem atoms, not used if negative, by default -1.0
         n_bases : int, optional
             Size of the basis set, by default 8
         n_polynomials : int, optional
@@ -343,11 +350,11 @@ class RadialEmbeddingBlock(torch.nn.Module):
         self.n_out = n_bases
         if basis_type == 'bessel':
             self.bessel_fn = BesselBasis(
-                cutoff=cutoff, cutoff_l=cutoff_l, n_bases=n_bases
+                cutoff=cutoff, long_range_cutoff=long_range_cutoff, n_bases=n_bases
             )
         elif basis_type == 'gaussian':
             self.bessel_fn = GaussianBasis(
-                cutoff=cutoff, cutoff_l=cutoff_l, n_bases=n_bases
+                cutoff=cutoff, long_range_cutoff=long_range_cutoff, n_bases=n_bases
             )
         else:
             raise RuntimeError(
@@ -355,7 +362,7 @@ class RadialEmbeddingBlock(torch.nn.Module):
             )
         if n_polynomials > 0:
             self.cutoff_fn = PolynomialCutoff(
-                cutoff=cutoff, cutoff_l=cutoff_l, p=n_polynomials
+                cutoff=cutoff, long_range_cutoff=long_range_cutoff, p=n_polynomials
             )
         else:
             self.cutoff_fn = None
@@ -363,7 +370,7 @@ class RadialEmbeddingBlock(torch.nn.Module):
     def forward(
         self,
         edge_lengths: torch.Tensor,
-        edge_masks_le: torch.Tensor = None,
+        edge_masks_lr: torch.Tensor = None,
     ) -> torch.Tensor:
         """
         The forward pass of RadialEmbeddingBlock
@@ -372,17 +379,17 @@ class RadialEmbeddingBlock(torch.nn.Module):
         ----------
         edge_lengths: torch.Tensor (shape: [n_edges, 1])
             Lengths of edges.
-        edge_masks_le:  torch.Tensor (shape: [1, n_edges])
-            Mask for long edges.
+        edge_masks_lr:  torch.Tensor (shape: [1, n_edges])
+            Mask for long range edges.
 
         Returns
         -------
         edge_embedding: torch.Tensor (shape: [n_edges, n_bases])
             The radial edge embedding.
         """
-        r = self.bessel_fn(edge_lengths, edge_masks_le)
+        r = self.bessel_fn(edge_lengths, edge_masks_lr)
         if self.cutoff_fn is not None:
-            c = self.cutoff_fn(edge_lengths, edge_masks_le)
+            c = self.cutoff_fn(edge_lengths, edge_masks_lr)
             return r * c
         else:
             return r
@@ -413,7 +420,7 @@ def test_bessel_basis() -> None:
 
     assert (torch.abs(data - data_new) < 1E-12).all()
 
-    rbf = BesselBasis(6.0, cutoff_l=10.0, n_bases=2)
+    rbf = BesselBasis(6.0, long_range_cutoff=10.0, n_bases=2)
 
     data_new = rbf(
         torch.tensor([i * 0.5 + 0.1 for i in range(0, 10)]).view(-1, 1)
@@ -473,7 +480,7 @@ def test_gaussian_basis() -> None:
 
     assert (torch.abs(data - data_new) < 1E-12).all()
 
-    rbf = GaussianBasis(6.0, cutoff_l=60.0, n_bases=2)
+    rbf = GaussianBasis(6.0, long_range_cutoff=60.0, n_bases=2)
 
     index = torch.tensor([True, False] * 5)
 

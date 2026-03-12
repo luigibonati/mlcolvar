@@ -343,7 +343,7 @@ def create_dataset_from_trajectories(
     topologies: Union[List[str], str, None],
     cutoff: float,
     buffer: float = 0.0,
-    cutoff_l: float = -1.0,
+    long_range_cutoff: float = -1.0,
     z_table: AtomicNumberTable = None,
     load_args: list = None,
     folder: str = None,
@@ -377,9 +377,10 @@ def create_dataset_from_trajectories(
         The graph cutoff radius.
     buffer: float
         Buffer size used in finding active environment atoms.
-    cutoff_l: float
-        The lone graph cutoff radius between subsystem atoms. This option
-        should be defined with the `subsystem_selection` option.
+    long_range_cutoff : float
+            Cutoff radius for the long-range edges defined on subsystem atoms. 
+            If negative, no long-range interactions are considered, by default -1.0. 
+            This option should be defined with the `subsystem_selection` option.
     z_table: mlcolvar.graph.data.atomic.AtomicNumberTable
         The atomic number table used to build the node attributes. If not
         given, it will be created from the given trajectories.
@@ -402,7 +403,7 @@ def create_dataset_from_trajectories(
     subsystem_selection: str
         MDTraj style atom selections of the subsystem atoms. If given, long
         edges will be put between subsystem atoms. This option should be
-        defined along with the `cutoff_l` option. Besides, all atoms selected
+        defined along with the `long_range_cutoff` option. Besides, all atoms selected
         by this option should also be selected by the `system_selection`.
     return_trajectories: bool
         If also return the loaded trajectory objects.
@@ -459,8 +460,8 @@ def create_dataset_from_trajectories(
             'Not `environment_selection` given! Cannot define buffer size!'
         )
     
-    assert not ((subsystem_selection is not None) ^ (cutoff_l > 0)), (
-        "`subsystem_selection` should appear with `cutoff_l`!"
+    assert not ((subsystem_selection is not None) ^ (long_range_cutoff > 0)), (
+        "`subsystem_selection` should appear with `long_range_cutoff`!"
     )
 
     # initialize simple labels if not provided
@@ -579,7 +580,7 @@ def create_dataset_from_trajectories(
                                                load_args=load_args,
                                                lengths_conversion=lengths_conversion,
                                                buffer=buffer,
-                                               cutoff_l=cutoff_l,
+                                               long_range_cutoff=long_range_cutoff,
                                                atom_names=atom_names,
                                                remove_isolated_nodes=remove_isolated_nodes,
                                                show_progress=show_progress)
@@ -646,7 +647,7 @@ def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
                                      load_args : dict = None,
                                      lengths_conversion : float = 10,
                                      buffer: float = 0.0,
-                                     cutoff_l: float = -1.0,
+                                     long_range_cutoff: float = -1.0,
                                      atom_names: List = None,
                                      remove_isolated_nodes: bool = False,
                                      show_progress: bool = True,
@@ -673,7 +674,7 @@ def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
         z_table=z_table,
         cutoff=cutoff,
         buffer=buffer,
-        cutoff_l=cutoff_l,
+        long_range_cutoff=long_range_cutoff,
         atom_names=atom_names,
         remove_isolated_nodes=remove_isolated_nodes,
         show_progress=show_progress

@@ -405,7 +405,7 @@ def create_timelagged_dataset(
                                             "data_list_lag" : copy.deepcopy(X[x_lag.numpy().tolist()]["data_list"])},
                                     metadata={"atomic_numbers" : atomic_numbers,
                                             "cutoff" : X.metadata["cutoff"],
-                                            "cutoff_l": X.metadata["cutoff_l"]},
+                                            "long_range_cutoff": X.metadata["long_range_cutoff"]},
                                     data_type="graphs")
             # update weights
             for i in range(len(dataset)):
