@@ -527,7 +527,7 @@ class GVPConvLayer(nn.Module):
         residual=True,
         cutoff: float = -1.0,
         long_range_cutoff: float = -1.0,
-        aggr: str = 'mean', # TODO this is not used
+        aggr: str = 'mean',
     ) -> None:
         """Full graph convolution / message passing layer with
         Geometric Vector Perceptrons. 
@@ -557,6 +557,11 @@ class GVPConvLayer(nn.Module):
             whether to perform the update residually, by default True
         cutoff : float, optional
             radial cutoff, by default -1.0
+        long_range_cutoff : float
+            Cutoff radius for the long-range edges defined on subsystem atoms. 
+            If negative, no long-range interactions are considered, by default -1.0
+        aggr : str, optional
+            Type of message aggregate function, by default 'mean'
         """
         super(GVPConvLayer, self).__init__()
         self.conv = GVPConv(
@@ -564,7 +569,7 @@ class GVPConvLayer(nn.Module):
             node_dims,
             edge_dims,
             n_message,
-            aggr='mean', # TODO use the aggr argument
+            aggr=aggr,
             activations=activations,
             vector_gate=vector_gate,
             cutoff=cutoff,
