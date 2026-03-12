@@ -115,17 +115,40 @@ def get_masses(atomic_numbers: Iterable[int]) -> List[float]:
 class Configuration:
     """
     Internal helper class that describe a given configuration of the system.
+
+    Parameters
+    ----------  
+        atomic_numbers: np.ndarray
+            Atomic numbers of the atoms in the system. Shape: [n_atoms]
+        positions: np.ndarray
+            Positions of the atoms in the system. Shape: [n_atoms, 3], units: Ang
+        cell: np.ndarray
+            Cell of the system. Shape: [n_atoms, 3], units: Ang
+        pbc: Optional[tuple]
+            Periodic boundary conditions of the system. Shape: [3]
+        node_labels: Optional[np.ndarray]
+            Node labels of the graph. Shape: [n_atoms, n_node_labels]
+        graph_labels: Optional[np.ndarray]
+            Graph-level labels of the configuration. Shape: [n_graph_labels, 1]
+        weight: Optional[float]
+            Weight of the configuration. Shape: []
+        system: Optional[np.ndarray]
+            Indices of the system atoms. Shape: [n_system_atoms]
+        environment: Optional[np.ndarray]
+            Indices of the environment atoms. Shape: [n_environment_atoms]
+        subsystem: Optional[np.ndarray]
+            Indices of the subsystem atoms for long-range interactions. Shape: [n_subsystem_atoms]
     """
-    atomic_numbers: np.ndarray          # shape: [n_atoms]
-    positions: np.ndarray               # shape: [n_atoms, 3], units: Ang
-    cell: np.ndarray                    # shape: [n_atoms, 3], units: Ang
-    pbc: Optional[tuple]                # shape: [3]
-    node_labels: Optional[np.ndarray]   # shape: [n_atoms, n_node_labels]
-    graph_labels: Optional[np.ndarray]  # shape: [n_graph_labels, 1]
-    weight: Optional[float] = 1.0       # shape: []
-    system: Optional[np.ndarray] = None       # shape: [n_system_atoms]
-    environment: Optional[np.ndarray] = None  # shape: [n_environment_atoms]
-    subsystem: Optional[np.ndarray] = None    # shape: [n_subsystem]
+    atomic_numbers: np.ndarray                  # shape: [n_atoms]
+    positions: np.ndarray                       # shape: [n_atoms, 3], units: Ang
+    cell: np.ndarray                            # shape: [n_atoms, 3], units: Ang
+    pbc: Optional[tuple]                        # shape: [3]
+    node_labels: Optional[np.ndarray]           # shape: [n_atoms, n_node_labels]
+    graph_labels: Optional[np.ndarray]          # shape: [n_graph_labels, 1]
+    weight: Optional[float] = 1.0               # shape: []
+    system: Optional[np.ndarray] = None         # shape: [n_system_atoms]
+    environment: Optional[np.ndarray] = None    # shape: [n_environment_atoms]
+    subsystem: Optional[np.ndarray] = None      # shape: [n_subsystem]
 
 
 Configurations = List[Configuration]
