@@ -341,7 +341,8 @@ def create_test_graph_input(output_type: str,
                             n_states: int = 2,
                             random_weights = False,
                             add_noise = True,
-                            environment: bool = False):
+                            environment: bool = False,
+                            long_range: bool = False,):
     """
     Util function to generate several types of mock graph data objects for testing purposes.
     The graphs are created drawing positions from a predefined set of positions that cover most use cases.
@@ -363,6 +364,8 @@ def create_test_graph_input(output_type: str,
         If to add a random noise for each entry to the predefined positions, by default True
     environment : bool, optional
         Whether to include environment nodes in the graph, by default False
+    long_range : bool, optional
+        Whether to include long-range edges in the graph, by default False
     
     Returns
     -------
@@ -371,7 +374,7 @@ def create_test_graph_input(output_type: str,
     if n_atoms == 3:
         numbers = [8, 1, 1]
         system_atoms = [0,1] if environment else None
-        environment_atoms = [3] if environment else None
+        environment_atoms = [2] if environment else None
         node_labels = np.array([[0], [1], [1]])
         _ref_positions = np.array(
             [
@@ -404,6 +407,8 @@ def create_test_graph_input(output_type: str,
     else:
         raise ValueError(f'Example input can be generated either with 3 or 4 atoms, found {n_atoms}')
 
+    subsystem_atoms = [0,1] if long_range else None
+
     np.random.seed(0)
     idx = np.random.randint(low=0, high=6, size=(n_samples*n_states))
     positions = _ref_positions[idx, :, :]
@@ -433,7 +438,8 @@ def create_test_graph_input(output_type: str,
             graph_labels=graph_labels[i],
             weight=weights[i],
             system=system_atoms,
-            environment=environment_atoms
+            environment=environment_atoms,
+            subsystem=subsystem_atoms,
         ) for i in range(0, n_samples*n_states)
     ]
 
@@ -442,8 +448,12 @@ def create_test_graph_input(output_type: str,
     if output_type == 'configurations':
         return config
 
-    dataset = create_dataset_from_configurations(
-        config, z_table, 0.1, show_progress=False, remove_isolated_nodes=True
+    dataset = create_dataset_from_configurations(config=config, 
+                                                 z_table=z_table, 
+                                                 cutoff=0.1, 
+                                                 long_range_cutoff=0.3 if long_range else -1.0,
+                                                 show_progress=False, 
+                                                 remove_isolated_nodes=True
     )
 
     if output_type == 'dataset':
@@ -471,7 +481,8 @@ def create_test_graph_input(output_type: str,
     return None
 
 def create_graph_tracing_example(n_species: int,
-                                 environment: bool = False) -> dict:
+                                 environment: bool = False,
+                                 long_range: bool = False) -> dict:
     """
     Util to create a tracing example for graph based models.
 
@@ -481,7 +492,8 @@ def create_graph_tracing_example(n_species: int,
         Number of chemical species to be considered in the model.
     environment : bool, optional
         Whether to include environment nodes in the graph, by default False.
-
+    long_range : bool, optional
+        Whether to include long-range edges in the graph, by default False.
     Returns
     -------
     dict
@@ -510,6 +522,7 @@ def create_graph_tracing_example(n_species: int,
     
     system_atoms = [0,1] if environment else None
     environment_atoms = [2] if environment else None
+    subsystem_atoms = [0,1] if long_range else None
     
     weights = np.ones((1, 1, 1))
     config = [
@@ -522,14 +535,19 @@ def create_graph_tracing_example(n_species: int,
             graph_labels=graph_labels[i],
             weight=weights[i],
             system=system_atoms,
-            environment=environment_atoms
+            environment=environment_atoms,
+            subsystem=subsystem_atoms,
         ) for i in range(0, 1)
     ]
 
     # here we do not remove isolated nodes
-    dataset = create_dataset_from_configurations(
-        config, z_table, 0.1, show_progress=False, remove_isolated_nodes=False
-    )
+    dataset = create_dataset_from_configurations(config=config, 
+                                                 z_table=z_table, 
+                                                 cutoff=0.1, 
+                                                 long_range_cutoff=0.3 if long_range else -1.0,
+                                                 show_progress=False, 
+                                                 remove_isolated_nodes=False
+                                    )
     
     datamodule = DictModule(
         dataset,
