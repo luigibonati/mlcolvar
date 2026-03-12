@@ -23,6 +23,7 @@ class BaseGNN(nn.Module):
         cutoff: float,
         atomic_numbers: List[int],
         pooling_operation: str,
+        long_range_cutoff: float = -1.0,
         n_bases: int = 6,
         n_polynomials: int = 6,
         basis_type: str = 'bessel',
@@ -40,6 +41,9 @@ class BaseGNN(nn.Module):
             The atomic numbers mapping.
         pooling_operation : str
             Type of pooling operation to combine node-level features into graph-level features, either mean or sum
+        long_range_cutoff : float
+            Cutoff radius for the long-range edges defined on subsystem atoms. 
+            If negative, no long-range interactions are considered, by default -1.0
         n_bases : int, optional
             Size of the basis set used for the embedding, by default 6
         n_polynomials : int, optional
@@ -50,15 +54,24 @@ class BaseGNN(nn.Module):
         super().__init__()
 
         self._radial_embedding = radial.RadialEmbeddingBlock(cutoff=cutoff, 
+                                                             long_range_cutoff=long_range_cutoff,
                                                              n_bases=n_bases, 
                                                              n_polynomials=n_polynomials, 
                                                              basis_type=basis_type
                                                             )
+        
+        assert (long_range_cutoff < 0) or (long_range_cutoff > cutoff), (
+            "The long range cutoff should be longer than the regular cutoff!"
+        )
+
         self.register_buffer(
             'n_out', torch.tensor(n_out, dtype=torch.int64)
         )
         self.register_buffer(
             'cutoff', torch.tensor(cutoff, dtype=torch.get_default_dtype())
+        )
+        self.register_buffer(
+            'long_range_cutoff', torch.tensor(long_range_cutoff, dtype=torch.get_default_dtype())
         )
         self.register_buffer(
             'atomic_numbers', torch.tensor(atomic_numbers, dtype=torch.int64)
@@ -102,8 +115,15 @@ class BaseGNN(nn.Module):
             shifts=data['shifts'],
             normalize=normalize,
         )
-        return lengths, self._radial_embedding(lengths), vectors
-    
+        
+        mask = data.get("edge_masks_lr", None)
+        
+        return (
+            lengths,
+            self._radial_embedding(lengths, mask),
+            vectors
+        )
+        
     def pooling(self,
                 input : torch.Tensor,
                 data : Dict[str, torch.Tensor]) -> torch.Tensor:
