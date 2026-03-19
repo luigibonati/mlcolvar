@@ -89,52 +89,58 @@ def tprime_evaluation(t, logweights=None):
 
 
 def compute_koopman_weights(
-    X: np.array,
-    lag_time: int = 1,
+    X: np.ndarray,
+    t: np.ndarray = None,
+    lag_time: float = 1.0,
     eps: float = 1e-6,
     min_weight: float = 1e-12,
 ):
     """
-    Compute Koopman reweighting log-factors from time-lagged data (NumPy version).
-
-    This function implements the linear Koopman reweighting scheme proposed in
-    Wu et al. (JCP 2017), estimating frame-wise weights w(x) such that weighted
-    time-lagged correlations approximate equilibrium expectations.
-
-    The weight function is assumed to be affine in the input features:
-        w(x) = u_x^T x + c
+    Compute Koopman reweighting log-factors from time-lagged data.
 
     Parameters
     ----------
     X : np.ndarray, shape (T, d)
         Time series of input features.
-    lag_time : int, optional
-        Lag time (in number of frames) used to construct time-lagged
-        correlations (default: 1).
+    t : np.ndarray, optional
+        Time series corresponding to X. If None, unit spacing (dt=1) is assumed.
+    lag_time : float
+        Lag time expressed in physical time units.
     eps : float, optional
-        Threshold for discarding small eigenvalues during whitening
-        of the covariance matrix (default: 1e-6).
+        Threshold for discarding small eigenvalues.
     min_weight : float, optional
-        Minimum allowed weight for numerical stability before taking
-        the logarithm (default: 1e-12).
+        Minimum allowed weight.
 
     Returns
     -------
     logweights : np.ndarray, shape (T,)
-        Logarithm of Koopman reweighting factors for each frame.
     """
-    # --- sanity checks ---
+
     X = np.asarray(X)
-    if lag_time < 1:
-        raise ValueError("lag_time must be >= 1.")
-    if lag_time >= X.shape[0]:
-        raise ValueError("lag_time too large for the length of X.")
+    # handle time
+    if t is None:
+        # fallback: assume unit time spacing
+        dt = 1.0
+    else:
+        t = np.asarray(t)
+        if len(t) != len(X):
+            raise ValueError("t and X must have the same length.")
+        if len(t) < 2:
+            raise ValueError("t must have at least two elements.")
+        
+        dt = float(t[1] - t[0])
+        
+    lag_frames = int(round(lag_time / dt))
+    if lag_frames < 1:
+        raise ValueError("lag_time too small.")
+    if lag_frames >= X.shape[0]:
+        raise ValueError("lag_time too large.")
 
     # ------------------------------------------------------------------
     # 1) Construct time-lagged pairs and remove mean (unweighted)
     # ------------------------------------------------------------------
-    X0 = X[:-lag_time]
-    Xt = X[lag_time:]
+    X0 = X[:-lag_frames]
+    Xt = X[lag_frames:]
 
     mu0 = X0.mean(axis=0)
     mut = Xt.mean(axis=0)
