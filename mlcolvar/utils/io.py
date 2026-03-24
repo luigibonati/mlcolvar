@@ -346,6 +346,9 @@ def create_dataset_from_trajectories(
     load_args: list = None,
     folder: str = None,
     labels: list = None,
+    trajectory_labels: list = None,
+    graph_labels: list = None,
+    node_labels: list = None,
     system_selection: str = None,
     environment_selection: str = None,
     return_trajectories: bool = False,
@@ -383,8 +386,15 @@ def create_dataset_from_trajectories(
         Common path for the files to be imported. If set, filenames become
         `folder/file_name`.
     labels: list
-        List of labels to be assigned to the given files. by default None.
-        If None, it simply enumerates the files.
+        Deprecated alias for `trajectory_labels`.
+    trajectory_labels: list
+        One label (or vector of labels) per trajectory. It is broadcast to all
+        selected frames and saved as `graph_labels`.
+    graph_labels: list
+        One label (or vector of labels) per selected frame of each trajectory.
+        Mutually exclusive with `trajectory_labels`.
+    node_labels: list
+        Optional node-level labels per selected frame and trajectory.
     system_selection: str
         MDTraj style atom selections [1] of the system atoms. If given, only
         selected atoms will be loaded from the trajectories. This option may
@@ -429,6 +439,19 @@ def create_dataset_from_trajectories(
     .. [1] https://www.mdtraj.org/1.9.8.dev0/atom_selection.html
     """
 
+    # ensure trajectories is a list
+    if isinstance(trajectories, str):
+        trajectories = [trajectories]
+
+    # backward compatibility: labels is an alias for trajectory_labels
+    if labels is not None and trajectory_labels is not None:
+        raise ValueError("Only one of `labels` or `trajectory_labels` can be provided.")
+    if labels is not None:
+        trajectory_labels = labels
+
+    if trajectory_labels is not None and graph_labels is not None:
+        raise ValueError("Only one of `trajectory_labels` or `graph_labels` can be provided.")
+
     # check if using truncated graph
     if environment_selection is not None:
         assert system_selection is not None, (
@@ -448,23 +471,11 @@ def create_dataset_from_trajectories(
             'Not `environment_selection` given! Cannot define buffer size!'
         )
 
-    # initialize simple labels if not provided
-    if labels is None:
-        labels = [i for i in range(len(trajectories))]
-    else:
-        assert len(labels) == len(trajectories), (
-            "Number of labels and trajectories must be the same!"
-            )
-
     # check topologies if given, with xyz it can be None
     if topologies is not None:
         assert len(trajectories) == len(topologies) or len(topologies)==1 or isinstance(topologies, str), (
             'Either a single topology file or as many as the trajectory files must be provided!'
         )
-
-    # ensure trajectories is a list
-    if isinstance(trajectories, str):
-        trajectories = [trajectories]
     
     # --- Handle topologies input ---
     # Allow topology to be None or empty. In that case, create a list of empty strings.
@@ -546,6 +557,14 @@ def create_dataset_from_trajectories(
                 else:
                     print(f"downloaded file ({url_top}) saved as ({topologies[i]}).")
 
+    graph_labels, node_labels = _normalize_graph_target_inputs(
+        trajectories=trajectories_in_memory,
+        load_args=load_args,
+        trajectory_labels=trajectory_labels,
+        graph_labels=graph_labels,
+        node_labels=node_labels,
+    )
+
     if z_table is None:
         z_table = _z_table_from_top(topologies_in_memory)
 
@@ -555,7 +574,8 @@ def create_dataset_from_trajectories(
         atom_names = None
 
     dataset = dataset_from_mdtraj_trajectories(trajectories=trajectories_in_memory,
-                                               labels=labels,
+                                               graph_labels=graph_labels,
+                                               node_labels=node_labels,
                                                cutoff=cutoff, 
                                                z_table=z_table,
                                                system_selection=system_selection,
@@ -619,8 +639,181 @@ def load_traj_with_mdtraj(trajectory: str,
         
         return traj
 
+def _as_torch_if_array(x):
+    if isinstance(x, torch.Tensor):
+        return x.detach().cpu()
+    if isinstance(x, np.ndarray):
+        return torch.as_tensor(x)
+    return x
+
+
+def _to_torch_tensor(x, dtype=torch.get_default_dtype()):
+    if isinstance(x, torch.Tensor):
+        return x.detach().cpu().to(dtype=dtype)
+    return torch.as_tensor(x, dtype=dtype)
+
+
+def _get_selected_frame_indices(n_frames: int, load_arg: dict = None) -> List[int]:
+    if load_arg is None:
+        return list(range(0, n_frames, 1))
+    start = load_arg.get('start', 0)
+    stop = load_arg.get('stop', None)
+    stride = load_arg.get('stride', 1)
+    if stop is None:
+        stop = n_frames
+    return list(range(start, stop, stride))
+
+
+def _normalize_trajectory_labels(trajectory_labels, n_traj: int):
+    if trajectory_labels is None:
+        return [torch.tensor([[i]], dtype=torch.get_default_dtype()) for i in range(n_traj)]
+
+    trajectory_labels = _as_torch_if_array(trajectory_labels)
+
+    if isinstance(trajectory_labels, torch.Tensor):
+        if trajectory_labels.ndim == 0:
+            trajectory_labels = trajectory_labels.reshape(1).repeat(n_traj)
+            trajectory_labels = trajectory_labels.tolist()
+        elif trajectory_labels.ndim >= 1 and trajectory_labels.shape[0] == n_traj:
+            trajectory_labels = [trajectory_labels[i] for i in range(n_traj)]
+        else:
+            if n_traj == 1:
+                raise ValueError(
+                    f"trajectory_labels has length {trajectory_labels.shape[0]} for a single trajectory. Use graph_labels for per-frame targets."
+                )
+            raise ValueError(
+                f"trajectory_labels first dimension ({trajectory_labels.shape[0]}) must match number of trajectories ({n_traj})."
+            )
+
+    if not isinstance(trajectory_labels, (list, tuple)):
+        trajectory_labels = [trajectory_labels]
+
+    if len(trajectory_labels) != n_traj:
+        raise ValueError(
+            f"Number of trajectory labels ({len(trajectory_labels)}) must match number of trajectories ({n_traj})."
+        )
+
+    normalized = []
+    for item in trajectory_labels:
+        item = _as_torch_if_array(item)
+        if isinstance(item, torch.Tensor):
+            if item.ndim == 0:
+                normalized.append(item.reshape(1, 1).to(dtype=torch.get_default_dtype()))
+            else:
+                normalized.append(item.reshape(-1, 1).to(dtype=torch.get_default_dtype()))
+        elif np.isscalar(item):
+            normalized.append(torch.tensor([[item]], dtype=torch.get_default_dtype()))
+        else:
+            arr = _to_torch_tensor(item)
+            if arr.ndim == 0:
+                normalized.append(arr.reshape(1, 1))
+            else:
+                normalized.append(arr.reshape(-1, 1))
+    return normalized
+
+
+def _broadcast_trajectory_to_graph_labels(trajectory_labels, frame_counts: List[int]):
+    trajectory_labels = _normalize_trajectory_labels(trajectory_labels, len(frame_counts))
+    broadcast = []
+    for i, n_frames in enumerate(frame_counts):
+        y = trajectory_labels[i].reshape(1, -1)
+        broadcast.append(y.repeat(n_frames, 1))
+    return broadcast
+
+
+def _normalize_frame_level_labels(labels, frame_counts: List[int], name: str):
+    n_traj = len(frame_counts)
+
+    if labels is None:
+        return [None for _ in range(n_traj)]
+
+    labels = _as_torch_if_array(labels)
+
+    if n_traj == 1 and isinstance(labels, torch.Tensor) and labels.ndim >= 1 and labels.shape[0] == frame_counts[0]:
+        labels = [labels]
+
+    if not isinstance(labels, (list, tuple)):
+        raise ValueError(f"{name} must be a list/tuple with one entry per trajectory.")
+
+    if len(labels) != n_traj:
+        raise ValueError(
+            f"{name} has {len(labels)} entries but number of trajectories is {n_traj}."
+        )
+
+    normalized = []
+    for i, item in enumerate(labels):
+        n_frames = frame_counts[i]
+        if item is None:
+            normalized.append(None)
+            continue
+
+        item = _as_torch_if_array(item)
+        arr = _to_torch_tensor(item)
+
+        if arr.ndim == 0:
+            arr = arr.reshape(1, 1).repeat(n_frames, 1)
+        elif arr.ndim == 1:
+            if arr.shape[0] != n_frames:
+                raise ValueError(
+                    f"{name}[{i}] length ({arr.shape[0]}) must match selected frames ({n_frames})."
+                )
+            arr = arr.reshape(-1, 1)
+        elif arr.ndim == 2:
+            if arr.shape[0] != n_frames:
+                raise ValueError(
+                    f"{name}[{i}] first dimension ({arr.shape[0]}) must match selected frames ({n_frames})."
+                )
+        elif arr.ndim == 3 and name == 'node_labels':
+            if arr.shape[0] != n_frames:
+                raise ValueError(
+                    f"{name}[{i}] first dimension ({arr.shape[0]}) must match selected frames ({n_frames})."
+                )
+        else:
+            raise ValueError(f"Unsupported shape for {name}[{i}]: {tuple(arr.shape)}.")
+
+        normalized.append(arr)
+
+    return normalized
+
+
+def _normalize_graph_target_inputs(
+    trajectories: List[mdtraj.Trajectory],
+    load_args: list,
+    trajectory_labels=None,
+    graph_labels=None,
+    node_labels=None,
+):
+    n_traj = len(trajectories)
+    frame_counts = [
+        len(_get_selected_frame_indices(
+            n_frames=len(traj),
+            load_arg=load_args[i] if load_args is not None else None,
+        ))
+        for i, traj in enumerate(trajectories)
+    ]
+
+    if trajectory_labels is not None and graph_labels is not None:
+        raise ValueError("Only one of `trajectory_labels` or `graph_labels` can be provided.")
+
+    if trajectory_labels is None and graph_labels is None:
+        trajectory_labels = [i for i in range(n_traj)]
+
+    if graph_labels is None:
+        graph_labels = _broadcast_trajectory_to_graph_labels(
+            trajectory_labels=trajectory_labels,
+            frame_counts=frame_counts,
+        )
+    else:
+        graph_labels = _normalize_frame_level_labels(graph_labels, frame_counts, name='graph_labels')
+
+    node_labels = _normalize_frame_level_labels(node_labels, frame_counts, name='node_labels')
+
+    return graph_labels, node_labels
+
+
 def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
-                                     labels: List[int],
+                                     graph_labels: List,
+                                     node_labels: List,
                                      cutoff: float,
                                      z_table: AtomicNumberTable, 
                                      system_selection: str = None,
@@ -637,7 +830,8 @@ def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
     for i in range(len(trajectories)):
             configuration = _configurations_from_trajectory(
                 trajectory=trajectories[i],
-                label=labels[i],
+                graph_labels=graph_labels[i],
+                node_labels=node_labels[i],
                 system_selection=system_selection,
                 environment_selection=environment_selection,
                 start=load_args[i]['start'] if load_args is not None else 0,
@@ -692,7 +886,8 @@ def _z_table_from_top(
 
 def _configurations_from_trajectory(
     trajectory: mdtraj.Trajectory,
-    label: int = None,
+    graph_labels = None,
+    node_labels = None,
     system_selection: str = None,
     environment_selection: str = None,
     start: int = 0,
@@ -706,8 +901,8 @@ def _configurations_from_trajectory(
     ----------
     trajectory: mdtraj.Trajectory
         The MDTraj Trajectory object.
-    label: int
-        The graph label.
+    graph_labels: np.ndarray
+        Frame-level graph labels for selected frames of this trajectory.
     system_selection: str
         MDTraj style atom selections of the system atoms. If given, only
         selected atoms will be loaded from the trajectories. This option may
@@ -720,9 +915,6 @@ def _configurations_from_trajectory(
         Conversion factor for length units, by default 10.
         MDTraj uses nanometers, the default sends to Angstroms.
     """
-    if label is not None:
-        label = np.array([[label]])
-
     if system_selection is not None and environment_selection is not None:
         system_atoms = trajectory.top.select(system_selection)
         assert len(system_atoms) > 0, (
@@ -750,15 +942,26 @@ def _configurations_from_trajectory(
         stop = len(trajectory)
 
     configurations = []
+    frame_indices = list(range(start, stop, stride))
 
-    for i in range(start,stop,stride):
+    for local_idx, i in enumerate(frame_indices):
+        label_i = None
+        if graph_labels is not None:
+            label_i = _to_torch_tensor(graph_labels[local_idx]).reshape(-1, 1)
+
+        node_i = None
+        if node_labels is not None:
+            node_i = _to_torch_tensor(node_labels[local_idx])
+            if node_i.ndim == 1:
+                node_i = node_i.reshape(-1, 1)
+
         configuration = Configuration(
             atomic_numbers=atomic_numbers,
             positions=trajectory.xyz[i] * lengths_conversion,
             cell=cell[i] * lengths_conversion,
             pbc=pbc,
-            graph_labels=label,
-            node_labels=None,  # TODO: Add supports for per-node labels.
+            graph_labels=label_i,
+            node_labels=node_i,
             system=system_atoms,
             environment=environment_atoms
         )
@@ -1005,6 +1208,36 @@ system_selection: str = None
         assert dataset[4]["data_list"]['graph_labels'] == torch.tensor([[2.0]])
         assert dataset[5]["data_list"]['graph_labels'] == torch.tensor([[2.0]])
 
+        dataset = create_dataset_from_trajectories(
+            trajectories=[test_dataset_path, test_dataset_path, test_dataset_path],
+            topologies=[test_dataset_path, test_dataset_path, test_dataset_path],
+            cutoff=1.0,
+            trajectory_labels=[10.0, 20.0, 30.0],
+            system_selection=system_selection,
+            show_progress=False,
+        )
+        assert dataset[0]["data_list"]["graph_labels"] == torch.tensor([[10.0]])
+        assert dataset[1]["data_list"]["graph_labels"] == torch.tensor([[10.0]])
+        assert dataset[2]["data_list"]["graph_labels"] == torch.tensor([[20.0]])
+        assert dataset[3]["data_list"]["graph_labels"] == torch.tensor([[20.0]])
+        assert dataset[4]["data_list"]["graph_labels"] == torch.tensor([[30.0]])
+        assert dataset[5]["data_list"]["graph_labels"] == torch.tensor([[30.0]])
+
+        dataset = create_dataset_from_trajectories(
+            trajectories=[test_dataset_path, test_dataset_path, test_dataset_path],
+            topologies=[test_dataset_path, test_dataset_path, test_dataset_path],
+            cutoff=1.0,
+            graph_labels=[np.array([1.0, 2.0]), np.array([3.0, 4.0]), np.array([5.0, 6.0])],
+            system_selection=system_selection,
+            show_progress=False,
+        )
+        assert torch.allclose(dataset[0]["data_list"]["graph_labels"], torch.tensor([[1.0]]))
+        assert torch.allclose(dataset[1]["data_list"]["graph_labels"], torch.tensor([[2.0]]))
+        assert torch.allclose(dataset[2]["data_list"]["graph_labels"], torch.tensor([[3.0]]))
+        assert torch.allclose(dataset[3]["data_list"]["graph_labels"], torch.tensor([[4.0]]))
+        assert torch.allclose(dataset[4]["data_list"]["graph_labels"], torch.tensor([[5.0]]))
+        assert torch.allclose(dataset[5]["data_list"]["graph_labels"], torch.tensor([[6.0]]))
+
         def check_data_1(data) -> None:
             assert(torch.allclose(data["data_list"]['edge_index'], torch.tensor([[0, 0, 1, 1, 2, 2],
                                                                                 [2, 1, 0, 2, 1, 0]])
@@ -1094,6 +1327,86 @@ system_selection: str = None
 
             for i in range(6):
                 check_data_2(dataset[i])
+
+
+def test_graph_and_node_labels_syntax(text: str = """
+CRYST1    2.000    2.000    2.000  90.00  90.00  90.00 P 1           1
+ATOM      1  OH2 TIP3W   1       0.000   0.000   0.000  1.00  0.00      WT1  O
+ATOM      2  H1  TIP3W   1       0.700   0.700   0.000  1.00  0.00      WT1  H
+ATOM      3  H2  TIP3W   1       0.700  -0.700   0.000  1.00  0.00      WT1  H
+ENDMODEL
+ATOM      1  OH2 TIP3W   1       0.000   0.000   0.000  1.00  0.00      WT1  O
+ATOM      2  H1  TIP3W   1       0.700   0.700   0.000  1.00  0.00      WT1  H
+ATOM      3  H2  TIP3W   1       0.700  -0.700   0.000  1.00  0.00      WT1  H
+END
+""") -> None:
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        test_dataset_path = os.path.join(tmpdir, "test_labels_syntax.pdb")
+        with open(test_dataset_path, 'w') as fp:
+            print(text, file=fp)
+
+        # Valid graph-level labels from torch tensor [n_frames]
+        dataset = create_dataset_from_trajectories(
+            trajectories=[test_dataset_path],
+            topologies=[test_dataset_path],
+            cutoff=1.0,
+            graph_labels=torch.tensor([1.0, 2.0]),
+            show_progress=False,
+        )
+        assert torch.allclose(dataset[0]["data_list"]["graph_labels"], torch.tensor([[1.0]]))
+        assert torch.allclose(dataset[1]["data_list"]["graph_labels"], torch.tensor([[2.0]]))
+
+        # Valid graph-level multitarget labels [n_frames, n_targets]
+        dataset = create_dataset_from_trajectories(
+            trajectories=[test_dataset_path],
+            topologies=[test_dataset_path],
+            cutoff=1.0,
+            graph_labels=torch.tensor([[1.0, 10.0], [2.0, 20.0]]),
+            show_progress=False,
+        )
+        assert torch.allclose(dataset[0]["data_list"]["graph_labels"], torch.tensor([[1.0], [10.0]]))
+        assert torch.allclose(dataset[1]["data_list"]["graph_labels"], torch.tensor([[2.0], [20.0]]))
+
+        # Valid node-level labels [n_frames, n_nodes]
+        dataset = create_dataset_from_trajectories(
+            trajectories=[test_dataset_path],
+            topologies=[test_dataset_path],
+            cutoff=1.0,
+            graph_labels=torch.tensor([0.0, 1.0]),
+            node_labels=torch.tensor([[0.0, 1.0, 2.0], [3.0, 4.0, 5.0]]),
+            show_progress=False,
+        )
+        assert torch.allclose(dataset[0]["data_list"]["node_labels"], torch.tensor([[0.0], [1.0], [2.0]]))
+        assert torch.allclose(dataset[1]["data_list"]["node_labels"], torch.tensor([[3.0], [4.0], [5.0]]))
+
+        # Invalid graph-level labels: wrong number of frames
+        try:
+            create_dataset_from_trajectories(
+                trajectories=[test_dataset_path],
+                topologies=[test_dataset_path],
+                cutoff=1.0,
+                graph_labels=torch.tensor([1.0, 2.0, 3.0]),
+                show_progress=False,
+            )
+            assert False
+        except ValueError:
+            pass
+
+        # Invalid node-level labels: wrong number of frames
+        try:
+            create_dataset_from_trajectories(
+                trajectories=[test_dataset_path],
+                topologies=[test_dataset_path],
+                cutoff=1.0,
+                graph_labels=torch.tensor([1.0, 2.0]),
+                node_labels=torch.tensor([[0.0, 1.0, 2.0]]),
+                show_progress=False,
+            )
+            assert False
+        except ValueError:
+            pass
 
 
 def test_dataset_from_xyz():
