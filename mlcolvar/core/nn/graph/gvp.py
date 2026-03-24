@@ -136,7 +136,7 @@ class GVPModel(BaseGNN):
         ])
 
     def forward(
-        self, data: Dict[str, torch.Tensor], pool: bool = True
+        self, data: Dict[str, torch.Tensor]
     ) -> torch.Tensor:
         """The forward pass.
 
@@ -145,8 +145,6 @@ class GVPModel(BaseGNN):
         data: Dict[str, torch.Tensor]
             The data dict. Usually came from the `to_dict` method of a
             `torch_geometric.data.Batch` object.
-        pool: bool
-            If perform the pooling to the model output, by default True.
         """
         h_V = (data['node_attrs'], None)
         for w in self.W_v:
@@ -171,8 +169,8 @@ class GVPModel(BaseGNN):
             h_V = w(h_V)
         out = h_V[0]
 
-        if pool:
-            out = self.pooling(input=out, data=data)
+        # pooling is controlled by `self.pooling_operation` (mean/sum/None)
+        out = self.pooling(input=out, data=data)
 
         return out
 
