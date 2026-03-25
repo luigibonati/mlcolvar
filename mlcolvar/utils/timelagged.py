@@ -517,3 +517,21 @@ def test_create_timelagged_dataset():
         X, t, lag_time=lag_time, walker=walker
     )
     assert len(dataset) == n_points - 2 * lag_time
+
+def test_compute_koopman_weights():
+    n_points = 100
+    dim = 3
+    lag_time = 5.0
+
+    # Generate random input data (T, d)
+    X = np.random.randn(n_points, dim)
+    t = np.arange(n_points)  # uniform time grid
+
+    # --- Basic functionality test ---
+    logw = compute_koopman_weights(X, t=t, lag_time=lag_time)
+    assert logw.shape == (n_points,)
+    assert np.all(np.isfinite(logw))
+
+    # --- Test fallback when time array is not provided ---
+    logw2 = compute_koopman_weights(X, t=None, lag_time=1.0)
+    assert logw2.shape == (n_points,)
