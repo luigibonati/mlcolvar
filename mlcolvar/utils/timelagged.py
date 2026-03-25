@@ -20,7 +20,7 @@ try:
 except ImportError:
     TQDM_IS_INSTALLED = False
 
-__all__ = ["find_timelagged_configurations", "create_timelagged_dataset"]
+__all__ = ["find_timelagged_configurations", "create_timelagged_dataset", "compute_koopman_weights"]
 
 
 def closest_idx(array, value):
@@ -86,6 +86,99 @@ def tprime_evaluation(t, logweights=None):
         tprime = t
 
     return tprime
+
+
+def compute_koopman_weights(
+    X: np.ndarray,
+    t: np.ndarray = None,
+    lag_time: float = 1.0,
+    eps: float = 1e-6,
+    min_weight: float = 1e-12,
+):
+    """
+    Compute Koopman reweighting log-factors from time-lagged data.
+
+    Parameters
+    ----------
+    X : np.ndarray, shape (T, d)
+        Time series of input features.
+    t : np.ndarray, optional
+        Time series corresponding to X. If None, unit spacing (dt=1) is assumed.
+    lag_time : float
+        Lag time expressed in physical time units.
+    eps : float, optional
+        Threshold for discarding small eigenvalues.
+    min_weight : float, optional
+        Minimum allowed weight.
+
+    Returns
+    -------
+    logweights : np.ndarray, shape (T,)
+    """
+
+    X = np.asarray(X)
+    T, d = X.shape
+
+    # --- time handling ---
+    if t is None:
+        dt = 1.0
+    else:
+        t = np.asarray(t)
+        if len(t) != T:
+            raise ValueError("t and X must have same length")
+        dt = float(t[1] - t[0])
+
+    lag = int(round(lag_time / dt))
+    if lag < 1 or lag >= T:
+        raise ValueError("invalid lag_time")
+
+    # --- construct lagged data ---
+    X_t = X[:-lag]
+    X_tau = X[lag:]
+
+    # --- center data ---
+    m0 = X_t.mean(axis=0)
+    m1 = X_tau.mean(axis=0)
+
+    X_t -= m0
+    X_tau -= m1
+
+    # --- covariance ---
+    C = X_t.T @ X_t / len(X_t)
+    C_tau = X_t.T @ X_tau / len(X_t)
+
+    # --- whitening ---
+    w, V = np.linalg.eigh(C)
+    mask = w > eps
+    if not np.any(mask):
+        raise RuntimeError("degenerate covariance")
+
+    W = V[:, mask] @ np.diag(w[mask] ** -0.5)
+
+    # --- Koopman operator ---
+    K = W.T @ C_tau @ W
+
+    # --- augment with constant ---
+    dim = K.shape[0]
+    A = np.eye(dim + 1)
+    A[:dim, :dim] = K
+    A[-1, :-1] = (m1 - m0) @ W
+
+    # --- invariant vector ---
+    eigvals, eigvecs = np.linalg.eig(A.T)
+    idx = np.argmin(np.abs(eigvals.real - 1))
+    v = eigvecs[:, idx].real
+
+    v /= v[-1]  # normalize
+
+    # --- back to original space ---
+    coeff = W @ v[:-1]
+    bias = 1.0 - m0 @ coeff
+
+    weights = X @ coeff + bias
+    weights = np.maximum(weights, min_weight)
+
+    return np.log(weights)
 
 
 def find_timelagged_configurations(
@@ -319,8 +412,9 @@ def create_timelagged_dataset(
         if reweight_mode is None:
             w_t = torch.ones(len(x_t))
             w_lag = torch.ones(len(x_lag))
+            
         else:
-            logweights = torch.tensor(logweights, dtype=torch.float32)
+            logweights = torch.tensor(logweights, dtype=torch.get_default_dtype())
             weights = torch.exp(logweights)
             w_t = weights[:-lag_steps]
             w_lag = weights[lag_steps:]
@@ -403,3 +497,21 @@ def test_create_timelagged_dataset():
         X, t, lag_time=lag_time, walker=walker
     )
     assert len(dataset) == n_points - 2 * lag_time
+
+def test_compute_koopman_weights():
+    n_points = 100
+    dim = 3
+    lag_time = 5.0
+
+    # Generate random input data (T, d)
+    X = np.random.randn(n_points, dim)
+    t = np.arange(n_points)  # uniform time grid
+
+    # --- Basic functionality test ---
+    logw = compute_koopman_weights(X, t=t, lag_time=lag_time)
+    assert logw.shape == (n_points,)
+    assert np.all(np.isfinite(logw))
+
+    # --- Test fallback when time array is not provided ---
+    logw2 = compute_koopman_weights(X, t=None, lag_time=1.0)
+    assert logw2.shape == (n_points,)
