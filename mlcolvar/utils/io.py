@@ -721,6 +721,8 @@ def _broadcast_trajectory_to_graph_labels(trajectory_labels, frame_counts: List[
     return broadcast
 
 
+
+
 def _normalize_frame_level_labels(labels, frame_counts: List[int], name: str):
     n_traj = len(frame_counts)
 
@@ -729,8 +731,21 @@ def _normalize_frame_level_labels(labels, frame_counts: List[int], name: str):
 
     labels = _as_torch_if_array(labels)
 
-    if n_traj == 1 and isinstance(labels, torch.Tensor) and labels.ndim >= 1 and labels.shape[0] == frame_counts[0]:
-        labels = [labels]
+    if n_traj == 1:
+        n_frames = frame_counts[0]
+        if isinstance(labels, torch.Tensor) and labels.ndim >= 1 and labels.shape[0] == n_frames:
+            labels = [labels]
+        elif (
+            isinstance(labels, (list, tuple))
+            and len(labels) == n_frames
+            and len(labels) != n_traj
+        ):
+            warn(
+                f"`{name}` was passed as a flat list/tuple of length {n_frames} for a single trajectory; "
+                "interpreting it as frame-level labels. To avoid ambiguity, prefer passing a tensor/array "
+                "or wrapping per-trajectory labels as [labels]."
+            )
+            labels = [_to_torch_tensor(labels)]
 
     if not isinstance(labels, (list, tuple)):
         raise ValueError(f"{name} must be a list/tuple with one entry per trajectory.")
@@ -809,7 +824,6 @@ def _normalize_graph_target_inputs(
     node_labels = _normalize_frame_level_labels(node_labels, frame_counts, name='node_labels')
 
     return graph_labels, node_labels
-
 
 def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
                                      graph_labels: List,
