@@ -117,88 +117,68 @@ def compute_koopman_weights(
     """
 
     X = np.asarray(X)
-    # handle time
+    T, d = X.shape
+
+    # --- time handling ---
     if t is None:
-        # fallback: assume unit time spacing
         dt = 1.0
     else:
         t = np.asarray(t)
-        if len(t) != len(X):
-            raise ValueError("t and X must have the same length.")
-        if len(t) < 2:
-            raise ValueError("t must have at least two elements.")
-        
+        if len(t) != T:
+            raise ValueError("t and X must have same length")
         dt = float(t[1] - t[0])
-        
-    lag_frames = int(round(lag_time / dt))
-    if lag_frames < 1:
-        raise ValueError("lag_time too small.")
-    if lag_frames >= X.shape[0]:
-        raise ValueError("lag_time too large.")
 
-    # ------------------------------------------------------------------
-    # 1) Construct time-lagged pairs and remove mean (unweighted)
-    # ------------------------------------------------------------------
-    X0 = X[:-lag_frames]
-    Xt = X[lag_frames:]
+    lag = int(round(lag_time / dt))
+    if lag < 1 or lag >= T:
+        raise ValueError("invalid lag_time")
 
-    mu0 = X0.mean(axis=0)
-    mut = Xt.mean(axis=0)
+    # --- construct lagged data ---
+    X_t = X[:-lag]
+    X_tau = X[lag:]
 
-    X0c = X0 - mu0
-    Xtc = Xt - mut
+    # --- center data ---
+    m0 = X_t.mean(axis=0)
+    m1 = X_tau.mean(axis=0)
 
-    # ------------------------------------------------------------------
-    # 2) Covariance and time-lagged covariance matrices
-    # ------------------------------------------------------------------
-    N = X0c.shape[0]
+    X_t -= m0
+    X_tau -= m1
 
-    C00 = (X0c.T @ X0c) / N
-    C00 = 0.5 * (C00 + C00.T)  # enforce symmetry
-    C0t = (X0c.T @ Xtc) / N
+    # --- covariance ---
+    C = X_t.T @ X_t / len(X_t)
+    C_tau = X_t.T @ X_tau / len(X_t)
 
-    # ------------------------------------------------------------------
-    # 3) Whitening transformation based on C00
-    # ------------------------------------------------------------------
-    eigvals, eigvecs = np.linalg.eigh(C00)
-    keep = eigvals > eps
-    if not np.any(keep):
-        raise RuntimeError("All eigenvalues discarded during whitening.")
+    # --- whitening ---
+    w, V = np.linalg.eigh(C)
+    mask = w > eps
+    if not np.any(mask):
+        raise RuntimeError("degenerate covariance")
 
-    R = eigvecs[:, keep] @ np.diag(1.0 / np.sqrt(eigvals[keep]))
+    W = V[:, mask] @ np.diag(w[mask] ** -0.5)
 
-    # ------------------------------------------------------------------
-    # 4) Augmented Koopman operator (constant basis + drift term)
-    # ------------------------------------------------------------------
-    K = R.T @ C0t @ R
-    M = K.shape[0]
+    # --- Koopman operator ---
+    K = W.T @ C_tau @ W
 
-    K_aug = np.zeros((M + 1, M + 1))
-    K_aug[:M, :M] = K
-    K_aug[M, M] = 1.0
-    K_aug[M, :M] = (mut - mu0) @ R
+    # --- augment with constant ---
+    dim = K.shape[0]
+    A = np.eye(dim + 1)
+    A[:dim, :dim] = K
+    A[-1, :-1] = (m1 - m0) @ W
 
-    # ------------------------------------------------------------------
-    # 5) Invariant mode: left eigenvector with eigenvalue 1
-    # ------------------------------------------------------------------
-    eigvals_K, eigvecs_K = np.linalg.eig(K_aug.T)
-    idx = np.argmin(np.abs(eigvals_K.real - 1.0))
-    u = eigvecs_K[:, idx].real
+    # --- invariant vector ---
+    eigvals, eigvecs = np.linalg.eig(A.T)
+    idx = np.argmin(np.abs(eigvals.real - 1))
+    v = eigvecs[:, idx].real
 
-    # gauge fixing (normalize constant component)
-    u = u / u[-1]
+    v /= v[-1]  # normalize
 
-    # ------------------------------------------------------------------
-    # 6) Map invariant mode back to feature space
-    # ------------------------------------------------------------------
-    u_x = R @ u[:-1]
-    c = u[-1] - mu0 @ u_x
+    # --- back to original space ---
+    coeff = W @ v[:-1]
+    bias = 1.0 - m0 @ coeff
 
-    weights = X @ u_x + c
-    weights = np.clip(weights, min_weight, None)
-    logweights = np.log(weights)
+    weights = X @ coeff + bias
+    weights = np.maximum(weights, min_weight)
 
-    return logweights
+    return np.log(weights)
 
 
 def find_timelagged_configurations(
