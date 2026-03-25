@@ -109,12 +109,8 @@ class RegressionCV(BaseCV):
         # =================forward====================
         y = self.forward_cv(x)
 
-        # Keep compatibility with scalar targets stored with an extra singleton dim.
-        if y.ndim > 1 and y.shape[-1] == 1:
-            y = y.squeeze(-1)
-        if labels.ndim > 1 and labels.shape[-1] == 1:
-            labels = labels.squeeze(-1)
-
+        # Keep compatibility with scalar targets stored with extra singleton dims.
+        y, labels = self._align_regression_tensors(y, labels)
         # ===================loss=====================
         try:
             loss = self.loss_fn(y, labels, **loss_kwargs)
@@ -127,6 +123,29 @@ class RegressionCV(BaseCV):
         name = "train" if self.training else "valid"
         self.log(f"{name}_loss", loss, on_epoch=True)
         return loss
+
+    @staticmethod
+    def _squeeze_trailing_singletons(x: torch.Tensor) -> torch.Tensor:
+        """Remove trailing singleton dimensions, preserving multi-target tensors."""
+        while x.ndim > 1 and x.shape[-1] == 1:
+            x = x.squeeze(-1)
+        return x
+
+    def _align_regression_tensors(
+        self, y: torch.Tensor, labels: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Align prediction and target shapes before computing the regression loss."""
+        y = self._squeeze_trailing_singletons(y)
+        labels = self._squeeze_trailing_singletons(labels)
+
+        if y.shape != labels.shape:
+            raise ValueError(
+                "Prediction/target shape mismatch in RegressionCV: "
+                f"pred shape={tuple(y.shape)}, target shape={tuple(labels.shape)}. "
+                "Check `graph_target_key`, pooling configuration, and label tensor shapes."
+            )
+
+        return y, labels
 
 
 def test_regression_cv():
