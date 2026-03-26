@@ -75,7 +75,9 @@ class BaseCV(lightning.LightningModule):
                 else self.preprocessing.in_features
             )
         else:
-            return create_graph_tracing_example(n_species=len(self.atomic_numbers), environment=True)
+            return create_graph_tracing_example(n_species=len(self.atomic_numbers), 
+                                                environment=True,
+                                                long_range=True if hasattr(self, 'long_range_cutoff') and self.long_range_cutoff > 0 else False)
 
 
     # TODO add general torch.nn.Module
@@ -95,6 +97,7 @@ class BaseCV(lightning.LightningModule):
             if isinstance(model, BaseGNN):
                 self.register_buffer('n_out', model.n_out)    
                 self.register_buffer('cutoff', model.cutoff)
+                self.register_buffer('long_range_cutoff', model.long_range_cutoff)
                 self.register_buffer('atomic_numbers', model.atomic_numbers)
         else:
             raise ValueError(
