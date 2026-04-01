@@ -36,7 +36,7 @@ along with plumed.  If not, see <http://www.gnu.org/licenses/>.
 // (see https://discuss.pytorch.org/t/how-to-check-libtorch-version/77709/4 and also
 // https://github.com/pytorch/pytorch/blob/dfbd030854359207cb3040b864614affeace11ce/torch/csrc/jit/api/module.cpp#L479)
 // adapted from NequIP https://github.com/mir-group/nequip
-#if ( TORCH_VERSION_MAJOR == 2 || TORCH_VERSION_MAJOR == 1 && TORCH_VERSION_MINOR <= 10 )
+#if ( TORCH_VERSION_MAJOR == 1 && TORCH_VERSION_MINOR <= 10 )
 #define DO_TORCH_FREEZE_HACK
 // For the hack, need more headers:
 #include <torch/csrc/jit/passes/freeze_module.h>
