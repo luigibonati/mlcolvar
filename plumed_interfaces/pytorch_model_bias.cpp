@@ -213,11 +213,6 @@ PytorchModelBias::PytorchModelBias(const ActionOptions&ao):
     torch::jit::setFusionStrategy(strategy);
   #endif
 
-// TODO check torch::jit::optimize_for_inference() for more complex models
-// This could speed up the code, it was not available on LTS 
-  #if (TORCH_VERSION_MAJOR == 1 && TORCH_VERSION_MINOR >= 10)
-  _model = torch::jit::optimize_for_inference(_model);
-  #endif
 // END -> Optimize model 
 
 
