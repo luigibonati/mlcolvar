@@ -273,7 +273,9 @@ std::vector<torch::jit::IValue> inputs;
 inputs.push_back( input_S );
 //calculate output
 torch::Tensor output_z = _model.forward( inputs ).toTensor();
-torch::Tensor output_q = 1 / (1 + torch::exp(-t_sigmoid_p*(output_z)));
+torch::Tensor output_q = torch::sigmoid(t_sigmoid_p * output_z);
+torch::Tensor one_minus_q = 1 - output_q;
+torch::Tensor sigmoid_prime = t_sigmoid_p * output_q * one_minus_q;
 
 // for(unsigned j=0; j<_n_out; j++) {  --> TODO maybe fix for more dimensions
 
@@ -286,14 +288,14 @@ torch::Tensor gradient_z = torch::autograd::grad({output_z},
     /*create_graph=*/true)[0]; // the [0] is to get a tensor and not a vector<at::tensor>
 
 // get derivatives of q using the derivatives of sigmoid
-torch::Tensor gradient_q = gradient_z * t_sigmoid_p * torch::exp(-t_sigmoid_p * output_z) / torch::pow((1 + torch::exp(-t_sigmoid_p * output_z)), 2);
+torch::Tensor gradient_q = gradient_z * sigmoid_prime;
 
 // compute bias from gradients
 torch::Tensor log_grad_sq;
 if (use_q_for_bias) // standard definition
-  log_grad_sq = torch::log( torch::sum( torch::pow(gradient_q, 2) ) + t_epsilon );
+  log_grad_sq = torch::log( torch::sum(gradient_q * gradient_q) + t_epsilon );
 else // change of variable from q to z
-  log_grad_sq = torch::log( torch::sum( torch::pow(gradient_z, 2) ) * torch::pow(t_sigmoid_p, 2) * torch::pow(output_q, 2).squeeze() * torch::pow(1-output_q, 2).squeeze() + t_epsilon);
+  log_grad_sq = torch::log(torch::sum(gradient_z * gradient_z) * torch::pow(sigmoid_prime.squeeze(), 2) + t_epsilon);
 
 log_grad_sq = -lambda_over_beta * ( log_grad_sq - log_epsilon );
 
