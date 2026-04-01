@@ -1,8 +1,8 @@
 import torch
 import lightning
-from typing import Union, Tuple
+from typing import Union, Tuple,List
 from mlcolvar.cvs import BaseCV
-from mlcolvar.core import FeedForward
+from mlcolvar.core import FeedForward, BaseGNN
 from mlcolvar.core.loss.generator_loss import GeneratorLoss
 from mlcolvar.cvs.generator.utils import compute_eigenfunctions
 from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
@@ -10,6 +10,16 @@ from mlcolvar.data import DictDataset
 
 __all__ = ["Generator"]
 
+class Softmax_PostProc(torch.nn.Module):
+    def __init__(self, r=4):
+        super(Softmax_PostProc, self).__init__()
+        self.p = r
+        self.final_linear = torch.nn.Linear(r, r)
+
+    def forward(self, input):
+        input=torch.nn.functional.softmax(input,dim=-1)
+        input=self.final_linear(input)
+        return input
 
 class Generator(BaseCV):
     """
@@ -39,13 +49,14 @@ class Generator(BaseCV):
 
     def __init__(self,
                  r: int,
-                 layers: list,
+                 model: Union[List[int], FeedForward, BaseGNN],
                  eta: float,
                  alpha: float,
                  friction: torch.Tensor,
                  descriptors_derivatives: Union[SmartDerivatives, torch.Tensor] = None,
                  n_dim: int = 3,
-                 u_stat:bool = True,
+                 split:bool = True,
+                 softmax_postproc: bool = False,
                  options: dict = None,
                  **kwargs
                  ):
@@ -70,13 +81,13 @@ class Generator(BaseCV):
                 - A torch.Tensor with the derivatives to save time, memory-wise could be less efficient
         n_dim : int
             Number of dimensions, by default 3
-        u_stat : bool, optional
-            Do we use U-statistics to compute the loss
+        split : bool, optional
+            Do we split the data when computing the loss
         options : dict[str, Any], optional
             Options for the building blocks of the model, by default {}.
             Available blocks: ['nn'] .
         """
-        super().__init__(model=layers, **kwargs)
+        super().__init__(model, **kwargs)
 
         # =======  LOSS  =======
         self.loss_fn = GeneratorLoss(r=r,
@@ -85,44 +96,50 @@ class Generator(BaseCV):
                                      friction=friction, 
                                      descriptors_derivatives=descriptors_derivatives,
                                      n_dim=n_dim,
-                                     u_stat=u_stat
+                                     split=split
                                      )
         self.r = r
         self.eta = eta
         self.friction = friction
         self.n_dim=n_dim
+        self.softmax_postproc = softmax_postproc
 
         # check layers
-        if layers[-1] != 1:
-            raise ValueError ( 
-                f"The last layer of the neural network should have dimension 1! Found {layers[-1]}"
-                )
+        
         
         # these are initialized by compute_eigenfunctions method
         self.evecs = None
         self.evals = None
-
         # ======= OPTIONS =======
         # parse and sanitize
         options = self.parse_options(options)
-
         # ======= BLOCKS =======
         # initialize NN turning
-        o = "nn"
-        # set default activation to tanh
-        if "activation" not in options[o]:
-            options[o]["activation"] = "tanh"
-        self.nn = torch.nn.ModuleList(
-            [FeedForward(layers, **options[o]) for idx in range(r)]
-        )
+        if not self._override_model:
+            o = "nn"
+            # set default activation to tanh
+            if "activation" not in options[o]:
+                options[o]["activation"] = "tanh"
+        
+            self.nn = FeedForward(self.layers, **options[o])
+        else:
+            self.nn = model
+        if self.nn.out_features != r:
+            raise ValueError ( 
+                f"The last layer of the neural network should have dimension {r}! Found {self.nn.out_features}."
+                )
+        if self.softmax_postproc:
+            self.postprocessing=Softmax_PostProc(r)
+
 
     def compute_eigenfunctions(self,
                                dataset : DictDataset,        
                                eta : float = None, 
-                               friction : float = None,      
+                               friction : float = None,         
                                tikhonov_reg : float = 1e-4,      
                                recompute : bool = False,        
-                               descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None
+                               descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None,
+                               batch_size=100,
                                ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Computes the eigenfunctions based on the representation learned given by the neural networks.
 
@@ -161,60 +178,62 @@ class Generator(BaseCV):
         if eta is None:
             eta = self.eta
         
-        # get data
-        input = dataset["data"]
-        weights = dataset['weights']
-        cell_preprocessing = self._get_batch_cell(dataset)
-
-        input.requires_grad = True
+        is_graph = isinstance(self.nn, BaseGNN)
         
-        # get output
-        output = self.forward(input, cell=cell_preprocessing)
-
-        # If the calculation has not been done previously, or we want to compute again the eigenpairs due to a change of parameters
         if (recompute or self.evecs is None): 
             # get eigenfunctions
-            eigenfunctions, evals, evecs = compute_eigenfunctions(
-                input=input,
-                output=output,
-                weights=weights,
+                eigenfunctions, evals, evecs, output = compute_eigenfunctions(
+                dataset=dataset,
+                model=self,
                 r=self.r,
                 eta=eta,
                 friction=friction,
                 tikhonov_reg=tikhonov_reg,
                 descriptors_derivatives=descriptors_derivatives,
-                n_dim=self.n_dim
-            )
-            self.evals = evals
-            self.evecs = evecs
-
-            return eigenfunctions, evals, evecs
+                n_dim=self.n_dim,
+                batch_size=batch_size,
+                is_graph=is_graph
+                )
+                self.evals = evals
+                self.evecs = evecs
+                return eigenfunctions, evals, evecs
 
         else:
+            if isinstance(self.nn, FeedForward):
+                x = dataset["data"]
+                x = x.reshape((x.shape[0], -1))
+                cell_preprocessing = self._get_batch_cell(dataset)
+            elif isinstance(self.nn, BaseGNN):
+                x = dataset.get_graph_inputs()
+                cell_preprocessing = None
+            output = self.forward_nn(x, cell=cell_preprocessing)
             eigenfunctions = output @ self.evecs
             return eigenfunctions, self.evals, self.evecs
-
-    def forward_cv(self, 
-                   x: torch.Tensor
-                   ) -> torch.Tensor:
-        return torch.cat([nn(x) for nn in self.nn], dim=1)
+    
+    def forward_nn(self, x, cell=None):
+        if self.preprocessing is not None:
+            x = self._apply_module(self.preprocessing, x, cell=cell)
+        z = self.nn(x)
+        return z
 
     def training_step(self, 
                       train_batch, 
                       batch_idx):
         """Compute and return the training loss and record metrics."""
         torch.set_grad_enabled(True)
-
+        if isinstance(self.nn, FeedForward):
         # =================get data===================
-        x = train_batch["data"]
+            x = train_batch["data"]
         # check data are have shape (n_data, -1)
-        x = x.reshape((x.shape[0], -1))
+            x = x.reshape((x.shape[0], -1))
 
-        x.requires_grad = True
+            x.requires_grad = True
 
-        weights = train_batch["weights"]
-        cell = self._get_batch_cell(train_batch)
-
+            weights = train_batch["weights"]
+        elif isinstance(self.nn, BaseGNN):
+            x = self._setup_graph_data(train_batch)
+            labels = x['graph_labels']
+            weights = x['weight'].clone()
         try:
             ref_idx = train_batch["ref_idx"]
         except KeyError:
@@ -222,7 +241,11 @@ class Generator(BaseCV):
 
         # =================forward====================
         # we use forward and not forward_cv to also apply the preprocessing (if present)
-        q = self.forward(x, cell=cell)
+        z = self.forward_nn(x)
+        if self.postprocessing is not None:
+            q=self.postprocessing(z)
+        else:
+            q=z
         # ===================loss=====================
         if self.training:
             loss, loss_ef, loss_ortho = self.loss_fn(x, q, weights, ref_idx)
@@ -234,6 +257,8 @@ class Generator(BaseCV):
         self.log(f"{name}_loss_var", loss_ef, on_epoch=True)
         self.log(f"{name}_loss_ortho", loss_ortho, on_epoch=True)
         return loss
+
+
 
 
 # ---------------------------------------------------------------------------------------------------------------
