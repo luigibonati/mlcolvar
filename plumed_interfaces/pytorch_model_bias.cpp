@@ -1,5 +1,5 @@
 /* +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-Copyright (c) 2026 of Luigi Bonati and Enrico Trizio.
+Copyright (c) 2026 of Enrico Trizio.
 
 The pytorch module is free software: you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
@@ -15,11 +15,7 @@ You should have received a copy of the GNU Lesser General Public License
 along with plumed.  If not, see <http://www.gnu.org/licenses/>.
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ */
 
-// #ifdef __PLUMED_HAS_LIBTORCH
-// convert LibTorch version to string
-//#define STRINGIFY(x) #x
-//#define TOSTR(x) STRINGIFY(x)
-//#define LIBTORCH_VERSION TO_STR(TORCH_VERSION_MAJOR) "." TO_STR(TORCH_VERSION_MINOR) "." TO_STR(TORCH_VERSION_PATCH)
+#ifdef __PLUMED_HAS_LIBTORCH
 
 #include "core/PlumedMain.h"
 #include "function/Function.h"
@@ -72,7 +68,7 @@ class PytorchModelBias :
   torch::Tensor t_sigmoid_p;
   torch::Tensor t_epsilon;
   torch::Tensor t_grad_output;
-  torch::Tensor t_grad_output2;
+  torch::Tensor t_grad_output_bias;
 public:
   explicit PytorchModelBias(const ActionOptions&);
   void calculate();
@@ -104,7 +100,12 @@ std::vector<float> PytorchModelBias::tensor_to_vector(const torch::Tensor& x) {
 PytorchModelBias::PytorchModelBias(const ActionOptions&ao):
   Action(ao),
   Function(ao)
-{ //print pytorch version
+{ // print libtorch version
+  std::stringstream ss;
+  ss << TORCH_VERSION_MAJOR << "." << TORCH_VERSION_MINOR << "." << TORCH_VERSION_PATCH;
+  std::string version;
+  ss >> version; // extract into the string.
+  log.printf(("  LibTorch version: "+version+"\n").data());
 
   //number of inputs of the model
   _n_in=getNumberOfArguments();
@@ -117,7 +118,6 @@ PytorchModelBias::PytorchModelBias(const ActionOptions&ao):
   parse("LAMBDA", lambda);
   parse("BETA", beta);
 
-  //parse params
   sigmoid_p = 3.0;
   parse("SIGMOID_P", sigmoid_p);
 
@@ -133,7 +133,7 @@ PytorchModelBias::PytorchModelBias(const ActionOptions&ao):
   t_sigmoid_p = torch::tensor(sigmoid_p).to(device);
   t_epsilon = torch::tensor(epsilon).to(device);
   t_grad_output = torch::ones({1}).expand({1, 1}).to(device);
-  t_grad_output2 = torch::ones({1}).to(device);
+  t_grad_output_bias = torch::ones({1}).to(device);
 
   // we create the metatdata dict 
   std::unordered_map<std::string, std::string> metadata = {
@@ -152,11 +152,6 @@ PytorchModelBias::PytorchModelBias(const ActionOptions&ao):
     bool exist = infile.good();
     infile.close();
     if (exist) {
-      // print libtorch version
-      std::stringstream ss;
-      ss << TORCH_VERSION_MAJOR << "." << TORCH_VERSION_MINOR << "." << TORCH_VERSION_PATCH;
-      std::string version;
-      ss >> version; // extract into the string.
       plumed_merror("Cannot load FILE: '"+fname+"'. Please check that it is a Pytorch compiled model (exported with 'torch.jit.trace' or 'torch.jit.script') and that the Pytorch version matches the LibTorch one ("+version+").");
     }
     else {
@@ -253,6 +248,7 @@ componentIsNotPeriodic( name_comp );
   log<<plumed.cite("Bonati, Trizio, Rizzi, and Parrinello, J. Chem. Phys. 159, 014801 (2023)");
   log<<plumed.cite("Kang, Trizio, and Parrinello, Nat. Comp. Sci. 4, 451-460 (2024)");
   log<<plumed.cite("Trizio, Kang and Parrinello, Nat. Comp. Sci. 5, 582-591 (2025)");
+  log<<plumed.cite("Trizio, Rossi and Parrinello, J. Chem. Phys. (2026)");
   log.printf("\n");
 }
 
@@ -263,21 +259,21 @@ void PytorchModelBias::calculate() {
 vector<float> current_S(_n_in);
 for(unsigned i=0; i<_n_in; i++)
   current_S[i]=getArgument(i);
+
 //convert to tensor
 torch::Tensor input_S = torch::tensor(current_S).view({1,_n_in}).to(device);
 input_S.set_requires_grad(true);
+
 //convert to Ivalue
 std::vector<torch::jit::IValue> inputs;
 inputs.push_back( input_S );
+
 //calculate output
 torch::Tensor output_z = _model.forward( inputs ).toTensor();
 torch::Tensor output_q = torch::sigmoid(t_sigmoid_p * output_z);
 torch::Tensor one_minus_q = 1 - output_q;
 torch::Tensor sigmoid_prime = t_sigmoid_p * output_q * one_minus_q;
 
-// for(unsigned j=0; j<_n_out; j++) {  --> TODO maybe fix for more dimensions
-
-// compute gradients of CV 
 // get derivatives of z
 torch::Tensor gradient_z = torch::autograd::grad({output_z},
                       {input_S},
@@ -298,43 +294,43 @@ else // change of variable from q to z
 log_grad_sq = -lambda_over_beta * ( log_grad_sq - log_epsilon );
 
 // get derivatives of bias --> forces
-torch::Tensor gradient2 = torch::autograd::grad({log_grad_sq},
+torch::Tensor gradient_bias = torch::autograd::grad({log_grad_sq},
                         {input_S},
-      /*grad_outputs=*/ {t_grad_output2},
+      /*grad_outputs=*/ {t_grad_output_bias},
       /*retain_graph=*/false,
       /*create_graph=*/false)[0]; // the [0] is to get a tensor and not a vector<at::tensor>
 
-// we set the derivatives for plumed
-vector<float> der_q = this->tensor_to_vector ( gradient_q );  
+// we set the derivatives for plumed for q, z, and kbias
 string name_comp = "q";
-    //set derivatives of component j
-    for(unsigned i=0; i<_n_in; i++)
-      setDerivative( getPntrToComponent(name_comp), i, der_q[i] ); 
+vector<float> der_q = this->tensor_to_vector ( gradient_q );  
+//set derivatives of component i
+for(unsigned i=0; i<_n_in; i++)
+  setDerivative( getPntrToComponent(name_comp), i, der_q[i] ); 
 
-vector<float> der_z = this->tensor_to_vector ( gradient_z );  
 name_comp = "z";
-    //set derivatives of component j
-    for(unsigned i=0; i<_n_in; i++)
-      setDerivative( getPntrToComponent(name_comp), i, der_z[i] ); 
+vector<float> der_z = this->tensor_to_vector ( gradient_z );  
+//set derivatives of component i
+for(unsigned i=0; i<_n_in; i++)
+  setDerivative( getPntrToComponent(name_comp), i, der_z[i] ); 
 
-vector<float> der2 = this->tensor_to_vector ( gradient2 );  
 name_comp = "kbias";
-    //set derivatives of component j
-    for(unsigned i=0; i<_n_in; i++)
-      setDerivative( getPntrToComponent(name_comp), i, der2[i] ); 
+vector<float> der_bias = this->tensor_to_vector ( gradient_bias );  
+//set derivatives of component i
+for(unsigned i=0; i<_n_in; i++)
+  setDerivative( getPntrToComponent(name_comp), i, der_bias[i] ); 
 
 //set CV values
-vector<float> cvs_q = this->tensor_to_vector (output_q);
 name_comp = "q";
+vector<float> cvs_q = this->tensor_to_vector (output_q);
 getPntrToComponent(name_comp)->set(cvs_q[0]);
 
-vector<float> cvs_z = this->tensor_to_vector (output_z);
 name_comp = "z";
+vector<float> cvs_z = this->tensor_to_vector (output_z);
 getPntrToComponent(name_comp)->set(cvs_z[0]);
 
 // set BIAS value
-vector<float> bias = this->tensor_to_vector (log_grad_sq);
 name_comp = "kbias";
+vector<float> bias = this->tensor_to_vector (log_grad_sq);
 getPntrToComponent(name_comp)->set(bias[0]);
 
 }
@@ -344,4 +340,4 @@ getPntrToComponent(name_comp)->set(bias[0]);
 } //function
 } //PLMD
 
-// #endif //PLUMED_HAS_LIBTORCH
+#endif //PLUMED_HAS_LIBTORCH
