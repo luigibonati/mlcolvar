@@ -65,8 +65,14 @@ class PytorchModelBias :
   double sigmoid_p;
   double beta;
   bool use_q_for_bias;
+  double lambda_over_beta;
+  double log_epsilon;
   torch::jit::Module _model;
   torch::Device device = torch::kCPU;
+  torch::Tensor t_sigmoid_p;
+  torch::Tensor t_epsilon;
+  torch::Tensor t_grad_output;
+  torch::Tensor t_grad_output2;
 public:
   explicit PytorchModelBias(const ActionOptions&);
   void calculate();
@@ -121,6 +127,13 @@ PytorchModelBias::PytorchModelBias(const ActionOptions&ao):
   use_q_for_bias = false;
   parseFlag("USE_Q_FOR_BIAS", use_q_for_bias);
 
+  // Cache constants used at every step to avoid repeated allocations.
+  lambda_over_beta = lambda / beta;
+  log_epsilon = std::log(epsilon);
+  t_sigmoid_p = torch::tensor(sigmoid_p).to(device);
+  t_epsilon = torch::tensor(epsilon).to(device);
+  t_grad_output = torch::ones({1}).expand({1, 1}).to(device);
+  t_grad_output2 = torch::ones({1}).to(device);
 
   // we create the metatdata dict 
   std::unordered_map<std::string, std::string> metadata = {
@@ -248,12 +261,6 @@ componentIsNotPeriodic( name_comp );
 
 void PytorchModelBias::calculate() {
 
-// move to tensors
-torch::Tensor Sigmoid_p = torch::tensor(sigmoid_p);
-torch::Tensor Epsilon = torch::tensor(epsilon);
-torch::Tensor Beta = torch::tensor(beta);
-torch::Tensor Lambda = torch::tensor(lambda);
-
 // retrieve arguments
 vector<float> current_S(_n_in);
 for(unsigned i=0; i<_n_in; i++)
@@ -266,37 +273,34 @@ std::vector<torch::jit::IValue> inputs;
 inputs.push_back( input_S );
 //calculate output
 torch::Tensor output_z = _model.forward( inputs ).toTensor();
-torch::Tensor output_q = 1 / (1 + torch::exp(-Sigmoid_p*(output_z)));
+torch::Tensor output_q = 1 / (1 + torch::exp(-t_sigmoid_p*(output_z)));
 
 // for(unsigned j=0; j<_n_out; j++) {  --> TODO maybe fix for more dimensions
 
 // compute gradients of CV 
-torch::Tensor grad_output = torch::ones({1}).expand({1, 1}).to(device);
-
 // get derivatives of z
 torch::Tensor gradient_z = torch::autograd::grad({output_z},
                       {input_S},
-    /*grad_outputs=*/ {grad_output},
+    /*grad_outputs=*/ {t_grad_output},
     /*retain_graph=*/true,
     /*create_graph=*/true)[0]; // the [0] is to get a tensor and not a vector<at::tensor>
 
 // get derivatives of q using the derivatives of sigmoid
-torch::Tensor gradient_q = gradient_z * Sigmoid_p * torch::exp(-Sigmoid_p * output_z) / torch::pow((1 + torch::exp(-Sigmoid_p * output_z)), 2);
+torch::Tensor gradient_q = gradient_z * t_sigmoid_p * torch::exp(-t_sigmoid_p * output_z) / torch::pow((1 + torch::exp(-t_sigmoid_p * output_z)), 2);
 
 // compute bias from gradients
 torch::Tensor log_grad_sq;
 if (use_q_for_bias) // standard definition
-  log_grad_sq = torch::log( torch::sum( torch::pow(gradient_q, 2) ) + Epsilon );
+  log_grad_sq = torch::log( torch::sum( torch::pow(gradient_q, 2) ) + t_epsilon );
 else // change of variable from q to z
-  log_grad_sq = torch::log( torch::sum( torch::pow(gradient_z, 2) ) * torch::pow(Sigmoid_p, 2) * torch::pow(output_q, 2).squeeze() * torch::pow(1-output_q, 2).squeeze() + Epsilon);
+  log_grad_sq = torch::log( torch::sum( torch::pow(gradient_z, 2) ) * torch::pow(t_sigmoid_p, 2) * torch::pow(output_q, 2).squeeze() * torch::pow(1-output_q, 2).squeeze() + t_epsilon);
 
-log_grad_sq = - (Lambda / Beta) * ( log_grad_sq - torch::log(Epsilon) );
+log_grad_sq = -lambda_over_beta * ( log_grad_sq - log_epsilon );
 
 // get derivatives of bias --> forces
-torch::Tensor grad_output2 = torch::ones({1}).to(device);
 torch::Tensor gradient2 = torch::autograd::grad({log_grad_sq},
                         {input_S},
-      /*grad_outputs=*/ {grad_output2},
+      /*grad_outputs=*/ {t_grad_output2},
       /*retain_graph=*/true,
       /*create_graph=*/false)[0]; // the [0] is to get a tensor and not a vector<at::tensor>
 
