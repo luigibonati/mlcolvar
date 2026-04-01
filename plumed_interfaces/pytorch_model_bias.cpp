@@ -231,6 +231,9 @@ PytorchModelBias::PytorchModelBias(const ActionOptions&ao):
   torch::Tensor output = _model.forward( inputs ).toTensor();
   vector<float> cvs = this->tensor_to_vector (output);
   _n_out=cvs.size();
+  if(_n_out!=1) {
+    plumed_merror("PYTORCH_MODEL_BIAS expects a model with a single scalar output, but got "+std::to_string(_n_out)+" outputs.");
+  }
 
 //create components of output  
 string name_comp = "z";
@@ -303,7 +306,7 @@ log_grad_sq = -lambda_over_beta * ( log_grad_sq - log_epsilon );
 torch::Tensor gradient2 = torch::autograd::grad({log_grad_sq},
                         {input_S},
       /*grad_outputs=*/ {t_grad_output2},
-      /*retain_graph=*/true,
+      /*retain_graph=*/false,
       /*create_graph=*/false)[0]; // the [0] is to get a tensor and not a vector<at::tensor>
 
 // we set the derivatives for plumed
