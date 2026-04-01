@@ -15,7 +15,7 @@ You should have received a copy of the GNU Lesser General Public License
 along with plumed.  If not, see <http://www.gnu.org/licenses/>.
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ */
 
-#ifdef __PLUMED_HAS_LIBTORCH
+// #ifdef __PLUMED_HAS_LIBTORCH
 
 #include <cmath>
 #include <memory>
@@ -25,6 +25,7 @@ along with plumed.  If not, see <http://www.gnu.org/licenses/>.
 #include <torch/csrc/jit/jit_log.h>
 
 #include "core/PlumedMain.h"
+#include "config/Config.h"
 #include "colvar/Colvar.h"
 #include "colvar/ActionRegister.h"
 #include "tools/NeighborList.h"
@@ -224,13 +225,13 @@ void PytorchGNN::registerKeywords(Keywords& keys)
   keys.add(
     "atoms",
     "GROUPA",
-    "First list of atoms (corresponding to the `system_selection in mlcolvar`)"
+    "First list of atoms (corresponding to the `system_selection` in mlcolvar)"
   );
 
   keys.add(
     "atoms",
     "GROUPB",
-    "Second list of atoms (corresponding to the `environment_selection in mlcolvar`)"
+    "Second list of atoms (corresponding to the `environment_selection` in mlcolvar`)"
   );
 
   keys.add(
@@ -242,7 +243,7 @@ void PytorchGNN::registerKeywords(Keywords& keys)
   keys.add(
     "compulsory",
     "STRUCTURE",
-    "PDB file name that contains the whole simulated system, with currect atom names and orders"
+    "PDB file name that contains the whole simulated system, with correct atom names and orders"
   );
 
   keys.add(
@@ -257,12 +258,14 @@ void PytorchGNN::registerKeywords(Keywords& keys)
     "Buffer size used in finding active environment atoms"
   );
 
+  // TODO: change this name
   keys.add(
     "optional",
     "KBLAMBDA",
     "The LAMBDA value for calculating $V_K$. Only vaild for GNN committor models"
   );
 
+  // TODO: change this name
   keys.add(
     "optional",
     "KBEPSILON",
@@ -290,7 +293,7 @@ void PytorchGNN::registerKeywords(Keywords& keys)
   keys.addFlag(
     "KBIAS",
     false,
-    "Calculate Kang's bias potential $V_K$ (a.k.a. Kolmogolov's bias). Only vaild for GNN committor models"
+    "Calculate Kolmogorov's bias potential $V_K$. Only vaild for GNN committor models"
   );
 
   keys.addOutputComponent(
@@ -302,13 +305,27 @@ void PytorchGNN::registerKeywords(Keywords& keys)
   keys.addOutputComponent(
     "kbias",
     "KBIAS",
-    "Kang's bias potential $V_K$"
+    "Kolmogorov's bias potential $V_K$"
   );
 }
 
 PytorchGNN::PytorchGNN(const ActionOptions& ao):
   PLUMED_COLVAR_INIT(ao)
 {
+  //TODO: use this information to branch later the code for different PLUMED versions
+  std::string plumed_version;
+  plumed_version = config::getVersion();
+
+  int major = 0, minor = 0;
+  char dot;
+
+  std::stringstream ss_plumed(plumed_version);
+  ss_plumed >> major >> dot >> minor;
+  std::string plumed_version_info = "  Plumed version: " + plumed_version + "\n";
+  log.printf(plumed_version_info.data());
+  log.printf("Plumed major version: %d\n", major);
+  log.printf("Plumed minor version: %d\n", minor);
+
   // print libtorch version
   std::stringstream ss;
   ss << TORCH_VERSION_MAJOR << "." \
@@ -334,7 +351,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
 
   parse("BUFFER", buffer);
   if (buffer > 0 && atom_list_b.size() == 0)
-    plumed_merror("Not GROUPB given! Cannot define the BUFFER key!");
+    plumed_merror("No GROUPB given! Cannot define the BUFFER key!");
 
   parse("KBLAMBDA", kb_lambda);
   parse("KBEPSILON", kb_epsilon);
@@ -367,7 +384,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   // check groups
   if (atom_list_b.size() > 0) {
     if (groups_have_intersection())
-      plumed_merror("GROUPA can not intersect with GROUPB!");
+      plumed_merror("GROUPA can't intersect with GROUPB!");
     atom_list_active.resize(atom_list_a.size() + atom_list_b.size());
     atom_list_active.clear();
   } else {
@@ -376,11 +393,11 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
     find_active_atoms(1);
   }
 
-  // check precise
+  // check precision to be used
   if (use_float64)
     torch_float_dtype = torch::kFloat64;
 
-  // check CUDA
+  // check whether to use CUDA
   if (required_cuda && torch::cuda::is_available()) {
     device = c10::Device(torch::kCUDA);
     use_cuda = true;
@@ -407,7 +424,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
     model = torch::jit::load(model_file_name, device);
   } catch (const c10::Error& e) {
     plumed_merror(
-      "Cannot load model file: '" + model_file_name + "'. Reason: " + e.what()
+      "Can't load model file: '" + model_file_name + "'. Reason: " + e.what()
     );
   }
 
@@ -415,7 +432,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   for (auto p: model.parameters())
     p.requires_grad_(false);
 
-  // set up model precise
+  // set up model precision
   model.to(torch_float_dtype);
 
   // summary
@@ -456,7 +473,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   // get atomic numbers
   if (!model.hasattr("atomic_numbers"))
     plumed_merror(
-      "Can not find model attribute: 'atomic_numbers'! This attribute has to be set during the compilation of the model!"
+      "Can't find model attribute: 'atomic_numbers'! This attribute has to be set during the compilation of the model!"
     );
   auto atomic_numbers = model.attr("atomic_numbers").toTensor();
   for (int64_t i = 0; i < atomic_numbers.size(0); i++)
@@ -467,22 +484,11 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
     is_committor = model.attr("is_committor").toTensor().item<int>() != 0;
   if (!is_committor && k_bias)
     plumed_merror(
-      "Can not calculate Kang's bias potential for a non-committor model!"
+      "Can not calculate Kolmogorov's bias potential for a non-committor model!"
     );
-  if (is_committor) {
-    if (n_out != 2)
-      plumed_merror(
-        "The committor model should output two values!"
-      );
-   // for (auto p: model.named_attributes())
-    //  if (p.name == "sigmoid.p")
-        //kb_sigmoid_p = p.value.toDouble();
-        kb_sigmoid_p = 3;
-    if (kb_sigmoid_p < 0)
-      plumed_merror(
-        "Can not load the sigmoid_p value from the model!"
-      );
-  }
+  
+    // TODO: pass the sigmoid at initailization in PLUMED as in the other interface
+    kb_sigmoid_p = 3;
 
 
   // optimize model
@@ -506,7 +512,9 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
 
   // optimize model for inference
 #if (TORCH_VERSION_MAJOR == 2 || TORCH_VERSION_MAJOR == 1 && TORCH_VERSION_MINOR >= 10)
+  #if (!is_committor)
   model = torch::jit::optimize_for_inference(model);
+  #endif
 #endif
 
   // send the model to device
@@ -644,7 +652,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   else
     log.printf("no\n");
   if (is_committor) {
-    log.printf("  If sample Kang's (or Kolmogolov's) ensemble: ");
+    log.printf("  If to sample Kolmogorov's ensemble: ");
     if (k_bias)
       log.printf("yes\n");
     else
@@ -675,6 +683,11 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   log << plumed.cite("Zhang et al., J. Chem. Theory Comput. 20, 24, 10787–10797 (2024)");
   log << plumed.cite("Bonati, Trizio, Rizzi and Parrinello, J. Chem. Phys. 159, 014801 (2023)");
   log << plumed.cite("Bonati, Rizzi and Parrinello, J. Phys. Chem. Lett. 11, 2998-3004 (2020)");
+  if (is_committor) {
+      log<<plumed.cite("Kang, Trizio, and Parrinello, Nat. Comp. Sci. 4, 451-460 (2024)");
+      log<<plumed.cite("Kang, Zhang, Trizio, Hou, and Parrinello, J. Chem. Theory Comput., 22, 4, 1613–1620 (2026)");
+      log<<plumed.cite("Trizio, Kang and Parrinello, Nat. Comp. Sci. 5, 582-591 (2025)");
+  }
   log.printf("\n");
 }
 
@@ -948,6 +961,7 @@ void PytorchGNN::calculate()
   auto grad_output = torch::ones({1}).expand({1, 1}).to(device);
 
   if (!is_committor) {
+    // Here we simply compute the output and its derivatives
     for (int i = 0; i < n_out; i++) {
       // set CV values
       string name_comp = "node-" + std::to_string(i);
@@ -974,15 +988,27 @@ void PytorchGNN::calculate()
         );
       }
     }
-  } else if (!k_bias) {
-    // set committor values
+  } else {
+    // Here we simply compute the output (z), the committor (q)
+    // and (optionally) the Kolmogorov's bias potential (V_K)
+    // as well as their derivatives
+    
+    // set z and committor values
     string name_comp_z = "node-0";
-    getPntrToComponent(name_comp_z)->set(output[0][0].cpu().item<double>());
+    torch::Tensor output_z = output[0][0];
+    getPntrToComponent(name_comp_z)->set(output_z.cpu().item<double>());
+    
     string name_comp_q = "node-1";
-    getPntrToComponent(name_comp_q)->set(output[0][1].cpu().item<double>());
+    torch::Tensor Sigmoid_p = torch::tensor(kb_sigmoid_p, torch_float_dtype).to(device);
+    torch::Tensor output_q = 1 / (1 + torch::exp(-Sigmoid_p*(output_z)));
+    getPntrToComponent(name_comp_q)->set(output_q.cpu().item<double>());
+
+    if (!k_bias) {
+    // this branch doesn't need second gradients
+    
     // set derivatives of z
-    auto gradients = torch::autograd::grad(
-      {output.slice(1, 0, 1)},
+    auto gradients_z = torch::autograd::grad(
+      {output_z},
       {positions},
       {grad_output}, // grad_outputs
       false,         // retain_graph
@@ -990,9 +1016,9 @@ void PytorchGNN::calculate()
     )[0].cpu();
     #pragma omp parallel for num_threads(n_threads)
     for (int j = 0; j < n_atoms; j++) {
-      derivatives[j][0] = gradients[j][0].item<double>() * to_ang;
-      derivatives[j][1] = gradients[j][1].item<double>() * to_ang;
-      derivatives[j][2] = gradients[j][2].item<double>() * to_ang;
+      derivatives[j][0] = gradients_z[j][0].item<double>() * to_ang;
+      derivatives[j][1] = gradients_z[j][1].item<double>() * to_ang;
+      derivatives[j][2] = gradients_z[j][2].item<double>() * to_ang;
     }
     #pragma omp parallel for num_threads(n_threads)
     for (int j = 0; j < n_atoms; j++) {
@@ -1002,34 +1028,34 @@ void PytorchGNN::calculate()
       );
     }
   } else {
-    auto z = output[0][0];
-    auto epsilon = torch::tensor(kb_epsilon, torch_float_dtype).to(device);
-    auto sigmoid_p = torch::tensor(kb_sigmoid_p, torch_float_dtype).to(device);
+    // this branch also compute the V_K bias
+    // we thus need also all the second gradients
+    torch::Tensor epsilon = torch::tensor(kb_epsilon, torch_float_dtype).to(device);
+    
     // get bias value
     auto gradients_z = torch::autograd::grad(
-      {z},
+      {output_z},
       {positions},
       {grad_output}, // grad_outputs
       true,          // retain_graph
       true           // create_graph
     )[0];
+
     // square and sum over all dims
     auto gradients_z_sum = torch::sum(torch::pow(gradients_z, 2));
-    // chain rules
+
+    // use chain rule to write V_K as function of \nabla z
     auto k_bias_value = kb_lambda * (
         torch::log(gradients_z_sum + epsilon)
-        - 4.0 * torch::log(1.0 + torch::exp(-sigmoid_p * z))
-        - 2.0 * sigmoid_p * z
+        - 4.0 * torch::log(1.0 + torch::exp(-Sigmoid_p * output_z))
+        - 2.0 * Sigmoid_p * output_z
         - torch::log(epsilon)
     );
 
-    // set committor values
-    string name_comp_z = "node-0";
-    getPntrToComponent(name_comp_z)->set(output[0][0].cpu().item<double>());
-    string name_comp_q = "node-1";
-    getPntrToComponent(name_comp_q)->set(output[0][1].cpu().item<double>());
+    // set bias value
     string name_comp_b = "kbias";
     getPntrToComponent(name_comp_b)->set(k_bias_value.cpu().item<double>());
+
     // set derivatives of z
     #pragma omp parallel for num_threads(n_threads)
     for (int j = 0; j < n_atoms; j++) {
@@ -1044,6 +1070,7 @@ void PytorchGNN::calculate()
         getPntrToComponent(name_comp_z), index, derivatives[j]
       );
     }
+
     // set derivatives of bias
     auto gradients_b = torch::autograd::grad(
       {k_bias_value},
@@ -1066,6 +1093,7 @@ void PytorchGNN::calculate()
       );
     }
   }
+}
 }
 
 int PytorchGNN::atomic_number_from_name(std::string name)
@@ -1163,4 +1191,4 @@ void PytorchGNN::find_active_atoms(int n_threads) {
 
 } // PLMD
 
-#endif // PLUMED_HAS_LIBTORCH
+// #endif // PLUMED_HAS_LIBTORCH
