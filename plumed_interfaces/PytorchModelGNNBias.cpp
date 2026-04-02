@@ -82,16 +82,18 @@ auto getLengthUnit(Main&, Atoms& atoms, long)
   return atoms.getUnits().getLength();
 }
 
-//+PLUMEDOC PYTORCH_GNN PYTORCH_GNN
+//+PLUMEDOC PYTORCH_GNN_BIAS
 /*
-Load a Graph Neural Network (GNN) model compiled with TorchScript.
+Load a Graph Neural Network (GNN) model for the committor compiled with TorchScript and compute the Kolmogorov bias.
 
-This module uses a fixed length unit of _Angstrom_. Thus, the GNN model read by
-this module should be trained under the same unit convention. Besides, the
-module constructs node attributes w.r.t to the atomic types. As a result, this
-module require a PDB file which records names of _ALL_ atoms in the system
-(the STRUCTURE keyword). Note that the atom names in this PDB file could
-_ONLY_ be element symbols, e.g.:
+This colvar evaluates a TorchScript GNN model and assumes that it returns a single scalar output `z`. From this value it also computes the committor `q` and, when the `KBIAS` keyword is provided, the Kolmogorov bias `kbias`. 
+Derivatives of all outputs with respect to the atomic coordinates are obtained through PyTorch automatic differentiation.
+
+In particular, the module takes a GNN model for the `z` committor-based CV, applies a sigmoid activation to get the committor `q`, and then computes the bias as $V_K = -\\frac{\\lambda}{\\beta} \\log(\\| \\nabla q \\|^2 + \\epsilon)$, where $\\lambda$ is a prefactor, $\\beta$ is the inverse temperature, and $\\epsilon$ is a small regularization term to avoid divergences when the gradient is zero. 
+The bias can be optionally computed using the raw model output `z` instead of the activated `q` through `USE_Q_FOR_BIAS=false`, which may preserve larger gradients when `q` is close to `0` or `1`.
+
+This module uses a fixed length unit of _Angstrom_. Thus, the GNN model read by this module should be trained under the same unit convention. Besides, the module constructs node attributes from the atomic types. 
+As a result, this module requires a PDB file that records names of _ALL_ atoms in the system through the `STRUCTURE` keyword. Note that the atom names in this PDB file should be element symbols, e.g.:
 \auxfile{plumed_topo.pdb}
 ATOM      1  H   ACE A   1      15.100  12.940  29.390  1.00  0.00           H
 ATOM      2  C   ACE A   1      14.970  13.860  29.960  1.00  0.00           C
@@ -100,24 +102,10 @@ ATOM      4  H   ACE A   1      13.980  13.920  30.410  1.00  0.00           H
 ATOM      5  C   ACE A   1      15.300  15.070  29.100  1.00  0.00           C
 \endauxfile
 
-The module constructs graph edges between neighbors inside the selected atom
-group, using the cutoff value recorded in the model file. By default, such an
-atom group is defined by the single GROUPA keyword. Under this case, the node
-number of the input graph in each MD step is fixed, and the number of edges
-will change according to the relative postions of the atoms.
-However, if the GROUPB parameter is given, the atom group mentioned above will
-contain all atoms in GROUPA, _AND_ atoms in GROUPB which are within a radius of
-_ANY_ atom in GROUPA. Such a radius of selecting atoms from GROUPB equals to the
-cutoff radius recorded in the model file _plus_ the buffer size controlled by
-the BUFFER keyword. Thus, when GROUPB is given, the node number of the input
-graph could fluctuate in different MD steps.
+The module constructs graph edges between neighbors inside the selected atom group, using the cutoff value recorded in the model file. By default, such an atom group is defined by the single `GROUPA` keyword. In this case, the number of nodes in the input graph is fixed, while the number of edges changes according to the relative positions of the atoms. If the `GROUPB` parameter is given, the graph instead contains all atoms in `GROUPA` and all atoms in `GROUPB` that are within a radius of _ANY_ atom in `GROUPA`. Such a radius equals to the cutoff recorded in the model file _plus_ the buffer size controlled by the `BUFFER` keyword. Thus, when `GROUPB` is given, the node number of the input graph can fluctuate during the simulation.
 
-This module also support committor calculations. When the input PyTorch model
-is a committor model, the outputs will assign the zeta value to the first
-output (z) and the q value to the second output (q). If the KBIAS
-keyword is also given, the module will also calculate the committor bias and
-assign it with a label of kbias. These information will be shown in the log as
-well.
+The `LAMBDA` and `BETA` keywords control the bias prefactor and inverse temperature. The `EPSILON`, `SIGMOID_P`, and `USE_Q_FOR_BIAS` keywords tune the bias expression. 
+The outputs are exposed as `z`, `q`, and, when enabled, `kbias`.
 
 Note that this function requires \ref installation-libtorch LibTorch C++ library.
 Check the instructions in the \ref PYTORCH page to enable the module.
@@ -125,66 +113,19 @@ Specifically, we encourage the user to install the GPU-enabled version of
 LibTorch, when dealing with large input graphs.
 
 \par Examples
-The following example instructs plumed to evaluate the GNN model using the atoms 1-10. The neighbor list for determining the edges will be updated every 100 steps.
+Load a scalar committor GNN on atoms `1-10`, compute `z`, `q`, and `kbias`, and print them to `COLVAR`.
 \plumedfile
 PYTORCH_GNN ...
   GROUPA=1-10
   MODEL=model.ptc
   STRUCTURE=plumed_topo.pdb
   NL_STRIDE=100
-  LABEL=gnn
-... PYTORCH_GNN
-\endplumedfile
-
-The following example instructs plumed to do the same calculation as the above example, but will evaluate the model on CUDA using double precision, and add an OPES bias potential on the CV.
-\plumedfile
-PYTORCH_GNN ...
-  GROUPA=1-10
-  MODEL=model.ptc
-  STRUCTURE=plumed_topo.pdb
-  NL_STRIDE=100
-  CUDA
-  FLOAT64
-  LABEL=gnn
-... PYTORCH_GNN
-
-OPES_METAD ...
-  LABEL=opes
-  ARG=gnn.node-0
-  FILE=KERNELS
-  PACE=500
-  TEMP=300
-  BARRIER=35
-... OPES_METAD
-\endplumedfile
-
-The following example instructs plumed to do the same calculation as the above example, but will sample Kang's (or Kolmogolov's) transition state ensemble.
-\plumedfile
-PYTORCH_GNN ...
-  GROUPA=1-10
-  MODEL=model.ptc
-  STRUCTURE=plumed_topo.pdb
-  NL_STRIDE=100
-  FLOAT64
   KBIAS
-  LAMBDA=-2.0
+  LAMBDA=1.0
+  BETA=1.0
   LABEL=gnn
 ... PYTORCH_GNN
-
-BIASVALUE ARG=gnn.kbias LABEL=vk
-\endplumedfile
-
-The following example instructs plumed to evaluate the GNN model using the atoms 1-10 as center atoms, and atoms 11-100 as the environment atoms. The buffer size used for selecting active atoms from the environment atoms is 2 PLUMED unit. The neighbor list for determining the edges will be updated every 2 steps.
-\plumedfile
-PYTORCH_GNN ...
-  GROUPA=1-10
-  GROUPB=11-100
-  MODEL=model.ptc
-  STRUCTURE=plumed_topo.pdb
-  NL_STRIDE=2
-  BUFFER=2.0
-  LABEL=gnn
-... PYTORCH_GNN
+PRINT FILE=COLVAR ARG=gnn.z,gnn.q,gnn.kbias
 \endplumedfile
 
 */
