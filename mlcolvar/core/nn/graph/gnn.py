@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 
 from mlcolvar.core.nn.graph import radial
 from mlcolvar.utils import _code
@@ -22,7 +22,7 @@ class BaseGNN(nn.Module):
         n_out: int,
         cutoff: float,
         atomic_numbers: List[int],
-        pooling_operation: str,
+        pooling_operation: Optional[str],
         long_range_cutoff: float = -1.0,
         n_bases: int = 6,
         n_polynomials: int = 6,
@@ -39,8 +39,9 @@ class BaseGNN(nn.Module):
             radius used to build the graphs.
         atomic_numbers : List[int]
             The atomic numbers mapping.
-        pooling_operation : str
-            Type of pooling operation to combine node-level features into graph-level features, either mean or sum
+        pooling_operation : str or None
+            Type of pooling operation to combine node-level features into graph-level features ('mean' or 'sum').
+            If None, pooling is disabled and node-level outputs are returned unchanged.
         long_range_cutoff : float
             Cutoff radius for the long-range edges defined on subsystem atoms. 
             If negative, no long-range interactions are considered, by default -1.0
@@ -141,6 +142,9 @@ class BaseGNN(nn.Module):
         torch.Tensor
             Pooled output
         """
+        if self.pooling_operation is None:
+            return input
+
         if self.pooling_operation == 'mean':
             if 'system_masks' not in data.keys():
                 out = _code.scatter_mean(input, data['batch'], dim=0)
@@ -148,13 +152,15 @@ class BaseGNN(nn.Module):
                 out = input * data['system_masks']
                 out = _code.scatter_sum(out, data['batch'], dim=0)
                 out = out / data['n_system']
-        
+
         elif self.pooling_operation == 'sum':
             if 'system_masks' in data.keys():
-                out = input * data['system_masks']       
+                input = input * data['system_masks']
             out = _code.scatter_sum(input, data['batch'], dim=0)
         else:
-            raise ValueError (f"Invalid pooling operation! Found {self.pooling_operation}")
+            raise ValueError(
+                f"Invalid pooling operation! Found {self.pooling_operation}. Allowed values are 'mean', 'sum', or None."
+            )
 
         return out
     
