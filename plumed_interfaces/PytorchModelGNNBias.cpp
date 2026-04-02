@@ -497,18 +497,12 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   std::string model_architecture = model_summary("CV", model, 3, 0);
 
   // get CV length
-  if (!model.hasattr("n_out") && !model.hasattr("n_cvs"))
+  if (!model.hasattr("n_out"))
     plumed_merror(
-      "Can not find model attribute: 'n_out' or 'n_cvs'! One of these attributes has to be set during the compilation of the model!"
-    );
-  else if (model.hasattr("n_out") && model.hasattr("n_cvs"))
-    plumed_merror(
-      "Both model attribute: 'n_out' and 'n_cvs' are defined!"
+      "Can not find model attribute 'n_out'! This has to be set during the compilation of the model!"
     );
   if (model.hasattr("n_out"))
     n_out = model.attr("n_out").toTensor().item<int>();
-  else
-    n_out = model.attr("n_cvs").toTensor().item<int>();
 
   // get cutoff radius
   if (!model.hasattr("r_max") && !model.hasattr("cutoff") )
