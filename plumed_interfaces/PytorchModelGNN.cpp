@@ -132,21 +132,6 @@ OPES_METAD ...
 ... OPES_METAD
 \endplumedfile
 
-The following example instructs plumed to do the same calculation as the above example, but will sample Kang's (or Kolmogolov's) transition state ensemble.
-\plumedfile
-PYTORCH_GNN ...
-  GROUPA=1-10
-  MODEL=model.ptc
-  STRUCTURE=plumed_topo.pdb
-  NL_STRIDE=100
-  FLOAT64
-  KBIAS
-  KBLAMBDA=-2.0
-  LABEL=gnn
-... PYTORCH_GNN
-
-BIASVALUE ARG=gnn.kbias LABEL=vk
-\endplumedfile
 
 The following example instructs plumed to evaluate the GNN model using the atoms 1-10 as center atoms, and atoms 11-100 as the environment atoms. The buffer size used for selecting active atoms from the environment atoms is 2 PLUMED unit. The neighbor list for determining the edges will be updated every 2 steps.
 \plumedfile
@@ -172,13 +157,8 @@ class PytorchGNN: public Colvar
   bool serial = false;
   bool firsttime = true;
   bool invalidate_list = true;
-  bool is_committor = false;
-  bool k_bias = false;
   double r_max = 0.0; // In PLUMED length unit
   double buffer = 0.0; // In PLUMED length unit
-  double kb_lambda = 1.0;
-  double kb_epsilon = -1;
-  double kb_sigmoid_p= -1;
   std::string model_file_name;
   std::string structure_file_name;
   std::vector<int> system_node_types;
@@ -258,20 +238,6 @@ void PytorchGNN::registerKeywords(Keywords& keys)
     "Buffer size used in finding active environment atoms"
   );
 
-  // TODO: change this name
-  keys.add(
-    "optional",
-    "KBLAMBDA",
-    "The LAMBDA value for calculating $V_K$. Only vaild for GNN committor models"
-  );
-
-  // TODO: change this name
-  keys.add(
-    "optional",
-    "KBEPSILON",
-    "The EPSILON value for calculating $V_K$. Only vaild for GNN committor models, the default value depends on the model precision"
-  );
-
   keys.addFlag(
     "CUDA",
     false,
@@ -287,13 +253,7 @@ void PytorchGNN::registerKeywords(Keywords& keys)
   keys.addFlag(
     "FLOAT64",
     false,
-    "Evaluate the model in double precise"
-  );
-
-  keys.addFlag(
-    "KBIAS",
-    false,
-    "Calculate Kolmogorov's bias potential $V_K$. Only vaild for GNN committor models"
+    "Evaluate the model in double precision"
   );
 
   keys.addOutputComponent(
@@ -302,11 +262,6 @@ void PytorchGNN::registerKeywords(Keywords& keys)
     "Model outputs"
   );
 
-  keys.addOutputComponent(
-    "kbias",
-    "KBIAS",
-    "Kolmogorov's bias potential $V_K$"
-  );
 }
 
 PytorchGNN::PytorchGNN(const ActionOptions& ao):
@@ -353,9 +308,6 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   if (buffer > 0 && atom_list_b.size() == 0)
     plumed_merror("No GROUPB given! Cannot define the BUFFER key!");
 
-  parse("KBLAMBDA", kb_lambda);
-  parse("KBEPSILON", kb_epsilon);
-
   bool use_cuda = false;
   bool required_cuda = false;
   parseFlag("CUDA", required_cuda);
@@ -366,18 +318,10 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
 
   bool use_float64 = false;
   parseFlag("FLOAT64", use_float64);
-  if (kb_epsilon < 0) {
-    if (use_float64)
-      kb_epsilon = 1E-14;
-    else
-      kb_epsilon = 1E-7;
-  }
 
   bool nopbc = !pbc;
   parseFlag("NOPBC", nopbc);
   pbc = !nopbc;
-
-  parseFlag("KBIAS", k_bias);
 
   checkRead();
 
@@ -479,17 +423,6 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   for (int64_t i = 0; i < atomic_numbers.size(0); i++)
     model_atomic_numbers.push_back(atomic_numbers[i].item<int64_t>());
 
-  // check model type
-  if (model.hasattr("is_committor"))
-    is_committor = model.attr("is_committor").toTensor().item<int>() != 0;
-  if (!is_committor && k_bias)
-    plumed_merror(
-      "Can not calculate Kolmogorov's bias potential for a non-committor model!"
-    );
-  
-    // TODO: pass the sigmoid at initailization in PLUMED as in the other interface
-    kb_sigmoid_p = 3;
-
 
   // optimize model
   model.eval();
@@ -512,7 +445,6 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
 
   // optimize model for inference
 if (TORCH_VERSION_MAJOR == 2 || TORCH_VERSION_MAJOR == 1 && TORCH_VERSION_MINOR >= 10) {
-  if (!is_committor && !k_bias) // with committor bias this is suboptimal as we need several derivatives
     model = torch::jit::optimize_for_inference(model);
 }
 
@@ -553,24 +485,10 @@ if (TORCH_VERSION_MAJOR == 2 || TORCH_VERSION_MAJOR == 1 && TORCH_VERSION_MINOR 
   }
 
   // create components
-  if (!is_committor) {
-    for (int i = 0; i < n_out; i++) {
-      string name_comp = "node-" + std::to_string(i);
-      addComponentWithDerivatives(name_comp);
-      componentIsNotPeriodic(name_comp);
-    }
-  } else {
-    string name_comp_z = "node-0";
-    addComponentWithDerivatives(name_comp_z);
-    componentIsNotPeriodic(name_comp_z);
-    string name_comp_q = "node-1";
-    addComponent(name_comp_q);
-    componentIsNotPeriodic(name_comp_q);
-    if (k_bias) {
-      string name_comp_b = "kbias";
-      addComponentWithDerivatives(name_comp_b);
-      componentIsNotPeriodic(name_comp_b);
-    }
+  for (int i = 0; i < n_out; i++) {
+    string name_comp = "node-" + std::to_string(i);
+    addComponentWithDerivatives(name_comp);
+    componentIsNotPeriodic(name_comp);
   }
 
   // initialize the neighbor list
@@ -645,30 +563,6 @@ if (TORCH_VERSION_MAJOR == 2 || TORCH_VERSION_MAJOR == 1 && TORCH_VERSION_MINOR 
   if(atom_list_b.size() > 0)
     log.printf("  Environment buffer size: %f (PLUMED length unit)\n", buffer);
   log.printf("  Number of outputs: %d \n", n_out);
-  log.printf("  Is this a committor model: ");
-  if (is_committor)
-    log.printf("yes\n");
-  else
-    log.printf("no\n");
-  if (is_committor) {
-    log.printf("  If to sample Kolmogorov's ensemble: ");
-    if (k_bias)
-      log.printf("yes\n");
-    else
-      log.printf("no\n");
-    if (k_bias) {
-      log.printf("  LAMBDA    value for calculating V_K: %f\n", kb_lambda);
-      log.printf("  EPSILON   value for calculating V_K: %e\n", kb_epsilon);
-      log.printf("  SIGMOID_P value for calculating V_K: %e\n", kb_sigmoid_p);
-    }
-    if (k_bias) {
-      log << "  Output alignment: " + thename + ".kbias  -> V_K\n";
-      log << "  Output alignment: " + thename + ".node-0 -> zeta\n";
-    } else {
-      log << "  Output alignment: " + thename + ".node-0 -> zeta\n";
-    }
-    log << "  Output alignment: " + thename + ".node-1 -> q (no grad)\n";
-  }
   log.printf("  Will run on device: ");
   if (use_cuda)
     log.printf("CUDA\n");
@@ -682,11 +576,6 @@ if (TORCH_VERSION_MAJOR == 2 || TORCH_VERSION_MAJOR == 1 && TORCH_VERSION_MINOR 
   log << plumed.cite("Zhang et al., J. Chem. Theory Comput. 20, 24, 10787–10797 (2024)");
   log << plumed.cite("Bonati, Trizio, Rizzi and Parrinello, J. Chem. Phys. 159, 014801 (2023)");
   log << plumed.cite("Bonati, Rizzi and Parrinello, J. Phys. Chem. Lett. 11, 2998-3004 (2020)");
-  if (is_committor) {
-      log<<plumed.cite("Kang, Trizio, and Parrinello, Nat. Comp. Sci. 4, 451-460 (2024)");
-      log<<plumed.cite("Kang, Zhang, Trizio, Hou, and Parrinello, J. Chem. Theory Comput., 22, 4, 1613–1620 (2026)");
-      log<<plumed.cite("Trizio, Kang and Parrinello, Nat. Comp. Sci. 5, 582-591 (2025)");
-  }
   log.printf("\n");
 }
 
@@ -956,141 +845,36 @@ void PytorchGNN::calculate()
   std::vector<PLMD::Vector> derivatives(n_atoms);
   auto grad_output = torch::ones({1}).expand({1, 1}).to(device);
 
-  if (!is_committor) {
-    // Here we simply compute the output and its derivatives
-    for (int i = 0; i < n_out; i++) {
-      // set CV values
-      string name_comp = "node-" + std::to_string(i);
-      getPntrToComponent(name_comp)->set(output[0][i].cpu().item<double>());
-      // set derivatives
-      auto gradients = torch::autograd::grad(
-        {output.slice(1, i, (i + 1))},
-        {positions},
-        {grad_output}, // grad_outputs
-        true,          // retain_graph
-        false          // create_graph
-      )[0].cpu();
-      #pragma omp parallel for num_threads(n_threads)
-      for (int j = 0; j < n_atoms; j++) {
-        derivatives[j][0] = gradients[j][0].item<double>() * to_ang;
-        derivatives[j][1] = gradients[j][1].item<double>() * to_ang;
-        derivatives[j][2] = gradients[j][2].item<double>() * to_ang;
-      }
-      #pragma omp parallel for num_threads(n_threads)
-      for (int j = 0; j < n_atoms; j++) {
-        int index = atom_list_active[j];
-        setAtomsDerivatives(
-          getPntrToComponent(name_comp), index, derivatives[j]
-        );
-      }
-    }
-  } else {
-    // Here we compute the output (z), the committor (q)
-    // and (optionally) the Kolmogorov's bias potential (V_K)
-    // as well as their derivatives
-    
-    // set z and committor values
-    string name_comp_z = "node-0";
-    torch::Tensor output_z = output[0][0];
-    getPntrToComponent(name_comp_z)->set(output_z.cpu().item<double>());
-    
-    string name_comp_q = "node-1";
-    torch::Tensor Sigmoid_p = torch::tensor(kb_sigmoid_p, torch_float_dtype).to(device);
-    torch::Tensor output_q = 1 / (1 + torch::exp(-Sigmoid_p*(output_z)));
-    getPntrToComponent(name_comp_q)->set(output_q.cpu().item<double>());
-
-    if (!k_bias) {
-    // this branch doesn't need second gradients
-    
-    // set derivatives of z
-    auto gradients_z = torch::autograd::grad(
-      {output_z},
-      {positions},
-      {grad_output}, // grad_outputs
-      false,         // retain_graph
-      false          // create_graph
-    )[0].cpu();
-    #pragma omp parallel for num_threads(n_threads)
-    for (int j = 0; j < n_atoms; j++) {
-      derivatives[j][0] = gradients_z[j][0].item<double>() * to_ang;
-      derivatives[j][1] = gradients_z[j][1].item<double>() * to_ang;
-      derivatives[j][2] = gradients_z[j][2].item<double>() * to_ang;
-    }
-    #pragma omp parallel for num_threads(n_threads)
-    for (int j = 0; j < n_atoms; j++) {
-      int index = atom_list_active[j];
-      setAtomsDerivatives(
-        getPntrToComponent(name_comp_z), index, derivatives[j]
-      );
-    }
-  } else {
-    // this branch also compute the V_K bias
-    // we thus need also all the second gradients
-    torch::Tensor epsilon = torch::tensor(kb_epsilon, torch_float_dtype).to(device);
-    
-    // get bias value
-    auto gradients_z = torch::autograd::grad(
-      {output_z},
+  // Here we simply compute the output and its derivatives
+  for (int i = 0; i < n_out; i++) {
+    // set CV values
+    string name_comp = "node-" + std::to_string(i);
+    getPntrToComponent(name_comp)->set(output[0][i].cpu().item<double>());
+    // set derivatives
+    auto gradients = torch::autograd::grad(
+      {output.slice(1, i, (i + 1))},
       {positions},
       {grad_output}, // grad_outputs
       true,          // retain_graph
-      true           // create_graph
-    )[0];
-
-    // square and sum over all dims
-    auto gradients_z_sum = torch::sum(torch::pow(gradients_z, 2));
-
-    // use chain rule to write V_K as function of \nabla z
-    auto k_bias_value = kb_lambda * (
-        torch::log(gradients_z_sum + epsilon)
-        - 4.0 * torch::log(1.0 + torch::exp(-Sigmoid_p * output_z))
-        - 2.0 * Sigmoid_p * output_z
-        - torch::log(epsilon)
-    );
-
-    // set bias value
-    string name_comp_b = "kbias";
-    getPntrToComponent(name_comp_b)->set(k_bias_value.cpu().item<double>());
-
-    // set derivatives of z
-    #pragma omp parallel for num_threads(n_threads)
-    for (int j = 0; j < n_atoms; j++) {
-      derivatives[j][0] = gradients_z[j][0].item<double>() * to_ang;
-      derivatives[j][1] = gradients_z[j][1].item<double>() * to_ang;
-      derivatives[j][2] = gradients_z[j][2].item<double>() * to_ang;
-    }
-    #pragma omp parallel for num_threads(n_threads)
-    for (int j = 0; j < n_atoms; j++) {
-      int index = atom_list_active[j];
-      setAtomsDerivatives(
-        getPntrToComponent(name_comp_z), index, derivatives[j]
-      );
-    }
-
-    // set derivatives of bias
-    auto gradients_b = torch::autograd::grad(
-      {k_bias_value},
-      {positions},
-      {grad_output}, // grad_outputs
-      false,         // retain_graph
       false          // create_graph
     )[0].cpu();
     #pragma omp parallel for num_threads(n_threads)
     for (int j = 0; j < n_atoms; j++) {
-      derivatives[j][0] = gradients_b[j][0].item<double>() * to_ang;
-      derivatives[j][1] = gradients_b[j][1].item<double>() * to_ang;
-      derivatives[j][2] = gradients_b[j][2].item<double>() * to_ang;
+      derivatives[j][0] = gradients[j][0].item<double>() * to_ang;
+      derivatives[j][1] = gradients[j][1].item<double>() * to_ang;
+      derivatives[j][2] = gradients[j][2].item<double>() * to_ang;
     }
     #pragma omp parallel for num_threads(n_threads)
     for (int j = 0; j < n_atoms; j++) {
       int index = atom_list_active[j];
       setAtomsDerivatives(
-        getPntrToComponent(name_comp_b), index, derivatives[j]
+        getPntrToComponent(name_comp), index, derivatives[j]
       );
+  
     }
   }
 }
-}
+
 
 int PytorchGNN::atomic_number_from_name(std::string name)
 {
