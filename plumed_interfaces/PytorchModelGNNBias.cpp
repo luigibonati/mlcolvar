@@ -21,6 +21,7 @@ along with plumed.  If not, see <http://www.gnu.org/licenses/>.
 #include <memory>
 #include <fstream>
 #include <type_traits>
+#include <unordered_map>
 #include <torch/torch.h>
 #include <torch/script.h>
 #include <torch/csrc/jit/jit_log.h>
@@ -200,9 +201,11 @@ class PytorchGNN: public Colvar
   bool k_bias = false;
   double r_max = 0.0; // In PLUMED length unit
   double buffer = 0.0; // In PLUMED length unit
+  double beta = 1.0;
   double kb_lambda = 1.0;
   double kb_epsilon = -1;
   double kb_sigmoid_p= -1;
+  double kb_lambda_over_beta = 1.0;
   std::string model_file_name;
   std::string structure_file_name;
   std::vector<int> system_node_types;
@@ -215,6 +218,9 @@ class PytorchGNN: public Colvar
   torch::ScalarType torch_float_dtype = torch::kFloat32;
   torch::Device device = c10::Device(torch::kCPU);
   torch::Tensor t_kb_sigmoid_p;
+  torch::Tensor t_kb_epsilon;
+  torch::Tensor t_log_kb_epsilon;
+  torch::Tensor t_grad_output;
   const std::array<std::string, 118> periodic_table = {
      "h", "he",
      "li", "be",                                                              "b",  "c",  "n",  "o",  "f", "ne",
@@ -284,6 +290,12 @@ void PytorchGNN::registerKeywords(Keywords& keys)
   );
 
   // TODO: change this name
+  keys.add(
+    "optional",
+    "BETA",
+    "Inverse temperature in the right energy units, used for calculating $V_K$"
+  );
+
   keys.add(
     "optional",
     "KBLAMBDA",
@@ -375,6 +387,10 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   if (buffer > 0 && atom_list_b.size() == 0)
     plumed_merror("No GROUPB given! Cannot define the BUFFER key!");
 
+  parse("BETA", beta);
+  if (beta <= 0.0)
+    plumed_merror("BETA should be positive!");
+
   parse("KBLAMBDA", kb_lambda);
   parse("KBEPSILON", kb_epsilon);
   kb_sigmoid_p = 3.0;
@@ -429,7 +445,11 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
     use_cuda = false;
   }
 
+  kb_lambda_over_beta = kb_lambda / beta;
   t_kb_sigmoid_p = torch::tensor(kb_sigmoid_p, torch_float_dtype).to(device);
+  t_kb_epsilon = torch::tensor(kb_epsilon, torch_float_dtype).to(device);
+  t_log_kb_epsilon = torch::tensor(std::log(kb_epsilon), torch_float_dtype).to(device);
+  t_grad_output = torch::ones({1}).expand({1, 1}).to(device);
 
   // check structure file
   PDB pdb;
@@ -445,9 +465,15 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
     plumed_merror("Can not open PDB file: '" + structure_file_name + "'");
   }
 
+  // create the metadata dict
+  std::unordered_map<std::string, std::string> metadata = {
+    {"_jit_bailout_depth", ""},
+    {"_jit_fusion_strategy", ""}
+  };
+
   // deserialize the model from file
   try {
-    model = torch::jit::load(model_file_name, device);
+    model = torch::jit::load(model_file_name, device, metadata);
   } catch (const c10::Error& e) {
     plumed_merror(
       "Can't load model file: '" + model_file_name + "'. Reason: " + e.what()
@@ -523,6 +549,32 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
 #else
   // do it normally
   model = torch::jit::freeze(model);
+#endif
+
+#if (TORCH_VERSION_MAJOR == 1 && TORCH_VERSION_MINOR <= 10)
+  size_t jit_bailout_depth;
+  if (metadata["_jit_bailout_depth"].empty()) {
+    jit_bailout_depth = 1;
+  } else {
+    jit_bailout_depth = std::stoi(metadata["_jit_bailout_depth"]);
+  }
+  torch::jit::getBailoutDepth() = jit_bailout_depth;
+#else
+  torch::jit::FusionStrategy strategy;
+  if (metadata["_jit_fusion_strategy"].empty()) {
+    strategy = {{torch::jit::FusionBehavior::DYNAMIC, 0}};
+  } else {
+    std::stringstream strat_stream(metadata["_jit_fusion_strategy"]);
+    std::string fusion_type, fusion_depth;
+    while (std::getline(strat_stream, fusion_type, ',')) {
+      std::getline(strat_stream, fusion_depth, ';');
+      strategy.push_back({
+        fusion_type == "STATIC" ? torch::jit::FusionBehavior::STATIC : torch::jit::FusionBehavior::DYNAMIC,
+        std::stoi(fusion_depth)
+      });
+    }
+  }
+  torch::jit::setFusionStrategy(strategy);
 #endif
 
   // optimize model for inference
@@ -659,6 +711,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
     log.printf("no\n");
   if (k_bias) {
     log.printf("  LAMBDA    value for calculating V_K: %f\n", kb_lambda);
+    log.printf("  BETA      value for calculating V_K: %f\n", beta);
     log.printf("  EPSILON   value for calculating V_K: %e\n", kb_epsilon);
     log.printf("  SIGMOID_P value for calculating V_K: %e\n", kb_sigmoid_p);
   }
@@ -953,7 +1006,6 @@ void PytorchGNN::calculate()
 
   // helper variables
   std::vector<PLMD::Vector> derivatives(n_atoms);
-  auto grad_output = torch::ones({1}).expand({1, 1}).to(device);
 
   
     // Here we compute the output (z), the committor (q)
@@ -976,7 +1028,7 @@ void PytorchGNN::calculate()
     auto gradients_z = torch::autograd::grad(
       {output_z},
       {positions},
-      {grad_output}, // grad_outputs
+      {t_grad_output}, // grad_outputs
       false,         // retain_graph
       false          // create_graph
     )[0].cpu();
@@ -996,13 +1048,12 @@ void PytorchGNN::calculate()
   } else {
     // this branch also compute the V_K bias
     // we thus need also all the second gradients
-    torch::Tensor epsilon = torch::tensor(kb_epsilon, torch_float_dtype).to(device);
-    
+
     // get bias value
     auto gradients_z = torch::autograd::grad(
       {output_z},
       {positions},
-      {grad_output}, // grad_outputs
+      {t_grad_output}, // grad_outputs
       true,          // retain_graph
       true           // create_graph
     )[0];
@@ -1011,11 +1062,11 @@ void PytorchGNN::calculate()
     auto gradients_z_sum = torch::sum(torch::pow(gradients_z, 2));
 
     // use chain rule to write V_K as function of \nabla z
-    auto k_bias_value = kb_lambda * (
-        torch::log(gradients_z_sum + epsilon)
+    auto k_bias_value = kb_lambda_over_beta * (
+        torch::log(gradients_z_sum + t_kb_epsilon)
         - 4.0 * torch::log(1.0 + torch::exp(-t_kb_sigmoid_p * output_z))
         - 2.0 * t_kb_sigmoid_p * output_z
-        - torch::log(epsilon)
+        - t_log_kb_epsilon
     );
 
     // set bias value
@@ -1041,7 +1092,7 @@ void PytorchGNN::calculate()
     auto gradients_b = torch::autograd::grad(
       {k_bias_value},
       {positions},
-      {grad_output}, // grad_outputs
+      {t_grad_output}, // grad_outputs
       false,         // retain_graph
       false          // create_graph
     )[0].cpu();
