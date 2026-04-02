@@ -511,11 +511,10 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
 #endif
 
   // optimize model for inference
-#if (TORCH_VERSION_MAJOR == 2 || TORCH_VERSION_MAJOR == 1 && TORCH_VERSION_MINOR >= 10)
-  #if (!is_committor)
-  model = torch::jit::optimize_for_inference(model);
-  #endif
-#endif
+if (TORCH_VERSION_MAJOR == 2 || TORCH_VERSION_MAJOR == 1 && TORCH_VERSION_MINOR >= 10) {
+  if (!is_committor && !k_bias) // with committor bias this is suboptimal as we need several derivatives
+    model = torch::jit::optimize_for_inference(model);
+}
 
   // send the model to device
   model.to(device);
@@ -936,21 +935,18 @@ void PytorchGNN::calculate()
   input.insert("shifts", shifts);
   input.insert("unit_shifts", unit_shifts);
 
-  // Optional fields.
-  if (atom_list_b.size() > 0) {
-    auto system_masks = torch::zeros(
-      {n_atoms, 1}, torch::dtype(torch::kBool)
-    );
-    for (size_t i = 0; i < atom_list_a.size(); i++)
-      system_masks[i] = true;
-    system_masks = system_masks.to(device);
-    input.insert("system_masks", system_masks);
+  // create and insert system mask and n_system
+  torch::Tensor system_masks = torch::zeros({n_atoms, 1}, torch::dtype(torch::kBool));
+  for (size_t i = 0; i < atom_list_a.size(); i++)
+    system_masks[i] = true;
+  system_masks = system_masks.to(device);
+  input.insert("system_masks", system_masks);
 
-    auto n_system = torch::ones({1, 1}, torch::dtype(torch::kInt64));
-    n_system = n_system.to(device);
-    n_system[0][0] = (int64_t)atom_list_a.size();
-    input.insert("n_system", n_system);
-  }
+  torch::Tensor n_system = torch::ones({1, 1}, torch::dtype(torch::kInt64));
+  n_system = n_system.to(device);
+  n_system[0][0] = (int64_t)atom_list_a.size();
+  input.insert("n_system", n_system);
+  
 
   // TODO: figure out how to enable virials. Maybe we could port MACE's python
   // code to our python module.
