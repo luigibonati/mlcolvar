@@ -167,7 +167,7 @@ PYTORCH_GNN ...
   NL_STRIDE=100
   FLOAT64
   KBIAS
-  KBLAMBDA=-2.0
+  LAMBDA=-2.0
   LABEL=gnn
 ... PYTORCH_GNN
 
@@ -202,10 +202,10 @@ class PytorchGNN: public Colvar
   double r_max = 0.0; // In PLUMED length unit
   double buffer = 0.0; // In PLUMED length unit
   double beta = 1.0;
-  double kb_lambda = 1.0;
-  double kb_epsilon = -1;
-  double kb_sigmoid_p= -1;
-  double kb_lambda_over_beta = 1.0;
+  double lambda = 1.0;
+  double epsilon = -1;
+  double sigmoid_p = -1;
+  double lambda_over_beta = 1.0;
   std::string model_file_name;
   std::string structure_file_name;
   std::vector<int> system_node_types;
@@ -217,9 +217,9 @@ class PytorchGNN: public Colvar
   torch::jit::script::Module model;
   torch::ScalarType torch_float_dtype = torch::kFloat32;
   torch::Device device = c10::Device(torch::kCPU);
-  torch::Tensor t_kb_sigmoid_p;
-  torch::Tensor t_kb_epsilon;
-  torch::Tensor t_log_kb_epsilon;
+  torch::Tensor t_sigmoid_p;
+  torch::Tensor t_epsilon;
+  torch::Tensor t_log_epsilon;
   torch::Tensor t_grad_output;
   const std::array<std::string, 118> periodic_table = {
      "h", "he",
@@ -289,7 +289,6 @@ void PytorchGNN::registerKeywords(Keywords& keys)
     "Buffer size used in finding active environment atoms"
   );
 
-  // TODO: change this name
   keys.add(
     "optional",
     "BETA",
@@ -298,14 +297,13 @@ void PytorchGNN::registerKeywords(Keywords& keys)
 
   keys.add(
     "optional",
-    "KBLAMBDA",
+    "LAMBDA",
     "The LAMBDA value for calculating $V_K$. Only vaild for GNN committor models"
   );
 
-  // TODO: change this name
   keys.add(
     "optional",
-    "KBEPSILON",
+    "EPSILON",
     "The EPSILON value for calculating $V_K$. Only vaild for GNN committor models, the default value depends on the model precision"
   );
 
@@ -391,10 +389,9 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   if (beta <= 0.0)
     plumed_merror("BETA should be positive!");
 
-  parse("KBLAMBDA", kb_lambda);
-  parse("KBEPSILON", kb_epsilon);
-  kb_sigmoid_p = 3.0;
-  parse("SIGMOID_P", kb_sigmoid_p);
+  parse("LAMBDA", lambda);
+  sigmoid_p = 3.0;
+  parse("SIGMOID_P", sigmoid_p);
 
   bool use_cuda = false;
   bool required_cuda = false;
@@ -406,12 +403,13 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
 
   bool use_float64 = false;
   parseFlag("FLOAT64", use_float64);
-  if (kb_epsilon < 0) {
+  if (epsilon < 0) {
     if (use_float64)
-      kb_epsilon = 1E-14;
+      epsilon = 1E-14;
     else
-      kb_epsilon = 1E-7;
+      epsilon = 1E-7;
   }
+  parse("EPSILON", epsilon);
 
   bool nopbc = !pbc;
   parseFlag("NOPBC", nopbc);
@@ -445,10 +443,10 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
     use_cuda = false;
   }
 
-  kb_lambda_over_beta = kb_lambda / beta;
-  t_kb_sigmoid_p = torch::tensor(kb_sigmoid_p, torch_float_dtype).to(device);
-  t_kb_epsilon = torch::tensor(kb_epsilon, torch_float_dtype).to(device);
-  t_log_kb_epsilon = torch::tensor(std::log(kb_epsilon), torch_float_dtype).to(device);
+  lambda_over_beta = lambda / beta;
+  t_sigmoid_p = torch::tensor(sigmoid_p, torch_float_dtype).to(device);
+  t_epsilon = torch::tensor(epsilon, torch_float_dtype).to(device);
+  t_log_epsilon = torch::tensor(std::log(epsilon), torch_float_dtype).to(device);
   t_grad_output = torch::ones({1}).expand({1, 1}).to(device);
 
   // check structure file
@@ -710,10 +708,10 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   else
     log.printf("no\n");
   if (k_bias) {
-    log.printf("  LAMBDA    value for calculating V_K: %f\n", kb_lambda);
+    log.printf("  LAMBDA    value for calculating V_K: %f\n", lambda);
     log.printf("  BETA      value for calculating V_K: %f\n", beta);
-    log.printf("  EPSILON   value for calculating V_K: %e\n", kb_epsilon);
-    log.printf("  SIGMOID_P value for calculating V_K: %e\n", kb_sigmoid_p);
+    log.printf("  EPSILON   value for calculating V_K: %e\n", epsilon);
+    log.printf("  SIGMOID_P value for calculating V_K: %e\n", sigmoid_p);
   }
   if (k_bias) {
     log << "  Output alignment: " + thename + ".kbias  -> V_K\n";
@@ -1018,7 +1016,7 @@ void PytorchGNN::calculate()
     getPntrToComponent(name_comp_z)->set(output_z.cpu().item<double>());
     
     string name_comp_q = "q";
-    torch::Tensor output_q = 1 / (1 + torch::exp(-t_kb_sigmoid_p * output_z));
+    torch::Tensor output_q = 1 / (1 + torch::exp(-t_sigmoid_p * output_z));
     getPntrToComponent(name_comp_q)->set(output_q.cpu().item<double>());
 
     if (!k_bias) {
@@ -1062,16 +1060,16 @@ void PytorchGNN::calculate()
     auto gradients_z_sum = torch::sum(torch::pow(gradients_z, 2));
 
     // use chain rule to write V_K as function of \nabla z
-    auto k_bias_value = kb_lambda_over_beta * (
-        torch::log(gradients_z_sum + t_kb_epsilon)
-        - 4.0 * torch::log(1.0 + torch::exp(-t_kb_sigmoid_p * output_z))
-        - 2.0 * t_kb_sigmoid_p * output_z
-        - t_log_kb_epsilon
+    auto bias = lambda_over_beta * (
+        torch::log(gradients_z_sum + t_epsilon)
+        - 4.0 * torch::log(1.0 + torch::exp(-t_sigmoid_p * output_z))
+        - 2.0 * t_sigmoid_p * output_z
+        - t_log_epsilon
     );
 
     // set bias value
     string name_comp_b = "kbias";
-    getPntrToComponent(name_comp_b)->set(k_bias_value.cpu().item<double>());
+    getPntrToComponent(name_comp_b)->set(bias.cpu().item<double>());
 
     // set derivatives of z
     #pragma omp parallel for num_threads(n_threads)
