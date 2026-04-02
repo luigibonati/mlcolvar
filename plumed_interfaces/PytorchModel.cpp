@@ -90,7 +90,11 @@ public:
   std::vector<float> tensor_to_vector(const torch::Tensor& x);
 };
 
-PLUMED_REGISTER_ACTION(PytorchModel,"PYTORCH_MODEL_TEST")
+// This is the macro that registers the action in plumed. 
+// The name is arbitrary, but it has to be unique among all the actions in plumed.
+// Thus, if this is loaded at runtime with a the pytorch module already present
+// it needs to be registered with a different name, e.g., PYTORCH_MODEL_RUNTIME
+PLUMED_REGISTER_ACTION(PytorchModel,"PYTORCH_MODEL_RUNTIME")
 
 void PytorchModel::registerKeywords(Keywords& keys) {
   Function::registerKeywords(keys);
