@@ -15,7 +15,7 @@ You should have received a copy of the GNU Lesser General Public License
 along with plumed.  If not, see <http://www.gnu.org/licenses/>.
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ */
 
-// #ifdef __PLUMED_HAS_LIBTORCH
+#ifdef __PLUMED_HAS_LIBTORCH
 
 #include <cmath>
 #include <memory>
@@ -985,7 +985,7 @@ void PytorchGNN::calculate()
       }
     }
   } else {
-    // Here we simply compute the output (z), the committor (q)
+    // Here we compute the output (z), the committor (q)
     // and (optionally) the Kolmogorov's bias potential (V_K)
     // as well as their derivatives
     
@@ -1187,4 +1187,4 @@ void PytorchGNN::find_active_atoms(int n_threads) {
 
 } // PLMD
 
-// #endif // PLUMED_HAS_LIBTORCH
+#endif // PLUMED_HAS_LIBTORCH
