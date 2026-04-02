@@ -51,6 +51,31 @@ namespace PLMD {
 namespace function {
 namespace pytorch {
 
+//+PLUMEDOC PYTORCH_FUNCTION PYTORCH_MODEL_BIAS
+/*
+Similar to \ref PYTORCH_MODEL, but assumes that the model is a committor-like function and computes the corresponding Kolmogorov bias.
+This action evaluates a TorchScript model and assumes that it returns a single scalar output `z`. From this value it also computes the activated committor-like quantity `q` and the bias contribution `kbias`. Derivatives of all outputs with respect to the input arguments are obtained through PyTorch automatic differentiation.
+In particular, it takes a model for the z committor-based CV, applies a sigmoid activation to get the committor q, and then computes the bias as $V_K = -\\frac{\\lambda}{\\beta} \\log(\\| \\nabla q \\|^2 + \\epsilon)$, where $\\lambda$ is a prefactor, $\\beta$ is the inverse temperature, and $\\epsilon$ is a small regularization term to avoid divergences when the gradient is zero. The bias can be optionally computed using the raw model output z instead of the activated q, which may lead to better gradients when q is close to 0 or 1.
+
+By default it is assumed that the model is saved as `model.ptc`, unless otherwise indicated by the `FILE` keyword. The action requires a model with exactly one output. 
+The `LAMBDA` and `BETA` keywords control the bias prefactor and the inverse temperature, while `EPSILON`, `SIGMOID_P`, and `USE_Q_FOR_BIAS` tune the bias expression.
+
+Note that this function requires \ref installation-libtorch LibTorch C++ library. Check the instructions in the \ref PYTORCH page to enable the module.
+
+\par Examples
+Load model and print the raw output, activated output, and bias contribution.
+
+\plumedfile
+#SETTINGS AUXFILE=regtest/pytorch/rt-pytorch_model_2d/torch_model.ptc
+phi: TORSION ATOMS=5,7,9,15
+psi: TORSION ATOMS=7,9,15,17
+model: PYTORCH_MODEL_BIAS FILE=torch_model.ptc ARG=phi,psi LAMBDA=1.0 BETA=1.0
+PRINT FILE=COLVAR ARG=model.z,model.q,model.kbias
+\endplumedfile
+
+*/
+//+ENDPLUMEDOC
+
 class PytorchModelBias :
   public Function
 {
