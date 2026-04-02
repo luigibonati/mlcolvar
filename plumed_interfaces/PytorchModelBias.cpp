@@ -291,10 +291,10 @@ if (use_q_for_bias) // standard definition
 else // change of variable from q to z
   log_grad_sq = torch::log(torch::sum(gradient_z * gradient_z) * torch::pow(sigmoid_prime.squeeze(), 2) + t_epsilon);
 
-log_grad_sq = -lambda_over_beta * ( log_grad_sq - log_epsilon );
+torch::Tensor bias_value = -lambda_over_beta * ( log_grad_sq - log_epsilon );
 
 // get derivatives of bias --> forces
-torch::Tensor gradient_bias = torch::autograd::grad({log_grad_sq},
+torch::Tensor gradient_bias = torch::autograd::grad({bias_value},
                         {input_S},
       /*grad_outputs=*/ {t_grad_output_bias},
       /*retain_graph=*/false,
@@ -330,7 +330,7 @@ getPntrToComponent(name_comp)->set(cvs_z[0]);
 
 // set BIAS value
 name_comp = "kbias";
-vector<float> bias = this->tensor_to_vector (log_grad_sq);
+vector<float> bias = this->tensor_to_vector (bias_value);
 getPntrToComponent(name_comp)->set(bias[0]);
 
 }
