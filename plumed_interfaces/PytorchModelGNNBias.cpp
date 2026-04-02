@@ -113,7 +113,7 @@ graph could fluctuate in different MD steps.
 
 This module also support committor calculations. When the input PyTorch model
 is a committor model, the outputs will assign the zeta value to the first
-output (node-0) and the q value to the second output (node-1). If the KBIAS
+output (z) and the q value to the second output (q). If the KBIAS
 keyword is also given, the module will also calculate the committor bias and
 assign it with a label of kbias. These information will be shown in the log as
 well.
@@ -197,7 +197,6 @@ class PytorchGNN: public Colvar
   bool serial = false;
   bool firsttime = true;
   bool invalidate_list = true;
-  bool is_committor = false;
   bool k_bias = false;
   double r_max = 0.0; // In PLUMED length unit
   double buffer = 0.0; // In PLUMED length unit
@@ -215,6 +214,7 @@ class PytorchGNN: public Colvar
   torch::jit::script::Module model;
   torch::ScalarType torch_float_dtype = torch::kFloat32;
   torch::Device device = c10::Device(torch::kCPU);
+  torch::Tensor t_kb_sigmoid_p;
   const std::array<std::string, 118> periodic_table = {
      "h", "he",
      "li", "be",                                                              "b",  "c",  "n",  "o",  "f", "ne",
@@ -297,6 +297,12 @@ void PytorchGNN::registerKeywords(Keywords& keys)
     "The EPSILON value for calculating $V_K$. Only vaild for GNN committor models, the default value depends on the model precision"
   );
 
+  keys.add(
+    "optional",
+    "SIGMOID_P",
+    "The sigmoid steepness used for calculating $V_K$. Only valid for GNN committor models"
+  );
+
   keys.addFlag(
     "CUDA",
     false,
@@ -322,7 +328,13 @@ void PytorchGNN::registerKeywords(Keywords& keys)
   );
 
   keys.addOutputComponent(
-    "node",
+    "z",
+    "default",
+    "Model outputs"
+  );
+
+  keys.addOutputComponent(
+    "q",
     "default",
     "Model outputs"
   );
@@ -365,6 +377,8 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
 
   parse("KBLAMBDA", kb_lambda);
   parse("KBEPSILON", kb_epsilon);
+  kb_sigmoid_p = 3.0;
+  parse("SIGMOID_P", kb_sigmoid_p);
 
   bool use_cuda = false;
   bool required_cuda = false;
@@ -414,6 +428,8 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   } else if (required_cuda) {
     use_cuda = false;
   }
+
+  t_kb_sigmoid_p = torch::tensor(kb_sigmoid_p, torch_float_dtype).to(device);
 
   // check structure file
   PDB pdb;
@@ -489,17 +505,6 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   for (int64_t i = 0; i < atomic_numbers.size(0); i++)
     model_atomic_numbers.push_back(atomic_numbers[i].item<int64_t>());
 
-  // check model type
-  if (model.hasattr("is_committor"))
-    is_committor = model.attr("is_committor").toTensor().item<int>() != 0;
-  if (!is_committor && k_bias)
-    plumed_merror(
-      "Can not calculate Kolmogorov's bias potential for a non-committor model!"
-    );
-  
-    // TODO: pass the sigmoid at initailization in PLUMED as in the other interface
-    kb_sigmoid_p = 3;
-
 
   // optimize model
   model.eval();
@@ -522,7 +527,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
 
   // optimize model for inference
   if (TORCH_VERSION_MAJOR == 2 || (TORCH_VERSION_MAJOR == 1 && TORCH_VERSION_MINOR >= 10)) {
-    if (!is_committor && !k_bias) // with committor bias this is suboptimal as we need several derivatives
+    if (!k_bias) // with committor bias this is suboptimal as we need several derivatives
       model = torch::jit::optimize_for_inference(model);
   }
 
@@ -563,24 +568,16 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   }
 
   // create components
-  if (!is_committor) {
-    for (int i = 0; i < n_out; i++) {
-      string name_comp = "node-" + std::to_string(i);
-      addComponentWithDerivatives(name_comp);
-      componentIsNotPeriodic(name_comp);
-    }
-  } else {
-    string name_comp_z = "node-0";
-    addComponentWithDerivatives(name_comp_z);
-    componentIsNotPeriodic(name_comp_z);
-    string name_comp_q = "node-1";
-    addComponent(name_comp_q);
-    componentIsNotPeriodic(name_comp_q);
-    if (k_bias) {
-      string name_comp_b = "kbias";
-      addComponentWithDerivatives(name_comp_b);
-      componentIsNotPeriodic(name_comp_b);
-    }
+  string name_comp_z = "z";
+  addComponentWithDerivatives(name_comp_z);
+  componentIsNotPeriodic(name_comp_z);
+  string name_comp_q = "q";
+  addComponent(name_comp_q);
+  componentIsNotPeriodic(name_comp_q);
+  if (k_bias) {
+    string name_comp_b = "kbias";
+    addComponentWithDerivatives(name_comp_b);
+    componentIsNotPeriodic(name_comp_b);
   }
 
   // initialize the neighbor list
@@ -655,30 +652,24 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   if(atom_list_b.size() > 0)
     log.printf("  Environment buffer size: %f (PLUMED length unit)\n", buffer);
   log.printf("  Number of outputs: %d \n", n_out);
-  log.printf("  Is this a committor model: ");
-  if (is_committor)
+  log.printf("  If to sample Kolmogorov's ensemble: ");
+  if (k_bias)
     log.printf("yes\n");
   else
     log.printf("no\n");
-  if (is_committor) {
-    log.printf("  If to sample Kolmogorov's ensemble: ");
-    if (k_bias)
-      log.printf("yes\n");
-    else
-      log.printf("no\n");
-    if (k_bias) {
-      log.printf("  LAMBDA    value for calculating V_K: %f\n", kb_lambda);
-      log.printf("  EPSILON   value for calculating V_K: %e\n", kb_epsilon);
-      log.printf("  SIGMOID_P value for calculating V_K: %e\n", kb_sigmoid_p);
-    }
-    if (k_bias) {
-      log << "  Output alignment: " + thename + ".kbias  -> V_K\n";
-      log << "  Output alignment: " + thename + ".node-0 -> zeta\n";
-    } else {
-      log << "  Output alignment: " + thename + ".node-0 -> zeta\n";
-    }
-    log << "  Output alignment: " + thename + ".node-1 -> q (no grad)\n";
+  if (k_bias) {
+    log.printf("  LAMBDA    value for calculating V_K: %f\n", kb_lambda);
+    log.printf("  EPSILON   value for calculating V_K: %e\n", kb_epsilon);
+    log.printf("  SIGMOID_P value for calculating V_K: %e\n", kb_sigmoid_p);
   }
+  if (k_bias) {
+    log << "  Output alignment: " + thename + ".kbias  -> V_K\n";
+    log << "  Output alignment: " + thename + ".node-0 -> zeta\n";
+  } else {
+    log << "  Output alignment: " + thename + ".node-0 -> zeta\n";
+  }
+  log << "  Output alignment: " + thename + ".node-1 -> q (no grad)\n";
+  
   log.printf("  Will run on device: ");
   if (use_cuda)
     log.printf("CUDA\n");
@@ -692,11 +683,9 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   log << plumed.cite("Zhang et al., J. Chem. Theory Comput. 20, 24, 10787–10797 (2024)");
   log << plumed.cite("Bonati, Trizio, Rizzi and Parrinello, J. Chem. Phys. 159, 014801 (2023)");
   log << plumed.cite("Bonati, Rizzi and Parrinello, J. Phys. Chem. Lett. 11, 2998-3004 (2020)");
-  if (is_committor) {
-      log<<plumed.cite("Kang, Trizio, and Parrinello, Nat. Comp. Sci. 4, 451-460 (2024)");
-      log<<plumed.cite("Kang, Zhang, Trizio, Hou, and Parrinello, J. Chem. Theory Comput., 22, 4, 1613–1620 (2026)");
-      log<<plumed.cite("Trizio, Kang and Parrinello, Nat. Comp. Sci. 5, 582-591 (2025)");
-  }
+  log<<plumed.cite("Kang, Trizio, and Parrinello, Nat. Comp. Sci. 4, 451-460 (2024)");
+  log<<plumed.cite("Kang, Zhang, Trizio, Hou, and Parrinello, J. Chem. Theory Comput., 22, 4, 1613–1620 (2026)");
+  log<<plumed.cite("Trizio, Kang and Parrinello, Nat. Comp. Sci. 5, 582-591 (2025)");
   log.printf("\n");
 }
 
@@ -966,47 +955,18 @@ void PytorchGNN::calculate()
   std::vector<PLMD::Vector> derivatives(n_atoms);
   auto grad_output = torch::ones({1}).expand({1, 1}).to(device);
 
-  if (!is_committor) {
-    // Here we simply compute the output and its derivatives
-    for (int i = 0; i < n_out; i++) {
-      // set CV values
-      string name_comp = "node-" + std::to_string(i);
-      getPntrToComponent(name_comp)->set(output[0][i].cpu().item<double>());
-      // set derivatives
-      auto gradients = torch::autograd::grad(
-        {output.slice(1, i, (i + 1))},
-        {positions},
-        {grad_output}, // grad_outputs
-        true,          // retain_graph
-        false          // create_graph
-      )[0].cpu();
-      #pragma omp parallel for num_threads(n_threads)
-      for (int j = 0; j < n_atoms; j++) {
-        derivatives[j][0] = gradients[j][0].item<double>() * to_ang;
-        derivatives[j][1] = gradients[j][1].item<double>() * to_ang;
-        derivatives[j][2] = gradients[j][2].item<double>() * to_ang;
-      }
-      #pragma omp parallel for num_threads(n_threads)
-      for (int j = 0; j < n_atoms; j++) {
-        int index = atom_list_active[j];
-        setAtomsDerivatives(
-          getPntrToComponent(name_comp), index, derivatives[j]
-        );
-      }
-    }
-  } else {
+  
     // Here we compute the output (z), the committor (q)
     // and (optionally) the Kolmogorov's bias potential (V_K)
     // as well as their derivatives
     
     // set z and committor values
-    string name_comp_z = "node-0";
+    string name_comp_z = "z";
     torch::Tensor output_z = output[0][0];
     getPntrToComponent(name_comp_z)->set(output_z.cpu().item<double>());
     
-    string name_comp_q = "node-1";
-    torch::Tensor Sigmoid_p = torch::tensor(kb_sigmoid_p, torch_float_dtype).to(device);
-    torch::Tensor output_q = 1 / (1 + torch::exp(-Sigmoid_p*(output_z)));
+    string name_comp_q = "q";
+    torch::Tensor output_q = 1 / (1 + torch::exp(-t_kb_sigmoid_p * output_z));
     getPntrToComponent(name_comp_q)->set(output_q.cpu().item<double>());
 
     if (!k_bias) {
@@ -1053,8 +1013,8 @@ void PytorchGNN::calculate()
     // use chain rule to write V_K as function of \nabla z
     auto k_bias_value = kb_lambda * (
         torch::log(gradients_z_sum + epsilon)
-        - 4.0 * torch::log(1.0 + torch::exp(-Sigmoid_p * output_z))
-        - 2.0 * Sigmoid_p * output_z
+        - 4.0 * torch::log(1.0 + torch::exp(-t_kb_sigmoid_p * output_z))
+        - 2.0 * t_kb_sigmoid_p * output_z
         - torch::log(epsilon)
     );
 
@@ -1098,7 +1058,6 @@ void PytorchGNN::calculate()
         getPntrToComponent(name_comp_b), index, derivatives[j]
       );
     }
-  }
 }
 }
 
