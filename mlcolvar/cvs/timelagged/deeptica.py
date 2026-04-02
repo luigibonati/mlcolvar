@@ -77,8 +77,6 @@ class DeepTICA(BaseCV):
         self.loss_fn = ReduceEigenvaluesLoss(mode="sum2")
         # here we need to override the self.out_features attribute
         self.out_features = n_cvs
-        self.register_buffer('n_out', torch.as_tensor(n_cvs))    
-
 
         # ======= OPTIONS =======
         # parse and sanitize
@@ -98,6 +96,9 @@ class DeepTICA(BaseCV):
         
         elif self._override_model:
             self.nn = model
+            if self.out_features is not None:
+                self.register_buffer('n_out', torch.as_tensor(self.out_features))    
+
 
         # initialize tica
         o = "tica"
