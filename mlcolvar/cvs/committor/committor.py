@@ -92,8 +92,6 @@ class Committor(BaseCV):
             Available blocks: ['nn'].
         """
         super().__init__(model, **kwargs) 
-
-        self.register_buffer('is_committor', torch.tensor(1, dtype=int))
         
         # =======  LOSS  =======
         self.loss_fn = CommittorLoss(atomic_masses=atomic_masses,
