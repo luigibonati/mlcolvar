@@ -70,13 +70,13 @@ auto getUsingNaturalUnits(Main&, Atoms& atoms, long)
 }
 
 template <typename Main, typename Atoms>
-auto getLengthUnitCompat(Main& main, Atoms&, int)
+auto getLengthUnit(Main& main, Atoms&, int)
   -> decltype(main.getUnits().getLength()) {
   return main.getUnits().getLength();
 }
 
 template <typename Main, typename Atoms>
-auto getLengthUnitCompat(Main&, Atoms& atoms, long)
+auto getLengthUnit(Main&, Atoms& atoms, long)
   -> decltype(atoms.getUnits().getLength()) {
   return atoms.getUnits().getLength();
 }
@@ -366,7 +366,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
     pdb.readFromFilepointer(
       fp,
       getUsingNaturalUnits(plumed, plumed.getAtoms(), 0),
-      0.1 / getLengthUnitCompat(plumed, plumed.getAtoms(), 0)
+      0.1 / getLengthUnit(plumed, plumed.getAtoms(), 0)
     );
     fclose(fp);
   } else {
@@ -422,7 +422,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
     r_max = model.attr("cutoff").toTensor().item<double>();
   else
     r_max = model.attr("r_max").toTensor().item<double>();
-  r_max = r_max / getLengthUnitCompat(plumed, plumed.getAtoms(), 0) * 0.1;
+  r_max = r_max / getLengthUnit(plumed, plumed.getAtoms(), 0) * 0.1;
 
   // get atomic numbers
   if (!model.hasattr("atomic_numbers"))
@@ -646,7 +646,7 @@ void PytorchGNN::calculate()
   n_threads = std::min(n_threads, n_atoms);
 
   // get the unit
-  double to_ang = 10 * getLengthUnitCompat(plumed, plumed.getAtoms(), 0);
+  double to_ang = 10 * getLengthUnit(plumed, plumed.getAtoms(), 0);
 
   // get the positions
   // TODO: now, the positions used by the model file is in unit of Angstrom.
