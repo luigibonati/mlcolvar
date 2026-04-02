@@ -681,6 +681,9 @@ void PytorchGNN::calculate()
 
   if (atom_list_b.size() > 0) {
     n_edges = n_atoms * (n_atoms - 1);
+    // TODO(perf): this GROUPB path builds all atom pairs and filters them by
+    // cutoff afterwards. Replace it with direct cutoff-based edge generation
+    // from a neighbor structure once tests cover this branch.
     std::vector<float> distance_vector(n_edges);
     std::vector<std::vector<int64_t>> edge_index_vector;
     edge_index_vector.resize(2, std::vector<int64_t>(n_edges));
@@ -815,7 +818,6 @@ void PytorchGNN::calculate()
   input.insert("batch", batch);
   input.insert("cell", cell);
   input.insert("edge_index", edge_index);
-  node_attrs.set_requires_grad(true);
   input.insert("node_attrs", node_attrs);
   positions.set_requires_grad(true);
   input.insert("positions", positions);
