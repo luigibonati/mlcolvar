@@ -199,6 +199,7 @@ class PytorchGNN: public Colvar
   bool firsttime = true;
   bool invalidate_list = true;
   bool k_bias = false;
+  bool use_q_for_bias = false;
   double r_max = 0.0; // In PLUMED length unit
   double buffer = 0.0; // In PLUMED length unit
   double beta = 1.0;
@@ -314,6 +315,12 @@ void PytorchGNN::registerKeywords(Keywords& keys)
   );
 
   keys.addFlag(
+    "USE_Q_FOR_BIAS",
+    false,
+    "Use the activated output for the bias calculation, may kill small gradients, default false"
+  );
+
+  keys.addFlag(
     "CUDA",
     false,
     "Perform the calculation on CUDA"
@@ -416,6 +423,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   pbc = !nopbc;
 
   parseFlag("KBIAS", k_bias);
+  parseFlag("USE_Q_FOR_BIAS", use_q_for_bias);
 
   checkRead();
 
@@ -622,7 +630,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   addComponentWithDerivatives(name_comp_z);
   componentIsNotPeriodic(name_comp_z);
   string name_comp_q = "q";
-  addComponent(name_comp_q);
+  addComponentWithDerivatives(name_comp_q);
   componentIsNotPeriodic(name_comp_q);
   if (k_bias) {
     string name_comp_b = "kbias";
@@ -712,6 +720,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
     log.printf("  BETA      value for calculating V_K: %f\n", beta);
     log.printf("  EPSILON   value for calculating V_K: %e\n", epsilon);
     log.printf("  SIGMOID_P value for calculating V_K: %e\n", sigmoid_p);
+    log.printf("  USE_Q_FOR_BIAS for calculating V_K: %s\n", use_q_for_bias ? "yes" : "no");
   }
   if (k_bias) {
     log << "  Output alignment: " + thename + ".kbias  -> V_K\n";
@@ -719,7 +728,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   } else {
     log << "  Output alignment: " + thename + ".node-0 -> zeta\n";
   }
-  log << "  Output alignment: " + thename + ".node-1 -> q (no grad)\n";
+  log << "  Output alignment: " + thename + ".node-1 -> q\n";
   
   log.printf("  Will run on device: ");
   if (use_cuda)
@@ -1016,7 +1025,9 @@ void PytorchGNN::calculate()
     getPntrToComponent(name_comp_z)->set(output_z.cpu().item<double>());
     
     string name_comp_q = "q";
-    torch::Tensor output_q = 1 / (1 + torch::exp(-t_sigmoid_p * output_z));
+    torch::Tensor output_q = torch::sigmoid(t_sigmoid_p * output_z);
+    torch::Tensor one_minus_q = 1 - output_q;
+    torch::Tensor sigmoid_prime = t_sigmoid_p * output_q * one_minus_q;
     getPntrToComponent(name_comp_q)->set(output_q.cpu().item<double>());
 
     if (!k_bias) {
@@ -1030,6 +1041,7 @@ void PytorchGNN::calculate()
       false,         // retain_graph
       false          // create_graph
     )[0].cpu();
+    auto gradients_q = gradients_z * sigmoid_prime.cpu();
     #pragma omp parallel for num_threads(n_threads)
     for (int j = 0; j < n_atoms; j++) {
       derivatives[j][0] = gradients_z[j][0].item<double>() * to_ang;
@@ -1043,11 +1055,24 @@ void PytorchGNN::calculate()
         getPntrToComponent(name_comp_z), index, derivatives[j]
       );
     }
+    #pragma omp parallel for num_threads(n_threads)
+    for (int j = 0; j < n_atoms; j++) {
+      derivatives[j][0] = gradients_q[j][0].item<double>() * to_ang;
+      derivatives[j][1] = gradients_q[j][1].item<double>() * to_ang;
+      derivatives[j][2] = gradients_q[j][2].item<double>() * to_ang;
+    }
+    #pragma omp parallel for num_threads(n_threads)
+    for (int j = 0; j < n_atoms; j++) {
+      int index = atom_list_active[j];
+      setAtomsDerivatives(
+        getPntrToComponent(name_comp_q), index, derivatives[j]
+      );
+    }
   } else {
     // this branch also compute the V_K bias
     // we thus need also all the second gradients
 
-    // get bias value
+    // get derivatives of z and q
     auto gradients_z = torch::autograd::grad(
       {output_z},
       {positions},
@@ -1055,21 +1080,22 @@ void PytorchGNN::calculate()
       true,          // retain_graph
       true           // create_graph
     )[0];
+    auto gradients_q = gradients_z * sigmoid_prime;
 
-    // square and sum over all dims
-    auto gradients_z_sum = torch::sum(torch::pow(gradients_z, 2));
+    // compute bias from gradients
+    torch::Tensor log_grad_sq;
+    if (use_q_for_bias)
+      log_grad_sq = torch::log(torch::sum(gradients_q * gradients_q) + t_epsilon);
+    else
+      log_grad_sq = torch::log(
+        torch::sum(gradients_z * gradients_z) * torch::pow(sigmoid_prime.squeeze(), 2) + t_epsilon
+      );
 
-    // use chain rule to write V_K as function of \nabla z
-    auto bias = lambda_over_beta * (
-        torch::log(gradients_z_sum + t_epsilon)
-        - 4.0 * torch::log(1.0 + torch::exp(-t_sigmoid_p * output_z))
-        - 2.0 * t_sigmoid_p * output_z
-        - t_log_epsilon
-    );
+    torch::Tensor bias_value = -lambda_over_beta * (log_grad_sq - t_log_epsilon);
 
     // set bias value
     string name_comp_b = "kbias";
-    getPntrToComponent(name_comp_b)->set(bias.cpu().item<double>());
+    getPntrToComponent(name_comp_b)->set(bias_value.cpu().item<double>());
 
     // set derivatives of z
     #pragma omp parallel for num_threads(n_threads)
@@ -1085,10 +1111,24 @@ void PytorchGNN::calculate()
         getPntrToComponent(name_comp_z), index, derivatives[j]
       );
     }
+    auto gradients_q_cpu = gradients_q.cpu();
+    #pragma omp parallel for num_threads(n_threads)
+    for (int j = 0; j < n_atoms; j++) {
+      derivatives[j][0] = gradients_q_cpu[j][0].item<double>() * to_ang;
+      derivatives[j][1] = gradients_q_cpu[j][1].item<double>() * to_ang;
+      derivatives[j][2] = gradients_q_cpu[j][2].item<double>() * to_ang;
+    }
+    #pragma omp parallel for num_threads(n_threads)
+    for (int j = 0; j < n_atoms; j++) {
+      int index = atom_list_active[j];
+      setAtomsDerivatives(
+        getPntrToComponent(name_comp_q), index, derivatives[j]
+      );
+    }
 
     // set derivatives of bias
     auto gradients_b = torch::autograd::grad(
-      {k_bias_value},
+      {bias_value},
       {positions},
       {t_grad_output}, // grad_outputs
       false,         // retain_graph
