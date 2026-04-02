@@ -291,22 +291,7 @@ void PytorchGNN::registerKeywords(Keywords& keys)
 
 PytorchGNN::PytorchGNN(const ActionOptions& ao):
   PLUMED_COLVAR_INIT(ao)
-{
-  //TODO: use this information to branch later the code for different PLUMED versions
-  std::string plumed_version;
-  plumed_version = config::getVersion();
-
-  int major = 0, minor = 0;
-  char dot;
-
-  std::stringstream ss_plumed(plumed_version);
-  ss_plumed >> major >> dot >> minor;
-  std::string plumed_version_info = "  Plumed version: " + plumed_version + "\n";
-  log.printf(plumed_version_info.data());
-  log.printf("Plumed major version: %d\n", major);
-  log.printf("Plumed minor version: %d\n", minor);
-
-  // print libtorch version
+{// print libtorch version
   std::stringstream ss;
   ss << TORCH_VERSION_MAJOR << "." \
      << TORCH_VERSION_MINOR << "." \
