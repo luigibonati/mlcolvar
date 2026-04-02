@@ -20,6 +20,7 @@ along with plumed.  If not, see <http://www.gnu.org/licenses/>.
 #include <cmath>
 #include <memory>
 #include <fstream>
+#include <type_traits>
 #include <torch/torch.h>
 #include <torch/script.h>
 #include <torch/csrc/jit/jit_log.h>
@@ -55,6 +56,30 @@ class NeighborList;
 namespace colvar {
 
 namespace pytorch_gnn {
+
+template <typename Main, typename Atoms>
+auto getUsingNaturalUnits(Main& main, Atoms&, int)
+  -> decltype(main.usingNaturalUnits()) {
+  return main.usingNaturalUnits();
+}
+
+template <typename Main, typename Atoms>
+auto getUsingNaturalUnits(Main&, Atoms& atoms, long)
+  -> decltype(atoms.usingNaturalUnits()) {
+  return atoms.usingNaturalUnits();
+}
+
+template <typename Main, typename Atoms>
+auto getLengthUnitCompat(Main& main, Atoms&, int)
+  -> decltype(main.getUnits().getLength()) {
+  return main.getUnits().getLength();
+}
+
+template <typename Main, typename Atoms>
+auto getLengthUnitCompat(Main&, Atoms& atoms, long)
+  -> decltype(atoms.getUnits().getLength()) {
+  return atoms.getUnits().getLength();
+}
 
 //+PLUMEDOC PYTORCH_GNN PYTORCH_GNN
 /*
@@ -355,8 +380,8 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   if (fp != NULL) {
     pdb.readFromFilepointer(
       fp,
-      plumed.usingNaturalUnits(),         
-      0.1 / plumed.getUnits().getLength() 
+      getUsingNaturalUnits(plumed, plumed.getAtoms(), 0),
+      0.1 / getLengthUnitCompat(plumed, plumed.getAtoms(), 0)
     );
     fclose(fp);
   } else {
@@ -412,7 +437,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
     r_max = model.attr("cutoff").toTensor().item<double>();
   else
     r_max = model.attr("r_max").toTensor().item<double>();
-  r_max = r_max / plumed.getUnits().getLength() * 0.1;
+  r_max = r_max / getLengthUnitCompat(plumed, plumed.getAtoms(), 0) * 0.1;
 
   // get atomic numbers
   if (!model.hasattr("atomic_numbers"))
@@ -444,9 +469,9 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
 #endif
 
   // optimize model for inference
-if (TORCH_VERSION_MAJOR == 2 || TORCH_VERSION_MAJOR == 1 && TORCH_VERSION_MINOR >= 10) {
+  if (TORCH_VERSION_MAJOR == 2 || (TORCH_VERSION_MAJOR == 1 && TORCH_VERSION_MINOR >= 10)) {
     model = torch::jit::optimize_for_inference(model);
-}
+  }
 
   // send the model to device
   model.to(device);
@@ -636,7 +661,7 @@ void PytorchGNN::calculate()
   n_threads = std::min(n_threads, n_atoms);
 
   // get the unit
-  double to_ang = 10 * plumed.getUnits().getLength();
+  double to_ang = 10 * getLengthUnitCompat(plumed, plumed.getAtoms(), 0);
 
   // get the positions
   // TODO: now, the positions used by the model file is in unit of Angstrom.
