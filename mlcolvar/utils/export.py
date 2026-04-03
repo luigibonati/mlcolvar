@@ -10,7 +10,7 @@ from contextlib import contextmanager
 
 import torch
 import torch._inductor.package
-import torch_geometric as tg
+import torch_geometric
 
 from lightning import LightningModule
 from torch.fx.experimental.proxy_tensor import make_fx
@@ -308,7 +308,7 @@ class GraphAdapter:
 
     @staticmethod
     def data_to_tuple(
-        data: Union[tg.data.Data, Dict[str, Any], List[Any]],
+        data: Union[torch_geometric.data.Data, Dict[str, Any], List[Any]],
         device: str = "cpu",
     ) -> Tuple[torch.Tensor, ...]:
 
@@ -318,7 +318,7 @@ class GraphAdapter:
         if isinstance(data, list):
             data = data[0]
 
-        loader = tg.loader.DataLoader([data], batch_size=1, shuffle=False)
+        loader = torch_geometric.loader.DataLoader([data], batch_size=1, shuffle=False)
         batch = next(iter(loader)).to(device)
         dd = batch.to_dict()
 
@@ -374,7 +374,7 @@ class ModelExporter:
     def __init__(
         self,
         model: LightningModule,
-        example_inputs: Union[torch.Tensor, tg.data.Data, Dict[str, Any], List[Any]],
+        example_inputs: Union[torch.Tensor, torch_geometric.data.Data, Dict[str, Any], List[Any]],
         config: ExportConfig,
     ):
         self.model = model
