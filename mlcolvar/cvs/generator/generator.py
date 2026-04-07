@@ -56,7 +56,7 @@ class Generator(BaseCV):
                  descriptors_derivatives: Union[SmartDerivatives, torch.Tensor] = None,
                  n_dim: int = 3,
                  split:bool = True,
-                 softmax_postproc: bool = False,
+                 softmax_postproc: bool = True,
                  options: dict = None,
                  **kwargs
                  ):
