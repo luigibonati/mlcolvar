@@ -139,6 +139,7 @@ class PytorchGNN: public Colvar
   bool serial = false;
   bool firsttime = true;
   bool invalidate_list = true;
+  bool bailout_fusion = false;
   bool k_bias = false;
   bool use_q_for_bias = false;
   double r_max = 0.0; // In PLUMED length unit
@@ -274,6 +275,12 @@ void PytorchGNN::registerKeywords(Keywords& keys)
   );
 
   keys.addFlag(
+    "BAILOUTFUSION",
+    true,
+    "Use a faster LibTorch fusion strategy, by default true. Set it to false for debugging and older version compatibility."
+  );
+
+  keys.addFlag(
     "FLOAT64",
     false,
     "Evaluate the model in double precise"
@@ -351,6 +358,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
 
   bool use_float64 = false;
   parseFlag("FLOAT64", use_float64);
+  parseFlag("BAILOUTFUSION", bailout_fusion);
   if (epsilon < 0) {
     if (use_float64)
       epsilon = 1E-14;
@@ -472,6 +480,13 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   for (int64_t i = 0; i < atomic_numbers.size(0); i++)
     model_atomic_numbers.push_back(atomic_numbers[i].item<int64_t>());
 
+  if (bailout_fusion) {
+    torch::jit::FusionStrategy bailout = {
+      {torch::jit::FusionBehavior::STATIC,  0},
+      {torch::jit::FusionBehavior::DYNAMIC, 0},
+    };
+    torch::jit::setFusionStrategy(bailout);
+  }
 
   // optimize model
   model.eval();

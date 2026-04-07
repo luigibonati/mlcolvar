@@ -182,6 +182,7 @@ class PytorchGNN: public Colvar
   bool serial = false;
   bool firsttime = true;
   bool invalidate_list = true;
+  bool bailout_fusion = false;
   double r_max = 0.0; // In PLUMED length unit
   double buffer = 0.0; // In PLUMED length unit
   std::string model_file_name;
@@ -276,6 +277,12 @@ void PytorchGNN::registerKeywords(Keywords& keys)
   );
 
   keys.addFlag(
+    "BAILOUTFUSION",
+    true,
+    "Use a faster LibTorch fusion strategy, by default true. Set it to false for debugging and older version compatibility."
+  );
+
+  keys.addFlag(
     "FLOAT64",
     false,
     "Evaluate the model in double precision"
@@ -332,6 +339,8 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   bool nopbc = !pbc;
   parseFlag("NOPBC", nopbc);
   pbc = !nopbc;
+
+  parseFlag("BAILOUTFUSION", bailout_fusion);
 
   checkRead();
 
@@ -427,6 +436,14 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   for (int64_t i = 0; i < atomic_numbers.size(0); i++)
     model_atomic_numbers.push_back(atomic_numbers[i].item<int64_t>());
 
+// https://stackoverflow.com/questions/77102532/libtorch-performance-issue-when-using-multiple-gpus-in-multiple-threads
+  if (bailout_fusion) {
+    torch::jit::FusionStrategy bailout = {
+      {torch::jit::FusionBehavior::STATIC,  0},
+      {torch::jit::FusionBehavior::DYNAMIC, 0},
+    };
+    torch::jit::setFusionStrategy(bailout);
+  }
 
   // optimize model
   model.eval();
