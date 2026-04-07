@@ -507,32 +507,6 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   model = torch::jit::freeze(model);
 #endif
 
-#if (TORCH_VERSION_MAJOR == 1 && TORCH_VERSION_MINOR <= 10)
-  size_t jit_bailout_depth;
-  if (metadata["_jit_bailout_depth"].empty()) {
-    jit_bailout_depth = 1;
-  } else {
-    jit_bailout_depth = std::stoi(metadata["_jit_bailout_depth"]);
-  }
-  torch::jit::getBailoutDepth() = jit_bailout_depth;
-#else
-  torch::jit::FusionStrategy strategy;
-  if (metadata["_jit_fusion_strategy"].empty()) {
-    strategy = {{torch::jit::FusionBehavior::DYNAMIC, 0}};
-  } else {
-    std::stringstream strat_stream(metadata["_jit_fusion_strategy"]);
-    std::string fusion_type, fusion_depth;
-    while (std::getline(strat_stream, fusion_type, ',')) {
-      std::getline(strat_stream, fusion_depth, ';');
-      strategy.push_back({
-        fusion_type == "STATIC" ? torch::jit::FusionBehavior::STATIC : torch::jit::FusionBehavior::DYNAMIC,
-        std::stoi(fusion_depth)
-      });
-    }
-  }
-  torch::jit::setFusionStrategy(strategy);
-#endif
-
   // optimize model for inference
   if (TORCH_VERSION_MAJOR == 2 || (TORCH_VERSION_MAJOR == 1 && TORCH_VERSION_MINOR >= 10)) {
     if (!k_bias) // with committor bias this is suboptimal as we need several derivatives
