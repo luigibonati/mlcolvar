@@ -278,8 +278,8 @@ void PytorchGNN::registerKeywords(Keywords& keys)
 
   keys.addFlag(
     "BAILOUTFUSION",
-    true,
-    "Use a faster LibTorch fusion strategy, by default true. Set it to false for debugging and older version compatibility."
+    false,
+    "Use a faster LibTorch fusion strategy (experimental), by default false. Set it to false for debugging and older version compatibility."
   );
 
   keys.addFlag(
