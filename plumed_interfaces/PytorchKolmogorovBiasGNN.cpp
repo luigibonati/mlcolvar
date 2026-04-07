@@ -420,15 +420,9 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
     plumed_merror("Can not open PDB file: '" + structure_file_name + "'");
   }
 
-  // create the metadata dict
-  std::unordered_map<std::string, std::string> metadata = {
-    {"_jit_bailout_depth", ""},
-    {"_jit_fusion_strategy", ""}
-  };
-
   // deserialize the model from file
   try {
-    model = torch::jit::load(model_file_name, device, metadata);
+    model = torch::jit::load(model_file_name, device);
   } catch (const c10::Error& e) {
     plumed_merror(
       "Can't load model file: '" + model_file_name + "'. Reason: " + e.what()
@@ -480,6 +474,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   for (int64_t i = 0; i < atomic_numbers.size(0); i++)
     model_atomic_numbers.push_back(atomic_numbers[i].item<int64_t>());
 
+// https://stackoverflow.com/questions/77102532/libtorch-performance-issue-when-using-multiple-gpus-in-multiple-threads
   if (bailout_fusion) {
     torch::jit::FusionStrategy bailout = {
       {torch::jit::FusionBehavior::STATIC,  0},
@@ -738,12 +733,13 @@ void PytorchGNN::calculate()
   std::vector<float> positions_vector(n_atoms * 3);
   #pragma omp parallel for num_threads(n_threads)
   for (int i = 0; i < n_atoms; i++) {
-    int index = atom_list_active[i];
+    int index = atom_list_active[i]; 
     positions_vector[i * 3 + 0] = x_local[index][0] * to_ang;
     positions_vector[i * 3 + 1] = x_local[index][1] * to_ang;
     positions_vector[i * 3 + 2] = x_local[index][2] * to_ang;
-  }
-  torch::Tensor positions = torch::from_blob(
+  }  
+
+  torch::Tensor positions = torch::from_blob(  
     positions_vector.data(),
     n_atoms * 3,
     torch::TensorOptions().dtype(torch::kFloat32)
@@ -793,6 +789,9 @@ void PytorchGNN::calculate()
 
   if (atom_list_b.size() > 0) {
     n_edges = n_atoms * (n_atoms - 1);
+    // TODO(perf): this GROUPB path builds all atom pairs and filters them by
+    // cutoff afterwards. Replace it with direct cutoff-based edge generation
+    // from a neighbor structure once tests cover this branch.
     std::vector<float> distance_vector(n_edges);
     std::vector<std::vector<int64_t>> edge_index_vector;
     edge_index_vector.resize(2, std::vector<int64_t>(n_edges));
@@ -927,7 +926,6 @@ void PytorchGNN::calculate()
   input.insert("batch", batch);
   input.insert("cell", cell);
   input.insert("edge_index", edge_index);
-  node_attrs.set_requires_grad(true);
   input.insert("node_attrs", node_attrs);
   positions.set_requires_grad(true);
   input.insert("positions", positions);
@@ -956,23 +954,22 @@ void PytorchGNN::calculate()
   // helper variables
   std::vector<PLMD::Vector> derivatives(n_atoms);
 
+  // Here we compute the output (z), the committor (q)
+  // and (optionally) the Kolmogorov's bias potential (V_K)
+  // as well as their derivatives
   
-    // Here we compute the output (z), the committor (q)
-    // and (optionally) the Kolmogorov's bias potential (V_K)
-    // as well as their derivatives
-    
-    // set z and committor values
-    string name_comp_z = "z";
-    torch::Tensor output_z = output[0][0];
-    getPntrToComponent(name_comp_z)->set(output_z.cpu().item<double>());
-    
-    string name_comp_q = "q";
-    torch::Tensor output_q = torch::sigmoid(t_sigmoid_p * output_z);
-    torch::Tensor one_minus_q = 1 - output_q;
-    torch::Tensor sigmoid_prime = t_sigmoid_p * output_q * one_minus_q;
-    getPntrToComponent(name_comp_q)->set(output_q.cpu().item<double>());
+  // set z and committor values
+  string name_comp_z = "z";
+  torch::Tensor output_z = output[0][0];
+  getPntrToComponent(name_comp_z)->set(output_z.cpu().item<double>());
+  
+  string name_comp_q = "q";
+  torch::Tensor output_q = torch::sigmoid(t_sigmoid_p * output_z);
+  torch::Tensor one_minus_q = 1 - output_q;
+  torch::Tensor sigmoid_prime = t_sigmoid_p * output_q * one_minus_q;
+  getPntrToComponent(name_comp_q)->set(output_q.cpu().item<double>());
 
-    if (!k_bias) {
+  if (!k_bias) {
     // this branch doesn't need second gradients
     
     // set derivatives of z
