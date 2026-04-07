@@ -645,39 +645,60 @@ void PytorchGNN::calculate()
   // get the positions
   // TODO: now, the positions used by the model file is in unit of Angstrom.
   // We should warn the users about this default
-  auto positions = torch::empty({n_atoms, 3}, torch_float_dtype);
-  #pragma omp parallel for num_threads(n_threads)
-  for (int i = 0; i < n_atoms; i++) {
-    int index = atom_list_active[i];
-    positions[i][0] = x_local[index][0] * to_ang;
-    positions[i][1] = x_local[index][1] * to_ang;
-    positions[i][2] = x_local[index][2] * to_ang;
-  }
-  positions = positions.to(device);
+  std::vector<float> positions_vector(n_atoms * 3);  
+#pragma omp parallel for num_threads(n_threads)  
+for (int i = 0; i < n_atoms; i++) {  
+  int index = atom_list_active[i];  
+  positions_vector[i * 3 + 0] = x_local[index][0] * to_ang;  
+  positions_vector[i * 3 + 1] = x_local[index][1] * to_ang;  
+  positions_vector[i * 3 + 2] = x_local[index][2] * to_ang;  
+}  
+
+torch::Tensor positions = torch::from_blob(  
+  positions_vector.data(),  
+  n_atoms * 3,  
+  torch::TensorOptions().dtype(torch::kFloat32)  
+);  
+positions = positions.to(device).to(torch_float_dtype);  
+positions = positions.reshape({n_atoms, 3});  
+
 
   // cell
   // TODO: now, the box data used by the model file is in unit of Angstrom.
   // We should warn the users about this default
-  PLMD::Tensor box = getBox();
-  auto cell = torch::zeros({3, 3}, torch_float_dtype);
-  for (int i = 0; i < 3; i++) {
-    for (int j = 0; j < 3; j++)
-      cell[i][j] = box[i][j] * to_ang;
-  }
-  cell = cell.to(device);
+  PLMD::Tensor box = getBox();  
+  std::vector<float> cell_vector(9);  
+  for (int i = 0; i < 3; i++) {  
+    for (int j = 0; j < 3; j++)  
+      cell_vector[i * 3 + j] = box[i][j] * to_ang;  
+  }  
+  torch::Tensor cell = torch::from_blob(  
+    cell_vector.data(),  
+    9,  
+    torch::TensorOptions().dtype(torch::kFloat32)  
+  );  
+  cell = cell.to(device).to(torch_float_dtype);  
+  cell = cell.reshape({3, 3});  
 
   // build node attributes
   // TODO: now, the node attributes are in MACE's format.
   // We should try to give more options, or warn the users about this default
-  int n_node_feats = (int)model_atomic_numbers.size();
-  auto node_attrs = torch::zeros({n_atoms, n_node_feats}, torch_float_dtype);
-  #pragma omp parallel for num_threads(n_threads)
-  for (int i = 0; i < n_atoms; i++) {
-    int index = atom_list_active[i];
-    int node_type = system_node_types[getAbsoluteIndex(index).index()];
-    node_attrs[i][node_type] = 1.0;
-  }
-  node_attrs = node_attrs.to(device);
+  int n_node_feats = (int)model_atomic_numbers.size();  
+  std::vector<float> node_attrs_vector(n_node_feats * n_atoms);  
+  #pragma omp parallel for num_threads(n_threads)  
+  for (int i = 0; i < n_atoms; i++) {  
+    int index = atom_list_active[i];  
+    int node_type = system_node_types[getAbsoluteIndex(index).index()];  
+    node_attrs_vector[i * n_node_feats + node_type] = 1.0;  
+  }  
+  torch::Tensor node_attrs = torch::from_blob(  
+    node_attrs_vector.data(),  
+    n_node_feats * n_atoms,  
+    torch::TensorOptions().dtype(torch::kFloat32)  
+  );  
+  node_attrs = node_attrs.to(device).to(torch_float_dtype);  
+  node_attrs = node_attrs.reshape({n_atoms, n_node_feats});  
+
 
   // build edges
   int n_edges = 0;
