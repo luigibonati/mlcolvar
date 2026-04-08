@@ -28,7 +28,8 @@ if os.environ.get("MLCOLVAR_EXPORT_MAXIMUM_OPT") == "1":
     if hasattr(torch._inductor.config, "cuda"):
         torch._inductor.config.cuda.compile_opt_level = "-O3"
 
-    if hasattr(torch._inductor.config.aot_inductor, "compile_wrapper_opt_level"):
+    if hasattr(torch._inductor.config.aot_inductor, "compile_wrapper_opt_level") \
+       and os.environ.get("MLCOLVAR_USE_WRAPPER_OPT") == "1":
         torch._inductor.config.aot_inductor.compile_wrapper_opt_level = "O3"
 
     os.environ["MLCOLVAR_EXPORT_FLOAT_TOL"] = "1E-4"
