@@ -475,7 +475,6 @@ class ModelExporter:
             metadata = {
                 "n_cvs": str(self.model.n_cvs.item()),
                 "cutoff": str(self.model.cutoff.item()),
-                "cutoff_l": str(self.model.cutoff_l.item()),
                 "n_atom_types": str(len(self.model.atomic_numbers)),
                 "float_dtype": str(self.model.dtype)[-2:],
             }
