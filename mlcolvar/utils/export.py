@@ -17,10 +17,12 @@ from torch.fx.experimental.proxy_tensor import make_fx
 
 from mlcolvar.core.nn import FeedForward, BaseGNN
 from mlcolvar.utils import _code
+import sys
 
 # Maximum optimization settings for exporting models with AOTInductor.
 # Activated only when MLCOLVAR_EXPORT_MAXIMUM_OPT=1.
-if os.environ.get("MLCOLVAR_EXPORT_MAXIMUM_OPT") == "1":
+# NOTE: Disabled on Windows because AOTInductor requires a C++ compiler
+if os.environ.get("MLCOLVAR_EXPORT_MAXIMUM_OPT") == "1" and not sys.platform.startswith("win"):
     torch._inductor.config.freezing = True
     torch._inductor.config.max_autotune = True
     torch._inductor.config.max_autotune_gemm = True
@@ -28,8 +30,7 @@ if os.environ.get("MLCOLVAR_EXPORT_MAXIMUM_OPT") == "1":
     if hasattr(torch._inductor.config, "cuda"):
         torch._inductor.config.cuda.compile_opt_level = "-O3"
 
-    if hasattr(torch._inductor.config.aot_inductor, "compile_wrapper_opt_level") \
-       and os.environ.get("MLCOLVAR_USE_WRAPPER_OPT") == "1":
+    if hasattr(torch._inductor.config.aot_inductor, "compile_wrapper_opt_level"):
         torch._inductor.config.aot_inductor.compile_wrapper_opt_level = "O3"
 
     os.environ["MLCOLVAR_EXPORT_FLOAT_TOL"] = "1E-4"
