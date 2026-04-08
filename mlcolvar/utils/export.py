@@ -21,8 +21,11 @@ import sys
 
 # Maximum optimization settings for exporting models with AOTInductor.
 # Activated only when MLCOLVAR_EXPORT_MAXIMUM_OPT=1.
-# NOTE: Disabled on Windows because AOTInductor requires a C++ compiler
-if os.environ.get("MLCOLVAR_EXPORT_MAXIMUM_OPT") == "1" and not sys.platform.startswith("win"):
+# NOTE: Enabled only on Linux, since AOTInductor requires a C++ compiler
+if (
+    os.environ.get("MLCOLVAR_EXPORT_MAXIMUM_OPT") == "1"
+    and sys.platform.startswith("linux")
+):
     torch._inductor.config.freezing = True
     torch._inductor.config.max_autotune = True
     torch._inductor.config.max_autotune_gemm = True
