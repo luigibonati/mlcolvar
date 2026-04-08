@@ -884,6 +884,24 @@ def export(
     return exporter.export()
 
 
+def load_exported(
+    file_name: str,
+) -> torch._inductor.package.package.AOTICompiledModel:
+    """
+    Load an exported CV model.
+
+    Parameters
+    ----------
+    file_name: str
+        Name of the `.pt2` file.
+    """
+
+    model = torch._inductor.aoti_load_package(file_name)
+
+    return model
+
+
+
 def test_export_1():
     torch.manual_seed(0)
     torch.set_default_dtype(torch.float64)
