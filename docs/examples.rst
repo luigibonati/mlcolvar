@@ -22,3 +22,4 @@ Examples of usage of data-driven CVs or other tools from the mlcolvar library in
    notebooks/examples/ex_TPI-DeepTDA.ipynb
    notebooks/examples/ex_stateinterpreter.ipynb
    notebooks/examples/ex_committor.ipynb
+   notebooks/examples/ex_position-less_committor.ipynb

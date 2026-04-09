@@ -140,7 +140,7 @@ class SchNetModel(BaseGNN):
         self.W_out[2].bias.data.fill_(0)
 
     def forward(
-        self, data: Dict[str, torch.Tensor], pool: bool = True
+        self, data: Dict[str, torch.Tensor]
     ) -> torch.Tensor:
         """
         The forward pass.
@@ -149,8 +149,6 @@ class SchNetModel(BaseGNN):
         data: Dict[str, torch.Tensor]
             The data dict. Usually came from the `to_dict` method of a
             `torch_geometric.data.Batch` object.
-        pool: bool
-            If to perform the pooling to the model output.
         """
 
         # embed edges and node attrs
@@ -167,9 +165,8 @@ class SchNetModel(BaseGNN):
                 h_V = w(h_V)
         out = h_V
 
-        # perform pooling of the node-level ouptuts
-        if pool:
-            out = self.pooling(input=out, data=data)
+        # pooling is controlled by `self.pooling_operation` (mean/sum/None)
+        out = self.pooling(input=out, data=data)
         
         # in case the last linear transformation is performed AFTER pooling
         if self._w_out_after_pool:
