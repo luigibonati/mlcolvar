@@ -445,5 +445,20 @@ def test_schnet_3() -> None:
     data = _create_test_data_list()
     ref_out = torch.tensor([[-0.3191231788534454, -0.0436194218681725]] * 5)
     assert ( torch.allclose(model(data), ref_out) )
+
+    model = SchNetModel(
+        n_out=2,
+        cutoff=0.1,
+        atomic_numbers=[1, 8],
+        n_bases=6,
+        n_layers=2,
+        n_filters=16,
+        n_hidden_channels=16,
+        aggr='attention_separate',
+    )
+
+    data = _create_test_data_list()
+    ref_out = torch.tensor([[-0.1364561627454978, -0.1203537910489112]] * 5)
+    assert ( torch.allclose(model(data), ref_out) )
     
     torch.set_default_dtype(torch.float32)
