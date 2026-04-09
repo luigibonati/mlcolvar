@@ -1,7 +1,7 @@
 import torch
 import lightning
 from mlcolvar.cvs import BaseCV
-from mlcolvar.core import FeedForward
+from mlcolvar.core import FeedForward, Normalization
 from mlcolvar.core.loss import CommittorLoss
 from mlcolvar.core.nn.utils import Custom_Sigmoid
 
@@ -11,16 +11,20 @@ __all__ = ["Committor"]
 class Committor(BaseCV, lightning.LightningModule):
     """Base class for data-driven learning of committor function.
     The committor function q is expressed as the output of a neural network optimized with a self-consistent
-    approach based on the Kolmogorov's variational principle for the committor and on the imposition of its boundary conditions. 
+    approach based on the Kolmogorov's variational principle for the committor and on the imposition of its boundary conditions (see Refs. [1,2]).
+    It is also possible to use an approximated variational approach without explicit dependence on the atomic coordinates (see Ref. [3]).
+ 
 
     **Data**: for training it requires a DictDataset with the keys 'data', 'labels' and 'weights'
 
-    **Loss**: Minimize Kolmogorov's variational functional of q and impose boundary condition on the metastable states (CommittorLoss)
+    **Loss**: Minimize Kolmogorov's variational functional of q and impose boundary condition on the metastable states (CommittorLoss) from Refs. [1,2].
+              It is also possible to use an approximated variational approach without explicit dependence on the atomic coordinates
     
     References
     ----------
-    .. [*] P. Kang, E. Trizio, and M. Parrinello, "Computing the committor using the committor to study the transition state ensemble", Nat. Comput. Sci., 2024, DOI: 10.1038/s43588-024-00645-0
-    .. [*] E. Trizio, P. Kang and M. Parrinello, "Everything everywhere all at once: a probability-based enhanced sampling approach to rare events", Nat. Comput. Sci., 2025, DOI: 10.1038/s43588-025-00799-5
+    .. [1] P. Kang, E. Trizio, and M. Parrinello, "Computing the committor using the committor to study the transition state ensemble", Nat. Comput. Sci., 2024, DOI: 10.1038/s43588-024-00645-0
+    .. [2] E. Trizio, P. Kang, and M. Parrinello, "Everything everywhere all at once: a probability-based enhanced sampling approach to rare events", Nat. Comput. Sci., 2025, DOI: 10.1038/s43588-025-00799-5
+    .. [3] E. Trizio, G. Rossi, and M. Parrinello, "Ceci n'est pas un committor: Efficient sampling via approximated committor functions", J Chem. Phys., 2026, DOI: 10.1063/5.0331622
 
     See also
     --------
@@ -34,22 +38,24 @@ class Committor(BaseCV, lightning.LightningModule):
         Class to optimize the gradients calculation imporving speed and memory efficiency.
     """
 
-    BLOCKS = ["nn", "sigmoid"]
+    BLOCKS = ["norm_in", "nn", "sigmoid"]
 
     def __init__(
         self, 
         layers: list,
-        atomic_masses: torch.Tensor,
         alpha: float,
+        atomic_masses: torch.Tensor = None,
         gamma: float = 10000,
         delta_f: float = 0,
         cell: float = None,
-        separate_boundary_dataset : bool = True,
-        descriptors_derivatives : torch.nn.Module = None,
+        separate_boundary_dataset: bool = True,
+        descriptors_derivatives: torch.nn.Module = None,
         log_var: bool = False,
+        use_gradients_wrt_positions: bool = True,
         z_regularization: float = 0.0,
         z_threshold: float = None,
-        n_dim : int = 3,
+        n_dim: int = None,
+        norm_in: bool = False,
         options: dict = None,
         **kwargs,
     ):
@@ -59,11 +65,12 @@ class Committor(BaseCV, lightning.LightningModule):
         ----------
         layers : list
             Number of neurons per layer
-        atomic_masses : torch.Tensor
-            List of masses of all the atoms we are using, for each atom we need to repeat three times for x,y,z.
-            The mlcolvar.cvs.committor.utils.initialize_committor_masses can be used to simplify this.
         alpha : float
             Hyperparamer that scales the boundary conditions contribution to loss, i.e. alpha*(loss_bound_A + loss_bound_B)
+        atomic_masses : torch.Tensor
+            List of masses of all the atoms we are using, for each atom we need to repeat three times for x,y,z, by default None.
+            The mlcolvar.cvs.committor.utils.initialize_committor_masses can be used to simplify this.
+            If the position-less loss is used, this must be set to None.
         gamma : float, optional
             Hyperparamer that scales the whole loss to avoid too small numbers, i.e. gamma*(loss_var + loss_bound), by default 10000
         delta_f : float, optional
@@ -78,6 +85,9 @@ class Committor(BaseCV, lightning.LightningModule):
             See also mlcolvar.core.loss.committor_loss.SmartDerivatives
         log_var : bool, optional
             Switch to minimize the log of the variational functional, by default False.
+        use_gradients_wrt_positions : bool, optional
+            Whether to use gradients with respect to positions as prescribed in the original Kolmogorov variational functional, by default True.
+            Set to false to use the approximated variational principle defined in Ref. [3] without explicit dependence on the atomic coordinates derivatives.
         z_regularization : float, optional
             Scales a regularization on the learned z space preventing it from exceeding the threshold given with 'z_threshold'.
             The magnitude of the regularization is scaled by the given number, by default 0.0
@@ -85,22 +95,34 @@ class Committor(BaseCV, lightning.LightningModule):
             Sets a maximum threshold for the z value during the training, by default None. 
             The magnitude of the regularization term is scaled via the `z_regularization` key.
         n_dim : int
-            Number of dimensions, by default 3.
+            Number of dimensions, by default None. 
+            If None, it defaults to 3 for the position-based loss and to 1 for the position-less loss.
+        norm_in : bool
+            Whether to normalize the input of the NN model, by default False.
         options : dict[str, Any], optional
             Options for the building blocks of the model, by default {}.
             Available blocks: ['nn'] .
         """
         super().__init__(in_features=layers[0], out_features=layers[-1], **kwargs) 
         
+        if use_gradients_wrt_positions and atomic_masses is None:
+            raise ValueError("atomic_masses must be provided when using Kolmogorov variational functional (use_gradients_wrt_positions is True)")
+        elif not use_gradients_wrt_positions:
+            if atomic_masses is not None:
+                raise ValueError("atomic_masses must be None when using approximated variational principle (use_gradients_wrt_positions is False)")
+            if descriptors_derivatives is not None:
+                raise ValueError("descriptors_derivatives must be None when using approximated variational principle (use_gradients_wrt_positions is False)")
+            
         # =======  LOSS  =======
-        self.loss_fn = CommittorLoss(atomic_masses=atomic_masses,
-                                     alpha=alpha,
+        self.loss_fn = CommittorLoss(alpha=alpha,
+                                     atomic_masses=atomic_masses,
                                      gamma=gamma,
                                      delta_f=delta_f,
                                      cell=cell,
                                      separate_boundary_dataset=separate_boundary_dataset,
                                      descriptors_derivatives=descriptors_derivatives,
                                      log_var=log_var,
+                                     use_gradients_wrt_positions=use_gradients_wrt_positions,
                                      z_regularization=z_regularization,
                                      z_threshold=z_threshold,
                                      n_dim=n_dim
@@ -111,6 +133,11 @@ class Committor(BaseCV, lightning.LightningModule):
         options = self.parse_options(options)
 
         # ======= BLOCKS =======
+        # Initialize norm_in
+        o = "norm_in"
+        if norm_in and (options[o] is not False) and (options[o] is not None):
+            self.norm_in = Normalization(self.in_features, **options[o])
+
         # initialize NN turning
         o = "nn"
         # set default activation to tanh
@@ -126,6 +153,8 @@ class Committor(BaseCV, lightning.LightningModule):
     def forward_nn(self, x):
         if self.preprocessing is not None:
             x = self.preprocessing(x)
+        if self.norm_in is not None:
+            x = self.norm_in(x)
         z = self.nn(x)
         return z
 
@@ -218,7 +247,7 @@ def test_committor():
                              -6.7121, -7.6094, -7.9009, -7.0479, -5.2398, -7.8241, -5.8642, -7.0701,
                              -7.0348, -7.2577, -6.6142, -7.6322, -7.3279, -7.6393, -7.8608, -7.7037,
                              -6.6949, -6.3947, -7.2246, -7.7009, -6.7359, -7.2186, -7.7849, -5.6882])
-    model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0)
+    model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1)
     trainer.fit(model, datamodule)
     out = model(X)
     out.sum().backward()
@@ -238,23 +267,23 @@ def test_committor():
                             [0.0783],[0.1384],[0.0689],[0.0649],[0.0983],[0.1548],[0.0778],[0.0934],[0.0858],[0.1203],
                             [0.1073],[0.1139],[0.0716],[0.0988],[0.0918],[0.1109],[0.0918],[0.0928],[0.1070],[0.0742]])
     trainer = lightning.Trainer(max_epochs=5, logger=None, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0)
-    model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0, separate_boundary_dataset=False)
+    model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, separate_boundary_dataset=False)
     trainer.fit(model, datamodule)
     out = model(X)
     out.sum().backward()
     assert( torch.allclose(out, ref_out, atol=1e-3) )
 
     # test log loss
-    ref_out = torch.Tensor([[0.7236],[0.6559],[0.5530],[0.6739],[0.7527],[0.6769],[0.7338],[0.6840],[0.6892],[0.6255],
-                            [0.6321],[0.8155],[0.5824],[0.5282],[0.6315],[0.5164],[0.4789],[0.7296],[0.6918],[0.6379],
-                            [0.6191],[0.7071],[0.5849],[0.6282],[0.5886],[0.7218],[0.6431],[0.5893],[0.6257],[0.7119],
-                            [0.5604],[0.4941],[0.7952],[0.7044],[0.6574],[0.5482],[0.6171],[0.7085],[0.6243],[0.5334],
-                            [0.6313],[0.5883],[0.7220],[0.6117],[0.4803],[0.6749],[0.6686],[0.7030],[0.7206],[0.5813],
-                            [0.6033],[0.7746],[0.6691],[0.6363],[0.6862],[0.5791],[0.6586],[0.7126],[0.7538],[0.7382],
-                            [0.7757],[0.5703],[0.6464],[0.5825],[0.6061],[0.5842],[0.7049],[0.5703],[0.7346],[0.6371],
-                            [0.5740],[0.6844],[0.5948],[0.6675],[0.6640],[0.6047],[0.7321],[0.5453],[0.6755],[0.5813]])
+    ref_out = torch.Tensor([[0.7287],[0.6505],[0.5594],[0.6758],[0.7482],[0.6804],[0.7313],[0.6762],[0.6873],[0.6267],
+                            [0.6362],[0.8129],[0.5853],[0.5262],[0.6359],[0.5263],[0.4839],[0.7291],[0.6884],[0.6375],
+                            [0.6231],[0.6997],[0.5906],[0.6247],[0.5876],[0.7198],[0.6356],[0.5933],[0.6229],[0.7093],
+                            [0.5618],[0.5005],[0.7924],[0.6965],[0.6540],[0.5476],[0.6151],[0.7042],[0.6190],[0.5362],
+                            [0.6275],[0.5959],[0.7194],[0.6122],[0.4873],[0.6653],[0.6741],[0.7011],[0.7207],[0.5863],
+                            [0.6040],[0.7643],[0.6696],[0.6424],[0.6886],[0.5775],[0.6620],[0.7104],[0.7517],[0.7387],
+                            [0.7714],[0.5825],[0.6442],[0.5796],[0.6131],[0.5923],[0.7023],[0.5730],[0.7307],[0.6404],
+                            [0.5780],[0.6850],[0.5959],[0.6718],[0.6626],[0.6068],[0.7319],[0.5498],[0.6772],[0.5846]])
     trainer = lightning.Trainer(max_epochs=5, logger=None, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0)
-    model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0, log_var=True)
+    model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, log_var=True)
     trainer.fit(model, datamodule)
     out = model(X)
     out.sum().backward()
@@ -270,9 +299,26 @@ def test_committor():
                             [0.1337],[0.1444],[0.1603],[0.1396],[0.2043],[0.1964],[0.1459],[0.2243],[0.1930],[0.1893],
                             [0.2634],[0.1868],[0.1340],[0.2483],[0.1550],[0.1559],[0.1614],[0.2020],[0.1270],[0.2555]])
     trainer = lightning.Trainer(max_epochs=5, logger=None, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0)
-    model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0, z_regularization=100, z_threshold=0.000001)
+    model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, z_regularization=100, z_threshold=0.000001)
     trainer.fit(model, datamodule)
     out = model(X)
+    out.sum().backward()
+    assert( torch.allclose(out, ref_out, atol=1e-3) )
+
+    # test position-less loss
+    ref_out = torch.Tensor([[0.2318],[0.2119],[0.3039],[0.2349],[0.1933],[0.2506],[0.1453],[0.2849],[0.2042],[0.2514],
+                            [0.3391],[0.1043],[0.3083],[0.3091],[0.2147],[0.4049],[0.4225],[0.1488],[0.2421],[0.2429],
+                            [0.2354],[0.1662],[0.3195],[0.3682],[0.2881],[0.2027],[0.3813],[0.2461],[0.2892],[0.2725],
+                            [0.2833],[0.3431],[0.1060],[0.2795],[0.2566],[0.3266],[0.3747],[0.3010],[0.2916],[0.3081],
+                            [0.3136],[0.2971],[0.1736],[0.2491],[0.3451],[0.3594],[0.1713],[0.2217],[0.1426],[0.2170],
+                            [0.2296],[0.1287],[0.1386],[0.1911],[0.1898],[0.2731],[0.1899],[0.1999],[0.1325],[0.1380],
+                            [0.1678],[0.3036],[0.2935],[0.3828],[0.2623],[0.2214],[0.2149],[0.2332],[0.1143],[0.2179],
+                            [0.2237],[0.1641],[0.3423],[0.2643],[0.2220],[0.2521],[0.1774],[0.3679],[0.2753],[0.1834]])
+    trainer = lightning.Trainer(max_epochs=5, logger=None, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0)
+    model = Committor(layers=[6, 4, 2, 1], atomic_masses=None, alpha=1e-1, use_gradients_wrt_positions=False)
+    trainer.fit(model, datamodule)
+    out = model(X)
+    print(out)
     out.sum().backward()
     assert( torch.allclose(out, ref_out, atol=1e-3) )
 
@@ -281,7 +327,7 @@ def test_committor():
     for z_regularization, z_threshold in zip([10,   0,      -1,     10], 
                                              [None, 10,      1,     -1]):
         try:
-            model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0, z_regularization=z_regularization, z_threshold=z_threshold, n_dim=2)
+            model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, z_regularization=z_regularization, z_threshold=z_threshold, n_dim=2)
             trainer.fit(model, datamodule)
         except ValueError as e:
             print("[TEST LOG] Checked this error: ", e)
@@ -289,7 +335,7 @@ def test_committor():
     # test dimension error
     try:
         trainer = lightning.Trainer(max_epochs=5, logger=None, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0)
-        model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, delta_f=0, z_regularization=10, z_threshold=1, n_dim=2)
+        model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, z_regularization=10, z_threshold=1, n_dim=2)
         trainer.fit(model, datamodule)
     except RuntimeError as e:
         print("[TEST LOG] Checked this error: ", e)
@@ -515,3 +561,4 @@ def test_committor_with_derivatives():
             trainer.fit(model, wrong_datamodule)
         except ValueError as e:
             print("[TEST LOG] Checked this error: ", e)
+    
