@@ -14,8 +14,9 @@ In this way we can load the CVs in PLUMED by using PyTorch C++ APIs (LibTorch). 
 The most updated versions of PLUMED interfaces are available in the repository, in the subfolder ``plumed_interfaces/``.
 These include also interfaces not yet available in the official PLUMED release. 
 The interfaces are:
-
 - ``PytorchModel.cpp``: descriptor-based interface for evaluating a generic TorchScript model from PLUMED and exposing one component for each output node.
-- ``PytorchKolmogorovBias.cpp``: descriptor-based interface for committor models, returning the raw ``z`` output, the activated committor ``q``, and the corresponding Kolmogorov bias.
 - ``PytorchModelGNN.cpp``: graph-based interface for TorchScript GNN models, where the input graph is built directly in PLUMED from atomic positions and types.
+
+In addition to these generic interfaces, there are two specific interfaces for the Kolmogorov Bias approach:
+- ``PytorchKolmogorovBias.cpp``: descriptor-based interface for committor models, returning the raw ``z`` output, the activated committor ``q``, and the corresponding Kolmogorov bias.
 - ``PytorchKolmogorovBiasGNN.cpp``: graph-based committor interface that combines the GNN evaluation with the computation of ``q`` and the Kolmogorov bias.
