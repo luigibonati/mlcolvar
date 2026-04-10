@@ -102,7 +102,7 @@ ATOM      4  H   ACE A   1      13.980  13.920  30.410  1.00  0.00           H
 ATOM      5  C   ACE A   1      15.300  15.070  29.100  1.00  0.00           C
 \endauxfile
 
-The module constructs graph edges between neighbors inside the selected atom group, using the cutoff value recorded in the model file. By default, such an atom group is defined by the single `GROUPA` keyword. In this case, the number of nodes in the input graph is fixed, while the number of edges changes according to the relative positions of the atoms. If the `GROUPB` parameter is given, the graph instead contains all atoms in `GROUPA` and all atoms in `GROUPB` that are within a radius of _ANY_ atom in `GROUPA`. Such a radius equals to the cutoff recorded in the model file _plus_ the buffer size controlled by the `BUFFER` keyword. Thus, when `GROUPB` is given, the node number of the input graph can fluctuate during the simulation.
+The module constructs graph edges between neighbors inside the selected atom group, using the cutoff value recorded in the model file. By default, such an atom group is defined by the single `SYSTEM_SELECTION` keyword. In this case, the number of nodes in the input graph is fixed, while the number of edges changes according to the relative positions of the atoms. If the `ENVIRONMENT_SELECTION` parameter is given, the graph instead contains all atoms in `SYSTEM_SELECTION` and all atoms in `ENVIRONMENT_SELECTION` that are within a radius of _ANY_ atom in `SYSTEM_SELECTION`. Such a radius equals to the cutoff recorded in the model file _plus_ the buffer size controlled by the `BUFFER` keyword. Thus, when `ENVIRONMENT_SELECTION` is given, the node number of the input graph can fluctuate during the simulation.
 
 The `LAMBDA` and `BETA` keywords control the bias prefactor and inverse temperature. The `EPSILON`, `SIGMOID_P`, and `USE_Q_FOR_BIAS` keywords tune the bias expression. 
 The outputs are exposed as `z`, `q`, and, when enabled, `kbias`.
@@ -116,7 +116,7 @@ LibTorch, when dealing with large input graphs.
 Load a scalar committor GNN on atoms `1-10`, compute `z`, `q`, and `kbias`, and print them to `COLVAR`.
 \plumedfile
 PYTORCH_KOLMOGOROV_BIAS_GNN ...
-  GROUPA=1-10
+  SYSTEM_SELECTION=1-10
   MODEL=model.ptc
   STRUCTURE=plumed_topo.pdb
   NL_STRIDE=100
@@ -198,13 +198,13 @@ void PytorchKolmogorovBiasGNN::registerKeywords(Keywords& keys)
 
   keys.add(
     "atoms",
-    "GROUPA",
+    "SYSTEM_SELECTION",
     "First list of atoms (corresponding to the `system_selection` in mlcolvar)"
   );
 
   keys.add(
     "atoms",
-    "GROUPB",
+    "ENVIRONMENT_SELECTION",
     "Second list of atoms (corresponding to the `environment_selection` in mlcolvar`)"
   );
 
@@ -324,8 +324,8 @@ PytorchKolmogorovBiasGNN::PytorchKolmogorovBiasGNN(const ActionOptions& ao):
   log.printf(version_info.data());
 
   // parse input
-  parseAtomList("GROUPA", atom_list_a);
-  parseAtomList("GROUPB", atom_list_b);
+  parseAtomList("SYSTEM_SELECTION", atom_list_a);
+  parseAtomList("ENVIRONMENT_SELECTION", atom_list_b);
 
   parse("MODEL", model_file_name);
 
@@ -338,7 +338,7 @@ PytorchKolmogorovBiasGNN::PytorchKolmogorovBiasGNN(const ActionOptions& ao):
 
   parse("BUFFER", buffer);
   if (buffer > 0 && atom_list_b.size() == 0)
-    plumed_merror("No GROUPB given! Cannot define the BUFFER key!");
+    plumed_merror("No ENVIRONMENT_SELECTION given! Cannot define the BUFFER key!");
 
   parse("BETA", beta);
   if (beta <= 0.0)
@@ -379,7 +379,7 @@ PytorchKolmogorovBiasGNN::PytorchKolmogorovBiasGNN(const ActionOptions& ao):
   // check groups
   if (atom_list_b.size() > 0) {
     if (groups_have_intersection())
-      plumed_merror("GROUPA can't intersect with GROUPB!");
+      plumed_merror("SYSTEM_SELECTION can't intersect with ENVIRONMENT_SELECTION!");
     atom_list_active.resize(atom_list_a.size() + atom_list_b.size());
     atom_list_active.clear();
   } else {
@@ -590,14 +590,14 @@ PytorchKolmogorovBiasGNN::PytorchKolmogorovBiasGNN(const ActionOptions& ao):
       static_cast<unsigned>(atom_list_a.size()),
       static_cast<unsigned>(atom_list_b.size())
     );
-    log.printf("  System atom list (GROUPA):\n");
+    log.printf("  System atom list (SYSTEM_SELECTION):\n");
     for (unsigned int i = 0; i < atom_list_a.size(); i++) {
       if (((i + 1) % 10) == 0)
         log.printf("\n");
       log.printf("  %d", atom_list_a[i].serial());
     }
     log.printf("\n");
-    log.printf("  Environment atom list (GROUPB):\n");
+    log.printf("  Environment atom list (ENVIRONMENT_SELECTION):\n");
     for (unsigned int i = 0; i < atom_list_b.size(); i++) {
       if (((i + 1) % 10) == 0)
         log.printf("\n");

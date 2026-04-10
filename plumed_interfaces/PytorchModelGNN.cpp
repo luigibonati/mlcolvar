@@ -101,14 +101,14 @@ ATOM      5  C   ACE A   1      15.300  15.070  29.100  1.00  0.00           C
 
 The module constructs graph edges between neighbors inside the selected atom
 group, using the cutoff value recorded in the model file. By default, such an
-atom group is defined by the single GROUPA keyword. Under this case, the node
+atom group is defined by the single SYSTEM_SELECTION keyword. Under this case, the node
 number of the input graph in each MD step is fixed, and the number of edges
 will change according to the relative postions of the atoms.
-However, if the GROUPB parameter is given, the atom group mentioned above will
-contain all atoms in GROUPA, _AND_ atoms in GROUPB which are within a radius of
-_ANY_ atom in GROUPA. Such a radius of selecting atoms from GROUPB equals to the
+However, if the ENVIRONMENT_SELECTION parameter is given, the atom group mentioned above will
+contain all atoms in SYSTEM_SELECTION, _AND_ atoms in ENVIRONMENT_SELECTION which are within a radius of
+_ANY_ atom in SYSTEM_SELECTION. Such a radius of selecting atoms from ENVIRONMENT_SELECTION equals to the
 cutoff radius recorded in the model file _plus_ the buffer size controlled by
-the BUFFER keyword. Thus, when GROUPB is given, the node number of the input
+the BUFFER keyword. Thus, when ENVIRONMENT_SELECTION is given, the node number of the input
 graph could fluctuate in different MD steps.
 
 This module also support committor calculations. When the input PyTorch model
@@ -127,7 +127,7 @@ LibTorch, when dealing with large input graphs.
 The following example instructs plumed to evaluate the GNN model using the atoms 1-10. The neighbor list for determining the edges will be updated every 100 steps.
 \plumedfile
 PYTORCH_GNN ...
-  GROUPA=1-10
+  SYSTEM_SELECTION=1-10
   MODEL=model.ptc
   STRUCTURE=plumed_topo.pdb
   NL_STRIDE=100
@@ -138,7 +138,7 @@ PYTORCH_GNN ...
 The following example instructs plumed to do the same calculation as the above example, but will evaluate the model on CUDA using double precision, and add an OPES bias potential on the CV.
 \plumedfile
 PYTORCH_GNN ...
-  GROUPA=1-10
+  SYSTEM_SELECTION=1-10
   MODEL=model.ptc
   STRUCTURE=plumed_topo.pdb
   NL_STRIDE=100
@@ -161,8 +161,8 @@ OPES_METAD ...
 The following example instructs plumed to evaluate the GNN model using the atoms 1-10 as center atoms, and atoms 11-100 as the environment atoms. The buffer size used for selecting active atoms from the environment atoms is 2 PLUMED unit. The neighbor list for determining the edges will be updated every 2 steps.
 \plumedfile
 PYTORCH_GNN ...
-  GROUPA=1-10
-  GROUPB=11-100
+  SYSTEM_SELECTION=1-10
+  ENVIRONMENT_SELECTION=11-100
   MODEL=model.ptc
   STRUCTURE=plumed_topo.pdb
   NL_STRIDE=2
@@ -230,13 +230,13 @@ void PytorchGNN::registerKeywords(Keywords& keys)
 
   keys.add(
     "atoms",
-    "GROUPA",
+    "SYSTEM_SELECTION",
     "First list of atoms (corresponding to the `system_selection` in mlcolvar)"
   );
 
   keys.add(
     "atoms",
-    "GROUPB",
+    "ENVIRONMENT_SELECTION",
     "Second list of atoms (corresponding to the `environment_selection` in mlcolvar`)"
   );
 
@@ -309,8 +309,8 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   log.printf(version_info.data());
 
   // parse input
-  parseAtomList("GROUPA", atom_list_a);
-  parseAtomList("GROUPB", atom_list_b);
+  parseAtomList("SYSTEM_SELECTION", atom_list_a);
+  parseAtomList("ENVIRONMENT_SELECTION", atom_list_b);
 
   parse("MODEL", model_file_name);
 
@@ -323,7 +323,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
 
   parse("BUFFER", buffer);
   if (buffer > 0 && atom_list_b.size() == 0)
-    plumed_merror("No GROUPB given! Cannot define the BUFFER key!");
+    plumed_merror("No ENVIRONMENT_SELECTION given! Cannot define the BUFFER key!");
 
   bool use_cuda = false;
   bool required_cuda = false;
@@ -347,7 +347,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   // check groups
   if (atom_list_b.size() > 0) {
     if (groups_have_intersection())
-      plumed_merror("GROUPA can't intersect with GROUPB!");
+      plumed_merror("SYSTEM_SELECTION can't intersect with ENVIRONMENT_SELECTION!");
     atom_list_active.resize(atom_list_a.size() + atom_list_b.size());
     atom_list_active.clear();
   } else {
@@ -545,14 +545,14 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
       static_cast<unsigned>(atom_list_a.size()),
       static_cast<unsigned>(atom_list_b.size())
     );
-    log.printf("  System atom list (GROUPA):\n");
+    log.printf("  System atom list (SYSTEM_SELECTION):\n");
     for (unsigned int i = 0; i < atom_list_a.size(); i++) {
       if (((i + 1) % 10) == 0)
         log.printf("\n");
       log.printf("  %d", atom_list_a[i].serial());
     }
     log.printf("\n");
-    log.printf("  Environment atom list (GROUPB):\n");
+    log.printf("  Environment atom list (ENVIRONMENT_SELECTION):\n");
     for (unsigned int i = 0; i < atom_list_b.size(); i++) {
       if (((i + 1) % 10) == 0)
         log.printf("\n");

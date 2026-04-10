@@ -26,8 +26,8 @@ KAPPA=2000.0
 ... 
 
 PYTORCH_KOLMOGOROV_BIAS_GNN ...
-  GROUPA=sys
-  GROUPB=env
+  SYSTEM_SELECTION=sys
+  ENVIRONMENT_SELECTION=env
   MODEL=model_z.pt # use z model
   STRUCTURE=NaCl.pdb
   LABEL=gnn
