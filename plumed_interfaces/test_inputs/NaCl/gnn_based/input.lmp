@@ -44,6 +44,6 @@ fix fRattleWat wat rattle 0.0001 10 0 b 1 a 1        # Fix bonds and angles of w
 thermo         500                                       # compute and print on screen every 500dt
 thermo_style   custom step temp press epair etotal
 
-run            5000                                    # run the simualtion for N steps
+run            2000                                    # run the simualtion for N steps
 
 write_data  end.data                                   # write a lammps.data file with the final configuration, can be used to start new simulations
