@@ -25,7 +25,7 @@ AT=9.0
 KAPPA=2000.0
 ... 
 
-PYTORCH_GNN ...
+PYTORCH_KOLMOGOROV_BIAS_GNN ...
   GROUPA=sys
   GROUPB=env
   MODEL=model_z.pt # use z model
@@ -37,7 +37,7 @@ PYTORCH_GNN ...
   KBIAS
   BETA=0.5
   LAMBDA=1
-... PYTORCH_GNN
+... PYTORCH_KOLMOGOROV_BIAS_GNN
 
 # apply kolmogorov bias
 BIASVALUE ARG=gnn.kbias

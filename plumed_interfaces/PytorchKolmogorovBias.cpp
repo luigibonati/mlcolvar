@@ -51,7 +51,7 @@ namespace PLMD {
 namespace function {
 namespace pytorch {
 
-//+PLUMEDOC PYTORCH_FUNCTION PYTORCH_MODEL_BIAS
+//+PLUMEDOC PYTORCH_FUNCTION PYTORCH_KOLMOGOROV_BIAS
 /*
 Similar to \ref PYTORCH_MODEL, but assumes that the model is a committor-like function and computes the corresponding Kolmogorov bias.
 This action evaluates a TorchScript model and assumes that it returns a single scalar output `z`. From this value it also computes the activated committor-like quantity `q` and the bias contribution `kbias`. Derivatives of all outputs with respect to the input arguments are obtained through PyTorch automatic differentiation.
@@ -69,14 +69,14 @@ Load model and print the raw output, activated output, and bias contribution.
 #SETTINGS AUXFILE=regtest/pytorch/rt-pytorch_model_2d/torch_model.ptc
 phi: TORSION ATOMS=5,7,9,15
 psi: TORSION ATOMS=7,9,15,17
-model: PYTORCH_MODEL_BIAS FILE=torch_model.ptc ARG=phi,psi LAMBDA=1.0 BETA=1.0
+model: PYTORCH_KOLMOGOROV_BIAS FILE=torch_model.ptc ARG=phi,psi LAMBDA=1.0 BETA=1.0
 PRINT FILE=COLVAR ARG=model.z,model.q,model.kbias
 \endplumedfile
 
 */
 //+ENDPLUMEDOC
 
-class PytorchModelBias :
+class PytorchKolmogorovBias :
   public Function
 {
   unsigned _n_in;
@@ -95,16 +95,16 @@ class PytorchModelBias :
   torch::Tensor t_grad_output;
   torch::Tensor t_grad_output_bias;
 public:
-  explicit PytorchModelBias(const ActionOptions&);
+  explicit PytorchKolmogorovBias(const ActionOptions&);
   void calculate();
   static void registerKeywords(Keywords& keys);
 
   std::vector<float> tensor_to_vector(const torch::Tensor& x);
 };
 
-PLUMED_REGISTER_ACTION(PytorchModelBias,"PYTORCH_MODEL_BIAS")
+PLUMED_REGISTER_ACTION(PytorchKolmogorovBias,"PYTORCH_KOLMOGOROV_BIAS")
 
-void PytorchModelBias::registerKeywords(Keywords& keys) {
+void PytorchKolmogorovBias::registerKeywords(Keywords& keys) {
   Function::registerKeywords(keys);
   keys.use("ARG");
   keys.add("compulsory","LAMBDA","Prefactor of the bias");
@@ -118,11 +118,11 @@ void PytorchModelBias::registerKeywords(Keywords& keys) {
   keys.addOutputComponent("kbias", "default", "Model outputs");
 }
 
-std::vector<float> PytorchModelBias::tensor_to_vector(const torch::Tensor& x) {
+std::vector<float> PytorchKolmogorovBias::tensor_to_vector(const torch::Tensor& x) {
   return std::vector<float>(x.data_ptr<float>(), x.data_ptr<float>() + x.numel());
 }
 
-PytorchModelBias::PytorchModelBias(const ActionOptions&ao):
+PytorchKolmogorovBias::PytorchKolmogorovBias(const ActionOptions&ao):
   Action(ao),
   Function(ao)
 { // print libtorch version
@@ -247,7 +247,7 @@ PytorchModelBias::PytorchModelBias(const ActionOptions&ao):
   vector<float> cvs = this->tensor_to_vector (output);
   _n_out=cvs.size();
   if(_n_out!=1) {
-    plumed_merror("PYTORCH_MODEL_BIAS expects a model with a single scalar output, but got "+std::to_string(_n_out)+" outputs.");
+    plumed_merror("PYTORCH_KOLMOGOROV_BIAS expects a model with a single scalar output, but got "+std::to_string(_n_out)+" outputs.");
   }
 
 //create components of output  
@@ -278,7 +278,7 @@ componentIsNotPeriodic( name_comp );
 }
 
 
-void PytorchModelBias::calculate() {
+void PytorchKolmogorovBias::calculate() {
 
 // retrieve arguments
 vector<float> current_S(_n_in);

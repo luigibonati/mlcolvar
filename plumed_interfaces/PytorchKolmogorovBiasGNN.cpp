@@ -56,7 +56,7 @@ class NeighborList;
 
 namespace colvar {
 
-namespace pytorch_gnn {
+namespace pytorch_kolmogorov_bias_gnn {
 
 template <typename Main, typename Atoms>
 auto getUsingNaturalUnits(Main& main, Atoms&, int)
@@ -82,7 +82,7 @@ auto getLengthUnit(Main&, Atoms& atoms, long)
   return atoms.getUnits().getLength();
 }
 
-//+PLUMEDOC PYTORCH_GNN_BIAS
+//+PLUMEDOC PYTORCH_KOLMOGOROV_BIAS_GNN
 /*
 Load a Graph Neural Network (GNN) model for the committor compiled with TorchScript and compute the Kolmogorov bias.
 
@@ -115,7 +115,7 @@ LibTorch, when dealing with large input graphs.
 \par Examples
 Load a scalar committor GNN on atoms `1-10`, compute `z`, `q`, and `kbias`, and print them to `COLVAR`.
 \plumedfile
-PYTORCH_GNN ...
+PYTORCH_KOLMOGOROV_BIAS_GNN ...
   GROUPA=1-10
   MODEL=model.ptc
   STRUCTURE=plumed_topo.pdb
@@ -124,7 +124,7 @@ PYTORCH_GNN ...
   LAMBDA=1.0
   BETA=1.0
   LABEL=gnn
-... PYTORCH_GNN
+... PYTORCH_KOLMOGOROV_BIAS_GNN
 PRINT FILE=COLVAR ARG=gnn.z,gnn.q,gnn.kbias
 \endplumedfile
 
@@ -132,7 +132,7 @@ PRINT FILE=COLVAR ARG=gnn.z,gnn.q,gnn.kbias
 //+ENDPLUMEDOC
 
 
-class PytorchGNN: public Colvar
+class PytorchKolmogorovBiasGNN: public Colvar
 {
   int n_out = 0;
   bool pbc = true;
@@ -183,16 +183,16 @@ class PytorchGNN: public Colvar
   void find_active_atoms(int n_threads);
 
 public:
-  explicit PytorchGNN(const ActionOptions&);
-  ~PytorchGNN();
+  explicit PytorchKolmogorovBiasGNN(const ActionOptions&);
+  ~PytorchKolmogorovBiasGNN();
   static void registerKeywords(Keywords& keys);
   void calculate() override;
   void prepare() override;
-}; // class PytorchGNN
+}; // class PytorchKolmogorovBiasGNN
 
-PLUMED_REGISTER_ACTION(PytorchGNN, "PYTORCH_GNN")
+PLUMED_REGISTER_ACTION(PytorchKolmogorovBiasGNN, "PYTORCH_KOLMOGOROV_BIAS_GNN")
 
-void PytorchGNN::registerKeywords(Keywords& keys)
+void PytorchKolmogorovBiasGNN::registerKeywords(Keywords& keys)
 {
   Colvar::registerKeywords(keys);
 
@@ -311,7 +311,7 @@ void PytorchGNN::registerKeywords(Keywords& keys)
   );
 }
 
-PytorchGNN::PytorchGNN(const ActionOptions& ao):
+PytorchKolmogorovBiasGNN::PytorchKolmogorovBiasGNN(const ActionOptions& ao):
   PLUMED_COLVAR_INIT(ao)
 { // print libtorch version
   std::stringstream ss;
@@ -668,12 +668,12 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   log.printf("\n");
 }
 
-PytorchGNN::~PytorchGNN()
+PytorchKolmogorovBiasGNN::~PytorchKolmogorovBiasGNN()
 {
   return;
 }
 
-void PytorchGNN::prepare()
+void PytorchKolmogorovBiasGNN::prepare()
 {
   if (neighbor_list->getStride() > 0) {
     if (firsttime || ((getStep() % neighbor_list->getStride()) == 0)) {
@@ -694,7 +694,7 @@ void PytorchGNN::prepare()
 }
 
 
-void PytorchGNN::calculate()
+void PytorchKolmogorovBiasGNN::calculate()
 {
   // get some common data
   auto pbc_tools = getPbc();
@@ -1086,7 +1086,7 @@ void PytorchGNN::calculate()
 }
 }
 
-int PytorchGNN::atomic_number_from_name(std::string name)
+int PytorchKolmogorovBiasGNN::atomic_number_from_name(std::string name)
 {
   std::transform(
     name.begin(),
@@ -1102,7 +1102,7 @@ int PytorchGNN::atomic_number_from_name(std::string name)
   return std::distance(periodic_table.begin(), iter) + 1;
 }
 
-std::string PytorchGNN::model_summary(
+std::string PytorchKolmogorovBiasGNN::model_summary(
     std::string model_name, torch::jit::Module module, int level_max, int level
 ) {
   std::stringstream ss;
@@ -1129,7 +1129,7 @@ std::string PytorchGNN::model_summary(
   return ss.str();
 }
 
-bool PytorchGNN::groups_have_intersection(void) {
+bool PytorchKolmogorovBiasGNN::groups_have_intersection(void) {
   std::vector<AtomNumber> intersections;
   std::vector<AtomNumber> atom_list_a_copy(atom_list_a);
   std::vector<AtomNumber> atom_list_b_copy(atom_list_b);
@@ -1148,7 +1148,7 @@ bool PytorchGNN::groups_have_intersection(void) {
   return intersections.size() > 0;
 }
 
-void PytorchGNN::find_active_atoms(int n_threads) {
+void PytorchKolmogorovBiasGNN::find_active_atoms(int n_threads) {
   if (atom_list_b.size() > 0) {
     atom_list_active.clear();
     std::vector<int> neighbors(neighbor_list->size());
@@ -1175,7 +1175,7 @@ void PytorchGNN::find_active_atoms(int n_threads) {
   }
 }
 
-} // pytorch_gnn
+} // pytorch_kolmogorov_bias_gnn
 
 } // colvar
 
