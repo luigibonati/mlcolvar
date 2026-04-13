@@ -1,21 +1,26 @@
 # PLUMED Interfaces
 
-This folder contains most updated PLUMED interface source files and test input sets for the `mlcolvar` PLUMED integration.
+This folder contains the most updated source files of the PLUMED interface for the use of machine learning collective variables.
+These interfaces are primarly intended (but non limited) to be used with CV models trained through `mlcolvar` and can be loaded into a libtorch-aware PLUMED using the `LOAD` command at runtime.
+
+This folder also provides a few sets of test inputs for alanine dipeptide and the dissociation of NaCl that can be used to test the interfaces or possible modifications.
 
 ## Interface files
 
 - `PytorchModel.cpp`
   - Implements the `PYTORCH_MODEL` function for the use of standard descriptor-based PyTorch models as CVs. This is also available in PLUMED official releases.
+  Note that to avoid conflicts with default PLUMED installation, the action defined in the source file provided here is named `PYTORCH_MODEL_RUNTIME`.
 - `PytorchKolmogorovBias.cpp`
-  - Implements the `PYTORCH_KOLMOGOROV_BIAS` function for computing transition-state-oriented Kolmogorov bias from PyTorch descriptor-based model of the committor whicha can also be used as CVs.
+  - Implements the `PYTORCH_KOLMOGOROV_BIAS` function for computing transition-state-oriented Kolmogorov bias from PyTorch descriptor-based model of the committor which can also be used as CVs.
 - `PytorchModelGNN.cpp`
-  - Implements the `PYTORCH_GNN` colvar for the use of graph neural network models as CVs. The construction of the graph is done in PLUMED.
+  - Implements the `PYTORCH_GNN` colvar for the use of gnn-based models as CVs. The construction of the input graph is done in PLUMED using its built-in neighbor-list.
 - `PytorchKolmogorovBiasGNN.cpp`
-  - Implements the `PYTORCH_KOLMOGOROV_BIAS_GNN` colvar for computing transition-state-oriented Kolmogorov bias from raph neural network models of the committor whicha can also be used as CVs.
+  - Implements the `PYTORCH_KOLMOGOROV_BIAS_GNN` colvar for computing transition-state-oriented Kolmogorov bias from gnn-based models of the committor which can also be used as CVs.
 
 ## Test inputs
 
-The `test_inputs` folder contains example folders and run scripts for two systems:
+The `test_inputs` folder contains example folders for two simple systems (alanine and NaCl) that can be used to test the available interfaces and possibile modifications.
+Two run scripts are provided for the two systems as example:
 
 - `test_inputs/test_alanine.sh`
   - Launches alanine test runs.
@@ -26,7 +31,34 @@ The `test_inputs` folder contains example folders and run scripts for two system
   - Supported modes: `gnn`, `gnn-kbias`.
   - Uses the `test_inputs/NaCl/gnn_based` template.
 
-### Alanine test templates
+### Notes
+
+- The test scripts use environment-specific paths and executable names. Update these paths before running the tests.
+- The test inputs themselves include pre-trained model files and PLUMED input files for the available modes.
+- The `LOAD FILE=...` directive in the PLUMED input files references the corresponding `*.cpp` interface source file.
+- that the scripts are designed to be run from a folder within the mlcolvar root folder (e.g., mlcolvar/aux, which is ignored by git).
+
+### How to use the tests
+
+1. Make sure PLUMED is installed and built with the required `libtorch` support.
+2. \[For gnn-based\] Install/activate/locate the Python environment that provides `mdtraj`.
+3. Adjust the environment-specific paths in the test scripts:
+   - `test_inputs/test_alanine.sh`
+   - `test_inputs/test_NaCl.sh`
+
+4. Run the desired test script from a folder within the mlcolvar root folder (e.g., mlcolvar/aux, which is ignored by git):
+
+```bash
+bash plumed_interfaces/test_inputs/test_alanine.sh descriptors
+bash plumed_interfaces/test_inputs/test_alanine.sh descriptors-kbias
+bash plumed_interfaces/test_inputs/test_alanine.sh gnn
+bash plumed_interfaces/test_inputs/test_alanine.sh gnn-kbias
+
+bash plumed_interfaces/test_inputs/test_NaCl.sh gnn
+bash plumed_interfaces/test_inputs/test_NaCl.sh gnn-kbias
+```
+
+#### Alanine test templates
 
 - `test_inputs/alanine/descriptor_based`
   - `plumed_PytorchModel.dat`
@@ -45,7 +77,7 @@ The `test_inputs` folder contains example folders and run scripts for two system
   - `gromppvac.mdp`
   - `mdout.mdp`
 
-### NaCl test templates
+#### NaCl test templates
 
 - `test_inputs/NaCl/gnn_based`
   - `plumed_PytorchModelGNN.dat`
@@ -56,43 +88,3 @@ The `test_inputs` folder contains example folders and run scripts for two system
   - `NaCl_216wat_bound.data`
   - `NaCl_216wat_unbound.data`
   - `input.lmp`
-
-## How to use the tests
-
-1. Make sure PLUMED is installed and built with the required `libtorch` support.
-2. \[For gnn-based\] Install/activate/locate the Python environment that provides `mdtraj`.
-3. Adjust the environment-specific paths in the test scripts:
-   - `test_inputs/test_alanine.sh`
-   - `test_inputs/test_NaCl.sh`
-
-   These scripts currently source local installation scripts and set a hard-coded Python path.
-
-4. Run the desired test script from the repository root:
-
-```bash
-bash plumed_interfaces/test_inputs/test_alanine.sh descriptors
-bash plumed_interfaces/test_inputs/test_alanine.sh descriptors-kbias
-bash plumed_interfaces/test_inputs/test_alanine.sh gnn
-bash plumed_interfaces/test_inputs/test_alanine.sh gnn-kbias
-
-bash plumed_interfaces/test_inputs/test_NaCl.sh gnn
-bash plumed_interfaces/test_inputs/test_NaCl.sh gnn-kbias
-```
-
-## What happens during a test run
-
-- The test script copies the selected template folder to a working folder.
-- It copies one of the PLUMED interface source files from `plumed_interfaces/` into that working folder.
-- It renames the appropriate `plumed_*.dat` file to `plumed.dat`.
-- The script updates the `PYTHON_BIN` entry in the PLUMED input file to point to the configured Python interpreter \[ For gnn-based \].
-- Finally, it launches the MD engine (`gmx mdrun` for alanine, `lmp` for NaCl).
-
-## Notes
-
-- The test scripts use environment-specific paths and executable names. Update these paths before running the tests.
-- The test inputs themselves include pre-trained model files and PLUMED input files for the available modes.
-- The `LOAD FILE=...` directive in the PLUMED input files references the corresponding `*.cpp` interface source file.
-
-## Recommended next step
-
-If you want to add a new test or a new PLUMED interface variant, add a new `*.cpp` source file here, then create a matching `plumed_*.dat` input and a new mode in the appropriate test script.
