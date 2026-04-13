@@ -386,3 +386,66 @@ def test_schnet_2() -> None:
     
     torch.set_default_dtype(torch.float32)
 
+def test_schnet_from_dataset() -> None:
+    from mlcolvar.data.graph.utils import create_test_graph_input
+    torch.manual_seed(0)
+    torch.set_default_dtype(torch.float64)
+
+    dataset = create_test_graph_input(output_type='dataset',
+                                      n_atoms=3,
+                                      n_samples=5,
+                                      n_states=1,
+                                      add_noise=False,
+                                    )
+
+    model = SchNetModel(
+        n_out=2,
+        dataset_for_initialization=dataset,
+        n_bases=6,
+        n_layers=2,
+        n_filters=16,
+        n_hidden_channels=16,
+        aggr='max',
+        w_out_after_pool=True
+    )
+
+    # check the model parameters are correctly initialized from the dataset metadata
+    assert ( model.cutoff == dataset.metadata['cutoff'] )
+    assert ( torch.allclose(model.atomic_numbers, torch.as_tensor(dataset.metadata['atomic_numbers'])) )
+    assert ( torch.allclose(model.buffer, torch.as_tensor(dataset.metadata['buffer'])) )
+
+    # check output is consistent with the one obtained from the test graph input
+    ref_out = torch.tensor([[0.36632594, -0.08193991]] * 5)
+    assert ( torch.allclose(model(dataset.get_graph_inputs()), ref_out) )
+
+
+    # test with environment atoms
+    dataset = create_test_graph_input(output_type='dataset',
+                                      n_atoms=3,
+                                      n_samples=5,
+                                      n_states=1,
+                                      add_noise=False,
+                                      environment=True
+                                    )
+
+    model = SchNetModel(
+        n_out=2,
+        dataset_for_initialization=dataset,
+        n_bases=6,
+        n_layers=2,
+        n_filters=16,
+        n_hidden_channels=16,
+        aggr='max',
+        w_out_after_pool=True
+    )
+
+    # check the model parameters are correctly initialized from the dataset metadata
+    assert ( model.cutoff == dataset.metadata['cutoff'] )
+    assert ( torch.allclose(model.atomic_numbers, torch.as_tensor(dataset.metadata['atomic_numbers'])) )
+    assert ( torch.allclose(model.buffer, torch.as_tensor(dataset.metadata['buffer'])) )
+
+    # check output is consistent with the one obtained from the test graph input
+    ref_out = torch.tensor([[0.14110785, -0.22323715]] * 5)
+    assert ( torch.allclose(model(dataset.get_graph_inputs()), ref_out) )
+    
+    torch.set_default_dtype(torch.float32)

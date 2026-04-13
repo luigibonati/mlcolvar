@@ -89,7 +89,7 @@ class GVPModel(BaseGNN):
         """
         super().__init__(
             n_out=n_out, 
-            dataset_for_initialization=None,
+            dataset_for_initialization=dataset_for_initialization,
             pooling_operation=pooling_operation, 
             n_bases=n_bases, 
             n_polynomials=n_polynomials, 
@@ -923,3 +923,78 @@ def test_gvp() -> None:
 
 
     torch.set_default_dtype(torch.float32)
+
+def test_gvp_from_dataset() -> None:
+    from mlcolvar.data.graph.utils import create_test_graph_input
+    torch.manual_seed(0)
+    torch.set_default_dtype(torch.float64)
+
+    dataset = create_test_graph_input(output_type='dataset',
+                                      n_atoms=3,
+                                      n_samples=5,
+                                      n_states=1,
+                                      add_noise=False,
+                                    )
+
+    model = GVPModel(
+        n_out=2,
+        dataset_for_initialization=dataset,
+        n_bases=6,
+        n_polynomials=6,
+        n_layers=2,
+        n_messages=2,
+        n_feedforwards=2,
+        n_scalars_node=16,
+        n_vectors_node=8,
+        n_scalars_edge=16,
+        drop_rate=0,
+        activation='SiLU',
+    )
+
+    # check the model parameters are correctly initialized from the dataset metadata
+    assert ( model.cutoff == dataset.metadata['cutoff'] )
+    assert ( torch.allclose(model.atomic_numbers, torch.as_tensor(dataset.metadata['atomic_numbers'])) )
+    assert ( torch.allclose(model.buffer, torch.as_tensor(dataset.metadata['buffer'])) )
+
+    # check output is consistent with the one obtained from the test graph input
+    ref_out = torch.tensor([[-0.12551015, -0.5192468]] * 5)
+    assert ( torch.allclose(model(dataset.get_graph_inputs()), ref_out) )
+
+
+    # test with environment atoms
+    dataset = create_test_graph_input(output_type='dataset',
+                                      n_atoms=3,
+                                      n_samples=5,
+                                      n_states=1,
+                                      add_noise=False,
+                                      environment=True
+                                    )
+
+    model = GVPModel(
+        n_out=2,
+        dataset_for_initialization=dataset,
+        n_bases=6,
+        n_polynomials=6,
+        n_layers=2,
+        n_messages=2,
+        n_feedforwards=2,
+        n_scalars_node=16,
+        n_vectors_node=8,
+        n_scalars_edge=16,
+        drop_rate=0,
+        activation='SiLU',
+    )
+
+    # check the model parameters are correctly initialized from the dataset metadata
+    assert ( model.cutoff == dataset.metadata['cutoff'] )
+    assert ( torch.allclose(model.atomic_numbers, torch.as_tensor(dataset.metadata['atomic_numbers'])) )
+    assert ( torch.allclose(model.buffer, torch.as_tensor(dataset.metadata['buffer'])) )
+
+    # check output is consistent with the one obtained from the test graph input
+    ref_out = torch.tensor([[0.32278482, 0.05976963]] * 5)
+    assert ( torch.allclose(model(dataset.get_graph_inputs()), ref_out) )
+    
+    torch.set_default_dtype(torch.float32)
+
+if __name__ == "__main__":
+    test_gvp_from_dataset()
