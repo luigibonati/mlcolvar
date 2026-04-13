@@ -419,7 +419,7 @@ def test_committor_2():
     print()
     from mlcolvar.core.nn.graph import SchNetModel
     from mlcolvar.data.graph.utils import create_test_graph_input
-    gnn_model = SchNetModel(1, 0.1, [1, 8])
+    gnn_model = SchNetModel(n_out=1, cutoff=0.1, atomic_numbers=[1, 8])
 
     model = Committor(model=gnn_model, 
                       atomic_masses=atomic_masses, 
@@ -662,7 +662,7 @@ def test_committor_with_derivatives():
     print()
     from mlcolvar.core.nn.graph import SchNetModel
     from mlcolvar.data.graph.utils import create_test_graph_input
-    gnn_model = SchNetModel(1, 0.1, [1, 8])
+    gnn_model = SchNetModel(n_out=1, cutoff=0.1, atomic_numbers=[1, 8])
 
     model = Committor(model=gnn_model, 
                       atomic_masses=masses, 

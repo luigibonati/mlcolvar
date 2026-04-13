@@ -197,8 +197,8 @@ def test_trace_graph_based():
         datamodule = DictModule(dataset, lengths=[0.75, 0.2, 0.05], batch_size=25)
 
         # initialzie GNN-based model
-        gnn_model = SchNetModel(1, 
-                                10,
+        gnn_model = SchNetModel(n_out=1, 
+                                cutoff=10,
                                 atomic_numbers=dataset.metadata['atomic_numbers'])
         model = mlcolvar.cvs.RegressionCV(model=gnn_model)
         
