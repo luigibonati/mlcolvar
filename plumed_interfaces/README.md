@@ -1,7 +1,7 @@
 # PLUMED Interfaces
 
 This folder contains the most updated source files of the PLUMED interface for the use of machine learning collective variables.
-These interfaces are primarly intended (but non limited) to be used with CV models trained through `mlcolvar` and can be loaded into a libtorch-aware PLUMED using the `LOAD` command at runtime.
+These interfaces are primarily intended (but not limited) to be used with CV models trained through `mlcolvar` and can be loaded into a libtorch-aware PLUMED using the `LOAD` command at runtime.
 
 This folder also provides a few sets of test inputs for alanine dipeptide and the dissociation of NaCl that can be used to test the interfaces or possible modifications.
 
@@ -19,7 +19,7 @@ This folder also provides a few sets of test inputs for alanine dipeptide and th
 
 ## Test inputs
 
-The `test_inputs` folder contains example folders for two simple systems (alanine and NaCl) that can be used to test the available interfaces and possibile modifications.
+The `test_inputs` folder contains example folders for two simple systems (alanine and NaCl) that can be used to test the available interfaces and possible modifications.
 Two run scripts are provided for the two systems as example:
 
 - `test_inputs/test_alanine.sh`
@@ -36,7 +36,7 @@ Two run scripts are provided for the two systems as example:
 - The test scripts use environment-specific paths and executable names. Update these paths before running the tests.
 - The test inputs themselves include pre-trained model files and PLUMED input files for the available modes.
 - The `LOAD FILE=...` directive in the PLUMED input files references the corresponding `*.cpp` interface source file.
-- that the scripts are designed to be run from a folder within the mlcolvar root folder (e.g., mlcolvar/aux, which is ignored by git).
+- The scripts are designed to be run from a folder within the mlcolvar root folder (e.g., mlcolvar/aux, which is ignored by git).
 
 ### How to use the tests
 
