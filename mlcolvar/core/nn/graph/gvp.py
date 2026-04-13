@@ -6,6 +6,7 @@ from torch_geometric.nn import MessagePassing
 from typing import Tuple, Callable, Optional, List, Dict
 
 from mlcolvar.core.nn.graph.gnn import BaseGNN
+from mlcolvar.data import DictDataset
 
 """
 The Geometric Vector Perceptron (GVP) layer. This module is taken from:
@@ -32,8 +33,7 @@ class GVPModel(BaseGNN):
     def __init__(
         self,
         n_out: int,
-        cutoff: float,
-        atomic_numbers: List[int],
+        dataset_for_initialization: DictDataset = None,
         pooling_operation : str = 'mean',
         n_bases: int = 8,
         n_polynomials: int = 6,
@@ -47,6 +47,7 @@ class GVPModel(BaseGNN):
         activation: str = 'SiLU',
         basis_type: str = 'bessel',
         smooth: bool = False,
+        **kwargs
     ) -> None:
         """Initializes a Geometric Vector Perceptron (GVP) model.
 
@@ -54,11 +55,11 @@ class GVPModel(BaseGNN):
         ----------
         n_out: int
             Number of the output scalar node features.
-        cutoff: float
-            Cutoff radius of the basis functions. Should be the same as the cutoff
-            radius used to build the graphs.
-        atomic_numbers: List[int]
-            The atomic numbers mapping
+        dataset_for_initialization : DictDataset, optional
+            Dataset containing the graphs on which the gnn model will be applied. 
+            This is used to initialize and register the cutoff, buffer, and atomic_numbers from the dataset metadata.
+            This is the preferred way to initialize the gnn model, as it ensures consistency between the model and the dataset.
+            As an alternative this can be set to None and the cutoff, buffer, and atomic_numbers can be provided as kwargs.
         pooling_operation : str
             Type of pooling operation to combine node-level features into graph-level features, either mean or sum, by default 'mean'
         n_bases: int
@@ -88,12 +89,12 @@ class GVPModel(BaseGNN):
         """
         super().__init__(
             n_out=n_out, 
-            cutoff=cutoff, 
-            atomic_numbers=atomic_numbers, 
+            dataset_for_initialization=None,
             pooling_operation=pooling_operation, 
             n_bases=n_bases, 
             n_polynomials=n_polynomials, 
-            basis_type=basis_type
+            basis_type=basis_type,
+            **kwargs
         )
 
         self.W_e = nn.ModuleList([
@@ -106,8 +107,8 @@ class GVPModel(BaseGNN):
         ])
 
         self.W_v = nn.ModuleList([
-            LayerNorm((len(atomic_numbers), 0)),
-            GVP(in_dims=(len(atomic_numbers), 0),
+            LayerNorm((len(self.atomic_numbers), 0)),
+            GVP(in_dims=(len(self.atomic_numbers), 0),
                 out_dims=(n_scalars_node, n_vectors_node),
                 activations=(None, None),
                 vector_gate=True
@@ -122,7 +123,7 @@ class GVPModel(BaseGNN):
                          drop_rate=drop_rate,
                          activations=(eval(f'torch.nn.{activation}')(), None),
                          vector_gate=True,
-                         cutoff=(cutoff if smooth else -1)
+                         cutoff=(self.cutoff if smooth else -1)
                          )
             for _ in range(n_layers)
         )

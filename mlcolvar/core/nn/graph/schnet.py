@@ -4,6 +4,7 @@ from torch import nn
 from torch_geometric.nn import MessagePassing
 
 from mlcolvar.core.nn.graph.gnn import BaseGNN
+from mlcolvar.data import DictDataset
 
 from typing import List, Dict
 
@@ -51,8 +52,7 @@ class SchNetModel(BaseGNN):
     def __init__(
         self,
         n_out: int,
-        cutoff: float,
-        atomic_numbers: List[int],
+        dataset_for_initialization: DictDataset = None,
         pooling_operation : str = 'mean',
         n_bases: int = 16,
         n_layers: int = 2,
@@ -60,6 +60,7 @@ class SchNetModel(BaseGNN):
         n_hidden_channels: int = 16,
         aggr: str = 'mean',
         w_out_after_pool: bool = False,
+        **kwargs
     ) -> None:
         """The SchNet model. This implementation is taken from torch_geometric:
         https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/nn/models/schnet.py
@@ -68,11 +69,11 @@ class SchNetModel(BaseGNN):
         ----------
         n_out : int
             Size of the output node features.
-        cutoff : float
-            Cutoff radius of the basis functions. Should be the same as the cutoff
-            radius used to build the graphs.
-        atomic_numbers : List[int]
-            The atomic numbers mapping.
+        dataset_for_initialization : DictDataset, optional
+            Dataset containing the graphs on which the gnn model will be applied. 
+            This is used to initialize and register the cutoff, buffer, and atomic_numbers from the dataset metadata.
+            This is the preferred way to initialize the gnn model, as it ensures consistency between the model and the dataset.
+            As an alternative this can be set to None and the cutoff, buffer, and atomic_numbers can be provided as kwargs.
         pooling_operation : str
             Type of pooling operation to combine node-level features into graph-level features, either mean or sum, by default 'mean'
         n_bases : int, optional
@@ -90,18 +91,18 @@ class SchNetModel(BaseGNN):
         """
 
         super().__init__(
-            n_out=n_out, 
-            cutoff=cutoff, 
-            atomic_numbers=atomic_numbers, 
+            n_out=n_out,
+            dataset_for_initialization=dataset_for_initialization,
             pooling_operation=pooling_operation, 
             n_bases=n_bases, 
             n_polynomials=0, 
-            basis_type='gaussian'
+            basis_type='gaussian',
+            **kwargs
         )
 
         # transforms embedding into hidden channels
         self.W_v = nn.Linear(
-            in_features=len(atomic_numbers), 
+            in_features=len(self.atomic_numbers), 
             out_features=n_hidden_channels, 
             bias=False
         )
@@ -109,7 +110,7 @@ class SchNetModel(BaseGNN):
         # initialize layers with interaction blocks
         self.layers = nn.ModuleList([
             InteractionBlock(
-                n_hidden_channels, n_bases, n_filters, cutoff, aggr
+                n_hidden_channels, n_bases, n_filters, self.cutoff, aggr
             )
             for _ in range(n_layers)
         ])

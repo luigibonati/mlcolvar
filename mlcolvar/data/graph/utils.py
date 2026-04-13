@@ -193,6 +193,7 @@ def create_dataset_from_configurations(config: atomic.Configurations,
     dataset = DictDataset(dictionary={'data_list': data_list},
                           metadata={'atomic_numbers': z_table.zs,
                                     'cutoff': cutoff,
+                                    'buffer': buffer,
                                     'used_idx': unique_idx,
                                     'used_names': unique_names},
                           data_type='graphs')
