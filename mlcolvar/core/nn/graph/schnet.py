@@ -86,6 +86,12 @@ class SchNetModel(BaseGNN):
             Size of hidden embeddings, by default 16
         aggr : str, optional
             Type of the GNN aggregation function, by default 'mean'
+            Options:
+            - 'mean', 'sum', 'max', 'min', 'mul'
+            - 'attention' :
+                Shared attention gate across all layers.
+            - 'attention_separate' :
+                Independent attention gate for each layer.
         w_out_after_pool : bool, optional
             Whether to apply the last linear transformation form hidden to output channels after the pooling sum, by default False
         """
