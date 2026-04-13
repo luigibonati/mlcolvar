@@ -32,7 +32,6 @@ PYTORCH_GNN ...
   STRUCTURE=NaCl.pdb
   LABEL=gnn
   NL_STRIDE=100
-  BUFFER=3.0
 ... PYTORCH_GNN
 
 # define OPES calculation
