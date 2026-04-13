@@ -332,6 +332,7 @@ def create_test_graph_input(output_type: str,
         numbers = [8, 1, 1]
         system_atoms = [0,1] if environment else None
         environment_atoms = [3] if environment else None
+        buffer = 0.1 if environment else 0.0
         node_labels = np.array([[0], [1], [1]])
         _ref_positions = np.array(
             [
@@ -349,6 +350,7 @@ def create_test_graph_input(output_type: str,
         numbers = [8, 1, 1, 8]
         system_atoms = [0,1,2] if environment else None
         environment_atoms = [3] if environment else None
+        buffer = 0.1 if environment else 0.0
         node_labels = np.array([[0], [1], [1], [0]])
         _ref_positions = np.array(
             [
@@ -403,7 +405,7 @@ def create_test_graph_input(output_type: str,
         return config
 
     dataset = create_dataset_from_configurations(
-        config, z_table, 0.1, show_progress=False, remove_isolated_nodes=True
+        config, z_table, 0.1, show_progress=False, remove_isolated_nodes=True, buffer=buffer
     )
 
     if output_type == 'dataset':
