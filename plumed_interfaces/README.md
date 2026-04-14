@@ -7,13 +7,20 @@ This folder also provides a few sets of test inputs for alanine dipeptide and th
 
 ## Interface files
 
+#### Machine learning collective variables
+
 - `PytorchModel.cpp`
   - Implements the `PYTORCH_MODEL` function for the use of standard descriptor-based PyTorch models as CVs. This is also available in PLUMED official releases.
   Note that to avoid conflicts with default PLUMED installation, the action defined in the source file provided here is named `PYTORCH_MODEL_RUNTIME`.
-- `PytorchKolmogorovBias.cpp`
-  - Implements the `PYTORCH_KOLMOGOROV_BIAS` function for computing transition-state-oriented Kolmogorov bias from PyTorch descriptor-based model of the committor which can also be used as CVs.
+
 - `PytorchModelGNN.cpp`
   - Implements the `PYTORCH_GNN` colvar for the use of gnn-based models as CVs. The construction of the input graph is done in PLUMED using its built-in neighbor-list.
+
+#### Kolmogorov transition-state oriented bias from ML-models of the committor function
+
+- `PytorchKolmogorovBias.cpp`
+  - Implements the `PYTORCH_KOLMOGOROV_BIAS` function for computing transition-state-oriented Kolmogorov bias from PyTorch descriptor-based model of the committor which can also be used as CVs.
+
 - `PytorchKolmogorovBiasGNN.cpp`
   - Implements the `PYTORCH_KOLMOGOROV_BIAS_GNN` colvar for computing transition-state-oriented Kolmogorov bias from gnn-based models of the committor which can also be used as CVs.
 
