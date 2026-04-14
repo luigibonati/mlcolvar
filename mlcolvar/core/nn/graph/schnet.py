@@ -1,10 +1,11 @@
 import math
 import torch
 from torch import nn
-import torch_geometric
+from torch_geometric.nn.aggr import AttentionalAggregation
 from torch_geometric.nn import MessagePassing
 
 from mlcolvar.core.nn.graph.gnn import BaseGNN
+from mlcolvar.core.nn.utils import Shifted_Softplus
 
 from typing import List, Dict
 
@@ -13,7 +14,7 @@ The SchNet components. This module is taken from the pgy package:
 https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/nn/models/schnet.py
 """
 
-__all__ = ["SchNetModel", "InteractionBlock", "ShiftedSoftplus"]
+__all__ = ["SchNetModel", "InteractionBlock"]
 
 class SchNetModel(BaseGNN):
     """
@@ -86,12 +87,9 @@ class SchNetModel(BaseGNN):
             Size of hidden embeddings, by default 16
         aggr : str, optional
             Type of the GNN aggregation function, by default 'mean'
-            Options:
-            - 'mean', 'sum', 'max', 'min', 'mul'
-            - 'attention' :
-                Shared attention gate across all layers.
-            - 'attention_separate' :
-                Independent attention gate for each layer.
+            Possible choices are: 'mean', 'sum', 'max', 'min', 'mul', 
+            'attention'/'attentional' (shared attention gate across all layers), 
+            'attention_separate'/'attentional_separate' (Independent attention gate for each layer).
         w_out_after_pool : bool, optional
             Whether to apply the last linear transformation form hidden to output channels after the pooling sum, by default False
         """
@@ -117,24 +115,24 @@ class SchNetModel(BaseGNN):
         if aggr in ['attention', 'attentional']:
             self.attention_gate = nn.Sequential(
                 nn.Linear(n_filters, n_filters // 2),
-                ShiftedSoftplus(),
+                Shifted_Softplus(),
                 nn.Linear(n_filters // 2, 1)
             )
             aggr = [
-                torch_geometric.nn.aggr.AttentionalAggregation(self.attention_gate)
+                AttentionalAggregation(self.attention_gate)
             ] * n_layers
 
         elif aggr in ['attention_separate', 'attentional_separate']:
             self.attention_gate = nn.ModuleList([
                 nn.Sequential(
                     nn.Linear(n_filters, n_filters // 2),
-                    ShiftedSoftplus(),
+                    Shifted_Softplus(),
                     nn.Linear(n_filters // 2, 1)
                 )
                 for _ in range(n_layers)
             ])
             aggr = [
-                torch_geometric.nn.aggr.AttentionalAggregation(self.attention_gate[i])
+                AttentionalAggregation(self.attention_gate[i])
                 for i in range(n_layers)
             ]
         else:
@@ -152,7 +150,7 @@ class SchNetModel(BaseGNN):
         # transforms hidden channels into output channels
         self.W_out = nn.ModuleList([
             nn.Linear(n_hidden_channels, n_hidden_channels // 2),
-            ShiftedSoftplus(),
+            Shifted_Softplus(),
             nn.Linear(n_hidden_channels // 2, n_out)
         ])
 
@@ -249,7 +247,7 @@ class InteractionBlock(nn.Module):
         super().__init__()
         self.mlp = nn.Sequential(
             nn.Linear(num_gaussians, num_filters),
-            ShiftedSoftplus(),
+            Shifted_Softplus(),
             nn.Linear(num_filters, num_filters),
         )
         self.conv = CFConv(
@@ -260,7 +258,7 @@ class InteractionBlock(nn.Module):
             cutoff,
             aggr
         )
-        self.act = ShiftedSoftplus()
+        self.act = Shifted_Softplus()
         self.lin = nn.Linear(hidden_channels, hidden_channels)
 
         self.reset_parameters()
@@ -349,19 +347,9 @@ class CFConv(MessagePassing):
     def message(self, x_j: torch.Tensor, W: torch.Tensor) -> torch.Tensor:
         return x_j * W
 
-# TODO maybe remove and use the common one
-class ShiftedSoftplus(nn.Module):
-    def __init__(self) -> None:
-        super().__init__()
-        self.shift = torch.log(torch.tensor(2.0)).item()
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return nn.functional.softplus(x) - self.shift
-    
 
 
 from mlcolvar.data.graph.utils import create_graph_tracing_example, create_test_graph_input
-
 
 def _create_test_data_list():
     batch = create_test_graph_input(
