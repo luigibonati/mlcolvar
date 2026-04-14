@@ -112,6 +112,7 @@ def compute_eigenfunctions(dataset : DictDataset,
                            descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None,
                            n_dim : int = 3,
                            batch_size=None,
+                           soft_max_postproc=True,
                            is_graph=False,
                            ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Computes eigenfunctions and eigenvalues from a learned representation.
@@ -207,7 +208,8 @@ def compute_eigenfunctions(dataset : DictDataset,
                 ref_idx=None
 
         batch_output = model.forward_nn(batch_input, cell=cell)
-        batch_output = torch.nn.functional.softmax(batch_output,dim=-1)
+        if soft_max_postproc:
+            batch_output = torch.nn.functional.softmax(batch_output,dim=-1)
 
         cov_batch, dcov_batch = compute_covariances(input=batch_input,
                                                     output=batch_output,

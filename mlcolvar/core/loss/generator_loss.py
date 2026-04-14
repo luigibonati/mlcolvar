@@ -171,7 +171,7 @@ def generator_loss(input : torch.Tensor,
     lambdas = lambdas.to(device)
     diag_lamb = torch.diag(lambdas**2)
     if softmax_postproc:
-        diag_lamb = torch.block_diag(diag_lamb, torch.tensor(1/eta+1e-8,device=device).unsqueeze(0))
+        diag_lamb = torch.block_diag(diag_lamb, torch.tensor(1.0,device=device).unsqueeze(0))
         one_column = torch.ones((output.shape[0],1),device=device)
         output = torch.cat((output,one_column),dim=1)
     # get number of outputs and sample sizes

@@ -192,6 +192,7 @@ class Generator(BaseCV):
                 descriptors_derivatives=descriptors_derivatives,
                 n_dim=self.n_dim,
                 batch_size=batch_size,
+                soft_max_postproc=self.softmax_postproc,
                 is_graph=is_graph
                 )
                 self.evals = evals
