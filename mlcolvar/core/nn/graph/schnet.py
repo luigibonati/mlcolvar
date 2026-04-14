@@ -1,9 +1,11 @@
 import math
 import torch
 from torch import nn
+from torch_geometric.nn.aggr import AttentionalAggregation
 from torch_geometric.nn import MessagePassing
 
 from mlcolvar.core.nn.graph.gnn import BaseGNN
+from mlcolvar.core.nn.utils import Shifted_Softplus
 
 from typing import List, Dict
 
@@ -12,7 +14,7 @@ The SchNet components. This module is taken from the pgy package:
 https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/nn/models/schnet.py
 """
 
-__all__ = ["SchNetModel", "InteractionBlock", "ShiftedSoftplus"]
+__all__ = ["SchNetModel", "InteractionBlock"]
 
 class SchNetModel(BaseGNN):
     """
@@ -85,6 +87,9 @@ class SchNetModel(BaseGNN):
             Size of hidden embeddings, by default 16
         aggr : str, optional
             Type of the GNN aggregation function, by default 'mean'
+            Possible choices are: 'mean', 'sum', 'max', 'min', 'mul', 
+            'attention'/'attentional' (shared attention gate across all layers), 
+            'attention_separate'/'attentional_separate' (Independent attention gate for each layer).
         w_out_after_pool : bool, optional
             Whether to apply the last linear transformation form hidden to output channels after the pooling sum, by default False
         """
@@ -106,18 +111,46 @@ class SchNetModel(BaseGNN):
             bias=False
         )
 
+        # attentional aggregation 
+        if aggr in ['attention', 'attentional']:
+            self.attention_gate = nn.Sequential(
+                nn.Linear(n_filters, n_filters // 2),
+                Shifted_Softplus(),
+                nn.Linear(n_filters // 2, 1)
+            )
+            aggr = [
+                AttentionalAggregation(self.attention_gate)
+            ] * n_layers
+
+        elif aggr in ['attention_separate', 'attentional_separate']:
+            self.attention_gate = nn.ModuleList([
+                nn.Sequential(
+                    nn.Linear(n_filters, n_filters // 2),
+                    Shifted_Softplus(),
+                    nn.Linear(n_filters // 2, 1)
+                )
+                for _ in range(n_layers)
+            ])
+            aggr = [
+                AttentionalAggregation(self.attention_gate[i])
+                for i in range(n_layers)
+            ]
+        else:
+            self.attention_gate = None
+            aggr = [aggr] * n_layers
+
         # initialize layers with interaction blocks
         self.layers = nn.ModuleList([
             InteractionBlock(
-                n_hidden_channels, n_bases, n_filters, cutoff, aggr
+                n_hidden_channels, n_bases, n_filters, cutoff, aggr[i]
             )
-            for _ in range(n_layers)
+            for i in range(n_layers)
         ])
 
         # transforms hidden channels into output channels
         self.W_out = nn.ModuleList([
             nn.Linear(n_hidden_channels, n_hidden_channels // 2),
-            ShiftedSoftplus(),
+            Shifted_Softplus(),
             nn.Linear(n_hidden_channels // 2, n_out)
         ])
 
@@ -138,6 +171,18 @@ class SchNetModel(BaseGNN):
         self.W_out[0].bias.data.fill_(0)
         nn.init.xavier_uniform_(self.W_out[2].weight)
         self.W_out[2].bias.data.fill_(0)
+
+        if isinstance(self.attention_gate, torch.nn.Sequential):
+            nn.init.xavier_uniform_(self.attention_gate[0].weight)
+            self.attention_gate[0].bias.data.fill_(0)
+            nn.init.xavier_uniform_(self.attention_gate[2].weight)
+            self.attention_gate[2].bias.data.fill_(0)
+        elif isinstance(self.attention_gate, torch.nn.ModuleList):
+            for gate in self.attention_gate:
+                nn.init.xavier_uniform_(gate[0].weight)
+                gate[0].bias.data.fill_(0)
+                nn.init.xavier_uniform_(gate[2].weight)
+                gate[2].bias.data.fill_(0)
 
     def forward(
         self, data: Dict[str, torch.Tensor]
@@ -202,7 +247,7 @@ class InteractionBlock(nn.Module):
         super().__init__()
         self.mlp = nn.Sequential(
             nn.Linear(num_gaussians, num_filters),
-            ShiftedSoftplus(),
+            Shifted_Softplus(),
             nn.Linear(num_filters, num_filters),
         )
         self.conv = CFConv(
@@ -213,7 +258,7 @@ class InteractionBlock(nn.Module):
             cutoff,
             aggr
         )
-        self.act = ShiftedSoftplus()
+        self.act = Shifted_Softplus()
         self.lin = nn.Linear(hidden_channels, hidden_channels)
 
         self.reset_parameters()
@@ -302,19 +347,9 @@ class CFConv(MessagePassing):
     def message(self, x_j: torch.Tensor, W: torch.Tensor) -> torch.Tensor:
         return x_j * W
 
-# TODO maybe remove and use the common one
-class ShiftedSoftplus(nn.Module):
-    def __init__(self) -> None:
-        super().__init__()
-        self.shift = torch.log(torch.tensor(2.0)).item()
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return nn.functional.softplus(x) - self.shift
-    
 
 
 from mlcolvar.data.graph.utils import create_graph_tracing_example, create_test_graph_input
-
 
 def _create_test_data_list():
     batch = create_test_graph_input(
@@ -385,3 +420,39 @@ def test_schnet_2() -> None:
     
     torch.set_default_dtype(torch.float32)
 
+
+def test_schnet_3() -> None:
+    torch.manual_seed(0)
+    torch.set_default_dtype(torch.float64)
+
+    model = SchNetModel(
+        n_out=2,
+        cutoff=0.1,
+        atomic_numbers=[1, 8],
+        n_bases=6,
+        n_layers=2,
+        n_filters=16,
+        n_hidden_channels=16,
+        aggr='attention',
+    )
+
+    data = _create_test_data_list()
+    ref_out = torch.tensor([[-0.3191231788534454, -0.0436194218681725]] * 5)
+    assert ( torch.allclose(model(data), ref_out) )
+
+    model = SchNetModel(
+        n_out=2,
+        cutoff=0.1,
+        atomic_numbers=[1, 8],
+        n_bases=6,
+        n_layers=2,
+        n_filters=16,
+        n_hidden_channels=16,
+        aggr='attention_separate',
+    )
+
+    data = _create_test_data_list()
+    ref_out = torch.tensor([[-0.1364561627454978, -0.1203537910489112]] * 5)
+    assert ( torch.allclose(model(data), ref_out) )
+    
+    torch.set_default_dtype(torch.float32)
