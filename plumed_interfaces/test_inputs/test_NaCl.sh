@@ -2,17 +2,60 @@
 
 # retrieve mode (gnn, gnn-kbias)
 mode=$1
+
+
+# =====================================================================================
+# ======================================= SETUP =======================================
+# =====================================================================================
+
+# run parameters
 export OMP_NUM_THREADS=8
 
-
-# source programs
-source /home/etrizio@iit.local/Bin/lammps-stable_22Jul2025_update1_all/sourceme.sh
-source /home/etrizio@iit.local/Bin/dev/plumed2-2.10b/sourceme.sh
+# define paths to sourceme.sh files for lammps and plumed
+#these need to be edited by the user before running the script
+LAMMPS_SOURCE="/path/to/lammps/sourceme.sh"
+PLUMED_SOURCE="/path/to/plumed/sourceme.sh"
 
 # define python path with mdraj
 PYTHON_PATH="/home/etrizio@iit.local/Bin/miniconda3/envs/graph_mlcolvar_test_2.5/bin/python"
 
+# =====================================================================================
+# ======================================= CHECKS ======================================
+# =====================================================================================
 
+# try to source lammps and plumed, if not found print error message and exit
+if ! source $LAMMPS_SOURCE 2>/dev/null; then
+    echo "LAMMPS sourceme.sh file could not be found. Please edit the script to source LAMMPS before running it."
+    exit 1
+fi
+if ! source $PLUMED_SOURCE 2>/dev/null; then
+    echo "PLUMED sourceme.sh file could not be found. Please edit the script to source PLUMED before running it."
+    exit 1
+fi
+
+
+# check that lammps and plumed are sourced and python path is set if needed
+if ! command -v lmp &> /dev/null; then
+    echo "LAMMPS executable not working, please check!"
+    exit 1
+fi  
+if ! command -v plumed &> /dev/null; then
+    echo "PLUMED executable not working, please check!"
+    exit 1
+fi
+
+if ! command -v $PYTHON_PATH &> /dev/null; then
+    echo "Python could not be found. Please edit the script to set the PYTHON_PATH variable to a python executable with mdtraj installed."
+    exit 1
+fi
+if ! $PYTHON_PATH -c "import mdtraj" 2>/dev/null; then
+    echo "mdtraj is not installed in the Python environment."
+    exit 1
+fi
+
+# =====================================================================================
+# ====================================== PREPARE ======================================
+# =====================================================================================
 
 FOLDER_NAME="test_run_NaCl" 
 rm -r $FOLDER_NAME
@@ -39,6 +82,10 @@ fi
 
 # update phyton path
 sed -i "s|PYTHON_BIN=/path/to/python/with/mdtraj|PYTHON_BIN=$PYTHON_PATH|g" plumed.dat
+
+# =====================================================================================
+# ======================================== RUN ========================================
+# =====================================================================================
 
 # run simulation
 lmp -i input.lmp -l log.lammps &
