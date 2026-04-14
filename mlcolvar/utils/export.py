@@ -17,15 +17,10 @@ from torch.fx.experimental.proxy_tensor import make_fx
 
 from mlcolvar.core.nn import FeedForward, BaseGNN
 from mlcolvar.utils import _code
-import sys
 
 # Maximum optimization settings for exporting models with AOTInductor.
 # Activated only when MLCOLVAR_EXPORT_MAXIMUM_OPT=1.
-# NOTE: Enabled only on Linux, since AOTInductor requires a C++ compiler
-if (
-    os.environ.get("MLCOLVAR_EXPORT_MAXIMUM_OPT") == "1"
-    and sys.platform.startswith("linux")
-):
+if os.environ.get("MLCOLVAR_EXPORT_MAXIMUM_OPT") == "1":
     torch._inductor.config.freezing = True
     torch._inductor.config.max_autotune = True
     torch._inductor.config.max_autotune_gemm = True
@@ -924,6 +919,7 @@ def test_export_1():
     )
 
     os.remove("test.pt2")
+
 
 def test_export_2():
 
