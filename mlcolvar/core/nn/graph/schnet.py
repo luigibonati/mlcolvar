@@ -270,7 +270,7 @@ class InteractionBlock(nn.Module):
         if long_range_cutoff > 0:
             self.mlp_lr = nn.Sequential(
                 nn.Linear(num_gaussians, num_filters),
-                ShiftedSoftplus(),
+                Shifted_Softplus(),
                 nn.Linear(num_filters, num_filters),
             )
         else:
