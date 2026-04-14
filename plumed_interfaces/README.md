@@ -33,7 +33,7 @@ Two run scripts are provided for the two systems as example:
 
 ### Notes
 
-- The test scripts use environment-specific paths and executable names. Update these paths before running the tests.
+- The test scripts use environment-specific paths and executable names. Edit these paths before running the tests, otherwise an error will be thrown.
 - The test inputs themselves include pre-trained model files and PLUMED input files for the available modes.
 - The `LOAD FILE=...` directive in the PLUMED input files references the corresponding `*.cpp` interface source file.
 - The scripts are designed to be run from a folder within the mlcolvar root folder (e.g., mlcolvar/aux, which is ignored by git).
@@ -49,13 +49,14 @@ Two run scripts are provided for the two systems as example:
 4. Run the desired test script from a folder within the mlcolvar root folder (e.g., mlcolvar/aux, which is ignored by git):
 
 ```bash
-bash plumed_interfaces/test_inputs/test_alanine.sh descriptors
-bash plumed_interfaces/test_inputs/test_alanine.sh descriptors-kbias
-bash plumed_interfaces/test_inputs/test_alanine.sh gnn
-bash plumed_interfaces/test_inputs/test_alanine.sh gnn-kbias
+cd aux
+bash ../plumed_interfaces/test_inputs/test_alanine.sh descriptors
+bash ../plumed_interfaces/test_inputs/test_alanine.sh descriptors-kbias
+bash ../plumed_interfaces/test_inputs/test_alanine.sh gnn
+bash ../plumed_interfaces/test_inputs/test_alanine.sh gnn-kbias
 
-bash plumed_interfaces/test_inputs/test_NaCl.sh gnn
-bash plumed_interfaces/test_inputs/test_NaCl.sh gnn-kbias
+bash ../plumed_interfaces/test_inputs/test_NaCl.sh gnn
+bash ../plumed_interfaces/test_inputs/test_NaCl.sh gnn-kbias
 ```
 
 #### Alanine test templates
