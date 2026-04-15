@@ -18,12 +18,7 @@ dist: DISTANCE ATOMS=649,650
 
 coordNa: COORDINATION GROUPA=Na GROUPB=O SWITCH={RATIONAL D_0=2.2 R_0=1.0 NN=4 MM=12}   # within a radius of roughly 3A
 
-# define an upper_wall to keep the ions reasonably close
-uwall: UPPER_WALLS ...
-ARG=dist
-AT=9.0
-KAPPA=2000.0
-... 
+uwall: UPPER_WALLS ARG=dist AT=9.0 KAPPA=2000.0
 
 PYTORCH_KOLMOGOROV_BIAS_GNN ...
   SYSTEM_SELECTION=sys
@@ -32,7 +27,6 @@ PYTORCH_KOLMOGOROV_BIAS_GNN ...
   STRUCTURE=NaCl.pdb
   LABEL=gnn
   NL_STRIDE=1
-  BUFFER=3.0
   SIGMOID_P=3
   BETA=0.5
   LAMBDA=1
@@ -40,13 +34,7 @@ PYTORCH_KOLMOGOROV_BIAS_GNN ...
 
 BIASVALUE ARG=gnn.kbias
 
-opes: OPES_METAD ...
-  ARG=gnn.z
-  PACE=500
-  SIGMA=0.2
-  BARRIER=20
-  TEMP=300
-...
+opes: OPES_METAD ARG=gnn.z PACE=500 SIGMA=0.2 BARRIER=20 TEMP=300
 
-PRINT ARG=dist,coordNa,gnn.* STRIDE=100 FILE=colvar.dat
+PRINT ARG=gnn.* STRIDE=100 FILE=COLVAR
 
