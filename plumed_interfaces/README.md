@@ -27,16 +27,15 @@ This folder also provides a few sets of test inputs for alanine dipeptide and th
 ## Test inputs
 
 The `tests` folder contains example folders for two simple systems (alanine and NaCl) that can be used to test the available interfaces and possible modifications.
-Two run scripts are provided for the two systems as example:
+Two types of scripts are provided for the two systems:
 
-- `tests/test_alanine.sh`
-  - Launches alanine test runs.
-  - Supported modes: `descriptors`, `descriptors-kbias`, `gnn`, `gnn-kbias`.
-  - Chooses the corresponding test template from `tests/alanine/descriptor_based` or `tests/alanine/gnn_based`.
-- `tests/test_NaCl.sh`
-  - Launches the NaCl test run.
-  - Supported modes: `gnn`, `gnn-kbias`.
-  - Uses the `tests/NaCl/gnn_based` template.
+- `driver_alanine.sh` / `driver_NaCl.sh`: run a PLUMED driver to post-process a tracjetory. The output COLVAR file is also compared with a reference and the result is printed. These are used for testing the interfaces in GitHub.
+- `run_alanine.sh` / `run_NaCl.sh`: run a simualtion with PLUMED generate a (biased)tracjetory. These are not used for testing the interfaces in GitHub.
+
+Test scripts **expect an input string** that specifies the type of interface that needs to be tested.
+- Alanine tests support all the modes:`descriptors`, `descriptors-kbias`, `gnn`, `gnn-kbias`.
+- NaCl tests support the gnn-based modes only: `gnn`, `gnn-kbias`.
+
 
 ### Notes
 
@@ -49,21 +48,25 @@ Two run scripts are provided for the two systems as example:
 
 1. Make sure PLUMED is installed and built with the required `libtorch` support.
 2. \[For gnn-based\] Install/activate/locate the Python environment that provides `mdtraj`.
-3. Adjust the environment-specific paths in the test scripts:
-   - `tests/test_alanine.sh`
-   - `tests/test_NaCl.sh`
+3. Adjust the environment-specific paths in the needed test script(s) among:
+   - `tests/driver_alanine.sh`
+   - `tests/run_alanine.sh`
+   - `tests/driver_NaCl.sh`
+   - `tests/run_NaCl.sh`
 
 4. Run the desired test script from a folder within the mlcolvar root folder (e.g., mlcolvar/aux, which is ignored by git):
 
 ```bash
-cd aux
-bash ../plumed_interfaces/tests/test_alanine.sh descriptors
-bash ../plumed_interfaces/tests/test_alanine.sh descriptors-kbias
-bash ../plumed_interfaces/tests/test_alanine.sh gnn
-bash ../plumed_interfaces/tests/test_alanine.sh gnn-kbias
+# For example, to run tests with PLUMED driver
 
-bash ../plumed_interfaces/tests/test_NaCl.sh gnn
-bash ../plumed_interfaces/tests/test_NaCl.sh gnn-kbias
+cd aux
+bash ../plumed_interfaces/tests/driver_alanine.sh descriptors
+bash ../plumed_interfaces/tests/driver_alanine.sh descriptors-kbias
+bash ../plumed_interfaces/tests/driver_alanine.sh gnn
+bash ../plumed_interfaces/tests/driver_alanine.sh gnn-kbias
+
+bash ../plumed_interfaces/tests/driver_NaCl.sh gnn
+bash ../plumed_interfaces/tests/driver_NaCl.sh gnn-kbias
 ```
 
 #### Alanine test templates
