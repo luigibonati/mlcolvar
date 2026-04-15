@@ -26,17 +26,17 @@ This folder also provides a few sets of test inputs for alanine dipeptide and th
 
 ## Test inputs
 
-The `test_inputs` folder contains example folders for two simple systems (alanine and NaCl) that can be used to test the available interfaces and possible modifications.
+The `tests` folder contains example folders for two simple systems (alanine and NaCl) that can be used to test the available interfaces and possible modifications.
 Two run scripts are provided for the two systems as example:
 
-- `test_inputs/test_alanine.sh`
+- `tests/test_alanine.sh`
   - Launches alanine test runs.
   - Supported modes: `descriptors`, `descriptors-kbias`, `gnn`, `gnn-kbias`.
-  - Chooses the corresponding test template from `test_inputs/alanine/descriptor_based` or `test_inputs/alanine/gnn_based`.
-- `test_inputs/test_NaCl.sh`
+  - Chooses the corresponding test template from `tests/alanine/descriptor_based` or `tests/alanine/gnn_based`.
+- `tests/test_NaCl.sh`
   - Launches the NaCl test run.
   - Supported modes: `gnn`, `gnn-kbias`.
-  - Uses the `test_inputs/NaCl/gnn_based` template.
+  - Uses the `tests/NaCl/gnn_based` template.
 
 ### Notes
 
@@ -50,30 +50,30 @@ Two run scripts are provided for the two systems as example:
 1. Make sure PLUMED is installed and built with the required `libtorch` support.
 2. \[For gnn-based\] Install/activate/locate the Python environment that provides `mdtraj`.
 3. Adjust the environment-specific paths in the test scripts:
-   - `test_inputs/test_alanine.sh`
-   - `test_inputs/test_NaCl.sh`
+   - `tests/test_alanine.sh`
+   - `tests/test_NaCl.sh`
 
 4. Run the desired test script from a folder within the mlcolvar root folder (e.g., mlcolvar/aux, which is ignored by git):
 
 ```bash
 cd aux
-bash ../plumed_interfaces/test_inputs/test_alanine.sh descriptors
-bash ../plumed_interfaces/test_inputs/test_alanine.sh descriptors-kbias
-bash ../plumed_interfaces/test_inputs/test_alanine.sh gnn
-bash ../plumed_interfaces/test_inputs/test_alanine.sh gnn-kbias
+bash ../plumed_interfaces/tests/test_alanine.sh descriptors
+bash ../plumed_interfaces/tests/test_alanine.sh descriptors-kbias
+bash ../plumed_interfaces/tests/test_alanine.sh gnn
+bash ../plumed_interfaces/tests/test_alanine.sh gnn-kbias
 
-bash ../plumed_interfaces/test_inputs/test_NaCl.sh gnn
-bash ../plumed_interfaces/test_inputs/test_NaCl.sh gnn-kbias
+bash ../plumed_interfaces/tests/test_NaCl.sh gnn
+bash ../plumed_interfaces/tests/test_NaCl.sh gnn-kbias
 ```
 
 #### Alanine test templates
 
-- `test_inputs/alanine/descriptor_based`
+- `tests/alanine/descriptor_based`
   - `plumed_PytorchModel.dat`
   - `plumed_PytorchKolmogorovBias.dat`
   - `model.pt`
   - `stateA.tpr`
-- `test_inputs/alanine/gnn_based`
+- `tests/alanine/gnn_based`
   - `plumed_PytorchModelGNN.dat`
   - `plumed_PytorchKolmogorovBiasGNN.dat`
   - `model_q.pt`
@@ -87,7 +87,7 @@ bash ../plumed_interfaces/test_inputs/test_NaCl.sh gnn-kbias
 
 #### NaCl test templates
 
-- `test_inputs/NaCl/gnn_based`
+- `tests/NaCl/gnn_based`
   - `plumed_PytorchModelGNN.dat`
   - `plumed_PytorchKolmogorovBiasGNN.dat`
   - `plumed_unbiased.dat`

@@ -52,15 +52,15 @@ echo folder $FOLDER_NAME
 
 # copy template folder and move inside
 if [ "$mode" = "descriptors" ] || [ "$mode" = "descriptors-kbias" ]; then
-    cp -r ../plumed_interfaces/test_inputs/alanine/descriptor_based $FOLDER_NAME
+    cp -r ../plumed_interfaces/tests/alanine/descriptor_based $FOLDER_NAME
 elif [ "$mode" = "gnn" ] || [ "$mode" = "gnn-kbias" ]; then
-    cp -r ../plumed_interfaces/test_inputs/alanine/gnn_based $FOLDER_NAME
+    cp -r ../plumed_interfaces/tests/alanine/gnn_based $FOLDER_NAME
 else
     echo "Invalid mode. Use 'descriptors', 'descriptors-kbias', 'gnn' or 'gnn-kbias'."
     exit 1
 fi
 cd $FOLDER_NAME
-cp ../../plumed_interfaces/test_inputs/alanine/data/* .
+cp ../../plumed_interfaces/tests/alanine/data/* .
 
 
 if [ $mode = "descriptors" ]; then

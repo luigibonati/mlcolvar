@@ -50,9 +50,9 @@ rm -r $FOLDER_NAME
 echo folder $FOLDER_NAME
 
 # copy template folder and move inside
-cp -r ../plumed_interfaces/test_inputs/NaCl/gnn_based $FOLDER_NAME
+cp -r ../plumed_interfaces/tests/NaCl/gnn_based $FOLDER_NAME
 cd $FOLDER_NAME
-cp ../../plumed_interfaces/test_inputs/NaCl/data/* .
+cp ../../plumed_interfaces/tests/NaCl/data/* .
 
 
 if [ $mode == "gnn" ]; then
