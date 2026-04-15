@@ -80,7 +80,10 @@ else
     exit 1
 fi
 
-# update phyton path
+# remove useless input files
+rm plumed_*
+
+# update python path
 sed -i "s|PYTHON_BIN=/path/to/python/with/mdtraj|PYTHON_BIN=$PYTHON_PATH|g" plumed.dat
 
 # =====================================================================================

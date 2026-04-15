@@ -71,13 +71,13 @@ bash ../plumed_interfaces/test_inputs/test_NaCl.sh gnn-kbias
 - `test_inputs/alanine/descriptor_based`
   - `plumed_PytorchModel.dat`
   - `plumed_PytorchKolmogorovBias.dat`
-  - `model_z.pt`
+  - `model.pt`
   - `stateA.tpr`
 - `test_inputs/alanine/gnn_based`
   - `plumed_PytorchModelGNN.dat`
   - `plumed_PytorchKolmogorovBiasGNN.dat`
   - `model_q.pt`
-  - `model_z.pt`
+  - `model.pt`
   - `ref.pdb`
   - `stateA.tpr`
   - `topolvac.top`
@@ -91,7 +91,7 @@ bash ../plumed_interfaces/test_inputs/test_NaCl.sh gnn-kbias
   - `plumed_PytorchModelGNN.dat`
   - `plumed_PytorchKolmogorovBiasGNN.dat`
   - `plumed_unbiased.dat`
-  - `model_z.pt`
+  - `model.pt`
   - `NaCl.pdb`
   - `NaCl_216wat_bound.data`
   - `NaCl_216wat_unbound.data`
