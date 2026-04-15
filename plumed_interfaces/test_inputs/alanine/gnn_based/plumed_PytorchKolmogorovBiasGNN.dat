@@ -63,7 +63,7 @@ x45: DISTANCE ATOMS=17,19
 
 PYTORCH_KOLMOGOROV_BIAS_GNN ...
   SYSTEM_SELECTION=sys
-  MODEL=model_z.pt # use z model
+  MODEL=model.pt # use z model
   STRUCTURE=ref.pdb
   LABEL=gnn
   NL_STRIDE=1
@@ -72,13 +72,11 @@ PYTORCH_KOLMOGOROV_BIAS_GNN ...
   LAMBDA=1
 ... PYTORCH_KOLMOGOROV_BIAS_GNN
 
-# apply kolmogorov bias
 BIASVALUE ARG=gnn.kbias
 
-# apply OPES on z
 opes: OPES_METAD ARG=gnn.z PACE=500 BARRIER=30 TEMP=300
 
-PRINT FMT=%g STRIDE=500 FILE=COLVAR ARG=gnn.*,phi,psi
+PRINT FMT=%g STRIDE=500 FILE=COLVAR ARG=gnn.*
 
 ENDPLUMED
 

@@ -28,14 +28,13 @@ KAPPA=2000.0
 PYTORCH_GNN ...
   SYSTEM_SELECTION=sys
   ENVIRONMENT_SELECTION=env
-  MODEL=model_z.pt
+  MODEL=model.pt
   STRUCTURE=NaCl.pdb
   LABEL=gnn
   NL_STRIDE=100
   BUFFER=3.0
 ... PYTORCH_GNN
 
-# define OPES calculation
 opes: OPES_METAD ...
   ARG=gnn.node-0
   PACE=500
@@ -44,6 +43,5 @@ opes: OPES_METAD ...
   TEMP=300
 ...
 
-# print the values on a file colvar.dat
 PRINT ARG=dist,coordNa,gnn.* STRIDE=100 FILE=colvar.dat
 

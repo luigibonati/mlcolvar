@@ -28,7 +28,7 @@ KAPPA=2000.0
 PYTORCH_KOLMOGOROV_BIAS_GNN ...
   SYSTEM_SELECTION=sys
   ENVIRONMENT_SELECTION=env
-  MODEL=model_z.pt # use z model
+  MODEL=model.pt # use z model
   STRUCTURE=NaCl.pdb
   LABEL=gnn
   NL_STRIDE=1
@@ -38,10 +38,8 @@ PYTORCH_KOLMOGOROV_BIAS_GNN ...
   LAMBDA=1
 ... PYTORCH_KOLMOGOROV_BIAS_GNN
 
-# apply kolmogorov bias
 BIASVALUE ARG=gnn.kbias
 
-# define OPES calculation
 opes: OPES_METAD ...
   ARG=gnn.z
   PACE=500
@@ -50,6 +48,5 @@ opes: OPES_METAD ...
   TEMP=300
 ...
 
-# print the values on a file colvar.dat
 PRINT ARG=dist,coordNa,gnn.* STRIDE=100 FILE=colvar.dat
 
