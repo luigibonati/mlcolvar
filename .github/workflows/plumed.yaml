@@ -65,7 +65,7 @@ jobs:
           echo "files in directory: $(ls)"
 
           mkdir build
-          ./configure --prefix=$PWD/build --enable-libtorch
+          ./configure --prefix=$PWD/build --enable-libtorch --enable-modules=+pytorch
           make -j 8
           make -j 8 install 
       
@@ -107,4 +107,19 @@ jobs:
 
       - name: Test plumed interfaces
         run: |
-          echo "Here we have to do some tests folks :D"
+          echo "pwd : $PWD"
+
+          echo "files in directory: $(ls)"
+
+          source plumed-$PLUMED_VER/sourceme.sh
+
+          mkdir plumed_test
+          cd plumed_test
+          
+          bash ../plumed_interfaces/tests/driver_alanine.sh descriptors
+          bash ../plumed_interfaces/tests/driver_alanine.sh descriptors-kbias
+          bash ../plumed_interfaces/tests/driver_alanine.sh gnn
+          bash ../plumed_interfaces/tests/driver_alanine.sh gnn-kbias
+
+          bash ../plumed_interfaces/tests/driver_NaCl.sh gnn
+          bash ../plumed_interfaces/tests/driver_NaCl.sh gnn-kbias
