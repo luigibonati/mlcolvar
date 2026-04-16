@@ -10,10 +10,10 @@ mode=$1
 
 # define path to sourceme.sh files for plumed
 # this need to be edited by the user before running the script
-PLUMED_SOURCE="/home/etrizio@iit.local/Bin/dev/plumed2-2.10b/sourceme.sh" #"/path/to/plumed/sourceme.sh"
+PLUMED_SOURCE="/path/to/plumed/sourceme.sh"
 
 # define python path with mdraj
-PYTHON_PATH="/home/etrizio@iit.local/Bin/miniconda3/envs/graph_mlcolvar_test_2.5/bin/python"
+PYTHON_PATH="/path/to/python/with/mdtraj"
 
 # =====================================================================================
 # ======================================= CHECKS ======================================

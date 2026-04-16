@@ -48,6 +48,7 @@ jobs:
           echo "CPPFLAGS=$PIP_CPPFLAGS $CPPFLAGS" >> $GITHUB_ENV
       
       - name: Get plumed
+        # get plumed src from github and unpack
         run: |
           PLUMED_VER="2.10.0"
           echo "PLUMED_VER=$PLUMED_VER" >> $GITHUB_ENV
@@ -55,6 +56,7 @@ jobs:
           tar -xzf plumed-src-$PLUMED_VER.tgz
         
       - name: Configure and make plumed
+        # configure and make plumed to enable libtorch and pytorch
         run: |
           echo "pwd : $PWD"
           echo "LDFLAGS : $LDFLAGS"
@@ -70,6 +72,7 @@ jobs:
           make -j 8 install 
       
       - name: Create sourceme.sh plumed
+        # edit sourceme.sh file to load all the correct dependencies
         run: |
           echo "pwd : $PWD"
           cd plumed-$PLUMED_VER
@@ -86,7 +89,7 @@ jobs:
           export PLUMED_VIMPATH="$PLUMED_DIR/vim"
           export PYTHONPATH="$PLUMED_DIR/python:$PYTHONPATH"
           export PKG_CONFIG_PATH="$PLUMED_DIR/build/lib/pkgconfig:$PKG_CONFIG_PATH"
-          """ >> sourceme.sh
+          """ > sourceme.sh
 
           head sourceme.sh -n 20
 
@@ -94,6 +97,7 @@ jobs:
 
           echo $(which plumed)
       - name: Check installation
+        # check if libtorch and pytorch have been successfully enabled
         run: |
           echo "pwd : $PWD"
           cd plumed-$PLUMED_VER
@@ -106,20 +110,38 @@ jobs:
           plumed config module pytorch
 
       - name: Test plumed interfaces
+      # run tests using plumed driver
         run: |
           echo "pwd : $PWD"
 
           echo "files in directory: $(ls)"
 
           source plumed-$PLUMED_VER/sourceme.sh
+          
+          # define paths for plumed sourceme.sh and python with mdtraj
+          PLUMED_SOURCE_PATH="$PWD/plumed-$PLUMED_VER/sourceme.sh"
+          PYTHON_PATH="$(which python)"
 
+          echo "plumed_source_path : $PLUMED_SOURCE_PATH"
+          echo "python_path : $PYTHON_PATH"
+
+          # edit the test scripts wiht the correct paths
+          sed -i "s|PLUMED_SOURCE="/path/to/plumed/sourceme.sh"|PLUMED_SOURCE=$PLUMED_SOURCE_PATH|g" driver_alanine.sh
+          sed -i "s|PYTHON_PATH="/path/to/python/with/mdtraj"|PYTHON_PATH=$PYTHON_PATH|g" driver_alanine.sh
+
+          sed -i "s|PLUMED_SOURCE="/path/to/plumed/sourceme.sh"|PLUMED_SOURCE=$PLUMED_SOURCE_PATH|g" driver_NaCl.sh
+          sed -i "s|PYTHON_PATH="/path/to/python/with/mdtraj"|PYTHON_PATH=$PYTHON_PATH|g" driver_NaCl.sh
+
+          # create folder directory
           mkdir plumed_test
           cd plumed_test
           
+          # run test alanine
           bash ../plumed_interfaces/tests/driver_alanine.sh descriptors
           bash ../plumed_interfaces/tests/driver_alanine.sh descriptors-kbias
           bash ../plumed_interfaces/tests/driver_alanine.sh gnn
           bash ../plumed_interfaces/tests/driver_alanine.sh gnn-kbias
-
+          
+          # run tests NaCl
           bash ../plumed_interfaces/tests/driver_NaCl.sh gnn
           bash ../plumed_interfaces/tests/driver_NaCl.sh gnn-kbias
