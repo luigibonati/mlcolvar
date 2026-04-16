@@ -125,12 +125,12 @@ jobs:
           echo "plumed_source_path : $PLUMED_SOURCE_PATH"
           echo "python_path : $PYTHON_PATH"
 
-          # edit the test scripts wiht the correct paths
-          sed -i "s|PLUMED_SOURCE="/path/to/plumed/sourceme.sh"|PLUMED_SOURCE=$PLUMED_SOURCE_PATH|g" plumed_interfaces/tests/driver_alanine.sh
-          sed -i "s|PYTHON_PATH="/path/to/python/with/mdtraj"|PYTHON_PATH=$PYTHON_PATH|g" plumed_interfaces/tests/driver_alanine.sh
+          # edit the test scripts with the correct paths
+          sed -i "s|PLUMED_SOURCE=\"/path/to/plumed/sourceme.sh\"|PLUMED_SOURCE=\"$PLUMED_SOURCE_PATH\"|g" plumed_interfaces/tests/driver_alanine.sh
+          sed -i "s|PYTHON_PATH=\"/path/to/python/with/mdtraj\"|PYTHON_PATH=\"$PYTHON_PATH\"|g" plumed_interfaces/tests/driver_alanine.sh
 
-          sed -i "s|PLUMED_SOURCE="/path/to/plumed/sourceme.sh"|PLUMED_SOURCE=$PLUMED_SOURCE_PATH|g" plumed_interfaces/tests/driver_NaCl.sh
-          sed -i "s|PYTHON_PATH="/path/to/python/with/mdtraj"|PYTHON_PATH=$PYTHON_PATH|g" plumed_interfaces/tests/driver_NaCl.sh
+          sed -i "s|PLUMED_SOURCE=\"/path/to/plumed/sourceme.sh\"|PLUMED_SOURCE=\"$PLUMED_SOURCE_PATH\"|g" plumed_interfaces/tests/driver_NaCl.sh
+          sed -i "s|PYTHON_PATH=\"/path/to/python/with/mdtraj\"|PYTHON_PATH=\"$PYTHON_PATH\"|g" plumed_interfaces/tests/driver_NaCl.sh
 
           # create folder directory
           mkdir plumed_test
