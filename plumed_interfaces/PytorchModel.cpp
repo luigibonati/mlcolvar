@@ -193,8 +193,8 @@ PytorchModel::PytorchModel(const ActionOptions&ao):
   log.printf("  Number of input: %d \n",_n_in);
   log.printf("  Number of outputs: %d \n",_n_out);
   log.printf("  Bibliography: ");
-  log<<plumed.cite("Bonati, Trizio, Rizzi and Parrinello, J. Chem. Phys. 159, 014801 (2023)");
   log<<plumed.cite("Bonati, Rizzi and Parrinello, J. Phys. Chem. Lett. 11, 2998-3004 (2020)");
+  log<<plumed.cite("Bonati, Trizio, Rizzi and Parrinello, J. Chem. Phys. 159, 014801 (2023)");
   log.printf("\n");
 
 }

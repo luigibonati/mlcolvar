@@ -1,86 +1,86 @@
-# name: CI
+name: CI
 
-# on:
-#   # GitHub has started calling new repo's first branch "main" https://github.com/github/renaming
-#   # The cookiecutter uses the "--initial-branch" flag when it runs git-init
-#   push:
-#     branches:
-#       - "main"
-#       - "release/2.0"
-#   pull_request:
-#     branches:
-#       - "main"
-#       - "release/2.0"
-#   schedule:
-#     # Weekly tests run on main by default:
-#     #   Scheduled workflows run on the latest commit on the default or base branch.
-#     #   (from https://help.github.com/en/actions/reference/events-that-trigger-workflows#scheduled-events-schedule)
-#     - cron: "0 2 * * 1"
+on:
+  # GitHub has started calling new repo's first branch "main" https://github.com/github/renaming
+  # The cookiecutter uses the "--initial-branch" flag when it runs git-init
+  push:
+    branches:
+      - "main"
+      - "release/2.0"
+  pull_request:
+    branches:
+      - "main"
+      - "release/2.0"
+  schedule:
+    # Weekly tests run on main by default:
+    #   Scheduled workflows run on the latest commit on the default or base branch.
+    #   (from https://help.github.com/en/actions/reference/events-that-trigger-workflows#scheduled-events-schedule)
+    - cron: "0 2 * * 1"
 
-# jobs:
-#   test:
-#     name: Test on ${{ matrix.os }}, Python ${{ matrix.python-version }}
-#     runs-on: ${{ matrix.os }}
-#     strategy:
-#       matrix:
-#         os: [ubuntu-latest, windows-latest]      
-#         python-version: ["3.11", "3.12", "3.13"]
-#         include:
-#           - python-version: "3.11"
-#             os: macos-latest
-#           - python-version: "3.12"
-#             os: macos-latest
+jobs:
+  test:
+    name: Test on ${{ matrix.os }}, Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]      
+        python-version: ["3.11", "3.12", "3.13"]
+        include:
+          - python-version: "3.11"
+            os: macos-latest
+          - python-version: "3.12"
+            os: macos-latest
 
-#     steps:
-#       - uses: actions/checkout@v4
+    steps:
+      - uses: actions/checkout@v4
 
-#       - name: Additional info about the build
-#         shell: bash
-#         run: |
-#           uname -a
-#           df -h
-#           ulimit -a
-#       # this may be removed in the future when MPS issues will be solved in all torch versions
-#       # check https://github.com/pytorch/pytorch/issues/77764
-#       - name: Add MPS fallback [macOS only]
-#         if: contains( matrix.os, 'macOS' )
-#         shell: bash
-#         run: |
-#           echo "PYTORCH_ENABLE_MPS_FALLBACK=1" >> $GITHUB_ENV     
+      - name: Additional info about the build
+        shell: bash
+        run: |
+          uname -a
+          df -h
+          ulimit -a
+      # this may be removed in the future when MPS issues will be solved in all torch versions
+      # check https://github.com/pytorch/pytorch/issues/77764
+      - name: Add MPS fallback [macOS only]
+        if: contains( matrix.os, 'macOS' )
+        shell: bash
+        run: |
+          echo "PYTORCH_ENABLE_MPS_FALLBACK=1" >> $GITHUB_ENV     
 
-#       - name: Set up Python
-#         uses: actions/setup-python@v5
-#         with:
-#           python-version: ${{ matrix.python-version }}
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
       
-#       - name: Upgrade pip
-#         run: python -m pip install -U pip
+      - name: Upgrade pip
+        run: python -m pip install -U pip
 
-#       - name: Install package
-#         # conda setup requires this special shell
-#         shell: bash -l {0}
-#         run: |
-#           python -m pip install -e .[test]
-#           pip list
+      - name: Install package
+        # conda setup requires this special shell
+        shell: bash -l {0}
+        run: |
+          python -m pip install -e .[test]
+          pip list
 
-#       - name: Run tests
-#         # conda setup requires this special shell
-#         shell: bash -l {0}
-#         run: |
-#           pytest -v --pyargs mlcolvar.tests --cov=mlcolvar --cov-report=xml --color=yes
+      - name: Run tests
+        # conda setup requires this special shell
+        shell: bash -l {0}
+        run: |
+          pytest -v --pyargs mlcolvar.tests --cov=mlcolvar --cov-report=xml --color=yes
 
-#       - name: Run notebook tests
-#         # conda setup requires this special shell
-#         shell: bash -l {0}
-#         if: contains( matrix.os, 'ubuntu' )
-#         run: |
-#           pytest -v --nbmake docs/notebooks/ --ignore=docs/notebooks/tutorials/data/ --cov=mlcolvar --cov-append --cov-report=xml --color=yes 
+      - name: Run notebook tests
+        # conda setup requires this special shell
+        shell: bash -l {0}
+        if: contains( matrix.os, 'ubuntu' )
+        run: |
+          pytest -v --nbmake docs/notebooks/ --ignore=docs/notebooks/tutorials/data/ --cov=mlcolvar --cov-append --cov-report=xml --color=yes 
 
-#       - name: CodeCov
-#         if: contains( matrix.os, 'ubuntu' )
-#         uses: codecov/codecov-action@v5
-#         with:
-#           token: ${{ secrets.CODECOV_TOKEN }}
-#           files: ./coverage.xml
-#           flags: codecov
-#           name: codecov-${{ matrix.os }}-py${{ matrix.python-version }}
+      - name: CodeCov
+        if: contains( matrix.os, 'ubuntu' )
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.xml
+          flags: codecov
+          name: codecov-${{ matrix.os }}-py${{ matrix.python-version }}

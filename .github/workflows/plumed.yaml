@@ -58,14 +58,7 @@ jobs:
       - name: Configure and make plumed
         # configure and make plumed to enable libtorch and pytorch
         run: |
-          echo "pwd : $PWD"
-          echo "LDFLAGS : $LDFLAGS"
-          echo "CPPFLAGS : $CPPFLAGS"
-          echo "plumed version : $PLUMED_VER"
           cd plumed-$PLUMED_VER
-          echo "pwd after cd: $PWD"
-          echo "files in directory: $(ls)"
-
           mkdir build
           ./configure --prefix=$PWD/build --enable-libtorch --enable-modules=+pytorch
           make -j 8
@@ -74,11 +67,8 @@ jobs:
       - name: Create sourceme.sh plumed
         # edit sourceme.sh file to load all the correct dependencies
         run: |
-          echo "pwd : $PWD"
           cd plumed-$PLUMED_VER
-          echo "pwd after cd: $PWD"
-          echo "files in directory: $(ls)"
-
+      
           PLUMED_DIR=$PWD
           echo """export PLUMED_DIR=$PLUMED_DIR
 
@@ -96,27 +86,20 @@ jobs:
           source sourceme.sh
 
           echo $(which plumed)
+
       - name: Check installation
         # check if libtorch and pytorch have been successfully enabled
         run: |
-          echo "pwd : $PWD"
           cd plumed-$PLUMED_VER
-          echo "pwd after cd: $PWD"
-          echo "files in directory: $(ls)"
-
+          
           source sourceme.sh
           
           plumed config has libtorch
           plumed config module pytorch
 
       - name: Setup plumed tests
+        # edit plumed and python paths in the test scripts
         run: |
-          echo "pwd : $PWD"
-          echo "path : $PATH"
-          echo "files in directory: $(ls)"
-
-          source plumed-$PLUMED_VER/sourceme.sh
-          
           # define paths for plumed sourceme.sh and python with mdtraj
           PLUMED_SOURCE_PATH="$PWD/plumed-$PLUMED_VER/sourceme.sh"
           PYTHON_PATH="$(which python)"
@@ -134,7 +117,8 @@ jobs:
           # create folder directory
           mkdir plumed_test
           
-          
+      # the tests are separated to make it easier to find the results in the compilation outputs
+      # each step need to move to the plumed_test directory
       - name: Test alanine descriptors
         run: |
           cd plumed_test
