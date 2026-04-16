@@ -109,43 +109,6 @@ jobs:
           plumed config has libtorch
           plumed config module pytorch
 
-      - name: Test plumed interfaces
-      # run tests using plumed driver
-        run: |
-          echo "pwd : $PWD"
-          echo "path : $PATH"
-          echo "files in directory: $(ls)"
-
-          source plumed-$PLUMED_VER/sourceme.sh
-          
-          # define paths for plumed sourceme.sh and python with mdtraj
-          PLUMED_SOURCE_PATH="$PWD/plumed-$PLUMED_VER/sourceme.sh"
-          PYTHON_PATH="$(which python)"
-
-          echo "plumed_source_path : $PLUMED_SOURCE_PATH"
-          echo "python_path : $PYTHON_PATH"
-
-          # edit the test scripts with the correct paths
-          sed -i "s|PLUMED_SOURCE=\"/path/to/plumed/sourceme.sh\"|PLUMED_SOURCE=\"$PLUMED_SOURCE_PATH\"|g" plumed_interfaces/tests/driver_alanine.sh
-          sed -i "s|PYTHON_PATH=\"/path/to/python/with/mdtraj\"|PYTHON_PATH=\"$PYTHON_PATH\"|g" plumed_interfaces/tests/driver_alanine.sh
-
-          sed -i "s|PLUMED_SOURCE=\"/path/to/plumed/sourceme.sh\"|PLUMED_SOURCE=\"$PLUMED_SOURCE_PATH\"|g" plumed_interfaces/tests/driver_NaCl.sh
-          sed -i "s|PYTHON_PATH=\"/path/to/python/with/mdtraj\"|PYTHON_PATH=\"$PYTHON_PATH\"|g" plumed_interfaces/tests/driver_NaCl.sh
-
-          # create folder directory
-          mkdir plumed_test
-          cd plumed_test
-          
-          # run test alanine
-          bash ../plumed_interfaces/tests/driver_alanine.sh descriptors
-          bash ../plumed_interfaces/tests/driver_alanine.sh descriptors-kbias
-          bash ../plumed_interfaces/tests/driver_alanine.sh gnn
-          bash ../plumed_interfaces/tests/driver_alanine.sh gnn-kbias
-          
-          # run tests NaCl
-          bash ../plumed_interfaces/tests/driver_NaCl.sh gnn
-          bash ../plumed_interfaces/tests/driver_NaCl.sh gnn-kbias
-
       - name: Setup plumed tests
         run: |
           echo "pwd : $PWD"
