@@ -102,7 +102,6 @@ jobs:
 
           source sourceme.sh
           
-          plumed --version
           plumed config has libtorch
           plumed config module pytorch
 
