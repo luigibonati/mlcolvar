@@ -53,10 +53,16 @@ jobs:
           echo "PLUMED_VER=$PLUMED_VER" >> $GITHUB_ENV
           wget https://github.com/plumed/plumed2/releases/download/v$PLUMED_VER/plumed-src-$PLUMED_VER.tgz
           tar -xzf plumed-src-$PLUMED_VER.tgz
-          cd plumed-$PLUMED_VER
         
       - name: Configure and make plumed
         run: |
+          echo "pwd : $PWD"
+          echo "LDFLAGS : $LDFLAGS"
+          echo "CPPFLAGS : $CPPFLAGS"
+          echo "plumed version : $PLUMED_VER"
+          cd plumed-$PLUMED_VER
+          echo "pwd after cd: $PWD"
+          echo "files in directory: $(ls)"
           mkdir build
           ./configure --prefix=$PWD/build --enable-libtorch
           make -j 4
