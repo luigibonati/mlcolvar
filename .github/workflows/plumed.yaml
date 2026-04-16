@@ -1,4 +1,4 @@
-name: CI
+name: Plumed
 
 on:
   # GitHub has started calling new repo's first branch "main" https://github.com/github/renaming
