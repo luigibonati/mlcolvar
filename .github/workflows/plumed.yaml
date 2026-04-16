@@ -63,15 +63,21 @@ jobs:
           cd plumed-$PLUMED_VER
           echo "pwd after cd: $PWD"
           echo "files in directory: $(ls)"
+
           mkdir build
           ./configure --prefix=$PWD/build --enable-libtorch
-          make -j 4
-          make install 
+          make -j 8
+          make -j 8 install 
       
-      - name: Source plumed
+      - name: Create sourceme.sh plumed
         run: |
+          echo "pwd : $PWD"
+          cd plumed-$PLUMED_VER
+          echo "pwd after cd: $PWD"
+          echo "files in directory: $(ls)"
+
           PLUMED_DIR=$PWD
-          echo """export PLUMED_DIR="$PLUMED_DIR"
+          echo """export PLUMED_DIR=$PLUMED_DIR
 
           export PATH="$PLUMED_DIR/build/bin/:$PATH"
           export LIBRARY_PATH="$PLUMED_DIR/build/lib/:$LIBRARY_PATH"
@@ -82,9 +88,20 @@ jobs:
           export PKG_CONFIG_PATH="$PLUMED_DIR/build/lib/pkgconfig:$PKG_CONFIG_PATH"
           """ >> sourceme.sh
 
+          head sourceme.sh -n 20
+
           source sourceme.sh
+
+          echo $(which plumed)
       - name: Check installation
         run: |
+          echo "pwd : $PWD"
+          cd plumed-$PLUMED_VER
+          echo "pwd after cd: $PWD"
+          echo "files in directory: $(ls)"
+
+          source sourceme.sh
+          
           plumed --version
           plumed config has libtorch
           plumed config module pytorch
