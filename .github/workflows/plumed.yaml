@@ -145,3 +145,59 @@ jobs:
           # run tests NaCl
           bash ../plumed_interfaces/tests/driver_NaCl.sh gnn
           bash ../plumed_interfaces/tests/driver_NaCl.sh gnn-kbias
+
+      - name: Setup plumed tests
+        run: |
+          echo "pwd : $PWD"
+          echo "path : $PATH"
+          echo "files in directory: $(ls)"
+
+          source plumed-$PLUMED_VER/sourceme.sh
+          
+          # define paths for plumed sourceme.sh and python with mdtraj
+          PLUMED_SOURCE_PATH="$PWD/plumed-$PLUMED_VER/sourceme.sh"
+          PYTHON_PATH="$(which python)"
+
+          echo "plumed_source_path : $PLUMED_SOURCE_PATH"
+          echo "python_path : $PYTHON_PATH"
+
+          # edit the test scripts with the correct paths
+          sed -i "s|PLUMED_SOURCE=\"/path/to/plumed/sourceme.sh\"|PLUMED_SOURCE=\"$PLUMED_SOURCE_PATH\"|g" plumed_interfaces/tests/driver_alanine.sh
+          sed -i "s|PYTHON_PATH=\"/path/to/python/with/mdtraj\"|PYTHON_PATH=\"$PYTHON_PATH\"|g" plumed_interfaces/tests/driver_alanine.sh
+
+          sed -i "s|PLUMED_SOURCE=\"/path/to/plumed/sourceme.sh\"|PLUMED_SOURCE=\"$PLUMED_SOURCE_PATH\"|g" plumed_interfaces/tests/driver_NaCl.sh
+          sed -i "s|PYTHON_PATH=\"/path/to/python/with/mdtraj\"|PYTHON_PATH=\"$PYTHON_PATH\"|g" plumed_interfaces/tests/driver_NaCl.sh
+
+          # create folder directory
+          mkdir plumed_test
+          
+          
+      - name: Test alanine descriptors
+        run: |
+          cd plumed_test
+          bash ../plumed_interfaces/tests/driver_alanine.sh descriptors
+      
+      - name: Test alanine descriptors-kbias
+        run: |
+          cd plumed_test
+          bash ../plumed_interfaces/tests/driver_alanine.sh descriptors-kbias
+          
+      - name: Test alanine gnn
+        run: |
+          cd plumed_test    
+          bash ../plumed_interfaces/tests/driver_alanine.sh gnn
+      
+      - name: Test alanine gnn-kbias
+        run: |
+          cd plumed_test
+          bash ../plumed_interfaces/tests/driver_alanine.sh gnn-kbias
+          
+      - name: Test NaCl gnn
+        run: |
+          cd plumed_test
+          bash ../plumed_interfaces/tests/driver_NaCl.sh gnn
+      
+      - name: Test NaCl gnn-kbias
+        run: |
+          cd plumed_test
+          bash ../plumed_interfaces/tests/driver_NaCl.sh gnn-kbias

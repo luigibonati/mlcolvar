@@ -99,6 +99,11 @@ plumed driver < plumed.dat --timestep 1 --ixtc traj.xtc
 # check if output matches ref
 echo ""
 echo "Comparing generated COLVAR with reference COLVAR..."
+
+echo "\n\n\n\n"
+head -n 30 COLVAR
+echo "\n\n\n\n"
+
 if cmp -s COLVAR REF_COLVAR; then
   echo "[TEST PASSED] Generated COLVAR file matches the reference file"
   cd ../.. 
