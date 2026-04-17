@@ -1,18 +1,13 @@
 name: Plumed
 
 on:
-  # GitHub has started calling new repo's first branch "main" https://github.com/github/renaming
-  # The cookiecutter uses the "--initial-branch" flag when it runs git-init
   push:
     branches:
-      - "release/2.0"
+      - "release/2.0" # TODO, this need to be changed upon new release
   pull_request:
     branches:
-      - "release/2.0"
+      - "release/2.0" # TODO, this need to be changed upon new release
   schedule:
-    # Weekly tests run on main by default:
-    #   Scheduled workflows run on the latest commit on the default or base branch.
-    #   (from https://help.github.com/en/actions/reference/events-that-trigger-workflows#scheduled-events-schedule)
     - cron: "0 2 * * 1"
 
 jobs:
@@ -85,7 +80,7 @@ jobs:
 
           source sourceme.sh
 
-          echo $(which plumed)
+          echo "plumed path: $(which plumed)"
 
       - name: Check installation
         # check if libtorch and pytorch have been successfully enabled

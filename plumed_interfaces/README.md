@@ -75,18 +75,18 @@ bash ../plumed_interfaces/tests/driver_NaCl.sh gnn-kbias
   - `confAvac.gro`
   - `gromppvac.mdp`
   - `topolvac.top`
-- `tests/alanine/data` (data for PLUMED driver tests)
+- `tests/alanine/driver_data` (data for PLUMED driver tests)
   - `COLVAR_descriptors`
   - `COLVAR_descriptors-kbias`
   - `COLVAR_gnn`
   - `COLVAR_gnn-kbias`
   - `traj_comp.xtc`
-- `tests/alanine/descriptor_based` (inputs for descriptor-based interfaces)
+- `tests/alanine/descriptor_based_inputs` (inputs for descriptor-based interfaces)
   - `plumed_PytorchModel.dat`
   - `plumed_PytorchKolmogorovBias.dat`
   - `model.pt`
   - `stateA.tpr`
-- `tests/alanine/gnn_based` (inputs for gnn-based interfaces)
+- `tests/alanine/gnn_based_inputs` (inputs for gnn-based interfaces)
   - `plumed_PytorchModelGNN.dat`
   - `plumed_PytorchKolmogorovBiasGNN.dat`
   - `model.pt`
@@ -95,11 +95,11 @@ bash ../plumed_interfaces/tests/driver_NaCl.sh gnn-kbias
 
 #### NaCl folder
 
-- `tests/NaCl/data` (data for PLUMED driver tests)
+- `tests/NaCl/driver_data` (data for PLUMED driver tests)
   - `COLVAR_gnn`
   - `COLVAR_gnn-kbias`
   - `traj.xtc`
-- `tests/NaCl/gnn_based` (inputs for gnn-based interfaces)
+- `tests/NaCl/gnn_based_inputs` (inputs for gnn-based interfaces)
   - `plumed_PytorchModelGNN.dat`
   - `plumed_PytorchKolmogorovBiasGNN.dat`
   - `model.pt`
