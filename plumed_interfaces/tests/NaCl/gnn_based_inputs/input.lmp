@@ -7,7 +7,7 @@ bond_style  harmonic                         # Uses an harmonic potential around
 angle_style harmonic                         # Uses an harmonic potential around an equilibrium value for angles
 
 # ------------------------------- Atom Definition Section -------------------
-read_data    "NaCl_216wat_unbound.data"           # Read from file the positions, masses, velocities, bonds and charges of the atoms
+read_data    "NaCl_216wat_bound.data"           # Read from file the positions, masses, velocities, bonds and charges of the atoms
 
 group wat type  1  2                         # Define a group for the water molecules (types 1=O, 2=H)
 
@@ -29,9 +29,9 @@ pair_coeff 4 4   0.0127850  4.8304528498     # Set Cl interaction parameter
 
 # The dump command is used to print output, here: atom-id, molecule-id, lammps-type, xyz coord, image-xyz (for PBC box)
 dump         1 all custom 100 traj.lammpstrj id mol type x y z ix iy iz
-# dump         2 all custom 100 traj.xyz id mol type x y z ix iy iz
-dump            2 all extxyz 100 traj.xyz
-dump_modify     2 append yes element O H Na Cl
+dump         2 all extxyz 100 traj.xyz
+dump_modify  2 append yes element O H Na Cl
+dump         3 all xtc 100 traj.xtc
 
 timestep     2.0                                       # fs
 

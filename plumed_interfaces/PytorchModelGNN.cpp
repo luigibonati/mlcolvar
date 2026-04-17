@@ -591,9 +591,8 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   log << "  Model architecture: \n";
   log << model_architecture;
   log.printf("  Bibliography: ");
-  log << plumed.cite("Zhang et al., J. Chem. Theory Comput. 20, 24, 10787–10797 (2024)");
   log << plumed.cite("Bonati, Trizio, Rizzi and Parrinello, J. Chem. Phys. 159, 014801 (2023)");
-  log << plumed.cite("Bonati, Rizzi and Parrinello, J. Phys. Chem. Lett. 11, 2998-3004 (2020)");
+  log << plumed.cite("Zhang et al., J. Chem. Theory Comput. 20, 24, 10787–10797 (2024)");
   log.printf("\n");
 }
 

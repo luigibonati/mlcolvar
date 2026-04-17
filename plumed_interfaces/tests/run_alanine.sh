@@ -65,9 +65,9 @@ echo folder $FOLDER_NAME
 
 # copy template folder and move inside
 if [ "$mode" = "descriptors" ] || [ "$mode" = "descriptors-kbias" ]; then
-    cp -r ../plumed_interfaces/test_inputs/alanine/descriptor_based $FOLDER_NAME
+    cp -r ../plumed_interfaces/tests/alanine/descriptor_based_inputs $FOLDER_NAME
 elif [ "$mode" = "gnn" ] || [ "$mode" = "gnn-kbias" ]; then
-    cp -r ../plumed_interfaces/test_inputs/alanine/gnn_based $FOLDER_NAME
+    cp -r ../plumed_interfaces/tests/alanine/gnn_based_inputs $FOLDER_NAME
 else
     echo "Invalid mode. Use 'descriptors', 'descriptors-kbias', 'gnn' or 'gnn-kbias'."
     exit 1
@@ -96,7 +96,10 @@ elif [ $mode = "gnn-kbias" ]; then
     mv plumed_PytorchKolmogorovBiasGNN.dat plumed.dat
 fi
 
-# update phyton path
+# remove useless input files
+rm plumed_*
+
+# update python path
 sed -i "s|PYTHON_BIN=/path/to/python/with/mdtraj|PYTHON_BIN=$PYTHON_PATH|g" plumed.dat
 
 # =====================================================================================
