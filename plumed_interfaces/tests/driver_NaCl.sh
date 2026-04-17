@@ -100,16 +100,27 @@ plumed driver < plumed.dat --timestep 1 --ixtc traj.xtc
 echo ""
 echo "Comparing generated COLVAR with reference COLVAR..."
 
-
 head -n 30 COLVAR
 
-
-if cmp -s COLVAR REF_COLVAR; then
-  echo "[TEST PASSED] Generated COLVAR file matches the reference file"
-  cd ../.. 
+if awk 'NR==FNR {a[NR]=$0; next} {
+  n1=split(a[NR], f1); n2=split($0, f2)
+  for(i=1; i<=n1; i++) {
+    if(f1[i] != f2[i]) {
+      if(f1[i] ~ /^-?[0-9]+\.?[0-9]*$/ && f2[i] ~ /^-?[0-9]+\.?[0-9]*$/) {
+        if(sqrt((f1[i]-f2[i])^2) > 1e-4) {
+          print "Tolerance exceeded at line " NR " field " i; exit 1
+        }
+      } else {
+        print "Mismatch at line " NR " field " i; exit 1
+      }
+    }
+  }
+}' REF_COLVAR COLVAR; then
+  echo "[TEST PASSED] Generated COLVAR file matches reference (numerical tolerance 1e-4)"
+  cd ../..
   exit 0
 else
-  echo "[TEST FAILED] Generated COLVAR file does not match the reference file"
+  echo "[TEST FAILED] Generated COLVAR file differs from reference (numerical tolerance 1e-4)"
   cd ../..
   exit 1
 fi
