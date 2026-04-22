@@ -124,10 +124,10 @@ class Generator(BaseCV):
             self.nn = FeedForward(self.layers, **options[o])
         else:
             self.nn = model
-        if self.nn.out_features != r:
-            raise ValueError ( 
-                f"The last layer of the neural network should have dimension {r}! Found {self.nn.out_features}."
-                )
+        #if self.nn.out_features != r:
+        #    raise ValueError ( 
+        #        f"The last layer of the neural network should have dimension {r}! Found {self.nn.out_features}."
+        #        )
         if self.softmax_postproc:
             self.postprocessing=Softmax_PostProc(r)
 
