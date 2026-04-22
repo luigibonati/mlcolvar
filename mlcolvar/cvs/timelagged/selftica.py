@@ -165,7 +165,7 @@ class SelfTICA(BaseCV):
 
                 # ===== Compute representations =====
                 f_t_list.append(self.forward_nn(x_t))
-                f_lag_list.append(self.forward_nn(x_lag, lagged=False))
+                f_lag_list.append(self.forward_nn(x_lag))
 
                 # ===== Append weights =====
                 w_t_list.append(w_t_batch)
@@ -185,11 +185,11 @@ class SelfTICA(BaseCV):
         )
 
         if update_optimal:
-            self._update_tica_params(eigvals, lag_time)
+            self._update_tica_params(lag_time)
         
         return eigvals.cpu().numpy(), eigvecs.cpu().numpy()
     
-    def _update_tica_params(self, eigvecs, lag_time):
+    def _update_tica_params(self, lag_time):
         """Update optimal TICA parameters for inference."""
         self.current_evecs = self.tica.evecs.clone()
         self.current_means = self.tica.mean.clone()
@@ -214,12 +214,13 @@ class SelfTICA(BaseCV):
 
         return x
     
-    def forward_nn(self, x: torch.Tensor, lagged: bool = False) -> torch.Tensor:
+    def forward_nn(self, x: torch.Tensor, predict: bool = False) -> torch.Tensor:
         if not self._override_model:
             if self.norm_in is not None:
                 x = self._apply_module(self.norm_in, x)
+        # Optionally apply predictor: z → P(z)
         x_enc = self._apply_module(self.nn, x)
-        if lagged:
+        if predict:
             x_enc = self.predictor(x_enc)
         return x_enc
 
@@ -255,16 +256,16 @@ class SelfTICA(BaseCV):
             w_lag = x_lag['weight']
             
         # =================forward====================
-        f_t = self.forward_nn(x_t)
-        f_lag = self.forward_nn(x_lag, lagged=True)
+        f_t = self.forward_nn(x_t, predict=True)
+        f_lag = self.forward_nn(x_lag)
         # ===================loss=====================
         loss = self.loss_fn(f_t, f_lag)
         # ===================tica=====================
         with torch.no_grad():
             loss_noreg = self.loss_fn.noreg(f_t, f_lag)
-            f_lag_nolin = self.forward_nn(x_lag, lagged=False)
+            f_t_nolin = self.forward_nn(x_t, predict=False)
             eigvals, _ = self.tica.compute(
-                data=[f_t, f_lag_nolin], weights=[w_t, w_lag], save_params=True
+                data=[f_t_nolin, f_lag], weights=[w_t, w_lag], save_params=True
             )
             self.current_evecs = self.tica.evecs.clone()
             self.current_means = self.tica.mean.clone()
