@@ -1,0 +1,145 @@
+name: Plumed
+
+on:
+  push:
+    branches:
+      - "release/2.0" # TODO, this need to be changed upon new release
+  pull_request:
+    branches:
+      - "release/2.0" # TODO, this need to be changed upon new release
+  schedule:
+    - cron: "0 2 * * 1"
+
+jobs:
+  plumed_interfaces:
+    name: Test plumed interfaces
+    runs-on: ubuntu-latest
+    env:
+      CC: gcc
+      CXX: g++
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      
+      - name: Upgrade pip
+        run: python -m pip install -U pip
+
+      - name: Install package
+        run: |
+          python -m pip install -e .[test]
+
+      - name: Configure libtorch flags
+        # we take the flags to point to the libtorch shipped with pytorch
+        run: |
+          PIP_CPPFLAGS=$(python libtorch_flags_from_python.py --cppflags)
+          PIP_LDFLAGS=$(python libtorch_flags_from_python.py --ldflags)
+
+          echo "LDFLAGS=$PIP_LDFLAGS $LDFLAGS" >> $GITHUB_ENV
+          echo "CPPFLAGS=$PIP_CPPFLAGS $CPPFLAGS" >> $GITHUB_ENV
+      
+      - name: Get plumed
+        # get plumed src from github and unpack
+        run: |
+          PLUMED_VER="2.10.0"
+          echo "PLUMED_VER=$PLUMED_VER" >> $GITHUB_ENV
+          wget https://github.com/plumed/plumed2/releases/download/v$PLUMED_VER/plumed-src-$PLUMED_VER.tgz
+          tar -xzf plumed-src-$PLUMED_VER.tgz
+        
+      - name: Configure and make plumed
+        # configure and make plumed to enable libtorch and pytorch
+        run: |
+          cd plumed-$PLUMED_VER
+          mkdir build
+          ./configure --prefix=$PWD/build --enable-libtorch --enable-modules=+pytorch
+          make -j 8
+          make -j 8 install 
+      
+      - name: Create sourceme.sh plumed
+        # edit sourceme.sh file to load all the correct dependencies
+        run: |
+          cd plumed-$PLUMED_VER
+      
+          PLUMED_DIR=$PWD
+          echo """export PLUMED_DIR=$PLUMED_DIR
+
+          export PATH="$PLUMED_DIR/build/bin/:$PATH"
+          export LIBRARY_PATH="$PLUMED_DIR/build/lib/:$LIBRARY_PATH"
+          export LD_LIBRARY_PATH="$PLUMED_DIR/build/lib/:$LD_LIBRARY_PATH"
+          export PLUMED_KERNEL="$PLUMED_DIR/build/lib/libplumedKernel.so"
+          export PLUMED_VIMPATH="$PLUMED_DIR/vim"
+          export PYTHONPATH="$PLUMED_DIR/python:$PYTHONPATH"
+          export PKG_CONFIG_PATH="$PLUMED_DIR/build/lib/pkgconfig:$PKG_CONFIG_PATH"
+          """ > sourceme.sh
+
+          head sourceme.sh -n 20
+
+          source sourceme.sh
+
+          echo "plumed path: $(which plumed)"
+
+      - name: Check installation
+        # check if libtorch and pytorch have been successfully enabled
+        run: |
+          cd plumed-$PLUMED_VER
+          
+          source sourceme.sh
+          
+          plumed config has libtorch
+          plumed config module pytorch
+
+      - name: Setup plumed tests
+        # edit plumed and python paths in the test scripts
+        run: |
+          # define paths for plumed sourceme.sh and python with mdtraj
+          PLUMED_SOURCE_PATH="$PWD/plumed-$PLUMED_VER/sourceme.sh"
+          PYTHON_PATH="$(which python)"
+
+          echo "plumed_source_path : $PLUMED_SOURCE_PATH"
+          echo "python_path : $PYTHON_PATH"
+
+          # edit the test scripts with the correct paths
+          sed -i "s|PLUMED_SOURCE=\"/path/to/plumed/sourceme.sh\"|PLUMED_SOURCE=\"$PLUMED_SOURCE_PATH\"|g" plumed_interfaces/tests/driver_alanine.sh
+          sed -i "s|PYTHON_PATH=\"/path/to/python/with/mdtraj\"|PYTHON_PATH=\"$PYTHON_PATH\"|g" plumed_interfaces/tests/driver_alanine.sh
+
+          sed -i "s|PLUMED_SOURCE=\"/path/to/plumed/sourceme.sh\"|PLUMED_SOURCE=\"$PLUMED_SOURCE_PATH\"|g" plumed_interfaces/tests/driver_NaCl.sh
+          sed -i "s|PYTHON_PATH=\"/path/to/python/with/mdtraj\"|PYTHON_PATH=\"$PYTHON_PATH\"|g" plumed_interfaces/tests/driver_NaCl.sh
+
+          # create folder directory
+          mkdir plumed_test
+          
+      # the tests are separated to make it easier to find the results in the compilation outputs
+      # each step need to move to the plumed_test directory
+      - name: Test alanine descriptors
+        run: |
+          cd plumed_test
+          bash ../plumed_interfaces/tests/driver_alanine.sh descriptors
+      
+      - name: Test alanine descriptors-kbias
+        run: |
+          cd plumed_test
+          bash ../plumed_interfaces/tests/driver_alanine.sh descriptors-kbias
+          
+      - name: Test alanine gnn
+        run: |
+          cd plumed_test    
+          bash ../plumed_interfaces/tests/driver_alanine.sh gnn
+      
+      - name: Test alanine gnn-kbias
+        run: |
+          cd plumed_test
+          bash ../plumed_interfaces/tests/driver_alanine.sh gnn-kbias
+          
+      - name: Test NaCl gnn
+        run: |
+          cd plumed_test
+          bash ../plumed_interfaces/tests/driver_NaCl.sh gnn
+      
+      - name: Test NaCl gnn-kbias
+        run: |
+          cd plumed_test
+          bash ../plumed_interfaces/tests/driver_NaCl.sh gnn-kbias
