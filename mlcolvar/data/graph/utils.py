@@ -43,7 +43,6 @@ def _create_pyg_data_from_configuration(
     """
 
     assert config.graph_labels is None or len(config.graph_labels.shape) == 2
-
     assert not ((config.subsystem is not None) ^ (long_range_cutoff > 0))
 
     # NOTE: here we do not take care about the nodes that are not taking part
@@ -452,7 +451,13 @@ def create_test_graph_input(output_type: str,
         return config
 
     dataset = create_dataset_from_configurations(
-        config, z_table, 0.1, show_progress=False, remove_isolated_nodes=True, buffer=buffer
+        config=config, 
+        z_table=z_table, 
+        cutoff=0.1, 
+        show_progress=False, 
+        remove_isolated_nodes=True, 
+        buffer=buffer, 
+        long_range_cutoff=0.3 if long_range else -1.0,
     )
 
     if output_type == 'dataset':

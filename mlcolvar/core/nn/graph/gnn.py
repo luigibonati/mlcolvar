@@ -28,7 +28,7 @@ class BaseGNN(nn.Module):
         basis_type: str = 'bessel',
         cutoff: float = None,
         buffer : float = None, 
-        long_range_cutoff: float = -1.0,
+        long_range_cutoff: float = None,
         atomic_numbers: List[int] = None,
     ) -> None:
         """Initializes the core of a GNN model, taking care of edge embeddings.
@@ -70,7 +70,7 @@ class BaseGNN(nn.Module):
         if dataset_for_initialization is not None:
             if cutoff is not None or atomic_numbers is not None or buffer is not None or long_range_cutoff is not None:
                 raise ValueError("When 'dataset_for_initialization' is provided, 'cutoff', 'atomic_numbers', 'buffer', and 'long_range_cutoff' should not be provided as arguments. They will be inferred from the dataset.")
-            cutoff, atomic_numbers, buffer = self._initialize_from_dataset(dataset=dataset_for_initialization)
+            cutoff, atomic_numbers, buffer, long_range_cutoff = self._initialize_from_dataset(dataset=dataset_for_initialization)
         else:
             if cutoff is None or atomic_numbers is None:
                 raise ValueError("To initialize the gnn-model either provide a 'dataset_for_initialization' (preferred) or specify the 'cutoff' and 'atomic_numbers' and 'buffer' as arguments.")
@@ -111,7 +111,8 @@ class BaseGNN(nn.Module):
         """Initializes the cutoff, buffer, and atomic_numbers from a DictDataset."""
         return (dataset.metadata['cutoff'], 
                 dataset.metadata['atomic_numbers'], 
-                dataset.metadata['buffer'])
+                dataset.metadata['buffer'],
+                dataset.metadata['long_range_cutoff'])
 
     def embed_edge(
         self, data: Dict[str, torch.Tensor], normalize: bool = True
