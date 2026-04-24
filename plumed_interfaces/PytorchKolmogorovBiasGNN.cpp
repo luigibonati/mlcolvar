@@ -84,6 +84,40 @@ auto getLengthUnit(Main&, Atoms& atoms, long)
 
 //+PLUMEDOC PYTORCH_KOLMOGOROV_BIAS_GNN
 /*
+Load a Graph Neural Network (GNN) model for the committor compiled with TorchScript 
+and compute the Kolmogorov bias.
+
+This colvar evaluates a TorchScript GNN model and assumes that it returns a single
+scalar output `z`. From this value it computes the committor `q` and the Kolmogorov bias `kbias`. 
+Derivatives of all outputs with respect to the atomic coordinates are obtained 
+through PyTorch automatic differentiation.
+
+In particular, the module takes a GNN model for the `z` committor-based CV, applies 
+a sigmoid activation to get the committor `q`, and then computes the bias as 
+$V_K = -\\frac{\\lambda}{\\beta} \\log(\\| \\nabla q \\|^2 + \\epsilon)$, 
+where $\\lambda$ is a prefactor, $\\beta$ is the inverse temperature, 
+and $\\epsilon$ is a small regularization term to avoid divergences when
+the gradient is zero. 
+The bias can be optionally computed using the raw model output `z` 
+instead of the activated `q` through `USE_Q_FOR_BIAS=false`, which may preserve 
+larger gradients when `q` is close to `0` or `1`.
+
+This module uses a fixed length unit of _Angstrom_. 
+Thus, the GNN model read by this module should be trained under the same unit convention.
+Besides, the module constructs node attributes from the atomic types. 
+As a result, this module requires a PDB file that records names of _ALL_ atoms 
+in the system through the `STRUCTURE` keyword. Note that the atom names in this PDB file 
+should be element symbols, e.g.:
+\auxfile{plumed_topo.pdb}
+ATOM      1  H   ACE A   1      15.100  12.940  29.390  1.00  0.00           H
+ATOM      2  C   ACE A   1      14.970  13.860  29.960  1.00  0.00           C
+ATOM      3  H   ACE A   1      15.720  13.820  30.760  1.00  0.00           H
+ATOM      4  H   ACE A   1      13.980  13.920  30.410  1.00  0.00           H
+ATOM      5  C   ACE A   1      15.300  15.070  29.100  1.00  0.00           C
+\endauxfile
+
+//+PLUMEDOC PYTORCH_KOLMOGOROV_BIAS_GNN
+/*
 Load a Graph Neural Network (GNN) model for the committor compiled with TorchScript and compute the Kolmogorov bias.
 
 This colvar evaluates a TorchScript GNN model and assumes that it returns a single scalar output `z`. From this value it computes the committor `q` and the Kolmogorov bias `kbias`. 
@@ -102,7 +136,7 @@ ATOM      4  H   ACE A   1      13.980  13.920  30.410  1.00  0.00           H
 ATOM      5  C   ACE A   1      15.300  15.070  29.100  1.00  0.00           C
 \endauxfile
 
-The module constructs graph edges between neighbors inside the selected atom group, using the cutoff value recorded in the model file. By default, such an atom group is defined by the single `SYSTEM_SELECTION` keyword. In this case, the number of nodes in the input graph is fixed, while the number of edges changes according to the relative positions of the atoms. If the `ENVIRONMENT_SELECTION` parameter is given, the graph instead contains all atoms in `SYSTEM_SELECTION` and all atoms in `ENVIRONMENT_SELECTION` that are within a radius of _ANY_ atom in `SYSTEM_SELECTION`. Such a radius equals to the cutoff recorded in the model file _plus_ the buffer size controlled by the `BUFFER` keyword. Thus, when `ENVIRONMENT_SELECTION` is given, the node number of the input graph can fluctuate during the simulation.
+The module constructs graph edges between neighbors inside the selected atom group, using the cutoff value recorded in the model file. By default, such an atom group is defined by the single `SYSTEM_SELECTION` keyword. In this case, the number of nodes in the input graph is fixed, while the number of edges changes according to the relative positions of the atoms. If the `ENVIRONMENT_SELECTION` parameter is given, the graph instead contains all atoms in `SYSTEM_SELECTION` and all atoms in `ENVIRONMENT_SELECTION` that are within a radius of _ANY_ atom in `SYSTEM_SELECTION`. Such a radius equals to the cutoff recorded in the model file _plus_ the buffer size controlled by the `BUFFER` keyword. Thus, when `ENVIRONMENT_SELECTION` is given, the node number of the input graph can fluctuate during the simulation. Besides, when SUBGROUPA is defined the module will add long edges bewteen such a group. Cutoff radius of these long edges will equal to the long_range_cutoff attribute recorded in the model file.
 
 The `LAMBDA` and `BETA` keywords control the bias prefactor and inverse temperature. The `EPSILON`, `SIGMOID_P`, and `USE_Q_FOR_BIAS` keywords tune the bias expression. 
 The outputs are exposed as `z`, `q`, and `kbias`.
@@ -183,6 +217,7 @@ class PytorchKolmogorovBiasGNN: public Colvar
   bool use_q_for_bias = false;
   double r_max = 0.0; // In PLUMED length unit
   double buffer = 0.0; // In PLUMED length unit
+  double r_max_l = -1.0; // In PLUMED length unit
   double beta = 1.0;
   double lambda = 1.0;
   double epsilon = -1;
@@ -194,7 +229,9 @@ class PytorchKolmogorovBiasGNN: public Colvar
   std::vector<int> model_atomic_numbers;
   std::vector<AtomNumber> atom_list_a;
   std::vector<AtomNumber> atom_list_b;
+  std::vector<AtomNumber> atom_list_sub_a;
   std::vector<int> atom_list_active; // local_ids
+  std::vector<int> atom_list_active_subgroup; // local_ids
   std::unique_ptr<NeighborList> neighbor_list;
   torch::jit::script::Module model;
   torch::ScalarType torch_float_dtype = torch::kFloat32;
@@ -219,7 +256,9 @@ class PytorchKolmogorovBiasGNN: public Colvar
   );
   int atomic_number_from_name(std::string name);
   bool groups_have_intersection(void);
+  bool subgroup_is_in_group_a(void);
   void find_active_atoms(int n_threads);
+  void find_active_subgroup_atoms(void);
 
 public:
   explicit PytorchKolmogorovBiasGNN(const ActionOptions&);
@@ -245,6 +284,12 @@ void PytorchKolmogorovBiasGNN::registerKeywords(Keywords& keys)
     "atoms",
     "ENVIRONMENT_SELECTION",
     "Second list of atoms (corresponding to the `environment_selection` in mlcolvar`)"
+  );
+
+  keys.add(
+    "atoms",
+    "SUBSYSTEM_SELECTION",
+    "List of subsystem atoms (corresponding to the `subsystem_selection in mlcolvar`)"
   );
 
   keys.add(
@@ -359,6 +404,7 @@ PytorchKolmogorovBiasGNN::PytorchKolmogorovBiasGNN(const ActionOptions& ao):
   // parse input
   parseAtomList("SYSTEM_SELECTION", atom_list_a);
   parseAtomList("ENVIRONMENT_SELECTION", atom_list_b);
+  parseAtomList("SUBSYSTEM_SELECTION", atom_list_sub_a);
 
   parse("MODEL", model_file_name);
 
@@ -419,6 +465,13 @@ PytorchKolmogorovBiasGNN::PytorchKolmogorovBiasGNN(const ActionOptions& ao):
     atom_list_active.clear();
     find_active_atoms(1);
   }
+
+  if (atom_list_sub_a.size() > 0)
+    find_active_subgroup_atoms();
+
+  if (atom_list_sub_a.size() > 0)
+    if (!subgroup_is_in_group_a())
+      plumed_merror("Not all atoms in SUBGROUPA present in GROUPA!");
 
   // check precision to be used
   if (use_float64)
@@ -496,6 +549,40 @@ PytorchKolmogorovBiasGNN::PytorchKolmogorovBiasGNN(const ActionOptions& ao):
   else
     r_max = model.attr("r_max").toTensor().item<double>();
   r_max = r_max / getLengthUnit(plumed, plumed.getAtoms(), 0) * 0.1;
+
+  // get buffer size
+  if (model.hasattr("buffer")) {
+    if (atom_list_b.size() == 0)
+      plumed_merror(
+        "Model attribute 'buffer' is defined but no ENVIRONMENT_SELECTION given!"
+      );
+    buffer = model.attr("buffer").toTensor().item<double>();
+    } else
+    buffer = 0.0;
+  buffer = buffer / getLengthUnit(plumed, plumed.getAtoms(), 0) * 0.1;
+
+  // get long cutoff radius
+  if (atom_list_sub_a.size() > 0) {
+    if (!model.hasattr("long_range_cutoff")) {
+      plumed_merror(
+        "Can not find model attribute: 'long_range_cutoff'! Such an attributes is required for defining the subsystem group (SUBGROUPA)!"
+      );
+    } else if (model.attr("long_range_cutoff").toTensor().item<double>() < 0) {
+      plumed_merror(
+        "Model attribute: 'long_range_cutoff' is negative! A positive long cutoff radius is required for defining the subsystem group (SUBGROUPA)!"
+      );
+    } else {
+      r_max_l = model.attr("long_range_cutoff").toTensor().item<double>();
+      r_max_l = r_max_l / getLengthUnit(plumed, plumed.getAtoms(), 0) * 0.1;
+    }
+  } else if (
+    model.hasattr("long_range_cutoff")
+    && model.attr("long_range_cutoff").toTensor().item<double>() > 0
+  ) {
+    plumed_merror(
+      "Found model attribute: 'long_range_cutoff'! Such an attributes requires defining the subsystem group (SUBGROUPA)!"
+    );
+  }
 
   // get atomic numbers
   if (!model.hasattr("atomic_numbers"))
@@ -642,6 +729,19 @@ PytorchKolmogorovBiasGNN::PytorchKolmogorovBiasGNN(const ActionOptions& ao):
     }
     log.printf("\n");
   }
+  if (atom_list_sub_a.size() > 0) {
+    log.printf(
+      "  Will add long edges between %u atoms\n",
+      static_cast<unsigned>(atom_list_sub_a.size())
+    );
+    log.printf("  Subsystem atom list:\n");
+    for (unsigned int i = 0; i < atom_list_sub_a.size(); i++) {
+      if (((i + 1) % 10) == 0)
+        log.printf("\n");
+      log.printf("  %d", atom_list_sub_a[i].serial());
+    }
+    log.printf("\n");
+  }
   log << "  Model atomic numbers: " << model_atomic_numbers;
   log.printf("\n");
   log.printf("  Boundary conditions: ");
@@ -653,6 +753,8 @@ PytorchKolmogorovBiasGNN::PytorchKolmogorovBiasGNN(const ActionOptions& ao):
   log.printf("  Graph cutoff radius: %f (PLUMED length unit)\n", r_max);
   if(atom_list_b.size() > 0)
     log.printf("  Environment buffer size: %f (PLUMED length unit)\n", buffer);
+  if (atom_list_sub_a.size() > 0)
+    log.printf("  Subsystem cutoff radius: %f (PLUMED length unit)\n", r_max_l);
   log.printf("  Number of outputs: %d \n", n_out);
   
   log.printf("  LAMBDA    value for calculating V_K: %f\n", lambda);
@@ -799,6 +901,7 @@ void PytorchKolmogorovBiasGNN::calculate()
 
   // build edges
   int n_edges = 0;
+  int n_edges_l = 0;
   torch::Tensor edge_index;
 
   if (atom_list_b.size() > 0) {
@@ -875,6 +978,68 @@ void PytorchKolmogorovBiasGNN::calculate()
       torch::TensorOptions().dtype(torch::kInt64)
     );
     edge_index = torch::vstack({senders, receivers});
+  }
+
+  if (atom_list_sub_a.size() > 0) {
+    torch::Tensor edge_index_l;
+    int n_atoms_l = atom_list_sub_a.size();
+    n_edges_l = n_atoms_l * (n_atoms_l - 1);
+    std::vector<float> distance_vector_l(n_edges_l);
+    std::vector<std::vector<int64_t>> edge_index_vector_l;
+    edge_index_vector_l.resize(2, std::vector<int64_t>(n_edges_l));
+
+    #pragma omp parallel for num_threads(n_threads)
+    for (int i = 0; i < n_atoms_l; i++) {
+      int count = 0;
+      for (int j = 0; j < n_atoms_l; j++) {
+        if (i != j) {
+          // NOTE: build edge index using the partial local index list
+          edge_index_vector_l[0][
+            i * (n_atoms_l - 1) + count
+          ] = atom_list_active_subgroup[i];
+          edge_index_vector_l[1][
+            i * (n_atoms_l - 1) + count
+          ] = atom_list_active_subgroup[j];
+          count++;
+        }
+      }
+    }
+
+    #pragma omp parallel for num_threads(n_threads)
+    for (int i = 0; i < n_edges_l; i++) {
+      distance_vector_l[i] = pbc_tools.distance(
+        pbc,
+        x_local[edge_index_vector_l[0][i]],
+        x_local[edge_index_vector_l[1][i]]
+      );
+    }
+
+    torch::Tensor distances_l = torch::from_blob(
+      distance_vector_l.data(),
+      n_edges_l,
+      torch::TensorOptions().dtype(torch::kFloat32)
+    );
+    const torch::Tensor mask_l = distances_l <= r_max_l;
+
+    if (mask_l.size(0) > 0) {
+      torch::Tensor senders_l = torch::from_blob(
+        edge_index_vector_l[0].data(),
+        n_edges_l,
+        torch::TensorOptions().dtype(torch::kInt64)
+      );
+      torch::Tensor receivers_l = torch::from_blob(
+        edge_index_vector_l[1].data(),
+        n_edges_l,
+        torch::TensorOptions().dtype(torch::kInt64)
+      );
+      senders_l = senders_l.index({mask_l});
+      receivers_l = receivers_l.index({mask_l});
+      edge_index_l = torch::vstack({senders_l, receivers_l});
+      n_edges_l = (int)edge_index_l.size(1);
+
+      edge_index = torch::hstack({edge_index, edge_index_l});
+      n_edges = n_edges + n_edges_l;
+    }
   }
 
   edge_index = edge_index.to(device);
@@ -957,6 +1122,14 @@ void PytorchKolmogorovBiasGNN::calculate()
   n_system[0][0] = (int64_t)atom_list_a.size();
   input.insert("n_system", n_system);
   
+  if (atom_list_sub_a.size() > 0){
+    auto edge_masks_lr = torch::vstack({
+      torch::zeros({n_edges - n_edges_l, 1}, torch::dtype(torch::kBool)),
+      torch::ones({n_edges_l, 1}, torch::dtype(torch::kBool)),
+    });
+    edge_masks_lr = edge_masks_lr.to(device);
+    input.insert("edge_masks_lr", edge_masks_lr);
+  }
 
   // TODO: figure out how to enable virials. Maybe we could port MACE's python
   // code to our python module.
@@ -1121,6 +1294,18 @@ bool PytorchKolmogorovBiasGNN::groups_have_intersection(void) {
   return intersections.size() > 0;
 }
 
+bool PytorchKolmogorovBiasGNN::subgroup_is_in_group_a(void) {
+  std::vector<AtomNumber> atom_list_a_copy(atom_list_a);
+  std::vector<AtomNumber> atom_list_sub_a_copy(atom_list_sub_a);
+  for (auto atom_elt: atom_list_sub_a_copy)
+    if (
+      std::find(atom_list_a_copy.begin(),
+      atom_list_a_copy.end(), atom_elt) == atom_list_a_copy.end()
+    )
+      return false;
+  return true;
+}
+
 void PytorchKolmogorovBiasGNN::find_active_atoms(int n_threads) {
   if (atom_list_b.size() > 0) {
     atom_list_active.clear();
@@ -1145,6 +1330,19 @@ void PytorchKolmogorovBiasGNN::find_active_atoms(int n_threads) {
 
     for (size_t i = 0; i < atom_list_a.size(); i++)
       atom_list_active.push_back(i);
+  }
+}
+
+void PytorchKolmogorovBiasGNN::find_active_subgroup_atoms(void) {
+  atom_list_active_subgroup.clear();
+  // NOTE: since system atoms (atom_list_a) always appear at the head of the
+  // local indices, we simply find subsystem indices in atom_list_a.
+  for (auto atom_sub: atom_list_sub_a) {
+    int index = (int)std::distance(
+      atom_list_a.begin(),
+      find(atom_list_a.begin(), atom_list_a.end(), atom_sub)
+    );
+    atom_list_active_subgroup.push_back(index);
   }
 }
 
