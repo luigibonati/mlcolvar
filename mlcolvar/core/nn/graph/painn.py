@@ -3,6 +3,7 @@ import torch
 from torch import nn
 from torch_geometric.nn import MessagePassing
 
+from mlcolvar.data import DictDataset
 from mlcolvar.core.nn.graph.gnn import BaseGNN
 
 from typing import List, Dict, Optional, Tuple
@@ -57,30 +58,28 @@ class PaiNNModel(BaseGNN):
     def __init__(
         self,
         n_out: int,
-        cutoff: float,
-        atomic_numbers: List[int],
-        long_range_cutoff: float = -1.0,
+        dataset_for_initialization: DictDataset = None,
         pooling_operation : str = 'mean',
         n_bases: int = 6,
         n_layers: int = 2,
         n_hidden_channels: int = 16,
         aggr: str = 'add',
         w_out_after_pool: bool = True,
+        **kwargs
     ) -> None:
 
         super().__init__(
             n_out=n_out, 
-            cutoff=cutoff, 
-            atomic_numbers=atomic_numbers, 
-            long_range_cutoff=long_range_cutoff,
+            dataset_for_initialization=dataset_for_initialization,
             pooling_operation=pooling_operation, 
             n_bases=n_bases, 
             n_polynomials=0, 
-            basis_type='gaussian'
+            basis_type='gaussian',
+            **kwargs
         )
 
         self.W_v = nn.Linear(
-            len(atomic_numbers), n_hidden_channels, bias=False
+            len(self.atomic_numbers), n_hidden_channels, bias=False
         )
 
         # TODO: find out how to do attentional aggr properly.
@@ -97,7 +96,7 @@ class PaiNNModel(BaseGNN):
 
         self.layers_message = nn.ModuleList([
             MessagePassingPaiNN(
-                n_hidden_channels, n_bases, cutoff, long_range_cutoff, aggr[i],
+                n_hidden_channels, n_bases, self.cutoff, self.long_range_cutoff, aggr[i],
             ) for i in range(n_layers)
         ])
         self.layers_update = nn.ModuleList([
