@@ -96,6 +96,9 @@ class DeepTICA(BaseCV):
         
         elif self._override_model:
             self.nn = model
+            if self.out_features is not None:
+                self.register_buffer('n_out', torch.as_tensor(self.out_features))    
+
 
         # initialize tica
         o = "tica"

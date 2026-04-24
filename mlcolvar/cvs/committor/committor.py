@@ -105,7 +105,7 @@ class Committor(BaseCV):
             Available blocks: ['nn'].
         """
         super().__init__(model, **kwargs) 
-        
+                
         if use_gradients_wrt_positions and atomic_masses is None:
             raise ValueError("atomic_masses must be provided when using Kolmogorov variational functional (use_gradients_wrt_positions is True)")
         elif not use_gradients_wrt_positions:
@@ -114,8 +114,6 @@ class Committor(BaseCV):
             if descriptors_derivatives is not None:
                 raise ValueError("descriptors_derivatives must be None when using approximated variational principle (use_gradients_wrt_positions is False)")
     
-        self.register_buffer('is_committor', torch.tensor(1, dtype=int))
-        
         # =======  LOSS  =======
         self.loss_fn = CommittorLoss(alpha=alpha,
                                      atomic_masses=atomic_masses,
