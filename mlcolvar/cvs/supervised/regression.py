@@ -256,7 +256,7 @@ def test_regression_cv():
     # gnn external
     from mlcolvar.core.nn.graph.schnet import SchNetModel
     from mlcolvar.data.graph.utils import create_test_graph_input
-    gnn_model = SchNetModel(1, 0.1, [1, 8])
+    gnn_model = SchNetModel(n_out=1, cutoff=0.1, atomic_numbers=[1, 8])
     # create model
     model = RegressionCV(model=gnn_model)
 
@@ -289,7 +289,7 @@ def test_regression_cv():
 
     # node-level regression with GNN configured without pooling
     print("node-level")
-    gnn_model_node = SchNetModel(1, 0.1, [1, 8], pooling_operation=None)
+    gnn_model_node = SchNetModel(n_out=1, cutoff=0.1, atomic_numbers=[1, 8], pooling_operation=None)
     model = RegressionCV(model=gnn_model_node, graph_target_key="node_labels")
     trainer = lightning.Trainer(
         accelerator="cpu", max_epochs=1, logger=False, enable_checkpointing=False, enable_model_summary=False

@@ -6,6 +6,7 @@ from torch_geometric.nn import MessagePassing
 from typing import Tuple, Callable, Optional, List, Dict
 
 from mlcolvar.core.nn.graph.gnn import BaseGNN
+from mlcolvar.data import DictDataset
 
 """
 The Geometric Vector Perceptron (GVP) layer. This module is taken from:
@@ -32,10 +33,8 @@ class GVPModel(BaseGNN):
     def __init__(
         self,
         n_out: int,
-        cutoff: float,
-        atomic_numbers: List[int],
+        dataset_for_initialization: DictDataset = None,
         pooling_operation : str = 'mean',
-        long_range_cutoff: float = -1.0,
         n_bases: int = 8,
         n_polynomials: int = 6,
         n_layers: int = 1,
@@ -48,6 +47,7 @@ class GVPModel(BaseGNN):
         activation: str = 'SiLU',
         basis_type: str = 'bessel',
         smooth: bool = False,
+        **kwargs
     ) -> None:
         """Initializes a Geometric Vector Perceptron (GVP) model.
 
@@ -55,14 +55,11 @@ class GVPModel(BaseGNN):
         ----------
         n_out: int
             Number of the output scalar node features.
-        cutoff: float
-            Cutoff radius of the basis functions. Should be the same as the cutoff
-            radius used to build the graphs.
-        atomic_numbers: List[int]
-            The atomic numbers mapping
-        long_range_cutoff : float
-            Cutoff radius for the long-range edges defined on subsystem atoms. 
-            If negative, no long-range interactions are considered, by default -1.0
+        dataset_for_initialization : DictDataset, optional
+            Dataset containing the graphs on which the gnn model will be applied. 
+            This is used to initialize and register the cutoff, buffer, and atomic_numbers from the dataset metadata.
+            This is the preferred way to initialize the gnn model, as it ensures consistency between the model and the dataset.
+            As an alternative this can be set to None and the cutoff, buffer, and atomic_numbers can be provided as kwargs.
         pooling_operation : str
             Type of pooling operation to combine node-level features into graph-level features, either mean or sum, by default 'mean'
         n_bases: int
@@ -92,13 +89,12 @@ class GVPModel(BaseGNN):
         """
         super().__init__(
             n_out=n_out, 
-            cutoff=cutoff, 
-            atomic_numbers=atomic_numbers, 
-            long_range_cutoff=long_range_cutoff,
+            dataset_for_initialization=dataset_for_initialization,
             pooling_operation=pooling_operation, 
             n_bases=n_bases, 
             n_polynomials=n_polynomials, 
-            basis_type=basis_type
+            basis_type=basis_type,
+            **kwargs
         )
 
         self.W_e = nn.ModuleList([
@@ -111,8 +107,8 @@ class GVPModel(BaseGNN):
         ])
 
         self.W_v = nn.ModuleList([
-            LayerNorm((len(atomic_numbers), 0)),
-            GVP(in_dims=(len(atomic_numbers), 0),
+            LayerNorm((len(self.atomic_numbers), 0)),
+            GVP(in_dims=(len(self.atomic_numbers), 0),
                 out_dims=(n_scalars_node, n_vectors_node),
                 activations=(None, None),
                 vector_gate=True
@@ -127,8 +123,8 @@ class GVPModel(BaseGNN):
                          drop_rate=drop_rate,
                          activations=(eval(f'torch.nn.{activation}')(), None),
                          vector_gate=True,
-                         cutoff=(cutoff if smooth else -1),
-                         long_range_cutoff=(long_range_cutoff if smooth else -1),
+                         cutoff=(self.cutoff if smooth else -1),
+                         long_range_cutoff=(self.long_range_cutoff if smooth else -1),
                          )
             for _ in range(n_layers)
         )
@@ -984,45 +980,77 @@ def test_gvp() -> None:
 
     torch.set_default_dtype(torch.float32)
 
-
-def test_gvp_1() -> None:
+def test_gvp_from_dataset() -> None:
+    from mlcolvar.data.graph.utils import create_test_graph_input
     torch.manual_seed(0)
     torch.set_default_dtype(torch.float64)
 
+    dataset = create_test_graph_input(output_type='dataset',
+                                      n_atoms=3,
+                                      n_samples=5,
+                                      n_states=1,
+                                      add_noise=False,
+                                    )
+
     model = GVPModel(
         n_out=2,
-        cutoff=0.1,
-        long_range_cutoff=0.2,
-        atomic_numbers=[1, 8],
+        dataset_for_initialization=dataset,
         n_bases=6,
         n_polynomials=6,
         n_layers=2,
         n_messages=2,
-        n_feedforwards=1,
+        n_feedforwards=2,
         n_scalars_node=16,
         n_vectors_node=8,
         n_scalars_edge=16,
         drop_rate=0,
         activation='SiLU',
-        smooth=True,
     )
 
-    data = _create_test_data_list()
-    data['edge_masks_lr'] = torch.zeros(
-        ((data['edge_index'].shape[1]), 1), dtype=bool
-    )
-    data['edge_masks_lr'][:-2] = True
-    assert (
-        torch.abs(
-            model(data) -
-            torch.tensor([
-                [ 0.6782549308530667, -0.1433555162522605],
-                [ 0.6782549308530665, -0.1433555162522605],
-                [ 0.6782549308530665, -0.1433555162522605],
-                [ 0.6782549308530665, -0.1433555162522605],
-                [ 0.6918278001458905, -0.1167528609465146],
-            ])
-        ) < 1E-12
-    ).all()
+    # check the model parameters are correctly initialized from the dataset metadata
+    assert ( model.cutoff == dataset.metadata['cutoff'] )
+    assert ( torch.allclose(model.atomic_numbers, torch.as_tensor(dataset.metadata['atomic_numbers'])) )
+    assert ( torch.allclose(model.buffer, torch.as_tensor(dataset.metadata['buffer'])) )
 
+    # check output is consistent with the one obtained from the test graph input
+    ref_out = torch.tensor([[-0.12551015, -0.5192468]] * 5)
+    assert ( torch.allclose(model(dataset.get_graph_inputs()), ref_out) )
+
+
+    # test with environment atoms
+    dataset = create_test_graph_input(output_type='dataset',
+                                      n_atoms=3,
+                                      n_samples=5,
+                                      n_states=1,
+                                      add_noise=False,
+                                      environment=True
+                                    )
+
+    model = GVPModel(
+        n_out=2,
+        dataset_for_initialization=dataset,
+        n_bases=6,
+        n_polynomials=6,
+        n_layers=2,
+        n_messages=2,
+        n_feedforwards=2,
+        n_scalars_node=16,
+        n_vectors_node=8,
+        n_scalars_edge=16,
+        drop_rate=0,
+        activation='SiLU',
+    )
+
+    # check the model parameters are correctly initialized from the dataset metadata
+    assert ( model.cutoff == dataset.metadata['cutoff'] )
+    assert ( torch.allclose(model.atomic_numbers, torch.as_tensor(dataset.metadata['atomic_numbers'])) )
+    assert ( torch.allclose(model.buffer, torch.as_tensor(dataset.metadata['buffer'])) )
+
+    # check output is consistent with the one obtained from the test graph input
+    ref_out = torch.tensor([[0.32278482, 0.05976963]] * 5)
+    assert ( torch.allclose(model(dataset.get_graph_inputs()), ref_out) )
+    
     torch.set_default_dtype(torch.float32)
+
+if __name__ == "__main__":
+    test_gvp_from_dataset()

@@ -43,7 +43,6 @@ def _create_pyg_data_from_configuration(
     """
 
     assert config.graph_labels is None or len(config.graph_labels.shape) == 2
-
     assert not ((config.subsystem is not None) ^ (long_range_cutoff > 0))
 
     # NOTE: here we do not take care about the nodes that are not taking part
@@ -233,6 +232,7 @@ def create_dataset_from_configurations(config: atomic.Configurations,
     dataset = DictDataset(dictionary={'data_list': data_list},
                           metadata={'atomic_numbers': z_table.zs,
                                     'cutoff': cutoff,
+                                    'buffer': buffer,
                                     'long_range_cutoff': long_range_cutoff,
                                     'used_idx': unique_idx,
                                     'used_names': unique_names},
@@ -374,7 +374,8 @@ def create_test_graph_input(output_type: str,
     if n_atoms == 3:
         numbers = [8, 1, 1]
         system_atoms = [0,1] if environment else None
-        environment_atoms = [2] if environment else None
+        environment_atoms = [3] if environment else None
+        buffer = 0.1 if environment else 0.0
         node_labels = np.array([[0], [1], [1]])
         _ref_positions = np.array(
             [
@@ -392,6 +393,7 @@ def create_test_graph_input(output_type: str,
         numbers = [8, 1, 1, 8]
         system_atoms = [0,1,2] if environment else None
         environment_atoms = [3] if environment else None
+        buffer = 0.1 if environment else 0.0
         node_labels = np.array([[0], [1], [1], [0]])
         _ref_positions = np.array(
             [
@@ -448,12 +450,14 @@ def create_test_graph_input(output_type: str,
     if output_type == 'configurations':
         return config
 
-    dataset = create_dataset_from_configurations(config=config, 
-                                                 z_table=z_table, 
-                                                 cutoff=0.1, 
-                                                 long_range_cutoff=0.3 if long_range else -1.0,
-                                                 show_progress=False, 
-                                                 remove_isolated_nodes=True
+    dataset = create_dataset_from_configurations(
+        config=config, 
+        z_table=z_table, 
+        cutoff=0.1, 
+        show_progress=False, 
+        remove_isolated_nodes=True, 
+        buffer=buffer, 
+        long_range_cutoff=0.3 if long_range else -1.0,
     )
 
     if output_type == 'dataset':
