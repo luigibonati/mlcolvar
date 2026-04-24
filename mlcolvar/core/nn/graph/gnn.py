@@ -4,6 +4,7 @@ from typing import List, Dict, Tuple, Optional
 
 from mlcolvar.core.nn.graph import radial
 from mlcolvar.utils import _code
+from mlcolvar.data import DictDataset
 
 """
 GNN models.
@@ -20,12 +21,14 @@ class BaseGNN(nn.Module):
     def __init__(
         self,
         n_out: int,
-        cutoff: float,
-        atomic_numbers: List[int],
-        pooling_operation: Optional[str],
+        dataset_for_initialization: DictDataset,
+        pooling_operation: Optional[str] = None,
         n_bases: int = 6,
         n_polynomials: int = 6,
         basis_type: str = 'bessel',
+        cutoff: float = None,
+        buffer : float = None, 
+        atomic_numbers: List[int] = None,
     ) -> None:
         """Initializes the core of a GNN model, taking care of edge embeddings.
 
@@ -33,11 +36,11 @@ class BaseGNN(nn.Module):
         ----------
         n_out : int
             Number of the output scalar node features.
-        cutoff : float
-            Cutoff radius of the basis functions. Should be the same as the cutoff
-            radius used to build the graphs.
-        atomic_numbers : List[int]
-            The atomic numbers mapping.
+        dataset_for_initialization : DictDataset, optional
+            Dataset containing the graphs on which the gnn model will be applied. 
+            This is used to initialize and register the cutoff, buffer, and atomic_numbers from the dataset metadata.
+            This is the preferred way to initialize the gnn model, as it ensures consistency between the model and the dataset.
+            As an alternative this can be set to None and the cutoff, buffer, and atomic_numbers can be provided as arguments.
         pooling_operation : str or None
             Type of pooling operation to combine node-level features into graph-level features ('mean' or 'sum').
             If None, pooling is disabled and node-level outputs are returned unchanged.
@@ -47,23 +50,40 @@ class BaseGNN(nn.Module):
             Order of the polynomials in the basis functions, by default 6
         basis_type : str, optional
             Type of the basis function, by default 'bessel'
+        cutoff : float
+            When `dataset_for_initialization` is not provided, the cutoff radius of the basis functions, by default None. 
+            Should be the same as the cutoff radius used to build the graphs.
+        buffer : float, optional
+            When `dataset_for_initialization` is not provided, the additional buffer radius used to find active environment atoms, by default None.
+            Should be the same as the buffer used to build the graphs.
+        atomic_numbers : List[int]
+            When `dataset_for_initialization` is not provided, the atomic numbers mapping, by default None. 
+            Should be the same as the atomic numbers mapping used to build the graphs.
         """
         super().__init__()
+
+        # check if to initialize the buffer from the dataset or from the provided arguments
+        if dataset_for_initialization is not None:
+            if cutoff is not None or atomic_numbers is not None or buffer is not None:
+                raise ValueError("When 'dataset_for_initialization' is provided, 'cutoff', 'atomic_numbers', and 'buffer' should not be provided as arguments. They will be inferred from the dataset.")
+            cutoff, atomic_numbers, buffer = self._initialize_from_dataset(dataset=dataset_for_initialization)
+        else:
+            if cutoff is None or atomic_numbers is None:
+                raise ValueError("To initialize the gnn-model either provide a 'dataset_for_initialization' (preferred) or specify the 'cutoff' and 'atomic_numbers' and 'buffer' as arguments.")
+            if buffer is None:
+                buffer = 0.0
 
         self._radial_embedding = radial.RadialEmbeddingBlock(cutoff=cutoff, 
                                                              n_bases=n_bases, 
                                                              n_polynomials=n_polynomials, 
                                                              basis_type=basis_type
                                                             )
-        self.register_buffer(
-            'n_out', torch.tensor(n_out, dtype=torch.int64)
-        )
-        self.register_buffer(
-            'cutoff', torch.tensor(cutoff, dtype=torch.get_default_dtype())
-        )
-        self.register_buffer(
-            'atomic_numbers', torch.tensor(atomic_numbers, dtype=torch.int64)
-        )
+        
+        # register model buffers so that they can be inferred by the PLUMED interface
+        self.register_buffer('n_out', torch.tensor(n_out, dtype=torch.int64))
+        self.register_buffer('cutoff', torch.tensor(cutoff, dtype=torch.get_default_dtype()))
+        self.register_buffer('atomic_numbers', torch.tensor(atomic_numbers, dtype=torch.int64))
+        self.register_buffer('buffer', torch.tensor(buffer, dtype=torch.get_default_dtype()))
         self.pooling_operation = pooling_operation
 
     @property
@@ -73,6 +93,13 @@ class BaseGNN(nn.Module):
     @property
     def in_features(self):
         return None
+    
+    def _initialize_from_dataset(self, 
+                                dataset) -> None:
+        """Initializes the cutoff, buffer, and atomic_numbers from a DictDataset."""
+        return (dataset.metadata['cutoff'], 
+                dataset.metadata['atomic_numbers'], 
+                dataset.metadata['buffer'])
 
     def embed_edge(
         self, data: Dict[str, torch.Tensor], normalize: bool = True

@@ -100,23 +100,18 @@ ATOM      5  C   ACE A   1      15.300  15.070  29.100  1.00  0.00           C
 \endauxfile
 
 The module constructs graph edges between neighbors inside the selected atom
-group, using the cutoff value recorded in the model file. By default, such an
-atom group is defined by the single SYSTEM_SELECTION keyword. Under this case, the node
-number of the input graph in each MD step is fixed, and the number of edges
-will change according to the relative postions of the atoms.
-However, if the ENVIRONMENT_SELECTION parameter is given, the atom group mentioned above will
-contain all atoms in SYSTEM_SELECTION, _AND_ atoms in ENVIRONMENT_SELECTION which are within a radius of
-_ANY_ atom in SYSTEM_SELECTION. Such a radius of selecting atoms from ENVIRONMENT_SELECTION equals to the
-cutoff radius recorded in the model file _plus_ the buffer size controlled by
-the BUFFER keyword. Thus, when ENVIRONMENT_SELECTION is given, the node number of the input
-graph could fluctuate in different MD steps.
+group, using the cutoff value recorded in the model file. By default, such an 
+atom group is defined by the single `SYSTEM_SELECTION` keyword. In this case, the number 
+of nodes in the input graph is fixed, while the number of edges 
+changes according to the relative positions of the atoms. 
+If the `ENVIRONMENT_SELECTION` parameter is given, the graph instead contains all atoms
+in `SYSTEM_SELECTION` and all atoms in `ENVIRONMENT_SELECTION` that are within a cutoff
+radius from _any_ atom in `SYSTEM_SELECTION`. Such a radius equals to the cutoff recorded in the
+model file _plus_ the buffer size, also recorded in the model file. 
+Thus, when `ENVIRONMENT_SELECTION` is given, the node number of the input 
+graph can change dynamically during the simulation.
 
-This module also support committor calculations. When the input PyTorch model
-is a committor model, the outputs will assign the zeta value to the first
-output (node-0) and the q value to the second output (node-1). If the KBIAS
-keyword is also given, the module will also calculate the committor bias and
-assign it with a label of kbias. These information will be shown in the log as
-well.
+The outputs are exposed as `node-0`, `node-1`, etc.
 
 Note that this function requires \ref installation-libtorch LibTorch C++ library.
 Check the instructions in the \ref PYTORCH page to enable the module.
@@ -158,7 +153,9 @@ OPES_METAD ...
 \endplumedfile
 
 
-The following example instructs plumed to evaluate the GNN model using the atoms 1-10 as center atoms, and atoms 11-100 as the environment atoms. The buffer size used for selecting active atoms from the environment atoms is 2 PLUMED unit. The neighbor list for determining the edges will be updated every 2 steps.
+The following example instructs plumed to evaluate the GNN model using 
+the atoms 1-10 as center atoms, and atoms 11-100 as the environment atoms. 
+The neighbor list for determining the edges will be updated every 2 steps.
 \plumedfile
 PYTORCH_GNN ...
   SYSTEM_SELECTION=1-10
@@ -166,7 +163,6 @@ PYTORCH_GNN ...
   MODEL=model.ptc
   STRUCTURE=plumed_topo.pdb
   NL_STRIDE=2
-  BUFFER=2.0
   LABEL=gnn
 ... PYTORCH_GNN
 \endplumedfile
@@ -258,12 +254,6 @@ void PytorchGNN::registerKeywords(Keywords& keys)
     "The frequency with which we are updating the atoms in the neighbor list"
   );
 
-  keys.add(
-    "optional",
-    "BUFFER",
-    "Buffer size used in finding active environment atoms"
-  );
-
   keys.addFlag(
     "CUDA",
     false,
@@ -320,10 +310,6 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   parse("NL_STRIDE", neighbor_list_stride);
   if (neighbor_list_stride <= 0)
     plumed_merror("NL_STRIDE should be positive!");
-
-  parse("BUFFER", buffer);
-  if (buffer > 0 && atom_list_b.size() == 0)
-    plumed_merror("No ENVIRONMENT_SELECTION given! Cannot define the BUFFER key!");
 
   bool use_cuda = false;
   bool required_cuda = false;
@@ -426,6 +412,17 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   else
     r_max = model.attr("r_max").toTensor().item<double>();
   r_max = r_max / getLengthUnit(plumed, plumed.getAtoms(), 0) * 0.1;
+
+  // get buffer size
+  if (model.hasattr("buffer")) {
+    if (atom_list_b.size() == 0)
+      plumed_merror(
+        "Model attribute 'buffer' is defined but no ENVIRONMENT_SELECTION given!"
+      );
+    buffer = model.attr("buffer").toTensor().item<double>();
+    } else
+    buffer = 0.0;
+  buffer = buffer / getLengthUnit(plumed, plumed.getAtoms(), 0) * 0.1; 
 
   // get atomic numbers
   if (!model.hasattr("atomic_numbers"))
