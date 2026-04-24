@@ -296,12 +296,6 @@ void PytorchKolmogorovBiasGNN::registerKeywords(Keywords& keys)
 
   keys.add(
     "optional",
-    "BUFFER",
-    "Buffer size used in finding active environment atoms"
-  );
-
-  keys.add(
-    "optional",
     "BETA",
     "Inverse temperature in the right energy units, used for calculating $V_K$"
   );
