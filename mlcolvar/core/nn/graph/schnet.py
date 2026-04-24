@@ -4,6 +4,8 @@ from torch import nn
 from torch_geometric.nn.aggr import AttentionalAggregation
 from torch_geometric.nn import MessagePassing
 
+from mlcolvar.data import DictDataset
+from mlcolvar.core.nn.utils import Shifted_Softplus
 from mlcolvar.core.nn.graph.gnn import BaseGNN
 
 from typing import List, Dict
@@ -141,7 +143,7 @@ class SchNetModel(BaseGNN):
         # initialize layers with interaction blocks
         self.layers = nn.ModuleList([
             InteractionBlock(
-                n_hidden_channels, n_bases, n_filters, cutoff, aggr
+                n_hidden_channels, n_bases, n_filters, self.cutoff, aggr[i]
             )
             for i in range(n_layers)
         ])
@@ -347,8 +349,8 @@ class CFConv(MessagePassing):
         return x_j * W
 
 
-
 from mlcolvar.data.graph.utils import create_graph_tracing_example, create_test_graph_input
+
 
 def _create_test_data_list():
     batch = create_test_graph_input(
