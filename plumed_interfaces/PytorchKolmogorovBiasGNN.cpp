@@ -116,29 +116,22 @@ ATOM      4  H   ACE A   1      13.980  13.920  30.410  1.00  0.00           H
 ATOM      5  C   ACE A   1      15.300  15.070  29.100  1.00  0.00           C
 \endauxfile
 
-//+PLUMEDOC PYTORCH_KOLMOGOROV_BIAS_GNN
-/*
-Load a Graph Neural Network (GNN) model for the committor compiled with TorchScript and compute the Kolmogorov bias.
+The module constructs graph edges between neighbors inside the selected atom
+group, using the cutoff value recorded in the model file. By default, such an 
+atom group is defined by the single `SYSTEM_SELECTION` keyword. In this case, the number 
+of nodes in the input graph is fixed, while the number of edges 
+changes according to the relative positions of the atoms. 
+If the `ENVIRONMENT_SELECTION` parameter is given, the graph instead contains all atoms
+in `SYSTEM_SELECTION` and all atoms in `ENVIRONMENT_SELECTION` that are within a cutoff
+radius from _any_ atom in `SYSTEM_SELECTION`. Such a radius equals to the cutoff recorded in the
+model file _plus_ the buffer size, also recorded in the model file. 
+Thus, when `ENVIRONMENT_SELECTION` is given, the node number of the input 
+graph can change dynamically during the simulation. Besides, when SUBGROUPA is defined the module 
+will add long edges bewteen such a group. Cutoff radius of these long edges will equal to the 
+long_range_cutoff attribute recorded in the model file.
 
-This colvar evaluates a TorchScript GNN model and assumes that it returns a single scalar output `z`. From this value it computes the committor `q` and the Kolmogorov bias `kbias`. 
-Derivatives of all outputs with respect to the atomic coordinates are obtained through PyTorch automatic differentiation.
-
-In particular, the module takes a GNN model for the `z` committor-based CV, applies a sigmoid activation to get the committor `q`, and then computes the bias as $V_K = -\\frac{\\lambda}{\\beta} \\log(\\| \\nabla q \\|^2 + \\epsilon)$, where $\\lambda$ is a prefactor, $\\beta$ is the inverse temperature, and $\\epsilon$ is a small regularization term to avoid divergences when the gradient is zero. 
-The bias can be optionally computed using the raw model output `z` instead of the activated `q` through `USE_Q_FOR_BIAS=false`, which may preserve larger gradients when `q` is close to `0` or `1`.
-
-This module uses a fixed length unit of _Angstrom_. Thus, the GNN model read by this module should be trained under the same unit convention. Besides, the module constructs node attributes from the atomic types. 
-As a result, this module requires a PDB file that records names of _ALL_ atoms in the system through the `STRUCTURE` keyword. Note that the atom names in this PDB file should be element symbols, e.g.:
-\auxfile{plumed_topo.pdb}
-ATOM      1  H   ACE A   1      15.100  12.940  29.390  1.00  0.00           H
-ATOM      2  C   ACE A   1      14.970  13.860  29.960  1.00  0.00           C
-ATOM      3  H   ACE A   1      15.720  13.820  30.760  1.00  0.00           H
-ATOM      4  H   ACE A   1      13.980  13.920  30.410  1.00  0.00           H
-ATOM      5  C   ACE A   1      15.300  15.070  29.100  1.00  0.00           C
-\endauxfile
-
-The module constructs graph edges between neighbors inside the selected atom group, using the cutoff value recorded in the model file. By default, such an atom group is defined by the single `SYSTEM_SELECTION` keyword. In this case, the number of nodes in the input graph is fixed, while the number of edges changes according to the relative positions of the atoms. If the `ENVIRONMENT_SELECTION` parameter is given, the graph instead contains all atoms in `SYSTEM_SELECTION` and all atoms in `ENVIRONMENT_SELECTION` that are within a radius of _ANY_ atom in `SYSTEM_SELECTION`. Such a radius equals to the cutoff recorded in the model file _plus_ the buffer size controlled by the `BUFFER` keyword. Thus, when `ENVIRONMENT_SELECTION` is given, the node number of the input graph can fluctuate during the simulation. Besides, when SUBGROUPA is defined the module will add long edges bewteen such a group. Cutoff radius of these long edges will equal to the long_range_cutoff attribute recorded in the model file.
-
-The `LAMBDA` and `BETA` keywords control the bias prefactor and inverse temperature. The `EPSILON`, `SIGMOID_P`, and `USE_Q_FOR_BIAS` keywords tune the bias expression. 
+The `LAMBDA` and `BETA` keywords control the Kolmogorov bias prefactor and inverse temperature. 
+The `EPSILON`, `SIGMOID_P`, and `USE_Q_FOR_BIAS` keywords tune the bias expression. 
 The outputs are exposed as `z`, `q`, and `kbias`.
 
 Note that this function requires \ref installation-libtorch LibTorch C++ library.
@@ -147,7 +140,8 @@ Specifically, we encourage the user to install the GPU-enabled version of
 LibTorch, when dealing with large input graphs.
 
 \par Examples
-The following example instructs plumed to evaluate a committor GNN model using atoms 1-10 and compute the committor outputs `z`, `q`, and the Kolmogorov bias `kbias`. The neighbor list for determining the edges will be updated every 1 steps.
+The following example instructs plumed to evaluate a committor GNN model using 
+atoms 1-10 and compute the committor outputs `z`, `q`, and the Kolmogorov bias `kbias`. The neighbor list for determining the edges will be updated every 1 steps.
 \plumedfile
 PYTORCH_KOLMOGOROV_BIAS_GNN ...
   SYSTEM_SELECTION=1-10
@@ -162,7 +156,8 @@ BIASVALUE ARG=gnn.kbias
 PRINT FILE=COLVAR ARG=gnn.z,gnn.q,gnn.kbias STRIDE=100
 \endplumedfile
 
-The following example instructs plumed to do the same calculation as the above example, but will evaluate the model on CUDA using double precision and with custom bias parameters.
+The following example instructs plumed to do the same calculation as the above example, 
+but will evaluate the model on CUDA using double precision and with custom bias parameters.
 \plumedfile
 PYTORCH_KOLMOGOROV_BIAS_GNN ...
   SYSTEM_SELECTION=1-10
@@ -183,7 +178,10 @@ BIASVALUE ARG=gnn.kbias
 PRINT FILE=COLVAR ARG=gnn.z,gnn.q,gnn.kbias STRIDE=100
 \endplumedfile
 
-The following example instructs plumed to evaluate the committor GNN model using atoms 1-10 as system atoms and atoms 11-100 as the environment atoms. The buffer size used for selecting active atoms from the environment atoms is 2 PLUMED units. The neighbor list for determining the edges will be updated every 2 steps.
+The following example instructs plumed to evaluate the committor GNN model using atoms 
+1-10 as system atoms and atoms 11-100 as the environment atoms. 
+The neighbor list for determining the edges will be updated every 2 steps.
+
 \plumedfile
 PYTORCH_KOLMOGOROV_BIAS_GNN ...
   SYSTEM_SELECTION=1-10
@@ -191,7 +189,6 @@ PYTORCH_KOLMOGOROV_BIAS_GNN ...
   MODEL=model.ptc
   STRUCTURE=plumed_topo.pdb
   NL_STRIDE=2
-  BUFFER=2.0
   LAMBDA=1.0
   BETA=1.0
   LABEL=gnn
@@ -312,12 +309,6 @@ void PytorchKolmogorovBiasGNN::registerKeywords(Keywords& keys)
 
   keys.add(
     "optional",
-    "BUFFER",
-    "Buffer size used in finding active environment atoms"
-  );
-
-  keys.add(
-    "optional",
     "BETA",
     "Inverse temperature in the right energy units, used for calculating $V_K$"
   );
@@ -414,10 +405,6 @@ PytorchKolmogorovBiasGNN::PytorchKolmogorovBiasGNN(const ActionOptions& ao):
   parse("NL_STRIDE", neighbor_list_stride);
   if (neighbor_list_stride <= 0)
     plumed_merror("NL_STRIDE should be positive!");
-
-  parse("BUFFER", buffer);
-  if (buffer > 0 && atom_list_b.size() == 0)
-    plumed_merror("No ENVIRONMENT_SELECTION given! Cannot define the BUFFER key!");
 
   parse("BETA", beta);
   if (beta <= 0.0)
