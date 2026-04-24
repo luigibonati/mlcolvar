@@ -25,6 +25,7 @@ wheels/
 .installed.cfg
 *.egg
 extra/
+aux/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -112,3 +113,8 @@ old_code/
 .vscode/
 test_notebooks/
 lightning_logs/
+
+# Ignore plumed_interfaces test files and build artifacts
+plumed_interfaces/_*
+plumed_interfaces/*.o
+plumed_interfaces/*.so
