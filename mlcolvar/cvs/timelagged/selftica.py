@@ -48,6 +48,7 @@ class SelfTICA(BaseCV):
         model: Union[List[int], FeedForward, BaseGNN],
         n_cvs: int = None,
         regularization: float = 1e-5,
+        predictor_depth: int = 2,
         options: dict = None, 
         **kwargs,
         ):
@@ -64,6 +65,9 @@ class SelfTICA(BaseCV):
             Number of cvs to optimize, default None (= last layer)
         regularization : float, optional
             L2 regularization strength used in the loss function (default: 1e-5).
+        predictor_depth : int, optional
+            Number of layers of the predictor network (default: 2).
+            Use 1 for a linear predictor.
         options : dict[str, Any], optional
             Options for the building blocks of the model, by default {}. 
             Available blocks: ['norm_in', 'encoder', 'predictor', 'tica'].
@@ -108,8 +112,9 @@ class SelfTICA(BaseCV):
         else:
             raise ValueError("Cannot infer output dimension from model")
         
+        pred_layers = [out_dim] * predictor_depth
         self.predictor = FeedForward(
-           layers=[out_dim, out_dim],
+           layers=pred_layers,
            **options[o]
         )
 
