@@ -108,8 +108,15 @@ class SelfTICA(BaseCV):
 
         # initalize predictor
         o = "predictor"
+        # ===== infer output dimension =====
+        if hasattr(self.nn, "out_features") and isinstance(self.nn.out_features, int):
+            out_dim = self.nn.out_features
+        elif hasattr(self.nn, "n_out"):
+            out_dim = int(self.nn.n_out)
+        else:
+            raise ValueError("Cannot infer output dimension from model")
         
-        pred_layers = [self.nn.out_features] * predictor_depth
+        pred_layers = [out_dim] * predictor_depth
         self.predictor = FeedForward(
            layers=pred_layers,
            **options[o]
