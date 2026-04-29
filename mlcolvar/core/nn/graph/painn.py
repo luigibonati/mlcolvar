@@ -9,7 +9,7 @@ from mlcolvar.core.nn.graph.gnn import BaseGNN
 from typing import List, Dict, Optional, Tuple
 
 """
-The PaiNN components. This module is directly taken from repo:
+The PaiNN components. This module is adapted from repo:
 https://github.com/MaxH1996/PaiNN-in-PyG
 """
 
@@ -17,35 +17,8 @@ __all__ = ['PaiNNModel', 'MessagePassingPaiNN', 'UpdatePaiNN', 'AttentionGatePai
 
 class PaiNNModel(BaseGNN):
     """
-    The PaiNN model [1]. This implementation is taken from:
+    The PaiNN model [1]. This implementation is adapted from:
     https://github.com/MaxH1996/PaiNN-in-PyG/blob/main/PaiNN.py
-
-
-    Parameters
-    ----------
-    n_out: int
-        Size of the output node features.
-    cutoff: float
-        Cutoff radius of the basis functions. Should be the same as the cutoff
-        radius used to build the graphs.
-    atomic_numbers: List[int]
-        The atomic numbers mapping, e.g. the `atomic_numbers` attribute of a
-        `mlcolvar.graph.data.GraphDataSet` instance.
-    long_range_cutoff : float
-        Cutoff radius for the long-range edges defined on subsystem atoms. 
-        If negative, no long-range interactions are considered, by default -1.0
-    pooling_operation : str
-        Type of pooling operation to combine node-level features into graph-level features, either mean or sum, by default 'mean'
-    n_bases : int, optional
-        Size of the basis set used for the embedding, by default 6
-    n_layers : int, optional
-        Number of the graph convolution layers, by default 2
-    n_hidden_channels : int, optional
-        Size of hidden embeddings, by default 16
-    aggr: str
-        Type of the GNN aggr function.
-    w_out_after_pool : bool, optional
-        Whether to apply the last linear transformation form hidden to output channels after the pooling sum, by default True
 
     References
     ----------
@@ -63,10 +36,34 @@ class PaiNNModel(BaseGNN):
         n_bases: int = 6,
         n_layers: int = 2,
         n_hidden_channels: int = 16,
-        aggr: str = 'add',
+        aggr: str = 'sum',
         w_out_after_pool: bool = True,
         **kwargs
     ) -> None:
+        """
+        Parameters
+        ----------
+        n_out: int
+            Size of the output node features.
+        dataset_for_initialization : DictDataset, optional
+                Dataset containing the graphs on which the gnn model will be applied. 
+                This is used to initialize and register the cutoff, buffer, long_range_cutoff and atomic_numbers from the dataset metadata.
+                This is the preferred way to initialize the gnn model, as it ensures consistency between the model and the dataset.
+                As an alternative this can be set to None and the cutoff, buffer, long_range_cutoff and atomic_numbers can be provided as kwargs.
+        pooling_operation : str
+            Type of pooling operation to combine node-level features into graph-level features, either mean or sum, by default 'mean'
+        n_bases : int, optional
+            Size of the basis set used for the embedding, by default 6
+        n_layers : int, optional
+            Number of the graph convolution layers, by default 2
+        n_hidden_channels : int, optional
+            Size of hidden embeddings, by default 16
+        aggr: str
+            Type of the GNN aggr function, by default `sum`.
+            Possible choices are: 'mean', 'sum', 'max', 'min', 'mul'.
+        w_out_after_pool : bool, optional
+            Whether to apply the last linear transformation form hidden to output channels after the pooling sum, by default True
+        """
 
         super().__init__(
             n_out=n_out, 
@@ -146,8 +143,6 @@ class PaiNNModel(BaseGNN):
         h_E = self.embed_edge(data)
         h_V_s = self.W_v(data['node_attrs'])
         h_V_v = torch.zeros_like(h_V_s).unsqueeze(-1).expand(-1, -1, 3)
-
-        batch_id = data['batch']
 
         for message, update in zip(self.layers_message, self.layers_update):
             s_temp, v_temp = message(
@@ -229,7 +224,7 @@ class MessagePassingPaiNN(MessagePassing):
         n_gaussians: int,
         cutoff: float,
         long_range_cutoff: float = -1.0,
-        aggr: str = 'mean',
+        aggr: str = 'sum',
     ) -> None:
         super(MessagePassingPaiNN, self).__init__(aggr=aggr)
 

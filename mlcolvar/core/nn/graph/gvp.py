@@ -9,7 +9,7 @@ from mlcolvar.core.nn.graph.gnn import BaseGNN
 from mlcolvar.data import DictDataset
 
 """
-The Geometric Vector Perceptron (GVP) layer. This module is taken from:
+The Geometric Vector Perceptron (GVP) layer. This module is adapted from:
 https://github.com/chaitjo/geometric-gnn-dojo/blob/main/models/layers/py,
 and made compilable.
 """
