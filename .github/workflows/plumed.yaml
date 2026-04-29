@@ -138,8 +138,18 @@ jobs:
         run: |
           cd plumed_test
           bash ../plumed_interfaces/tests/driver_NaCl.sh gnn
+        
+      - name: Test NaCl gnn-lr
+        run: |
+          cd plumed_test
+          bash ../plumed_interfaces/tests/driver_NaCl.sh gnn-lr
       
       - name: Test NaCl gnn-kbias
         run: |
           cd plumed_test
           bash ../plumed_interfaces/tests/driver_NaCl.sh gnn-kbias
+      
+      - name: Test NaCl gnn-lr-kbias
+        run: |
+          cd plumed_test
+          bash ../plumed_interfaces/tests/driver_NaCl.sh gnn-lr-kbias

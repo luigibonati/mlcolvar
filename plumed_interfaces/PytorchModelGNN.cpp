@@ -109,7 +109,7 @@ in `SYSTEM_SELECTION` and all atoms in `ENVIRONMENT_SELECTION` that are within a
 radius from _any_ atom in `SYSTEM_SELECTION`. Such a radius equals to the cutoff recorded in the
 model file _plus_ the buffer size, also recorded in the model file. 
 Thus, when `ENVIRONMENT_SELECTION` is given, the node number of the input 
-graph can change dynamically during the simulation. Besides, when SUBGROUPA is defined
+graph can change dynamically during the simulation. Besides, when SUBSYSTEM_SELECTION is defined
 the module will add long edges bewteen such a group. Cutoff radius of these
 long edges will equal to the long_range_cutoff attribute recorded in the model file.
 
@@ -156,11 +156,13 @@ OPES_METAD ...
 
 
 The following example instructs plumed to evaluate the GNN model using 
-the atoms 1-10 as center atoms, and atoms 11-100 as the environment atoms. 
+the atoms 1-10 as system atoms, and atoms 11-100 as the environment atoms.
+In addition, long-range edges will be added between the subsystem atoms (1-10). 
 The neighbor list for determining the edges will be updated every 2 steps.
 \plumedfile
 PYTORCH_GNN ...
   SYSTEM_SELECTION=1-10
+  SUBSYSTEM_SELECTION=1-10
   ENVIRONMENT_SELECTION=11-100
   MODEL=model.ptc
   STRUCTURE=plumed_topo.pdb
@@ -361,7 +363,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
 
   if (atom_list_sub_a.size() > 0)
     if (!subgroup_is_in_group_a())
-      plumed_merror("Not all atoms in SUBGROUPA present in GROUPA!");
+      plumed_merror("Not all atoms in SUBSYSTEM_SELECTION present in SYSTEM_SELECTION!");
 
   // check precision to be used
   if (use_float64)
@@ -449,11 +451,11 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   if (atom_list_sub_a.size() > 0) {
     if (!model.hasattr("long_range_cutoff")) {
       plumed_merror(
-        "Can not find model attribute: 'long_range_cutoff'! Such an attributes is required for defining the subsystem group (SUBGROUPA)!"
+        "Can not find model attribute: 'long_range_cutoff'! Such an attributes is required for defining the subsystem group (SUBSYSTEM_SELECTION)!"
       );
     } else if (model.attr("long_range_cutoff").toTensor().item<double>() < 0) {
       plumed_merror(
-        "Model attribute: 'long_range_cutoff' is negative! A positive long cutoff radius is required for defining the subsystem group (SUBGROUPA)!"
+        "Model attribute: 'long_range_cutoff' is negative! A positive long cutoff radius is required for defining the subsystem group (SUBSYSTEM_SELECTION)!"
       );
     } else {
       r_max_l = model.attr("long_range_cutoff").toTensor().item<double>();
@@ -464,7 +466,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
     && model.attr("long_range_cutoff").toTensor().item<double>() > 0
   ) {
     plumed_merror(
-      "Found model attribute: 'long_range_cutoff'! Such an attributes requires defining the subsystem group (SUBGROUPA)!"
+      "Found model attribute: 'long_range_cutoff'! Such an attributes requires defining the subsystem group (SUBSYSTEM_SELECTION)!"
     );
   }
 
@@ -615,7 +617,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   }
   if (atom_list_sub_a.size() > 0) {
     log.printf(
-      "  Will add long edges between %u atoms\n",
+      "  Will add long-range edges between %u atoms\n",
       static_cast<unsigned>(atom_list_sub_a.size())
     );
     log.printf("  Subsystem atom list:\n");
@@ -638,7 +640,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   if(atom_list_b.size() > 0)
     log.printf("  Environment buffer size: %f (PLUMED length unit)\n", buffer);
   if (atom_list_sub_a.size() > 0)
-    log.printf("  Subsystem cutoff radius: %f (PLUMED length unit)\n", r_max_l);
+    log.printf("  Subsystem long-range cutoff radius: %f (PLUMED length unit)\n", r_max_l);
   log.printf("  Number of outputs: %d \n", n_out);
   log.printf("  Will run on device: ");
   if (use_cuda)
