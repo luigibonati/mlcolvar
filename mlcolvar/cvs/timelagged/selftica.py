@@ -46,7 +46,7 @@ class SelfTICA(BaseCV):
     def __init__(
         self, 
         model: Union[List[int], FeedForward, BaseGNN],
-        n_cvs: int = None,
+        n_cvs: int = 1,
         regularization: float = 1e-5,
         predictor_depth: int = 2,
         options: dict = None, 
@@ -62,7 +62,7 @@ class SelfTICA(BaseCV):
         encoder_layers : list
             A list of integers specifying the number of neurons in each layer of the encoder network.
         n_cvs : int,
-            Number of cvs to optimize, default None (= last layer)
+            Number of cvs to optimize, default 1
         regularization : float, optional
             L2 regularization strength used in the loss function (default: 1e-5).
         predictor_depth : int, optional
@@ -77,6 +77,10 @@ class SelfTICA(BaseCV):
 
         # =======   LOSS  =======
         self.loss_fn = ContrastiveLoss(reg=regularization, mode="l2")
+
+        # check n_cvs
+        if not isinstance(n_cvs, int) or n_cvs < 1:
+            raise ValueError("n_cvs must be a positive integer (>= 1)")
 
         # here we need to override the self.out_features attribute
         self.out_features = n_cvs
@@ -104,15 +108,8 @@ class SelfTICA(BaseCV):
 
         # initalize predictor
         o = "predictor"
-        # ===== infer output dimension =====
-        if hasattr(self.nn, "out_features") and isinstance(self.nn.out_features, int):
-            out_dim = self.nn.out_features
-        elif hasattr(self.nn, "n_out"):
-            out_dim = int(self.nn.n_out)
-        else:
-            raise ValueError("Cannot infer output dimension from model")
         
-        pred_layers = [out_dim] * predictor_depth
+        pred_layers = [self.nn.out_features] * predictor_depth
         self.predictor = FeedForward(
            layers=pred_layers,
            **options[o]
