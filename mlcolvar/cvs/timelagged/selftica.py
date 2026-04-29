@@ -109,7 +109,7 @@ class SelfTICA(BaseCV):
             raise ValueError("Cannot infer output dimension from model")
         
         self.predictor = FeedForward(
-           layers=[out_dim, out_dim, out_dim],
+           layers=[out_dim, out_dim],
            **options[o]
         )
 
