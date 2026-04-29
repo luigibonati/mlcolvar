@@ -4,10 +4,11 @@ from torch import nn
 from torch_geometric.nn.aggr import AttentionalAggregation
 from torch_geometric.nn import MessagePassing
 
-from mlcolvar.core.nn.graph.gnn import BaseGNN
+from mlcolvar.data import DictDataset
 from mlcolvar.core.nn.utils import Shifted_Softplus
+from mlcolvar.core.nn.graph.gnn import BaseGNN
 
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 """
 The SchNet components. This module is taken from the pgy package:
@@ -31,6 +32,9 @@ class SchNetModel(BaseGNN):
     atomic_numbers: List[int]
         The atomic numbers mapping, e.g. the `atomic_numbers` attribute of a
         `mlcolvar.graph.data.GraphDataSet` instance.
+    long_range_cutoff : float
+            Cutoff radius for the long-range edges defined on subsystem atoms. 
+            If negative, no long-range interactions are considered, by default -1.0
     n_bases: int
         Size of the basis set.
     n_layers: int
@@ -53,8 +57,7 @@ class SchNetModel(BaseGNN):
     def __init__(
         self,
         n_out: int,
-        cutoff: float,
-        atomic_numbers: List[int],
+        dataset_for_initialization: DictDataset = None,
         pooling_operation : str = 'mean',
         n_bases: int = 16,
         n_layers: int = 2,
@@ -62,6 +65,7 @@ class SchNetModel(BaseGNN):
         n_hidden_channels: int = 16,
         aggr: str = 'mean',
         w_out_after_pool: bool = False,
+        **kwargs
     ) -> None:
         """The SchNet model. This implementation is taken from torch_geometric:
         https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/nn/models/schnet.py
@@ -70,11 +74,11 @@ class SchNetModel(BaseGNN):
         ----------
         n_out : int
             Size of the output node features.
-        cutoff : float
-            Cutoff radius of the basis functions. Should be the same as the cutoff
-            radius used to build the graphs.
-        atomic_numbers : List[int]
-            The atomic numbers mapping.
+        dataset_for_initialization : DictDataset, optional
+            Dataset containing the graphs on which the gnn model will be applied. 
+            This is used to initialize and register the cutoff, buffer, and atomic_numbers from the dataset metadata.
+            This is the preferred way to initialize the gnn model, as it ensures consistency between the model and the dataset.
+            As an alternative this can be set to None and the cutoff, buffer, and atomic_numbers can be provided as kwargs.
         pooling_operation : str
             Type of pooling operation to combine node-level features into graph-level features, either mean or sum, by default 'mean'
         n_bases : int, optional
@@ -95,18 +99,18 @@ class SchNetModel(BaseGNN):
         """
 
         super().__init__(
-            n_out=n_out, 
-            cutoff=cutoff, 
-            atomic_numbers=atomic_numbers, 
+            n_out=n_out,
+            dataset_for_initialization=dataset_for_initialization,
             pooling_operation=pooling_operation, 
             n_bases=n_bases, 
             n_polynomials=0, 
-            basis_type='gaussian'
+            basis_type='gaussian',
+            **kwargs
         )
 
         # transforms embedding into hidden channels
         self.W_v = nn.Linear(
-            in_features=len(atomic_numbers), 
+            in_features=len(self.atomic_numbers), 
             out_features=n_hidden_channels, 
             bias=False
         )
@@ -142,7 +146,7 @@ class SchNetModel(BaseGNN):
         # initialize layers with interaction blocks
         self.layers = nn.ModuleList([
             InteractionBlock(
-                n_hidden_channels, n_bases, n_filters, cutoff, aggr[i]
+                n_hidden_channels, n_bases, n_filters, self.cutoff, self.long_range_cutoff, aggr[i]
             )
             for i in range(n_layers)
         ])
@@ -201,8 +205,16 @@ class SchNetModel(BaseGNN):
         h_V = self.W_v(data['node_attrs'])
 
         # update through layers
+        mask = data.get("edge_masks_lr", None)
+
         for layer in self.layers:
-            h_V = h_V + layer(h_V, data['edge_index'], h_E[0], h_E[1])
+            h_V = h_V + layer(
+                h_V,
+                data["edge_index"],
+                h_E[0],
+                h_E[1],
+                mask,
+            )
 
         # in case the last linear transformation is performed BEFORE pooling
         if not self._w_out_after_pool:
@@ -227,6 +239,7 @@ class InteractionBlock(nn.Module):
         num_gaussians: int,
         num_filters: int,
         cutoff: float,
+        long_range_cutoff: float = -1.0,
         aggr: str = 'mean'
     ) -> None:
         """SchNet interaction block
@@ -241,6 +254,9 @@ class InteractionBlock(nn.Module):
             Number of filters
         cutoff : float
             Radial cutoff
+        long_range_cutoff : float
+            Cutoff radius for the long-range edges defined on subsystem atoms. 
+            If negative, no long-range interactions are considered, by default -1.0
         aggr : str, optional
             Aggregation function, by default 'mean'
         """
@@ -250,12 +266,22 @@ class InteractionBlock(nn.Module):
             Shifted_Softplus(),
             nn.Linear(num_filters, num_filters),
         )
+        if long_range_cutoff > 0:
+            self.mlp_lr = nn.Sequential(
+                nn.Linear(num_gaussians, num_filters),
+                Shifted_Softplus(),
+                nn.Linear(num_filters, num_filters),
+            )
+        else:
+            self.mlp_lr = None
         self.conv = CFConv(
             hidden_channels,
             hidden_channels,
             num_filters,
             self.mlp,
             cutoff,
+            self.mlp_lr,
+            long_range_cutoff,
             aggr
         )
         self.act = Shifted_Softplus()
@@ -274,6 +300,11 @@ class InteractionBlock(nn.Module):
         self.conv.reset_parameters()
         nn.init.xavier_uniform_(self.lin.weight)
         self.lin.bias.data.fill_(0)
+        if self.mlp_lr is not None:
+            nn.init.xavier_uniform_(self.mlp_lr[0].weight)
+            self.mlp_lr[0].bias.data.fill_(0)
+            nn.init.xavier_uniform_(self.mlp_lr[2].weight)
+            self.mlp_lr[2].bias.data.fill_(0)
 
     def forward(
         self,
@@ -281,8 +312,9 @@ class InteractionBlock(nn.Module):
         edge_index: torch.Tensor,
         edge_weight: torch.Tensor,
         edge_attr: torch.Tensor,
+        edge_masks_lr: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        x = self.conv(x, edge_index, edge_weight, edge_attr)
+        x = self.conv(x, edge_index, edge_weight, edge_attr, edge_masks_lr)
         x = self.act(x)
         x = self.lin(x)
         return x
@@ -297,6 +329,8 @@ class CFConv(MessagePassing):
         num_filters: int,
         network: nn.Sequential,
         cutoff: float,
+        network_lr: Optional[nn.Sequential] = None,
+        long_range_cutoff: float = -1.0,
         aggr: str = 'mean'
     ) -> None:
         """Applies a continuous-filter convolution
@@ -313,6 +347,10 @@ class CFConv(MessagePassing):
             Neural network
         cutoff : float
             Radial cutoff
+        network_lr : Optional[nn.Sequential]
+            Neural network for long-range interactions
+        long_range_cutoff : float
+            Cutoff radius for the long-range edges defined on subsystem atoms
         aggr : str, optional
             Aggregation function, by default 'mean'
         """
@@ -320,7 +358,9 @@ class CFConv(MessagePassing):
         self.lin1 = nn.Linear(in_channels, num_filters, bias=False)
         self.lin2 = nn.Linear(num_filters, out_channels)
         self.network = network
+        self.network_lr = network_lr
         self.cutoff = cutoff
+        self.long_range_cutoff = long_range_cutoff
 
         self.reset_parameters()
 
@@ -335,9 +375,27 @@ class CFConv(MessagePassing):
         edge_index: torch.Tensor,
         edge_weight: torch.Tensor,
         edge_attr: torch.Tensor,
+        edge_masks_lr: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         C = 0.5 * (torch.cos(edge_weight * math.pi / self.cutoff) + 1.0)
         W = self.network(edge_attr) * C.view(-1, 1)
+
+        if edge_masks_lr is not None and self.network_lr is not None:
+            assert self.network_lr is not None
+            assert self.long_range_cutoff > self.cutoff
+
+            indices_lr = edge_masks_lr.nonzero()[:, 0]
+            lengths_lr = edge_weight[indices_lr]
+            edge_attr_lr = edge_attr[indices_lr]
+
+            C_l = 0.5 * torch.cos(lengths_lr * math.pi / self.long_range_cutoff) + 0.5
+            C_l_1 = 0.5 - 0.5 * torch.cos(lengths_lr * math.pi / self.cutoff)
+            C_l = C_l * (
+                C_l_1 * (lengths_lr < self.cutoff)  # le shorter than cutoff
+                + 1.0 * (lengths_lr > self.cutoff)  # le longer than cutoff
+            )
+            W_l = self.network_lr(edge_attr_lr) * C_l.view(-1, 1)
+            W = W.index_copy_(0, indices_lr, W_l)
 
         x = self.lin1(x)
         x = self.propagate(edge_index, x=x, W=W)
@@ -348,8 +406,8 @@ class CFConv(MessagePassing):
         return x_j * W
 
 
-
 from mlcolvar.data.graph.utils import create_graph_tracing_example, create_test_graph_input
+
 
 def _create_test_data_list():
     batch = create_test_graph_input(
@@ -420,6 +478,69 @@ def test_schnet_2() -> None:
     
     torch.set_default_dtype(torch.float32)
 
+def test_schnet_from_dataset() -> None:
+    from mlcolvar.data.graph.utils import create_test_graph_input
+    torch.manual_seed(0)
+    torch.set_default_dtype(torch.float64)
+
+    dataset = create_test_graph_input(output_type='dataset',
+                                      n_atoms=3,
+                                      n_samples=5,
+                                      n_states=1,
+                                      add_noise=False,
+                                    )
+
+    model = SchNetModel(
+        n_out=2,
+        dataset_for_initialization=dataset,
+        n_bases=6,
+        n_layers=2,
+        n_filters=16,
+        n_hidden_channels=16,
+        aggr='max',
+        w_out_after_pool=True
+    )
+
+    # check the model parameters are correctly initialized from the dataset metadata
+    assert ( model.cutoff == dataset.metadata['cutoff'] )
+    assert ( torch.allclose(model.atomic_numbers, torch.as_tensor(dataset.metadata['atomic_numbers'])) )
+    assert ( torch.allclose(model.buffer, torch.as_tensor(dataset.metadata['buffer'])) )
+
+    # check output is consistent with the one obtained from the test graph input
+    ref_out = torch.tensor([[0.36632594, -0.08193991]] * 5)
+    assert ( torch.allclose(model(dataset.get_graph_inputs()), ref_out) )
+
+
+    # test with environment atoms
+    dataset = create_test_graph_input(output_type='dataset',
+                                      n_atoms=3,
+                                      n_samples=5,
+                                      n_states=1,
+                                      add_noise=False,
+                                      environment=True
+                                    )
+
+    model = SchNetModel(
+        n_out=2,
+        dataset_for_initialization=dataset,
+        n_bases=6,
+        n_layers=2,
+        n_filters=16,
+        n_hidden_channels=16,
+        aggr='max',
+        w_out_after_pool=True
+    )
+
+    # check the model parameters are correctly initialized from the dataset metadata
+    assert ( model.cutoff == dataset.metadata['cutoff'] )
+    assert ( torch.allclose(model.atomic_numbers, torch.as_tensor(dataset.metadata['atomic_numbers'])) )
+    assert ( torch.allclose(model.buffer, torch.as_tensor(dataset.metadata['buffer'])) )
+
+    # check output is consistent with the one obtained from the test graph input
+    ref_out = torch.tensor([[0.14110785, -0.22323715]] * 5)
+    assert ( torch.allclose(model(dataset.get_graph_inputs()), ref_out) )
+    
+    torch.set_default_dtype(torch.float32)
 
 def test_schnet_3() -> None:
     torch.manual_seed(0)
@@ -453,6 +574,38 @@ def test_schnet_3() -> None:
 
     data = _create_test_data_list()
     ref_out = torch.tensor([[-0.1364561627454978, -0.1203537910489112]] * 5)
+    assert ( torch.allclose(model(data), ref_out) )
+    
+    torch.set_default_dtype(torch.float32)
+
+
+def test_schnet_4() -> None:
+    torch.manual_seed(0)
+    torch.set_default_dtype(torch.float64)
+
+    model = SchNetModel(
+        n_out=2,
+        cutoff=0.1,
+        long_range_cutoff=0.2,
+        atomic_numbers=[1, 8],
+        n_bases=6,
+        n_layers=2,
+        n_filters=16,
+        n_hidden_channels=16,
+        aggr='min',
+    )
+
+    data = _create_test_data_list()
+    data['edge_masks_lr'] = torch.zeros(
+        ((data['edge_index'].shape[1]), 1), dtype=bool
+    )
+    data['edge_masks_lr'][:-2] = True
+    torch.set_printoptions(precision=16)
+    ref_out = torch.tensor([[-0.1873424391457965, -0.0150953093265520],
+                            [-0.1873424391457965, -0.0150953093265520],
+                            [-0.1873424391457965, -0.0150953093265520],
+                            [-0.1873424391457965, -0.0150953093265520],
+                            [-0.1846414580701179, -0.0121660647548140]])
     assert ( torch.allclose(model(data), ref_out) )
     
     torch.set_default_dtype(torch.float32)

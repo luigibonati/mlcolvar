@@ -190,31 +190,35 @@ def test_trace_graph_based():
     from mlcolvar.core.nn.graph.schnet import SchNetModel 
     from mlcolvar.data.graph.utils import create_graph_tracing_example, create_test_graph_input
     for environment in [False, True]:
-        # create fake dataset
-        dataset = create_test_graph_input(n_samples=50, 
-                                          output_type='dataset', 
-                                          environment=environment)
-        datamodule = DictModule(dataset, lengths=[0.75, 0.2, 0.05], batch_size=25)
+        for long_range in [False, True]:
+            # create fake dataset
+            dataset = create_test_graph_input(n_samples=50, 
+                                            output_type='dataset', 
+                                            environment=environment,
+                                            long_range=long_range)
+            datamodule = DictModule(dataset, lengths=[0.75, 0.2, 0.05], batch_size=25)
 
-        # initialzie GNN-based model
-        gnn_model = SchNetModel(1, 
-                                10,
-                                atomic_numbers=dataset.metadata['atomic_numbers'])
-        model = mlcolvar.cvs.RegressionCV(model=gnn_model)
-        
-        # fake training to initialize the model parameters
-        trainer = lightning.Trainer(max_epochs=1, enable_checkpointing=False, logger=False, enable_progress_bar=False, enable_model_summary=False)
-        trainer.fit(model, datamodule)
-        
-        # trace the model
-        example = model.to_torchscript(method='trace')
-        assert isinstance(example, torch.jit.ScriptModule)
+            # initialzie GNN-based model
+            gnn_model = SchNetModel(n_out=1, 
+                                    cutoff=10 if not long_range else 1,
+                                    atomic_numbers=dataset.metadata['atomic_numbers'],
+                                    long_range_cutoff=5.0 if long_range else -1.0)
+            model = mlcolvar.cvs.RegressionCV(model=gnn_model)
+            
+            # fake training to initialize the model parameters
+            trainer = lightning.Trainer(max_epochs=1, enable_checkpointing=False, logger=False, enable_progress_bar=False, enable_model_summary=False)
+            trainer.fit(model, datamodule)
+            
+            # trace the model
+            example = model.to_torchscript(method='trace')
+            assert isinstance(example, torch.jit.ScriptModule)
 
-        # check that the example has the same output as the original model
-        for check_environment in [False, True]:
-            x = create_graph_tracing_example(n_species=len(dataset.metadata['atomic_numbers']), 
-                                             environment=check_environment)
-            assert torch.allclose(model(x), example(x))
+            # check that the example has the same output as the original model
+            for check_environment in [False, True]:
+                x = create_graph_tracing_example(n_species=len(dataset.metadata['atomic_numbers']), 
+                                                environment=check_environment,
+                                                long_range=long_range)
+                assert torch.allclose(model(x), example(x))
 
 if __name__=="__main__":
     test_trace_descriptor_based()
