@@ -378,6 +378,3 @@ def test_self_tica():
         method="trace",
     )
     assert torch.allclose(model(example_input_graph_test), traced_model(example_input_graph_test), atol=1e-6)
-
-if __name__ == "__main__":
-    test_self_tica()
