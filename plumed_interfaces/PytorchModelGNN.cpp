@@ -109,7 +109,9 @@ in `SYSTEM_SELECTION` and all atoms in `ENVIRONMENT_SELECTION` that are within a
 radius from _any_ atom in `SYSTEM_SELECTION`. Such a radius equals to the cutoff recorded in the
 model file _plus_ the buffer size, also recorded in the model file. 
 Thus, when `ENVIRONMENT_SELECTION` is given, the node number of the input 
-graph can change dynamically during the simulation.
+graph can change dynamically during the simulation. Besides, when SUBSYSTEM_SELECTION is defined
+the module will add long edges bewteen such a group. Cutoff radius of these
+long edges will equal to the long_range_cutoff attribute recorded in the model file.
 
 The outputs are exposed as `node-0`, `node-1`, etc.
 
@@ -154,11 +156,13 @@ OPES_METAD ...
 
 
 The following example instructs plumed to evaluate the GNN model using 
-the atoms 1-10 as center atoms, and atoms 11-100 as the environment atoms. 
+the atoms 1-10 as system atoms, and atoms 11-100 as the environment atoms.
+In addition, long-range edges will be added between the subsystem atoms (1-10). 
 The neighbor list for determining the edges will be updated every 2 steps.
 \plumedfile
 PYTORCH_GNN ...
   SYSTEM_SELECTION=1-10
+  SUBSYSTEM_SELECTION=1-10
   ENVIRONMENT_SELECTION=11-100
   MODEL=model.ptc
   STRUCTURE=plumed_topo.pdb
@@ -181,13 +185,16 @@ class PytorchGNN: public Colvar
   bool bailout_fusion = false;
   double r_max = 0.0; // In PLUMED length unit
   double buffer = 0.0; // In PLUMED length unit
+  double r_max_l = -1.0; // In PLUMED length unit
   std::string model_file_name;
   std::string structure_file_name;
   std::vector<int> system_node_types;
   std::vector<int> model_atomic_numbers;
   std::vector<AtomNumber> atom_list_a;
   std::vector<AtomNumber> atom_list_b;
+  std::vector<AtomNumber> atom_list_sub_a;
   std::vector<int> atom_list_active; // local_ids
+  std::vector<int> atom_list_active_subgroup; // local_ids
   std::unique_ptr<NeighborList> neighbor_list;
   torch::jit::script::Module model;
   torch::ScalarType torch_float_dtype = torch::kFloat32;
@@ -208,7 +215,9 @@ class PytorchGNN: public Colvar
   );
   int atomic_number_from_name(std::string name);
   bool groups_have_intersection(void);
+  bool subgroup_is_in_group_a(void);
   void find_active_atoms(int n_threads);
+  void find_active_subgroup_atoms(void);
 
 public:
   explicit PytorchGNN(const ActionOptions&);
@@ -234,6 +243,12 @@ void PytorchGNN::registerKeywords(Keywords& keys)
     "atoms",
     "ENVIRONMENT_SELECTION",
     "Second list of atoms (corresponding to the `environment_selection` in mlcolvar`)"
+  );
+
+  keys.add(
+    "atoms",
+    "SUBSYSTEM_SELECTION",
+    "List of subsystem atoms (corresponding to the `subsystem_selection in mlcolvar`)"
   );
 
   keys.add(
@@ -301,6 +316,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   // parse input
   parseAtomList("SYSTEM_SELECTION", atom_list_a);
   parseAtomList("ENVIRONMENT_SELECTION", atom_list_b);
+  parseAtomList("SUBSYSTEM_SELECTION", atom_list_sub_a);
 
   parse("MODEL", model_file_name);
 
@@ -341,6 +357,13 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
     atom_list_active.clear();
     find_active_atoms(1);
   }
+
+  if (atom_list_sub_a.size() > 0)
+    find_active_subgroup_atoms();
+
+  if (atom_list_sub_a.size() > 0)
+    if (!subgroup_is_in_group_a())
+      plumed_merror("Not all atoms in SUBSYSTEM_SELECTION present in SYSTEM_SELECTION!");
 
   // check precision to be used
   if (use_float64)
@@ -423,6 +446,29 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
     } else
     buffer = 0.0;
   buffer = buffer / getLengthUnit(plumed, plumed.getAtoms(), 0) * 0.1; 
+
+  // get long cutoff radius
+  if (atom_list_sub_a.size() > 0) {
+    if (!model.hasattr("long_range_cutoff")) {
+      plumed_merror(
+        "Can not find model attribute: 'long_range_cutoff'! Such an attributes is required for defining the subsystem group (SUBSYSTEM_SELECTION)!"
+      );
+    } else if (model.attr("long_range_cutoff").toTensor().item<double>() < 0) {
+      plumed_merror(
+        "Model attribute: 'long_range_cutoff' is negative! A positive long cutoff radius is required for defining the subsystem group (SUBSYSTEM_SELECTION)!"
+      );
+    } else {
+      r_max_l = model.attr("long_range_cutoff").toTensor().item<double>();
+      r_max_l = r_max_l / getLengthUnit(plumed, plumed.getAtoms(), 0) * 0.1;
+    }
+  } else if (
+    model.hasattr("long_range_cutoff")
+    && model.attr("long_range_cutoff").toTensor().item<double>() > 0
+  ) {
+    plumed_merror(
+      "Found model attribute: 'long_range_cutoff'! Such an attributes requires defining the subsystem group (SUBSYSTEM_SELECTION)!"
+    );
+  }
 
   // get atomic numbers
   if (!model.hasattr("atomic_numbers"))
@@ -569,6 +615,19 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
     }
     log.printf("\n");
   }
+  if (atom_list_sub_a.size() > 0) {
+    log.printf(
+      "  Will add long-range edges between %u atoms\n",
+      static_cast<unsigned>(atom_list_sub_a.size())
+    );
+    log.printf("  Subsystem atom list:\n");
+    for (unsigned int i = 0; i < atom_list_sub_a.size(); i++) {
+      if (((i + 1) % 10) == 0)
+        log.printf("\n");
+      log.printf("  %d", atom_list_sub_a[i].serial());
+    }
+    log.printf("\n");
+  }
   log << "  Model atomic numbers: " << model_atomic_numbers;
   log.printf("\n");
   log.printf("  Boundary conditions: ");
@@ -580,6 +639,8 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   log.printf("  Graph cutoff radius: %f (PLUMED length unit)\n", r_max);
   if(atom_list_b.size() > 0)
     log.printf("  Environment buffer size: %f (PLUMED length unit)\n", buffer);
+  if (atom_list_sub_a.size() > 0)
+    log.printf("  Subsystem long-range cutoff radius: %f (PLUMED length unit)\n", r_max_l);
   log.printf("  Number of outputs: %d \n", n_out);
   log.printf("  Will run on device: ");
   if (use_cuda)
@@ -713,6 +774,7 @@ void PytorchGNN::calculate()
 
   // build edges
   int n_edges = 0;
+  int n_edges_l = 0;
   torch::Tensor edge_index;
 
   if (atom_list_b.size() > 0) {
@@ -789,6 +851,68 @@ void PytorchGNN::calculate()
       torch::TensorOptions().dtype(torch::kInt64)
     );
     edge_index = torch::vstack({senders, receivers});
+  }
+
+  if (atom_list_sub_a.size() > 0) {
+    torch::Tensor edge_index_l;
+    int n_atoms_l = atom_list_sub_a.size();
+    n_edges_l = n_atoms_l * (n_atoms_l - 1);
+    std::vector<float> distance_vector_l(n_edges_l);
+    std::vector<std::vector<int64_t>> edge_index_vector_l;
+    edge_index_vector_l.resize(2, std::vector<int64_t>(n_edges_l));
+
+    #pragma omp parallel for num_threads(n_threads)
+    for (int i = 0; i < n_atoms_l; i++) {
+      int count = 0;
+      for (int j = 0; j < n_atoms_l; j++) {
+        if (i != j) {
+          // NOTE: build edge index using the partial local index list
+          edge_index_vector_l[0][
+            i * (n_atoms_l - 1) + count
+          ] = atom_list_active_subgroup[i];
+          edge_index_vector_l[1][
+            i * (n_atoms_l - 1) + count
+          ] = atom_list_active_subgroup[j];
+          count++;
+        }
+      }
+    }
+
+    #pragma omp parallel for num_threads(n_threads)
+    for (int i = 0; i < n_edges_l; i++) {
+      distance_vector_l[i] = pbc_tools.distance(
+        pbc,
+        x_local[edge_index_vector_l[0][i]],
+        x_local[edge_index_vector_l[1][i]]
+      );
+    }
+
+    torch::Tensor distances_l = torch::from_blob(
+      distance_vector_l.data(),
+      n_edges_l,
+      torch::TensorOptions().dtype(torch::kFloat32)
+    );
+    const torch::Tensor mask_l = distances_l <= r_max_l;
+
+    if (mask_l.size(0) > 0) {
+      torch::Tensor senders_l = torch::from_blob(
+        edge_index_vector_l[0].data(),
+        n_edges_l,
+        torch::TensorOptions().dtype(torch::kInt64)
+      );
+      torch::Tensor receivers_l = torch::from_blob(
+        edge_index_vector_l[1].data(),
+        n_edges_l,
+        torch::TensorOptions().dtype(torch::kInt64)
+      );
+      senders_l = senders_l.index({mask_l});
+      receivers_l = receivers_l.index({mask_l});
+      edge_index_l = torch::vstack({senders_l, receivers_l});
+      n_edges_l = (int)edge_index_l.size(1);
+
+      edge_index = torch::hstack({edge_index, edge_index_l});
+      n_edges = n_edges + n_edges_l;
+    }
   }
 
   edge_index = edge_index.to(device);
@@ -870,8 +994,16 @@ void PytorchGNN::calculate()
   n_system = n_system.to(device);
   n_system[0][0] = (int64_t)atom_list_a.size();
   input.insert("n_system", n_system);
-  
 
+  if (atom_list_sub_a.size() > 0){
+    auto edge_masks_lr = torch::vstack({
+      torch::zeros({n_edges - n_edges_l, 1}, torch::dtype(torch::kBool)),
+      torch::ones({n_edges_l, 1}, torch::dtype(torch::kBool)),
+    });
+    edge_masks_lr = edge_masks_lr.to(device);
+    input.insert("edge_masks_lr", edge_masks_lr);
+  }
+  
   // TODO: figure out how to enable virials. Maybe we could port MACE's python
   // code to our python module.
   auto output = model.forward({input}).toTensor();
@@ -973,6 +1105,18 @@ bool PytorchGNN::groups_have_intersection(void) {
   return intersections.size() > 0;
 }
 
+bool PytorchGNN::subgroup_is_in_group_a(void) {
+  std::vector<AtomNumber> atom_list_a_copy(atom_list_a);
+  std::vector<AtomNumber> atom_list_sub_a_copy(atom_list_sub_a);
+  for (auto atom_elt: atom_list_sub_a_copy)
+    if (
+      std::find(atom_list_a_copy.begin(),
+      atom_list_a_copy.end(), atom_elt) == atom_list_a_copy.end()
+    )
+      return false;
+  return true;
+}
+
 void PytorchGNN::find_active_atoms(int n_threads) {
   if (atom_list_b.size() > 0) {
     atom_list_active.clear();
@@ -997,6 +1141,19 @@ void PytorchGNN::find_active_atoms(int n_threads) {
 
     for (size_t i = 0; i < atom_list_a.size(); i++)
       atom_list_active.push_back(i);
+  }
+}
+
+void PytorchGNN::find_active_subgroup_atoms(void) {
+  atom_list_active_subgroup.clear();
+  // NOTE: since system atoms (atom_list_a) always appear at the head of the
+  // local indices, we simply find subsystem indices in atom_list_a.
+  for (auto atom_sub: atom_list_sub_a) {
+    int index = (int)std::distance(
+      atom_list_a.begin(),
+      find(atom_list_a.begin(), atom_list_a.end(), atom_sub)
+    );
+    atom_list_active_subgroup.push_back(index);
   }
 }
 

@@ -123,7 +123,8 @@ class GVPModel(BaseGNN):
                          drop_rate=drop_rate,
                          activations=(eval(f'torch.nn.{activation}')(), None),
                          vector_gate=True,
-                         cutoff=(self.cutoff if smooth else -1)
+                         cutoff=(self.cutoff if smooth else -1),
+                         long_range_cutoff=(self.long_range_cutoff if smooth else -1),
                          )
             for _ in range(n_layers)
         )
@@ -164,7 +165,15 @@ class GVPModel(BaseGNN):
         h_E = (h_E_1, h_E_2)
 
         for layer in self.layers:
-            h_V = layer(h_V, data['edge_index'], h_E, lengths)
+            mask = data.get("edge_masks_lr", None)
+            h_V = layer(
+                h_V,
+                data['edge_index'],
+                h_E,
+                lengths,
+                None,
+                mask
+            )
 
         for w in self.W_out:
             h_V = w(h_V)
@@ -314,6 +323,7 @@ class GVPConv(MessagePassing):
         'edge_attr_s': torch.Tensor,
         'edge_attr_v': torch.Tensor,
         'edge_lengths': torch.Tensor,
+        'edge_masks_lr': Optional[torch.Tensor],
     }
 
     def __init__(
@@ -326,6 +336,7 @@ class GVPConv(MessagePassing):
         activations=(nn.functional.relu, torch.sigmoid),
         vector_gate=True,
         cutoff: float = -1.0,
+        long_range_cutoff: float = -1.0,
     ) -> None:
         """Graph convolution / message passing with Geometric Vector Perceptrons.
         Takes in a graph with node and edge embeddings,
@@ -352,12 +363,16 @@ class GVPConv(MessagePassing):
             Whether to use vector gating, by default True. The vector activation will be used as sigma^+ in vector gating if `True`
         cutoff : float, optional
             Radial cutoff, by default -1.0
+        long_range_cutoff : float
+            Cutoff radius for the long-range edges defined on subsystem atoms. 
+            If negative, no long-range interactions are considered, by default -1.0
         """
         super(GVPConv, self).__init__(aggr=aggr)
         self.si, self.vi = in_dims
         self.so, self.vo = out_dims
         self.se, self.ve = edge_dims
         self.cutoff = cutoff
+        self.long_range_cutoff = long_range_cutoff
 
         GVP_ = functools.partial(
             GVP, activations=activations, vector_gate=vector_gate
@@ -389,6 +404,7 @@ class GVPConv(MessagePassing):
         edge_index: torch.Tensor,
         edge_attr: Tuple[torch.Tensor, torch.Tensor],
         edge_lengths: torch.Tensor,
+        edge_masks_lr: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Forward pass of GVPConv
 
@@ -402,7 +418,9 @@ class GVPConv(MessagePassing):
             Edge attributes
         edge_lengths : torch.Tensor
             Edge lengths
-
+        edge_masks_lr : Optional[torch.Tensor]
+            Mask for long-range edges defined on subsystem atoms, by default None.
+        
         Returns
         -------
         Tuple[torch.Tensor, torch.Tensor]
@@ -417,6 +435,7 @@ class GVPConv(MessagePassing):
             edge_attr_s=edge_attr[0],
             edge_attr_v=edge_attr[1],
             edge_lengths=edge_lengths,
+            edge_masks_lr=edge_masks_lr,
         )
         return _split(message, self.vo)
 
@@ -429,20 +448,44 @@ class GVPConv(MessagePassing):
         edge_attr_s: torch.Tensor,
         edge_attr_v: torch.Tensor,
         edge_lengths: torch.Tensor,
+        edge_masks_lr: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
+        
         assert edge_attr_s is not None
         assert edge_attr_v is not None
+
         v_j = v_j.view(v_j.shape[0], v_j.shape[1] // 3, 3)
         v_i = v_i.view(v_i.shape[0], v_i.shape[1] // 3, 3)
+
         message = _tuple_cat(
             (s_j, v_j), (edge_attr_s, edge_attr_v), (s_i, v_i)
         )
+
         message = self.message_func(message)
         message_merged = _merge(*message)
+
         if self.cutoff > 0:
-            # apply SchNet-style cutoff function
-            c = 0.5 * (torch.cos(edge_lengths * math.pi / self.cutoff) + 1.0)
-            message_merged = message_merged * c.view(-1, 1)
+            lens = edge_lengths
+
+            # normal cutoff
+            c = 0.5 * (torch.cos(lens * math.pi / self.cutoff) + 1.0)
+
+            if edge_masks_lr is not None and self.long_range_cutoff > self.cutoff:
+                mask = edge_masks_lr.view(-1, 1)
+
+                # long cutoff
+                c_l = 0.5 * torch.cos(lens * math.pi / self.long_range_cutoff) + 0.5
+                c_l_1 = 0.5 - 0.5 * torch.cos(lens * math.pi / self.cutoff)
+                c_l = c_l * (
+                    c_l_1 * (lens < self.cutoff) +
+                    (lens >= self.cutoff).float()
+                )
+
+                # replace long edges
+                c = torch.where(mask, c_l, c)
+
+            message_merged = message_merged * c
+
         return message_merged
 
     def message_func(
@@ -477,6 +520,8 @@ class GVPConvLayer(nn.Module):
         vector_gate=True,
         residual=True,
         cutoff: float = -1.0,
+        long_range_cutoff: float = -1.0,
+        aggr: str = 'mean',
     ) -> None:
         """Full graph convolution / message passing layer with
         Geometric Vector Perceptrons. 
@@ -506,6 +551,11 @@ class GVPConvLayer(nn.Module):
             whether to perform the update residually, by default True
         cutoff : float, optional
             radial cutoff, by default -1.0
+        long_range_cutoff : float
+            Cutoff radius for the long-range edges defined on subsystem atoms. 
+            If negative, no long-range interactions are considered, by default -1.0
+        aggr : str, optional
+            Type of message aggregate function, by default 'mean'
         """
         super(GVPConvLayer, self).__init__()
         self.conv = GVPConv(
@@ -513,10 +563,11 @@ class GVPConvLayer(nn.Module):
             node_dims,
             edge_dims,
             n_message,
-            aggr='mean',
+            aggr=aggr,
             activations=activations,
             vector_gate=vector_gate,
             cutoff=cutoff,
+            long_range_cutoff=long_range_cutoff,
         )
         GVP_ = functools.partial(
             GVP, activations=activations, vector_gate=vector_gate
@@ -549,6 +600,7 @@ class GVPConvLayer(nn.Module):
         edge_attr: Tuple[torch.Tensor, torch.Tensor],
         edge_lengths: torch.Tensor,
         node_mask: Optional[torch.Tensor] = None,
+        edge_masks_lr: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Forward pass of GVPConvLayer
     
@@ -566,6 +618,8 @@ class GVPConvLayer(nn.Module):
             Mask to restrict the node update to a subset. 
             It should be a tensor of type `bool` to index the first dim of node embeddings (s, V), by default None. 
             If not `None`, only the selected nodes will be updated.
+        edge_masks_lr : Optional[torch.Tensor]
+            Mask for long-range edges defined on subsystem atoms, by default None.
 
         Returns
         -------
@@ -573,7 +627,7 @@ class GVPConvLayer(nn.Module):
             Output scalar and vector node embeddings
         """
 
-        dh = self.conv(x, edge_index, edge_attr, edge_lengths)
+        dh = self.conv(x, edge_index, edge_attr, edge_lengths, edge_masks_lr)
 
         x_ = x
         if node_mask is not None:
@@ -859,18 +913,21 @@ def _merge(s: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
     return torch.cat([s, v], -1)
 
 
-def test_gvp() -> None:
-    from mlcolvar.data.graph.utils import create_graph_tracing_example, create_test_graph_input
 
-    def _create_test_data_list():
-        batch = create_test_graph_input(
-            output_type='batch',
-            n_atoms=3,
-            n_samples=6,
-            n_states=1,
-            add_noise=False,
-        )
-        return batch['data_list']
+from mlcolvar.data.graph.utils import create_graph_tracing_example, create_test_graph_input
+
+
+def _create_test_data_list():
+    batch = create_test_graph_input(
+        output_type='batch',
+        n_atoms=3,
+        n_samples=6,
+        n_states=1,
+        add_noise=False,
+    )
+    return batch['data_list']
+    
+def test_gvp() -> None:
 
     torch.manual_seed(0)
     torch.set_default_dtype(torch.float64)
@@ -920,7 +977,6 @@ def test_gvp() -> None:
     
     traced_model = torch.jit.trace(model, example_inputs=create_graph_tracing_example(2))
     assert ( torch.allclose(traced_model(data), ref_out) )
-
 
     torch.set_default_dtype(torch.float32)
 

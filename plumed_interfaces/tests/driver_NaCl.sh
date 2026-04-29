@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# retrieve mode (gnn, gnn-kbias)
+# retrieve mode (gnn,, gnn-lr, gnn-kbias, gnn-lr-kbias)
 mode=$1
 
 
@@ -55,18 +55,18 @@ cd $FOLDER_NAME
 cp ../../plumed_interfaces/tests/NaCl/driver_data/* .
 
 
-if [ $mode == "gnn" ]; then
+if [ $mode == "gnn" ] || [ "$mode" = "gnn-lr" ]; then
     # use standard interface and input file
     cp ../../plumed_interfaces/PytorchModelGNN.cpp .
     mv plumed_PytorchModelGNN.dat plumed.dat
 
-elif [ $mode == "gnn-kbias" ]; then
+elif [ $mode == "gnn-kbias" ] || [ "$mode" = "gnn-lr-kbias" ]; then
     # use kbias interface and input file
     cp ../../plumed_interfaces/PytorchKolmogorovBiasGNN.cpp .
     mv plumed_PytorchKolmogorovBiasGNN.dat plumed.dat
 
 else
-    echo "Invalid mode. Use 'gnn' or 'gnn-kbias'."
+    echo "Invalid mode. Use 'gnn', 'gnn-lr', 'gnn-kbias', or 'gnn-lr-kbias'."
     exit 1
 fi
 
@@ -84,6 +84,12 @@ sed -i "s|PYTHON_BIN=/path/to/python/with/mdtraj|PYTHON_BIN=$PYTHON_PATH|g" plum
 sed -i '/^[[:space:]]*uwall:/d' plumed.dat
 sed -i '/^[[:space:]]*opes:/d' plumed.dat
 sed -i '/^[[:space:]]*BIASVALUE:/d' plumed.dat
+
+# load model with long-range edges if in lr mode
+if [ $mode == "gnn-lr" ] || [ "$mode" = "gnn-lr-kbias" ]; then
+  sed -i "s|model.pt|model_lr.pt|g" plumed.dat
+  sed -i "s|SYSTEM_SELECTION=sys|SYSTEM_SELECTION=sys\n\tSUBSYSTEM_SELECTION=sys|g" plumed.dat
+fi
 
 # change printing stride
 sed -i "s|STRIDE=100|STRIDE=1|g" plumed.dat

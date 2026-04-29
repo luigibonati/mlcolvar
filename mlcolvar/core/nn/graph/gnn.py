@@ -28,6 +28,7 @@ class BaseGNN(nn.Module):
         basis_type: str = 'bessel',
         cutoff: float = None,
         buffer : float = None, 
+        long_range_cutoff: float = None,
         atomic_numbers: List[int] = None,
     ) -> None:
         """Initializes the core of a GNN model, taking care of edge embeddings.
@@ -56,6 +57,9 @@ class BaseGNN(nn.Module):
         buffer : float, optional
             When `dataset_for_initialization` is not provided, the additional buffer radius used to find active environment atoms, by default None.
             Should be the same as the buffer used to build the graphs.
+        long_range_cutoff : float
+            Cutoff radius for the long-range edges defined on subsystem atoms. 
+            If negative, no long-range interactions are considered, by default -1.0
         atomic_numbers : List[int]
             When `dataset_for_initialization` is not provided, the atomic numbers mapping, by default None. 
             Should be the same as the atomic numbers mapping used to build the graphs.
@@ -64,26 +68,34 @@ class BaseGNN(nn.Module):
 
         # check if to initialize the buffer from the dataset or from the provided arguments
         if dataset_for_initialization is not None:
-            if cutoff is not None or atomic_numbers is not None or buffer is not None:
-                raise ValueError("When 'dataset_for_initialization' is provided, 'cutoff', 'atomic_numbers', and 'buffer' should not be provided as arguments. They will be inferred from the dataset.")
-            cutoff, atomic_numbers, buffer = self._initialize_from_dataset(dataset=dataset_for_initialization)
+            if cutoff is not None or atomic_numbers is not None or buffer is not None or long_range_cutoff is not None:
+                raise ValueError("When 'dataset_for_initialization' is provided, 'cutoff', 'atomic_numbers', 'buffer', and 'long_range_cutoff' should not be provided as arguments. They will be inferred from the dataset.")
+            cutoff, atomic_numbers, buffer, long_range_cutoff = self._initialize_from_dataset(dataset=dataset_for_initialization)
         else:
             if cutoff is None or atomic_numbers is None:
                 raise ValueError("To initialize the gnn-model either provide a 'dataset_for_initialization' (preferred) or specify the 'cutoff' and 'atomic_numbers' and 'buffer' as arguments.")
             if buffer is None:
                 buffer = 0.0
+            if long_range_cutoff is None:
+                long_range_cutoff = -1.0
 
         self._radial_embedding = radial.RadialEmbeddingBlock(cutoff=cutoff, 
+                                                             long_range_cutoff=long_range_cutoff,
                                                              n_bases=n_bases, 
                                                              n_polynomials=n_polynomials, 
                                                              basis_type=basis_type
                                                             )
         
+        assert (long_range_cutoff < 0) or (long_range_cutoff > cutoff), (
+            "The long range cutoff should be longer than the regular cutoff!"
+        )
+
         # register model buffers so that they can be inferred by the PLUMED interface
         self.register_buffer('n_out', torch.tensor(n_out, dtype=torch.int64))
         self.register_buffer('cutoff', torch.tensor(cutoff, dtype=torch.get_default_dtype()))
         self.register_buffer('atomic_numbers', torch.tensor(atomic_numbers, dtype=torch.int64))
         self.register_buffer('buffer', torch.tensor(buffer, dtype=torch.get_default_dtype()))
+        self.register_buffer('long_range_cutoff', torch.tensor(long_range_cutoff, dtype=torch.get_default_dtype()))
         self.pooling_operation = pooling_operation
 
     @property
@@ -99,7 +111,8 @@ class BaseGNN(nn.Module):
         """Initializes the cutoff, buffer, and atomic_numbers from a DictDataset."""
         return (dataset.metadata['cutoff'], 
                 dataset.metadata['atomic_numbers'], 
-                dataset.metadata['buffer'])
+                dataset.metadata['buffer'],
+                dataset.metadata['long_range_cutoff'])
 
     def embed_edge(
         self, data: Dict[str, torch.Tensor], normalize: bool = True
@@ -130,8 +143,15 @@ class BaseGNN(nn.Module):
             shifts=data['shifts'],
             normalize=normalize,
         )
-        return lengths, self._radial_embedding(lengths), vectors
-    
+        
+        mask = data.get("edge_masks_lr", None)
+        
+        return (
+            lengths,
+            self._radial_embedding(lengths, mask),
+            vectors
+        )
+        
     def pooling(self,
                 input : torch.Tensor,
                 data : Dict[str, torch.Tensor]) -> torch.Tensor:

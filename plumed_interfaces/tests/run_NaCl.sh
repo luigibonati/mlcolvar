@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# retrieve mode (gnn, gnn-kbias)
+# retrieve mode (gnn, gnn-lr, gnn-kbias, gnn-lr-kbias)
 mode=$1
 
 
@@ -65,18 +65,18 @@ echo folder $FOLDER_NAME
 cp -r ../plumed_interfaces/tests/NaCl/gnn_based_inputs $FOLDER_NAME
 cd $FOLDER_NAME
 
-if [ $mode == "gnn" ]; then
+if [ $mode == "gnn" ] || [ "$mode" = "gnn-lr" ]; then
     # use standard interface and input file
     cp ../../plumed_interfaces/PytorchModelGNN.cpp .
     mv plumed_PytorchModelGNN.dat plumed.dat
 
-elif [ $mode == "gnn-kbias" ]; then
+elif [ $mode == "gnn-kbias" ] || [ "$mode" = "gnn-lr-kbias" ]; then
     # use kbias interface and input file
     cp ../../plumed_interfaces/PytorchKolmogorovBiasGNN.cpp .
     mv plumed_PytorchKolmogorovBiasGNN.dat plumed.dat
 
 else
-    echo "Invalid mode. Use 'gnn' or 'gnn-kbias'."
+    echo "Invalid mode. Use 'gnn', 'gnn-lr', 'gnn-kbias', or 'gnn-lr-kbias'."
     exit 1
 fi
 
@@ -85,6 +85,9 @@ rm plumed_*
 
 # update python path
 sed -i "s|PYTHON_BIN=/path/to/python/with/mdtraj|PYTHON_BIN=$PYTHON_PATH|g" plumed.dat
+if [ $mode == "gnn-lr" ] || [ "$mode" = "gnn-lr-kbias" ]; then
+  sed -i "s|model.pt|model_lr.pt|g" plumed.dat
+fi
 
 # =====================================================================================
 # ======================================== RUN ========================================
