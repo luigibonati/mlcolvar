@@ -11,7 +11,7 @@ from mlcolvar.data.graph.utils import create_dataset_from_configurations
 
 __all__ = ["load_traj_with_mdtraj", 
            "dataset_from_mdtraj_trajectories",
-           "_z_table_from_top",
+           "_atomic_numbers_from_top",
            "_names_from_top"]
 
 
@@ -48,7 +48,7 @@ def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
                                      graph_labels: List,
                                      node_labels: List,
                                      cutoff: float,
-                                     z_table: AtomicNumberTable, 
+                                     atomic_numbers: AtomicNumberTable, 
                                      system_selection: str = None,
                                      environment_selection: str = None,
                                      subsystem_selection: str = None,
@@ -80,7 +80,7 @@ def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
     # convert configurations into DictDataset
     dataset = create_dataset_from_configurations(
         config=configurations,
-        z_table=z_table,
+        atomic_numbers=atomic_numbers,
         cutoff=cutoff,
         buffer=buffer,
         long_range_cutoff=long_range_cutoff,
@@ -201,7 +201,7 @@ def _configurations_from_trajectory(
 
     return configurations
 
-def _z_table_from_top(
+def _atomic_numbers_from_top(
     top: List[mdtraj.Topology]
 ) -> AtomicNumberTable:
     """
@@ -216,8 +216,8 @@ def _z_table_from_top(
     for t in top:
         atomic_numbers.extend([a.element.number for a in t.atoms])
     # atomic_numbers = np.array(atomic_numbers, dtype=int)
-    z_table = AtomicNumberTable.from_zs(atomic_numbers)
-    return z_table
+    atomic_numbers = AtomicNumberTable.from_zs(atomic_numbers)
+    return atomic_numbers
 
 def _names_from_top(top: List[mdtraj.Topology] ):
     it = iter(top)
