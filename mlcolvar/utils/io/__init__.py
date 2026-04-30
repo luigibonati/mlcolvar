@@ -15,4 +15,4 @@ __all__ = ["load_dataframe",
 
 # not imported by default as they depend on optional libraries (pandas, scikit-learn or KDEpy)
 from .colvar import *
-from .traj import *
+from .graphs import *
