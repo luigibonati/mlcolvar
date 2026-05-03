@@ -30,7 +30,7 @@ from mlcolvar.core.nn.utils import get_activation, parse_nn_options
 class FeedForward(lightning.LightningModule):
     """Define a feedforward neural network given the list of layers.
 
-    Optionally dropout and batchnorm can be applied (the order is activation -> dropout -> batchnorm).
+    Optionally dropout and batchnorm can be applied (the order is batchnorm -> dropout -> activation).
     """
 
     def __init__(
@@ -89,15 +89,15 @@ class FeedForward(lightning.LightningModule):
         for i in range(len(layers) - 1):
             modules.append(torch.nn.Linear(layers[i], layers[i + 1]))
             activ, drop, norm = activation_list[i], dropout_list[i], batchnorm_list[i]
+            
+            if norm:
+                modules.append(torch.nn.BatchNorm1d(layers[i + 1]))
 
             if activ is not None:
                 modules.append(get_activation(activ))
 
             if drop is not None:
                 modules.append(torch.nn.Dropout(p=drop))
-
-            if norm:
-                modules.append(torch.nn.BatchNorm1d(layers[i + 1]))
 
         # store model and attributes
         self.nn = torch.nn.Sequential(*modules)
