@@ -903,7 +903,7 @@ def load_exported(
 
 def test_export_1():
     torch.manual_seed(0)
-    torch.set_default_dtype(torch.float64)
+    torch.set_default_dtype(torch.float32)
 
     model = FeedForward(layers=[5, 16, 16, 2])
     model.n_cvs = 2
@@ -924,7 +924,7 @@ def test_export_1():
 def test_export_2():
 
     torch.manual_seed(0)
-    torch.set_default_dtype(torch.float64)
+    torch.set_default_dtype(torch.float32)
 
     from mlcolvar.cvs import Committor
     from mlcolvar.cvs.committor.utils import initialize_committor_masses
@@ -962,7 +962,7 @@ def test_export_2():
 
 def test_export_3() -> None:
     torch.manual_seed(0)
-    torch.set_default_dtype(torch.float64)
+    torch.set_default_dtype(torch.float32)
 
     model = __import__("mlcolvar").core.nn.graph.SchNetModel(
         n_out=2,
