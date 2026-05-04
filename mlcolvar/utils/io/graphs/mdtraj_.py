@@ -83,7 +83,8 @@ def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
                                                      environment_selection=environment_selection,
                                                      subsystem_selection=subsystem_selection,
                                                      buffer=buffer,
-                                                     long_range_cutoff=long_range_cutoff)
+                                                     long_range_cutoff=long_range_cutoff,
+                                                     return_selection=True)
 
 
     # create configurations objects from trajectories

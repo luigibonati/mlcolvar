@@ -200,7 +200,8 @@ def _setup_atom_selection(system_selection : str,
                           environment_selection : str,
                           subsystem_selection : str,
                           buffer : float,
-                          long_range_cutoff : float):
+                          long_range_cutoff : float, 
+                          return_selection : bool):
 
     # check if using truncated graph
     if environment_selection is not None:
@@ -224,5 +225,5 @@ def _setup_atom_selection(system_selection : str,
     assert not ((subsystem_selection is not None) ^ (long_range_cutoff > 0)), (
         "`subsystem_selection` should appear with `long_range_cutoff`!"
     )
-
-    return selection
+    if return_selection:
+        return selection

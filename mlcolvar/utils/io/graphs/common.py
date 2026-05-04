@@ -144,11 +144,12 @@ def create_dataset_from_trajectories(
         raise ValueError("Only one of `trajectory_labels` or `graph_labels` can be provided.")
 
     # check atoms selection makes sense and get the total selection
-    required_atoms_selection = _setup_atom_selection(system_selection=system_selection,
-                                                     environment_selection=environment_selection,
-                                                     subsystem_selection=subsystem_selection,
-                                                     buffer=buffer,
-                                                     long_range_cutoff=long_range_cutoff)
+    _setup_atom_selection(system_selection=system_selection,
+                          environment_selection=environment_selection,
+                          subsystem_selection=subsystem_selection,
+                          buffer=buffer,
+                          long_range_cutoff=long_range_cutoff,
+                          return_selection=False)
 
 
     # ================================== Topology files handling ===================================
@@ -173,7 +174,6 @@ def create_dataset_from_trajectories(
 
     # ========================================= Load files =========================================
 
-    topologies_in_memory = []
     trajectories_in_memory = []
     for i in range(len(trajectories)):
         # ============================== PREPARATION ==============================
@@ -222,7 +222,6 @@ def create_dataset_from_trajectories(
 
         traj = load_traj_with_mdtraj(trajectory=trajectories[i],
                                      topology=topologies[i],
-                                     #selection=selection
                                      )
 
         trajectories_in_memory.append(traj)
@@ -242,7 +241,7 @@ def create_dataset_from_trajectories(
                     print(f"downloaded file ({url_top}) saved as ({topologies[i]}).")
     #endfor i in range(len(trajectories)):
 
-    # TODO make it work with save_names 
+    # TODO make it work with save_names, possibly moving into dataset_from_mdtraj_trajectories
     atom_names = None
 
     graph_labels, node_labels = _normalize_graph_target_inputs(trajectories=trajectories_in_memory,
