@@ -975,7 +975,7 @@ def test_export_3() -> None:
     )
 
     model.n_cvs = model.n_out
-    model.dtype = torch.float64
+    model.dtype = torch.float32
     model.device = "cpu"
 
     batch = __import__("mlcolvar").data.graph.utils.create_test_graph_input(
