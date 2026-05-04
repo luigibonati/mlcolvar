@@ -6,8 +6,8 @@ import mdtraj
 
 from mlcolvar.utils.io._utils import _download_temp_file
 from mlcolvar.utils.io.graphs._utils import *
-from mlcolvar.utils.io.graphs.mdtraj import *
-from mlcolvar.utils.io.graphs.ase import *
+from mlcolvar.utils.io.graphs.mdtraj_ import *
+from mlcolvar.utils.io.graphs.ase_ import *
 
 from mlcolvar.data import DictDataset
 from mlcolvar.data.graph.atomic import AtomicNumberTable
@@ -128,6 +128,8 @@ def create_dataset_from_trajectories(
     .. [1] https://www.mdtraj.org/1.9.8.dev0/atom_selection.html
     """
 
+    # ======================================= Initial checks =======================================
+
     # ensure trajectories is a list
     if isinstance(trajectories, str):
         trajectories = [trajectories]
@@ -141,6 +143,13 @@ def create_dataset_from_trajectories(
     if trajectory_labels is not None and graph_labels is not None:
         raise ValueError("Only one of `trajectory_labels` or `graph_labels` can be provided.")
 
+    # TODO move to a common utility function
+    # selection = _setup_atom_selection(system_selection=system_selection,
+    #                                   environment_selection=environment_selection,
+    #                                   subsystem_selection=subsystem_selection,
+    #                                   buffer=buffer,
+    #                                   long_range_cutoff=long_range_cutoff)
+
     # check if using truncated graph
     if environment_selection is not None:
         assert system_selection is not None, (
@@ -153,8 +162,8 @@ def create_dataset_from_trajectories(
     elif system_selection is not None:
         selection = system_selection
     else:
-        selection = None
- 
+        selection = 'all'
+     
     if environment_selection is None:
         assert buffer == 0, (
             'Not `environment_selection` given! Cannot define buffer size!'
@@ -170,7 +179,8 @@ def create_dataset_from_trajectories(
             'Either a single topology file or as many as the trajectory files must be provided!'
         )
     
-    # --- Handle topologies input ---
+    # ================================== Topology files handling ===================================
+
     # Allow topology to be None or empty. In that case, create a list of empty strings.
     shared_top = True
     if isinstance(topologies, str):
@@ -183,11 +193,12 @@ def create_dataset_from_trajectories(
         shared_top = False
 
 
-    # load topologies and trajectories
+    # ========================================= Load files =========================================
+
     topologies_in_memory = []
     trajectories_in_memory = []
     for i in range(len(trajectories)):
-        # =============== PREPARATION ===============
+        # ============================== PREPARATION ==============================
         assert isinstance(trajectories[i], str)
 
         # check if folder is given
@@ -204,7 +215,8 @@ def create_dataset_from_trajectories(
             temp_traj, trajectories[i] = _download_temp_file(file_url=url_traj, 
                                                              delete_download=delete_download, 
                                                              append_suffix=True, 
-                                                             return_name=True)
+                                                             return_name=True
+                                                            )
 
         # check if topologies[i] is an url
         download_top = False
@@ -218,7 +230,8 @@ def create_dataset_from_trajectories(
                 temp_top, topologies[i] = _download_temp_file(file_url=url_top, 
                                                               delete_download=delete_download, 
                                                               append_suffix=True, 
-                                                              return_name=True)
+                                                              return_name=True
+                                                            )
 
         # check extension of file, if .xyz create topology file through ASE
         _, ext = os.path.splitext(trajectories[i])
@@ -227,12 +240,17 @@ def create_dataset_from_trajectories(
             topologies[i] = create_pdb_from_xyz(trajectories[i], pdb_file)
 
 
-        # =============== LOADING ===============
-        # load trajectory
+        # ============================== LOADING ==============================
+
         traj = load_traj_with_mdtraj(trajectory=trajectories[i],
                                      topology=topologies[i],
-                                     selection=selection)
+                                     #selection=selection
+                                     )
         
+        # TODO move into the create_dataset_from_md_trajectories function
+        subset = traj.top.select(selection)
+        traj = traj.atom_slice(subset)
+
         trajectories_in_memory.append(traj)
         topologies_in_memory.append(traj.top)
 
@@ -249,15 +267,9 @@ def create_dataset_from_trajectories(
                     temp_top.close()
                 else:
                     print(f"downloaded file ({url_top}) saved as ({topologies[i]}).")
+    #endfor i in range(len(trajectories)):
 
-    graph_labels, node_labels = _normalize_graph_target_inputs(
-        trajectories=trajectories_in_memory,
-        load_args=load_args,
-        trajectory_labels=trajectory_labels,
-        graph_labels=graph_labels,
-        node_labels=node_labels,
-    )
-
+    # TODO move into the create_dataset_from_md_trajectories function
     if atomic_numbers is None:
         atomic_numbers = _atomic_numbers_from_top(topologies_in_memory)
 
@@ -265,6 +277,13 @@ def create_dataset_from_trajectories(
         atom_names = _names_from_top(topologies_in_memory)
     else:
         atom_names = None
+
+    graph_labels, node_labels = _normalize_graph_target_inputs(trajectories=trajectories_in_memory,
+                                                               load_args=load_args,
+                                                               trajectory_labels=trajectory_labels,
+                                                               graph_labels=graph_labels,
+                                                               node_labels=node_labels,
+                                                               )
 
     dataset = dataset_from_mdtraj_trajectories(trajectories=trajectories_in_memory,
                                                graph_labels=graph_labels,
@@ -286,6 +305,7 @@ def create_dataset_from_trajectories(
         return dataset, trajectories_in_memory
     else:
         return dataset
+
 
 
 def test_datasesetFromTrajectories():
@@ -507,6 +527,7 @@ system_selection: str = None
                                                                             [0.0, 0.0, 2.0]])
                                     )
                         )
+                print(data["data_list"]['node_attrs'])
                 assert(torch.allclose(data["data_list"]['node_attrs'], torch.tensor([[1.0], 
                                                                                     [1.0]])
                                     )
