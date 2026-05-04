@@ -157,11 +157,11 @@ class DictDataset(Dataset):
             else:
                 parts.append(f' "{key}": {list(val.shape)},')
         if self.metadata:
-            parts.append(" metadata={")
+            parts.append("\n\t    metadata={")
             for key, val in self.metadata.items():
-                parts.append(f' "{key}": {val},')
-            if parts[-1].endswith(","):
-                parts[-1] = parts[-1][:-1]
+                parts.append(f'"{key}": {val},\n\t\t      ')
+            if parts[-1].endswith(",\n\t\t      "):
+                parts[-1] = parts[-1][:-10]
             parts.append(" },")
         if parts[-1].endswith(","):
             parts[-1] = parts[-1][:-1]

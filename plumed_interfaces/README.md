@@ -34,7 +34,7 @@ Two types of scripts are provided for the two systems:
 
 Test scripts **expect an input string** that specifies the type of interface that needs to be tested.
 - Alanine tests support all the modes:`descriptors`, `descriptors-kbias`, `gnn`, `gnn-kbias`.
-- NaCl tests support the gnn-based modes only: `gnn`, `gnn-kbias`.
+- NaCl tests support the gnn-based modes only: `gnn`, `gnn-lr`, `gnn-kbias`, `gnn-lr-kbias`. In particular, it covers the use of truncated graphs and long-range cutoffs.
 
 
 ### Notes
@@ -66,7 +66,9 @@ bash ../plumed_interfaces/tests/driver_alanine.sh gnn
 bash ../plumed_interfaces/tests/driver_alanine.sh gnn-kbias
 
 bash ../plumed_interfaces/tests/driver_NaCl.sh gnn
+bash ../plumed_interfaces/tests/driver_NaCl.sh gnn-lr
 bash ../plumed_interfaces/tests/driver_NaCl.sh gnn-kbias
+bash ../plumed_interfaces/tests/driver_NaCl.sh gnn-lr-kbias
 ```
 
 #### Alanine folder
@@ -103,6 +105,7 @@ bash ../plumed_interfaces/tests/driver_NaCl.sh gnn-kbias
   - `plumed_PytorchModelGNN.dat`
   - `plumed_PytorchKolmogorovBiasGNN.dat`
   - `model.pt`
+  - `model_lr.pt`
   - `NaCl.pdb`
   - `NaCl_216wat_bound.data`
   - `NaCl_216wat_unbound.data`
