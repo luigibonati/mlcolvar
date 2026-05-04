@@ -143,35 +143,15 @@ def create_dataset_from_trajectories(
     if trajectory_labels is not None and graph_labels is not None:
         raise ValueError("Only one of `trajectory_labels` or `graph_labels` can be provided.")
 
-    # TODO move to a common utility function
-    # selection = _setup_atom_selection(system_selection=system_selection,
-    #                                   environment_selection=environment_selection,
-    #                                   subsystem_selection=subsystem_selection,
-    #                                   buffer=buffer,
-    #                                   long_range_cutoff=long_range_cutoff)
+    # check atoms selection makes sense and get the total selection
+    required_atoms_selection = _setup_atom_selection(system_selection=system_selection,
+                                                     environment_selection=environment_selection,
+                                                     subsystem_selection=subsystem_selection,
+                                                     buffer=buffer,
+                                                     long_range_cutoff=long_range_cutoff)
 
-    # check if using truncated graph
-    if environment_selection is not None:
-        assert system_selection is not None, (
-            'the `environment_selection` argument requires the'
-            + '`system_selection` argument to be defined!'
-        )
-        selection = '({:s}) or ({:s})'.format(
-            system_selection, environment_selection
-        )
-    elif system_selection is not None:
-        selection = system_selection
-    else:
-        selection = 'all'
-     
-    if environment_selection is None:
-        assert buffer == 0, (
-            'Not `environment_selection` given! Cannot define buffer size!'
-        )
-    
-    assert not ((subsystem_selection is not None) ^ (long_range_cutoff > 0)), (
-        "`subsystem_selection` should appear with `long_range_cutoff`!"
-    )
+
+    # ================================== Topology files handling ===================================
 
     # check topologies if given, with xyz it can be None
     if topologies is not None:
@@ -179,8 +159,6 @@ def create_dataset_from_trajectories(
             'Either a single topology file or as many as the trajectory files must be provided!'
         )
     
-    # ================================== Topology files handling ===================================
-
     # Allow topology to be None or empty. In that case, create a list of empty strings.
     shared_top = True
     if isinstance(topologies, str):
@@ -246,13 +224,8 @@ def create_dataset_from_trajectories(
                                      topology=topologies[i],
                                      #selection=selection
                                      )
-        
-        # TODO move into the create_dataset_from_md_trajectories function
-        subset = traj.top.select(selection)
-        traj = traj.atom_slice(subset)
 
         trajectories_in_memory.append(traj)
-        topologies_in_memory.append(traj.top)
 
         # remove temporary files from dowload if needed
         if download_traj:
@@ -269,14 +242,8 @@ def create_dataset_from_trajectories(
                     print(f"downloaded file ({url_top}) saved as ({topologies[i]}).")
     #endfor i in range(len(trajectories)):
 
-    # TODO move into the create_dataset_from_md_trajectories function
-    if atomic_numbers is None:
-        atomic_numbers = _atomic_numbers_from_top(topologies_in_memory)
-
-    if save_names:
-        atom_names = _names_from_top(topologies_in_memory)
-    else:
-        atom_names = None
+    # TODO make it work with save_names 
+    atom_names = None
 
     graph_labels, node_labels = _normalize_graph_target_inputs(trajectories=trajectories_in_memory,
                                                                load_args=load_args,

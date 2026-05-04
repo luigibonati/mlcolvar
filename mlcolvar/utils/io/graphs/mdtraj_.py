@@ -78,10 +78,23 @@ def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
     DictDataset
          The graph dataset created from the MDtraj trajectories.
     """
+    
+    required_atoms_selection = _setup_atom_selection(system_selection=system_selection,
+                                                     environment_selection=environment_selection,
+                                                     subsystem_selection=subsystem_selection,
+                                                     buffer=buffer,
+                                                     long_range_cutoff=long_range_cutoff)
+
 
     # create configurations objects from trajectories
     configurations = []
     for i in range(len(trajectories)):
+
+        # slice based on the required atoms selection for this trajectory
+        subset = trajectories[i].top.select(required_atoms_selection)
+        trajectories[i] = trajectories[i].atom_slice(subset)
+
+        # create configurations for this trajectory
         configuration = _configurations_from_mdtraj_trajectory(trajectory=trajectories[i],
                                                                 graph_labels=graph_labels[i],
                                                                 node_labels=node_labels[i],
@@ -94,6 +107,17 @@ def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
                                                                 lengths_conversion=lengths_conversion,
                                                             )
         configurations.extend(configuration)
+
+    # get common atomic numbers and atom names if not given
+    if atomic_numbers is None:
+        atomic_numbers = _atomic_numbers_from_top([trajectory.topology for trajectory in trajectories])
+
+    if atom_names is None:
+        try:
+            atom_names = _names_from_top([trajectory.topology for trajectory in trajectories])
+        except:
+            atom_names = None
+    
 
     # create dataset from configurations list
     dataset = create_dataset_from_configurations(config=configurations,

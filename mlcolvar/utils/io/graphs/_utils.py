@@ -11,7 +11,8 @@ __all__ = ["_as_torch_if_array",
            "_normalize_trajectory_labels",
            "_broadcast_trajectory_to_graph_labels",
            "_normalize_frame_level_labels",
-           "_normalize_graph_target_inputs"]
+           "_normalize_graph_target_inputs",
+           "_setup_atom_selection"]
 
 def _as_torch_if_array(x):
     if isinstance(x, torch.Tensor):
@@ -162,7 +163,7 @@ def _normalize_frame_level_labels(labels, frame_counts: List[int], name: str):
     return normalized
 
 def _normalize_graph_target_inputs(
-    trajectories: List[mdtraj.Trajectory],
+    trajectories: List,
     load_args: list,
     trajectory_labels=None,
     graph_labels=None,
@@ -194,3 +195,34 @@ def _normalize_graph_target_inputs(
     node_labels = _normalize_frame_level_labels(node_labels, frame_counts, name='node_labels')
 
     return graph_labels, node_labels
+
+def _setup_atom_selection(system_selection : str,
+                          environment_selection : str,
+                          subsystem_selection : str,
+                          buffer : float,
+                          long_range_cutoff : float):
+
+    # check if using truncated graph
+    if environment_selection is not None:
+        assert system_selection is not None, (
+            'the `environment_selection` argument requires the'
+            + '`system_selection` argument to be defined!'
+        )
+        selection = '({:s}) or ({:s})'.format(
+            system_selection, environment_selection
+        )
+    elif system_selection is not None:
+        selection = system_selection
+    else:
+        selection = 'all'
+     
+    if environment_selection is None:
+        assert buffer == 0, (
+            'Not `environment_selection` given! Cannot define buffer size!'
+        )
+    
+    assert not ((subsystem_selection is not None) ^ (long_range_cutoff > 0)), (
+        "`subsystem_selection` should appear with `long_range_cutoff`!"
+    )
+
+    return selection
