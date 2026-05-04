@@ -12,7 +12,7 @@ __all__ = ["SelfTICA"]
 class SelfTICA(BaseCV):
     """Self-supervised time-lagged independent component analysis (Self-TICA).
     
-    Is is a self-supervised generalization of Deep-TICA in which uses a encoder
+    It is a self-supervised generalization of Deep-TICA in which uses a encoder
     to learn a latent representation of the input data. TICA is then applied to
     this latent space to extract the slowest modes of the CV.
 
@@ -22,6 +22,8 @@ class SelfTICA(BaseCV):
     This can be created with the helper function `create_timelagged_dataset`.
 
     **Loss** :L2 contrastive loss encourging temporal consistency and decorrelation (ContrastiveLoss)
+    The contrastive loss is related to the VAMP-2 score and can be interpreted as a self-supervised 
+    approximation of time-lagged covariance maximization.
 
     References
     ----------
@@ -223,14 +225,11 @@ class SelfTICA(BaseCV):
 
         return x
     
-    def forward_nn(self, x: torch.Tensor, predict: bool = False) -> torch.Tensor:
+    def forward_nn(self, x: torch.Tensor) -> torch.Tensor:
         if not self._override_model:
             if self.norm_in is not None:
                 x = self._apply_module(self.norm_in, x)
-        # Optionally apply predictor: z → P(z)
         x_enc = self._apply_module(self.nn, x)
-        if predict:
-            x_enc = self.predictor(x_enc)
         return x_enc
 
     def set_regularization(self, c0_reg=1e-6):
@@ -265,16 +264,16 @@ class SelfTICA(BaseCV):
             w_lag = x_lag['weight']
             
         # =================forward====================
-        f_t = self.forward_nn(x_t, predict=True)
-        f_lag = self.forward_nn(x_lag)
+        z_t = self.forward_nn(x_t)
+        z_t_pred = self.predictor(z_t)
+        z_lag = self.forward_nn(x_lag)
         # ===================loss=====================
-        loss = self.loss_fn(f_t, f_lag)
+        loss = self.loss_fn(z_t_pred, z_lag)
         # ===================tica=====================
         with torch.no_grad():
-            loss_noreg = self.loss_fn.noreg(f_t, f_lag)
-            f_t_nolin = self.forward_nn(x_t, predict=False)
+            loss_noreg = self.loss_fn.noreg(z_t_pred, z_lag)
             eigvals, _ = self.tica.compute(
-                data=[f_t_nolin, f_lag], weights=[w_t, w_lag], save_params=True
+                data=[z_t, z_lag], weights=[w_t, w_lag], save_params=True
             )
             self.current_evecs = self.tica.evecs.clone()
             self.current_means = self.tica.mean.clone()

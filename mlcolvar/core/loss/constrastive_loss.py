@@ -103,12 +103,12 @@ def contrastive_loss(
     remove_average: bool = True,
 ) -> torch.Tensor:
     """
-    Compute the constrastive loss.
+    Compute the contrastive loss.
 
     This function unifies the contrastive spectral objectives used in SelfTICA
     and related methods. Depending on the chosen `mode`, it computes:
 
-    - L2 decorrelation loss
+    - L2 decorrelation loss (closely related to the VAMP-2 score)
     - KL-based loss via Donsker-Varadhan bound
     - KL-based loss via Nguyen-Wainwright-Jordan bound
 
