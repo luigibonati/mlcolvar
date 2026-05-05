@@ -84,7 +84,7 @@ def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
                                                      subsystem_selection=subsystem_selection,
                                                      buffer=buffer,
                                                      long_range_cutoff=long_range_cutoff,
-                                                     return_selection=True)
+                                                     return_required_atoms_selection=True)
 
 
     # create configurations objects from trajectories
@@ -162,32 +162,21 @@ def load_traj_with_mdtraj(trajectory: str,
             warn (f"Trajectory {trajectory} does not contain cell information that can be loaded by MDtraj. Trying to load cell information with ASE...")
             traj.unitcell_vectors = _get_cell_with_ase(trajectory)
             if traj.unitcell_vectors is None:
-                raise ValueError(
-                    f"Could not load cell information with neither MDtraj nor ASE from this file format. Check if the file contains cell information and if the file format is supported by ASE."
-                )
-        
-        # # apply selection if provided
-        # if selection is not None:
-        #     subset = traj.top.select(selection)
-        #     assert len(subset) > 0, (
-        #         'No atoms will be selected with selection string '
-        #         + '"{:s}"!'.format(selection)
-        #     )
-        #     traj = traj.atom_slice(subset)
+                raise ValueError("Could not load cell information with neither MDtraj nor ASE from this file format. " + 
+                                 "Check if the file contains cell information and if the file format is supported by ASE.")
         
         return traj
 
-def _configurations_from_mdtraj_trajectory(
-    trajectory: mdtraj.Trajectory,
-    graph_labels = None,
-    node_labels = None,
-    system_selection: str = None,
-    environment_selection: str = None,
-    subsystem_selection: str = None,
-    start: int = 0,
-    stop: int = None,
-    stride: int = 1,
-    lengths_conversion : float = 10.0) -> Configurations:
+def _configurations_from_mdtraj_trajectory(trajectory: mdtraj.Trajectory,
+                                           graph_labels = None,
+                                           node_labels = None,
+                                           system_selection: str = None,
+                                           environment_selection: str = None,
+                                           subsystem_selection: str = None,
+                                           start: int = 0,
+                                           stop: int = None,
+                                           stride: int = 1,
+                                           lengths_conversion : float = 10.0) -> Configurations:
     """
     Create configurations from one trajectory.
 
@@ -213,66 +202,38 @@ def _configurations_from_mdtraj_trajectory(
         MDTraj uses nanometers, the default sends to Angstroms.
     """  
 
-    # check if using truncated graph
-    if environment_selection is not None:
-        assert system_selection is not None, (
-            'the `environment_selection` argument requires the'
-            + '`system_selection` argument to be defined!'
-        )
-        selection = '({:s}) or ({:s})'.format(
-            system_selection, environment_selection
-        )
-    elif system_selection is not None:
-        selection = system_selection
-    else:
-        selection = 'all'
- 
-    subset = trajectory.top.select(selection)
+    required_atoms_selection = _setup_atom_selection(system_selection=system_selection,
+                                                     environment_selection=environment_selection,
+                                                     subsystem_selection=subsystem_selection,
+                                                     return_required_atoms_selection=True)
+
+
+    # this is not strictly needed, we may remove it in the future
+    subset = trajectory.top.select(required_atoms_selection)
     trajectory = trajectory.atom_slice(subset)
 
-    system_atoms = [i for i,e in enumerate(trajectory.top.atoms)]
+    # as we basically do the same for each selection, we use a dictionary initialized to the general case
+    selected_atoms = {}
+    selected_atoms['system'] = [i for i,e in enumerate(trajectory.top.atoms)]
+    selected_atoms['environment'] = []
+    selected_atoms['subsystem'] = None
 
-    environment_atoms = []  
-
-
-    if system_selection is not None:
-        system_atoms = trajectory.top.select(system_selection)
-        assert len(system_atoms) > 0, (
-            'No atoms will be selected with `system_selection`: '
-            + '"{:s}"!'.format(system_selection)
-        )
-
-        if environment_selection is not None:
-            environment_atoms = trajectory.top.select(environment_selection)
-            assert len(environment_atoms) > 0, (
-                'No atoms will be selected with `environment_selection`: '
-                + '"{:s}"!'.format(environment_selection)
-            )
-    elif environment_selection is not None:
-            raise ValueError("`environment_selection` is provided without `system_selection`. Please provide a `system_selection` or remove the `environment_selection`.")
+    # here we only check if the selections are effective, compatibility has been checked above already
+    for name, selection in {'system': system_selection, 
+                            'environment': environment_selection, 
+                            'subsystem': subsystem_selection}.items():
+        if selection is not None:
+            selected_atoms[name] = trajectory.top.select(selection)
+            if not len(selected_atoms[name]) > 0:
+                raise ValueError(f"No atoms will be selected with selection {name}_selection: {selection}!")
+    
 
     if subsystem_selection is not None:
-        subsystem_atoms = trajectory.top.select(subsystem_selection)
-        assert len(subsystem_atoms) > 0, (
-            'No atoms will be selected with `subsystem_selection`: '
-            + '"{:s}"!'.format(subsystem_selection)
-        )
-        # NOTE: in the above step we have done the atom_slice, so if no
-        # environment atom has been defined, the subsystem atoms will
-        # have to be selected from the sliced atoms, which are previously
-        # defined by system_selection.
-        # So here we only check if the subsystem_selection contains environment
-        # atoms, under the case where both system_selection AND
-        # environment_selection have been given.
-        if system_selection is not None and environment_selection is not None:
-            assert set(subsystem_atoms).issubset(set(system_atoms)), (
-                "All atoms selected by `subsystem_selection` should also be "
-                + "selected by `system_selection`!"
-            )
-    else:
-        subsystem_atoms = None
+        if not set(selected_atoms['subsystem']).issubset(set(selected_atoms['system'])):
+            raise ValueError("Only atoms in `system_selection` can be selected by `subsystem_selection`!")
 
-    atomic_numbers = [a.element.number for a in trajectory.top.atoms] #trajectory.top.atoms]
+    # get the list of the atomic numbers for the selected atoms
+    atomic_numbers = [a.element.number for a in trajectory.top.atoms]
     
     if trajectory.unitcell_vectors is not None:
         pbc = [True] * 3
@@ -298,32 +259,24 @@ def _configurations_from_mdtraj_trajectory(
             if node_i.ndim == 1:
                 node_i = node_i.reshape(-1, 1)
 
-        configuration = Configuration(
-            atomic_numbers=atomic_numbers,
-            positions=trajectory.xyz[i] * lengths_conversion,
-            cell=cell[i] * lengths_conversion,
-            pbc=pbc,
-            graph_labels=label_i,
-            node_labels=node_i,
-            system=system_atoms,
-            environment=environment_atoms,
-            subsystem=subsystem_atoms,
-        )
+        configuration = Configuration(atomic_numbers=atomic_numbers,
+                                      positions=trajectory.xyz[i] * lengths_conversion,
+                                      cell=cell[i] * lengths_conversion,
+                                      pbc=pbc,
+                                      graph_labels=label_i,
+                                      node_labels=node_i,
+                                      system=selected_atoms['system'],
+                                      environment=selected_atoms['environment'],
+                                      subsystem=selected_atoms['subsystem'],
+                                    )
         configurations.append(configuration)
 
     return configurations
 
-def _atomic_numbers_from_top(
-    top: List[mdtraj.Topology]
-) -> AtomicNumberTable:
-    """
-    Create an atomic number table from the topologies.
 
-    Parameters
-    ----------
-    top: List[mdtraj.Topology]
-        The topology objects.
-    """
+def _atomic_numbers_from_top(top: List[mdtraj.Topology]) -> AtomicNumberTable:
+    """Create an atomic number table from the topologies."""
+
     atomic_numbers = []
     for t in top:
         atomic_numbers.extend([a.element.number for a in t.atoms])
@@ -331,7 +284,9 @@ def _atomic_numbers_from_top(
     atomic_numbers = AtomicNumberTable.from_zs(atomic_numbers)
     return atomic_numbers
 
-def _names_from_top(top: List[mdtraj.Topology] ):
+def _names_from_top(top: List[mdtraj.Topology] ) -> List[str]:
+    """Retrieve atom names from the topologies."""
+
     it = iter(top)
     atom_names = list(next(it).atoms)
     if not all([atom_names == list(n.atoms) for n in it]):

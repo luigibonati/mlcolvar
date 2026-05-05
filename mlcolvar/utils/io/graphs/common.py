@@ -34,7 +34,7 @@ def create_dataset_from_trajectories(
     return_trajectories: bool = False,
     remove_isolated_nodes: bool = True,
     show_progress: bool = False,
-    save_names=True,
+    atom_names: List = None,
     lengths_conversion : float = 10.0,
     delete_download: bool = True,
 ) -> Union[
@@ -98,8 +98,9 @@ def create_dataset_from_trajectories(
         If remove isolated nodes from the dataset.
     show_progress: bool
         If show the progress bar, by default False.
-    save_names: bool
-        If to save names from topology file, by default True
+    atom_names : List, optional
+        Optional atom names used by the dataset constructor, by default None
+        If not provided, atomic names will be infered from the MDtraj Topology objects
     lengths_conversion: float,
         Conversion factor for length units, by default 10.
         MDTraj uses nanometers, the default sends to Angstroms.
@@ -149,7 +150,7 @@ def create_dataset_from_trajectories(
                           subsystem_selection=subsystem_selection,
                           buffer=buffer,
                           long_range_cutoff=long_range_cutoff,
-                          return_selection=False)
+                          return_required_atoms_selection=False)
 
 
     # ================================== Topology files handling ===================================
@@ -172,19 +173,23 @@ def create_dataset_from_trajectories(
         shared_top = False
 
 
-    # ========================================= Load files =========================================
+    # =================================== Add folder to paths =====================================
 
-    trajectories_in_memory = []
     for i in range(len(trajectories)):
-        # ============================== PREPARATION ==============================
         assert isinstance(trajectories[i], str)
-
         # check if folder is given
         if folder is not None:
             trajectories[i] = os.path.join(folder, trajectories[i])
             if topologies[i]:
                 topologies[i] = os.path.join(folder, topologies[i])
-        
+
+
+    # ========================================= Load files =========================================
+
+    trajectories_in_memory = []
+    for i in range(len(trajectories)):
+        # ============================== PREPARATION ==============================
+
         # check if trajectories[i] is an url
         download_traj = False
         if "http" in trajectories[i]:
@@ -240,9 +245,6 @@ def create_dataset_from_trajectories(
                 else:
                     print(f"downloaded file ({url_top}) saved as ({topologies[i]}).")
     #endfor i in range(len(trajectories)):
-
-    # TODO make it work with save_names, possibly moving into dataset_from_mdtraj_trajectories
-    atom_names = None
 
     graph_labels, node_labels = _normalize_graph_target_inputs(trajectories=trajectories_in_memory,
                                                                load_args=load_args,
