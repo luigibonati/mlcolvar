@@ -227,6 +227,9 @@ def create_dataset_from_trajectories(
 
         traj = load_traj_with_mdtraj(trajectory=trajectories[i],
                                      topology=topologies[i],
+                                     start=load_args[i]['start'] if load_args is not None else 0,
+                                     stop=load_args[i]['stop']  if load_args is not None else None,
+                                     stride=load_args[i]['stride']  if load_args is not None else 1,
                                      )
 
         trajectories_in_memory.append(traj)
