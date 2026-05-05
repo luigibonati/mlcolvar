@@ -103,6 +103,7 @@ class ExportWrapper(torch.nn.Module):
         calculate_k_bias: bool = False,
         epsilon: float = 1e-14,
         lambd: float = -1.0,
+        beta: float = 1.0,
         is_gnn: bool = False,
     ):
         super().__init__()
@@ -118,6 +119,9 @@ class ExportWrapper(torch.nn.Module):
         )
         self.lambd = torch.tensor(
             lambd, dtype=torch.get_default_dtype()
+        )
+        self.beta = torch.tensor(
+            beta, dtype=torch.get_default_dtype()
         )
 
         if self.calculate_k_bias:
@@ -247,6 +251,8 @@ class ExportWrapper(torch.nn.Module):
 
         epsilon = self.epsilon.to(device=device, dtype=dtype)
         lambd = self.lambd.to(device=device, dtype=dtype)
+        beta = self.beta.to(device=device, dtype=dtype)
+        lambda_over_beta = lambd / beta
         sigmoid_p = self.kb_sigmoid_p.to(device=device, dtype=dtype)
 
         z = outputs_raw[:, 0]
@@ -275,11 +281,14 @@ class ExportWrapper(torch.nn.Module):
 
         gradients_z_sum = torch.sum(gradients_z.pow(2))
 
-        k_bias_value = lambd * (
+        log_grad_sq = (
             torch.log(gradients_z_sum + epsilon)
             - 4.0 * torch.log(1.0 + torch.exp(-sigmoid_p * z))
             - 2.0 * sigmoid_p * z
-            - torch.log(epsilon)
+        )
+
+        k_bias_value = -lambda_over_beta * (
+            log_grad_sq - torch.log(epsilon)
         )
 
         gradients_b = torch.autograd.grad(
@@ -407,7 +416,8 @@ class ModelExporter:
         results = {
             "calculate_k_bias": k_bias_options is not None,
             "epsilon": 1e-14 if dtype == torch.float64 else 1e-7,
-            "lambd": -1.0,
+            "lambd": 1.0,
+            "beta": 1.0,
         }
 
         if not k_bias_options:
@@ -416,12 +426,17 @@ class ModelExporter:
         for k, v in k_bias_options.items():
             if k == "epsilon":
                 results["epsilon"] = float(v)
-            elif k in ["lambd", "lambda"]:
+            elif k == "lambd":
                 results["lambd"] = float(v)
+            elif k == "beta":
+                results["beta"] = float(v)
             elif k == "calculate_k_bias":
                 results["calculate_k_bias"] = bool(v)
             else:
                 raise ValueError(f"Unknown k_bias_options key: {k}")
+
+        if results["beta"] <= 0:
+            raise ValueError("k_bias_options['beta'] must be positive.")
 
         return results
 
@@ -935,6 +950,7 @@ def test_export_2():
     k_bias_options = dict(
         epsilon=1e-6,
         lambd=1,
+        beta=1,
     )
 
     export(
