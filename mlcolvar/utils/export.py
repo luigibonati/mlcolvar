@@ -51,7 +51,7 @@ GRAPH_FIELDS = [
 OPTIONAL_GRAPH_FIELDS = [
     "system_masks",
     "subsystem_masks",
-    "edge_masks_le",
+    "edge_masks_lr",
 ]
 
 EXCLUDED_AGGR_MODULES = [
