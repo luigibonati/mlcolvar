@@ -974,21 +974,6 @@ for (size_t i = 0; i < atom_list_a.size(); i++) {
     edge_masks_lr,
   };
 
-log << "  input edge_index sizes: " << edge_index.sizes() << " dtype: " << edge_index.dtype() << "\n";
-log << "  input shifts sizes: " << shifts.sizes() << " dtype: " << shifts.dtype() << "\n";
-log << "  input unit_shifts sizes: " << unit_shifts.sizes() << " dtype: " << unit_shifts.dtype() << "\n";
-log << "  input positions sizes: " << positions.sizes() << " dtype: " << positions.dtype() << "\n";
-log << "  input node_attrs sizes: " << node_attrs.sizes() << " dtype: " << node_attrs.dtype() << "\n";
-log << "  input batch sizes: " << batch.sizes() << " dtype: " << batch.dtype() << "\n";
-log << "  input weight sizes: " << weight.sizes() << " dtype: " << weight.dtype() << "\n";
-log << "  input label sizes: " << label.sizes() << " dtype: " << label.dtype() << "\n";
-log << "  input cell sizes: " << cell.sizes() << " dtype: " << cell.dtype() << "\n";
-log << "  input ptr sizes: " << ptr.sizes() << " dtype: " << ptr.dtype() << "\n";
-log << "  input n_system sizes: " << n_system.sizes() << " dtype: " << n_system.dtype() << "\n";
-log << "  input system_masks sizes: " << system_masks.sizes() << " dtype: " << system_masks.dtype() << "\n";
-log << "  input subsystem_masks sizes: " << subsystem_masks.sizes() << " dtype: " << subsystem_masks.dtype() << "\n";
-log << "  input edge_masks_lr sizes: " << edge_masks_lr.sizes() << " dtype: " << edge_masks_lr.dtype() << "\n";
-
   // forward
   std::vector<torch::Tensor> outputs = model->run(input_vector);  
 
