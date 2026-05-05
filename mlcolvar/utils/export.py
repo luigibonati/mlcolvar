@@ -109,8 +109,8 @@ class ExportWrapper(torch.nn.Module):
         model,
         calculate_gradients: bool = True,
         calculate_k_bias: bool = False,
-        kb_epsilon: float = 1e-14,
-        kb_lambda: float = -1.0,
+        epsilon: float = 1e-14,
+        lambd: float = -1.0,
         kb_truncated: bool = False,
         kb_weighted: bool = False,
         is_gnn: bool = False,
@@ -127,11 +127,11 @@ class ExportWrapper(torch.nn.Module):
         self.is_gnn = is_gnn
         self.is_committor = is_committor
 
-        self.kb_epsilon = torch.tensor(
-            kb_epsilon, dtype=torch.get_default_dtype()
+        self.epsilon = torch.tensor(
+            epsilon, dtype=torch.get_default_dtype()
         )
-        self.kb_lambda = torch.tensor(
-            kb_lambda, dtype=torch.get_default_dtype()
+        self.lambd = torch.tensor(
+            lambd, dtype=torch.get_default_dtype()
         )
 
         if is_committor:
@@ -243,8 +243,8 @@ class ExportWrapper(torch.nn.Module):
         dtype = outputs.dtype
         device = outputs.device
 
-        epsilon = self.kb_epsilon.to(device=device, dtype=dtype)
-        lambd = self.kb_lambda.to(device=device, dtype=dtype)
+        epsilon = self.epsilon.to(device=device, dtype=dtype)
+        lambd = self.lambd.to(device=device, dtype=dtype)
         sigmoid_p = self.kb_sigmoid_p.to(device=device, dtype=dtype)
 
         gradients_z = gradients.squeeze(0)
@@ -403,8 +403,8 @@ class ModelExporter:
 
         results = {
             "calculate_k_bias": k_bias_options is not None,
-            "kb_epsilon": 1e-14 if dtype == torch.float64 else 1e-7,
-            "kb_lambda": -1.0,
+            "epsilon": 1e-14 if dtype == torch.float64 else 1e-7,
+            "lambd": -1.0,
             "kb_truncated": False,
             "kb_weighted": False,
         }
@@ -413,7 +413,7 @@ class ModelExporter:
             return results
 
         for k, v in k_bias_options.items():
-            if k in ["kb_epsilon", "kb_lambda"]:
+            if k in ["epsilon", "lambd"]:
                 results[k] = float(v)
             elif k in ["kb_truncated", "kb_weighted"]:
                 results[k] = bool(v)
@@ -777,10 +777,10 @@ def export(
 
         Supported fields include:
 
-        - ``kb_epsilon`` : float  
+        - ``epsilon`` : float  
             Numerical regularization parameter used in the Kolmogorov bias.
 
-        - ``kb_lambda`` : float  
+        - ``lambd`` : float  
             Scaling factor of the Kolmogorov bias.
 
         - ``kb_truncated`` : bool  
@@ -831,7 +831,7 @@ def export(
         model,
         example_inputs=dataset[0],
         file_name="model_kbias_lambda_1.0.pt2",
-        k_bias_options={"kb_lambda": 1.0},
+        k_bias_options={"lambd": 1.0},
     )
     ```
 
@@ -947,8 +947,8 @@ def test_export_2():
 
     k_bias_options = dict(
         calculate_k_bias=True,
-        kb_epsilon=1e-6,
-        kb_lambda=1,
+        epsilon=1e-6,
+        lambd=1,
     )
 
     export(
