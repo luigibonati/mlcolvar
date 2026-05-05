@@ -85,84 +85,47 @@ class ExportWrapper(torch.nn.Module):
     """
     Wrapper used during model export.
 
-    This class standardizes the forward interface of a CV model so that it
-    can be compiled using AOTInductor and used in PLUMED.
-
     The exported model returns a fixed tuple:
 
-        (CV, ∇CV, V_K, ∇V_K)
+        (CV, ∇CV, 0, 0)
 
     where
-        CV     : collective variable value
-        ∇CV    : gradient of the CV w.r.t. the inputs
-        V_K    : Kolmogorov bias (only for committor models)
-        ∇V_K   : gradient of the Kolmogorov bias
+        CV  : collective variable value
+        ∇CV : gradient of the CV w.r.t. the inputs
 
-    This wrapper handles both:
-        - FFNN models
-        - GNN models
-
-    and optionally computes the Kolmogorov bias for committor models.
+    This wrapper handles both FFNN and GNN models.
     """
     def __init__(
         self,
         model,
         calculate_gradients: bool = True,
-        calculate_k_bias: bool = False,
-        epsilon: float = 1e-14,
-        lambd: float = -1.0,
         is_gnn: bool = False,
-        is_committor: bool = False,
     ):
         super().__init__()
 
         self.model = model
         self.calculate_gradients = calculate_gradients
-        self.calculate_k_bias = calculate_k_bias
 
         self.is_gnn = is_gnn
-        self.is_committor = is_committor
-
-        self.epsilon = torch.tensor(
-            epsilon, dtype=torch.get_default_dtype()
-        )
-        self.lambd = torch.tensor(
-            lambd, dtype=torch.get_default_dtype()
-        )
-
-        if is_committor:
-            self.kb_sigmoid_p = torch.tensor(
-                self.model.sigmoid.p,
-                dtype=torch.get_default_dtype(),
-            )
-
-        if calculate_k_bias and not calculate_gradients:
-            raise RuntimeError("Can not calculate k_bias without gradients")
 
     def forward(self, inputs, token: bool = False):
-        outputs_raw, outputs, x, data = self._compute_outputs(inputs)
-        gradients = self._compute_gradients(outputs, outputs_raw, x, data)
+        outputs, x, data = self._compute_outputs(inputs)
+        gradients = self._compute_gradients(outputs, x, data)
 
-        if not self.is_committor:
-            zero = torch.tensor(
-                0, device=outputs.device, dtype=outputs.dtype
-            )
-            return (
-                outputs,
-                gradients if self.calculate_gradients else zero,
-                zero,
-                zero,
-            )
-
-        k_bias_value, gradients_b = self._compute_kbias(
-            outputs_raw, outputs, gradients, x, data
+        zero = torch.tensor(
+            0, device=outputs.device, dtype=outputs.dtype
         )
+        
+        if self.calculate_gradients:
+            gradients = self._compute_gradients(outputs, x, data)
+        else:
+            gradients = zero
 
         return (
             outputs,
-            gradients if self.calculate_gradients else torch.zeros_like(outputs),
-            k_bias_value if self.calculate_k_bias else torch.zeros_like(outputs),
-            gradients_b if self.calculate_k_bias else torch.zeros_like(gradients),
+            gradients,
+            zero,
+            zero,
         )
     
     def _compute_outputs(self, inputs):
@@ -173,32 +136,19 @@ class ExportWrapper(torch.nn.Module):
             x = data["positions"].requires_grad_(True)
             data["positions"] = x
 
-            if self.is_committor:
-                outputs_raw = self.model.forward_nn(data)
-            else:
-                outputs_raw = self.model(data)
+            outputs = self.model(data)
 
         else:
             data = None
 
             x = inputs[0].requires_grad_(True)
+            
+            outputs = self.model(x)
+        return outputs, x, data
 
-            if self.is_committor:
-                outputs_raw = self.model.forward_nn(x)
-            else:
-                outputs_raw = self.model(x)
-
-        if not self.is_committor:
-            outputs = outputs_raw
-        else:
-            z = outputs_raw[:, 0]
-            q = self.model.sigmoid(z)
-            outputs = q.unsqueeze(-1)
-
-        return outputs_raw, outputs, x, data
-
-    def _compute_gradients(self, outputs, outputs_raw, x, data):
-        if outputs.shape[1] > 1 and not self.is_committor:
+    def _compute_gradients(self, outputs, x, data):
+        # Multi-output CV: compute full Jacobian
+        if outputs.shape[1] > 1:
             if self.is_gnn:
 
                 def wrapper(pos):
@@ -224,58 +174,24 @@ class ExportWrapper(torch.nn.Module):
                     strict=False,
                     vectorize=False,
                 )[0]
+
+        # Single-output CV: compute ordinary gradient
         else:
             gradients = torch.autograd.grad(
                 outputs.sum(),
                 x,
                 retain_graph=True,
-                create_graph=self.is_committor,
+                create_graph=False,
             )[0]
             gradients = gradients.unsqueeze(0)
 
         return gradients
-
-    def _compute_kbias(self, outputs_raw, outputs, gradients, x, data):
-        dtype = outputs.dtype
-        device = outputs.device
-
-        epsilon = self.epsilon.to(device=device, dtype=dtype)
-        lambd = self.lambd.to(device=device, dtype=dtype)
-        sigmoid_p = self.kb_sigmoid_p.to(device=device, dtype=dtype)
-
-        gradients_z = gradients.squeeze(0)
-        gradients_z_2 = gradients_z.pow(2)
-
-        gradients_z_sum = torch.sum(gradients_z_2)
-
-        z = outputs_raw[:, 0]
-
-        k_bias_value = lambd * (
-            torch.log(gradients_z_sum + epsilon)
-            - 4.0 * torch.log(1.0 + torch.exp(-sigmoid_p * z))
-            - 2.0 * sigmoid_p * z
-            - torch.log(epsilon)
-        )
-
-        if self.calculate_k_bias:
-            gradients_b = torch.autograd.grad(
-                k_bias_value.sum(),
-                x,
-                retain_graph=False,
-                create_graph=False,
-            )[0]
-        else:
-            gradients_b = torch.zeros_like(x)
-
-        gradients_b = gradients_b.unsqueeze(0)
-        return k_bias_value, gradients_b
 
 
 @dataclass
 class ExportConfig:
     file_name: str = "model.pt2"
     calculate_gradients: bool = True
-    k_bias_options: Optional[Dict[str, Any]] = None
     model_summary_level: int = 3
     run_check: bool = False
     is_gnn: bool = False
@@ -362,47 +278,6 @@ class ModelExporter:
         self.example_inputs = example_inputs
         self.config = config
 
-        self.is_committor = (
-            hasattr(model, "is_committor") and model.is_committor == 1
-        )
-
-        self.k_bias_options = self._normalize_k_bias_options(
-            model, config.k_bias_options
-        ) if self.is_committor else {}
-
-    # -------------------------------------------------------------------------
-    # static helpers
-    # -------------------------------------------------------------------------
-
-    @staticmethod
-    def _normalize_k_bias_options(
-        model,
-        k_bias_options: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-
-        dtype = next(model.parameters()).dtype
-
-        results = {
-            "calculate_k_bias": k_bias_options is not None,
-            "epsilon": 1e-14 if dtype == torch.float64 else 1e-7,
-            "lambd": -1.0,
-        }
-
-        if not k_bias_options:
-            return results
-
-        for k, v in k_bias_options.items():
-            if k == "epsilon":
-                results["epsilon"] = float(v)
-            elif k in ["lambd", "lambda"]:
-                results["lambd"] = float(v)
-            elif k == "calculate_k_bias":
-                results["calculate_k_bias"] = bool(v)
-            else:
-                raise ValueError(f"Unknown k_bias_options key: {k}")
-
-        return results
-
     # -------------------------------------------------------------------------
     # input preparation
     # -------------------------------------------------------------------------
@@ -476,18 +351,6 @@ class ModelExporter:
                 sum(p.numel() for p in self.model.parameters() if p.requires_grad)
             )
 
-            if self.is_committor:
-                metadata["is_committor"] = str(True)
-                atomic_masses = self.model.loss_fn.atomic_masses
-                for i in range(len(self.model.atomic_numbers)):
-                    metadata[f"atomic_masses_{i}"] = str(
-                        atomic_masses[i].item()
-                    )
-                for k in self.k_bias_options.keys():
-                    metadata[k] = str(self.k_bias_options[k])
-            else:
-                metadata["is_committor"] = str(False)
-
             metadata["calculate_gradients"] = str(
                 self.config.calculate_gradients
             )
@@ -500,12 +363,7 @@ class ModelExporter:
             "float_dtype": str(next(self.model.parameters()).dtype)[-2:],
             "calculate_gradients": str(self.config.calculate_gradients),
             "model_type": "ffnn",
-            "is_committor": str(bool(self.is_committor)),
         }
-
-        if self.is_committor:
-            for k in self.k_bias_options.keys():
-                metadata[k] = str(self.k_bias_options[k])
 
         return metadata
 
@@ -573,10 +431,8 @@ class ModelExporter:
         aot_model = torch._inductor.aoti_load_package(file_name)
         metadata = aot_model.get_metadata()
         float_dtype = metadata["float_dtype"]
-        is_committor = metadata["is_committor"] in ("True", "1", True)
         calculate_gradients = metadata["calculate_gradients"] in ("True", "1", True)
         n_cvs = int(metadata["n_cvs"])
-        calculate_k_bias = metadata.get("calculate_k_bias", "False") in ("True", "1", True)
 
         model_outputs = model(example_inputs)
         aot_model_outputs = aot_model(example_inputs)
@@ -585,25 +441,11 @@ class ModelExporter:
         mae = delta.abs().max().item()
         check_mae(mae, float_dtype, "CV values")
 
-        if (not is_committor) and calculate_gradients:
+        if calculate_gradients:
             for i in range(n_cvs):
                 delta_i = model_outputs[1][i] - aot_model_outputs[1][i]
                 mae = delta_i.abs().max().item()
                 check_mae(mae, float_dtype, "CV gradients {:d}".format(i))
-
-        elif is_committor:
-            delta_z = model_outputs[1][0] - aot_model_outputs[1][0]
-            mae = delta_z.abs().max().item()
-            check_mae(mae, float_dtype, "CV gradients")
-
-            if calculate_k_bias:
-                delta_k = model_outputs[2] - aot_model_outputs[2]
-                mae = delta_k.abs().max().item()
-                check_mae(mae, float_dtype, "KBias")
-
-                delta_k = model_outputs[3][0] - aot_model_outputs[3][0]
-                mae = delta_k.abs().max().item()
-                check_mae(mae, float_dtype, "KBias gradients")
 
     @contextmanager
     def _patched_graph_ops(self):
@@ -641,8 +483,6 @@ class ModelExporter:
             self.model,
             calculate_gradients=self.config.calculate_gradients,
             is_gnn=self.config.is_gnn,
-            is_committor=self.is_committor,
-            **self.k_bias_options,
         )
 
     def _compile_and_export(
@@ -724,7 +564,6 @@ def export(
     example_inputs,
     file_name: str = "model.pt2",
     calculate_gradients: bool = True,
-    k_bias_options: Optional[Dict[str, Any]] = None,
     model_summary_level: int = 3,
     run_check: bool = False,
 ):
@@ -752,19 +591,6 @@ def export(
     calculate_gradients : bool, optional
         Whether gradient calculations should be included in the exported
         model. This option should normally remain enabled.
-
-    k_bias_options : dict[str, Any], optional
-        Options for enabling the Kolmogorov bias :math:`V_K` for committor
-        models. If this dictionary is provided, the Kolmogorov bias is
-        automatically enabled in the exported model.
-
-        Supported fields include:
-
-        - ``epsilon`` : float  
-            Numerical regularization parameter used in the Kolmogorov bias.
-
-        - ``lambd`` : float  
-            Scaling factor of the Kolmogorov bias.
 
     model_summary_level : int, optional
         Depth of the model summary stored in the exported metadata.
@@ -807,8 +633,7 @@ def export(
     export(
         model,
         example_inputs=dataset[0],
-        file_name="model_kbias_lambda_1.0.pt2",
-        k_bias_options={"lambd": 1.0},
+        file_name="model.pt2",
     )
     ```
 
@@ -852,7 +677,6 @@ def export(
         config=ExportConfig(
             file_name=file_name,
             calculate_gradients=calculate_gradients,
-            k_bias_options=k_bias_options,
             model_summary_level=model_summary_level,
             is_gnn=is_gnn,
             run_check=run_check,
@@ -900,46 +724,7 @@ def test_export_1():
     os.remove("test.pt2")
 
 
-def test_export_2():
-
-    torch.manual_seed(0)
-    torch.set_default_dtype(torch.float32)
-
-    from mlcolvar.cvs import Committor
-    from mlcolvar.cvs.committor.utils import initialize_committor_masses
-
-    atomic_masses = initialize_committor_masses(
-        atom_types=[0,1],
-        masses=[15.999, 1.008]
-    )
-
-    x = torch.randn((1,5))
-
-    model = Committor(
-        model=[5,4,2,1],
-        atomic_masses=atomic_masses,
-        alpha=1e-1,
-        delta_f=0
-    )
-
-    k_bias_options = dict(
-        calculate_k_bias=True,
-        epsilon=1e-6,
-        lambd=1,
-    )
-
-    export(
-        model,
-        example_inputs=x,
-        file_name="test.pt2",
-        k_bias_options=k_bias_options,
-        run_check=True
-    )
-
-    os.remove("test.pt2")
-
-
-def test_export_3() -> None:
+def test_export_2() -> None:
     torch.manual_seed(0)
     torch.set_default_dtype(torch.float32)
 
