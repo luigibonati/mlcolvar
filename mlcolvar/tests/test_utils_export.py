@@ -5,6 +5,7 @@ import pytest
 from mlcolvar.utils.export import (
     test_export_1,
     test_export_2,
+    test_export_3,
 )
 
 # Check whether the current platform is Linux
@@ -32,6 +33,10 @@ if not IS_LINUX:
         reason="AOTInductor requires Linux"
     )(test_export_2)
 
+    test_export_3 = pytest.mark.skip(
+        reason="AOTInductor requires Linux"
+    )(test_export_3)
+
 
 # ============================================================
 # Script entry point (manual execution)
@@ -47,6 +52,7 @@ if __name__ == "__main__":
         # Run export tests normally on Linux
         test_export_1()
         test_export_2()
+        test_export_3()
     else:
         # Gracefully skip when running manually on non-Linux systems
         print("Skipped: export tests require Linux (AOTInductor)")
