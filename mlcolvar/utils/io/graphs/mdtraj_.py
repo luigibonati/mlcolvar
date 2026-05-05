@@ -95,6 +95,7 @@ def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
         subset = trajectories[i].top.select(required_atoms_selection)
         trajectories[i] = trajectories[i].atom_slice(subset)
 
+        # TODO maybe this can be a single function with a backend argument
         # create configurations for this trajectory
         configuration = _configurations_from_mdtraj_trajectory(trajectory=trajectories[i],
                                                                 graph_labels=graph_labels[i],
@@ -102,9 +103,6 @@ def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
                                                                 system_selection=system_selection,
                                                                 environment_selection=environment_selection,
                                                                 subsystem_selection=subsystem_selection,
-                                                                start=load_args[i]['start'] if load_args is not None else 0,
-                                                                stop=load_args[i]['stop']  if load_args is not None else None,
-                                                                stride=load_args[i]['stride']  if load_args is not None else 1,
                                                                 lengths_conversion=lengths_conversion,
                                                             )
         configurations.extend(configuration)
@@ -135,7 +133,10 @@ def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
 
 
 def load_traj_with_mdtraj(trajectory: str, 
-                          topology: str, 
+                          topology: str,
+                          start: int = 0,
+                          stop: int = None,
+                          stride: int = 1, 
                           ) -> List[mdtraj.Trajectory]:
         """
         Load a trajectory using MDtraj.
@@ -146,6 +147,12 @@ def load_traj_with_mdtraj(trajectory: str,
             Path to the trajectory file.
         topology : str, optional
             Path to the topology file.
+        start : int, optional
+            Starting frame index, by default 0
+        stop : int, optional
+            Stopping frame index, by default None (load until the end)
+        stride : int, optional
+            Stride for frame selection, by default 1 (load all frames)
         Returns
         -------
         List[mdtraj.Trajectory]
@@ -165,7 +172,15 @@ def load_traj_with_mdtraj(trajectory: str,
                 raise ValueError("Could not load cell information with neither MDtraj nor ASE from this file format. " + 
                                  "Check if the file contains cell information and if the file format is supported by ASE.")
         
+        # slice the trajectory frames
+        if stop is None:
+            stop = len(traj)
+
+        frame_indices = list(range(start, stop, stride))
+        traj = traj[frame_indices]
+
         return traj
+
 
 def _configurations_from_mdtraj_trajectory(trajectory: mdtraj.Trajectory,
                                            graph_labels = None,
@@ -173,9 +188,6 @@ def _configurations_from_mdtraj_trajectory(trajectory: mdtraj.Trajectory,
                                            system_selection: str = None,
                                            environment_selection: str = None,
                                            subsystem_selection: str = None,
-                                           start: int = 0,
-                                           stop: int = None,
-                                           stride: int = 1,
                                            lengths_conversion : float = 10.0) -> Configurations:
     """
     Create configurations from one trajectory.
@@ -242,22 +254,11 @@ def _configurations_from_mdtraj_trajectory(trajectory: mdtraj.Trajectory,
         pbc = [False] * 3
         cell = [None] * len(trajectory)
 
-    if stop is None:
-        stop = len(trajectory)
-
     configurations = []
-    frame_indices = list(range(start, stop, stride))
+    for i in range(len(trajectory)):
 
-    for local_idx, i in enumerate(frame_indices):
-        label_i = None
-        if graph_labels is not None:
-            label_i = _to_torch_tensor(graph_labels[local_idx]).reshape(-1, 1)
-
-        node_i = None
-        if node_labels is not None:
-            node_i = _to_torch_tensor(node_labels[local_idx])
-            if node_i.ndim == 1:
-                node_i = node_i.reshape(-1, 1)
+        label_i = _to_torch_tensor(graph_labels[i]).reshape(-1, 1) if graph_labels is not None else None
+        node_i = _to_torch_tensor(node_labels[i]).reshape(-1, 1) if node_labels is not None else None
 
         configuration = Configuration(atomic_numbers=atomic_numbers,
                                       positions=trajectory.xyz[i] * lengths_conversion,
@@ -269,6 +270,7 @@ def _configurations_from_mdtraj_trajectory(trajectory: mdtraj.Trajectory,
                                       environment=selected_atoms['environment'],
                                       subsystem=selected_atoms['subsystem'],
                                     )
+        
         configurations.append(configuration)
 
     return configurations
@@ -280,9 +282,11 @@ def _atomic_numbers_from_top(top: List[mdtraj.Topology]) -> AtomicNumberTable:
     atomic_numbers = []
     for t in top:
         atomic_numbers.extend([a.element.number for a in t.atoms])
-    # atomic_numbers = np.array(atomic_numbers, dtype=int)
+
     atomic_numbers = AtomicNumberTable.from_zs(atomic_numbers)
+
     return atomic_numbers
+
 
 def _names_from_top(top: List[mdtraj.Topology] ) -> List[str]:
     """Retrieve atom names from the topologies."""
@@ -290,8 +294,6 @@ def _names_from_top(top: List[mdtraj.Topology] ) -> List[str]:
     it = iter(top)
     atom_names = list(next(it).atoms)
     if not all([atom_names == list(n.atoms) for n in it]):
-        raise ValueError(
-            "The atoms names or their order are different in the topology files. Check or deactivate save_names"
-        )
+        raise ValueError("The atoms names or their order are different in the topology files. Check or deactivate save_names")
     
     return atom_names
