@@ -220,8 +220,9 @@ def create_dataset_from_configurations(config: atomic.Configurations,
         unique_idx = torch.Tensor(unique_idx).to(torch.int64)
     
     # if not remove_isolated_nodes we simply take all the atoms
+    # TODO this needs to be fixed for the variable size of the environment
     else:
-        unique_idx = torch.arange(data_list[0]['n_system'].item()).to(torch.int64)
+        unique_idx = torch.arange(data_list[0]['n_system'].item() + data_list[0]['n_env'].item()).to(torch.int64)
         for i in range(len(data_list)):
             data_list[i]['names_idx'] = unique_idx
     
