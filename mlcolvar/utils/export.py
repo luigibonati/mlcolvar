@@ -111,8 +111,6 @@ class ExportWrapper(torch.nn.Module):
         calculate_k_bias: bool = False,
         epsilon: float = 1e-14,
         lambd: float = -1.0,
-        kb_truncated: bool = False,
-        kb_weighted: bool = False,
         is_gnn: bool = False,
         is_committor: bool = False,
     ):
@@ -121,8 +119,6 @@ class ExportWrapper(torch.nn.Module):
         self.model = model
         self.calculate_gradients = calculate_gradients
         self.calculate_k_bias = calculate_k_bias
-        self.kb_truncated = kb_truncated
-        self.kb_weighted = kb_weighted
 
         self.is_gnn = is_gnn
         self.is_committor = is_committor
@@ -250,31 +246,16 @@ class ExportWrapper(torch.nn.Module):
         gradients_z = gradients.squeeze(0)
         gradients_z_2 = gradients_z.pow(2)
 
-        if self.kb_weighted and self.is_gnn:
-            atomic_masses = self.model.loss_fn.atomic_masses.to(dtype).to(device)
-            node_types = torch.where(data["node_attrs"])[1]
-            node_masses = atomic_masses[node_types].unsqueeze(-1)
-            gradients_z_2 = gradients_z_2 / node_masses
-
         gradients_z_sum = torch.sum(gradients_z_2)
 
         z = outputs_raw[:, 0]
-        q = outputs[:, 0]
 
-        if not self.kb_truncated:
-            k_bias_value = lambd * (
-                torch.log(gradients_z_sum + epsilon)
-                - 4.0 * torch.log(1.0 + torch.exp(-sigmoid_p * z))
-                - 2.0 * sigmoid_p * z
-                - torch.log(epsilon)
-            )
-        else:
-            k_bias_value = lambd * (
-                torch.log(
-                    gradients_z_sum * torch.pow(q * (1 - q), 2) + epsilon
-                )
-                - torch.log(epsilon)
-            )
+        k_bias_value = lambd * (
+            torch.log(gradients_z_sum + epsilon)
+            - 4.0 * torch.log(1.0 + torch.exp(-sigmoid_p * z))
+            - 2.0 * sigmoid_p * z
+            - torch.log(epsilon)
+        )
 
         if self.calculate_k_bias:
             gradients_b = torch.autograd.grad(
@@ -405,18 +386,20 @@ class ModelExporter:
             "calculate_k_bias": k_bias_options is not None,
             "epsilon": 1e-14 if dtype == torch.float64 else 1e-7,
             "lambd": -1.0,
-            "kb_truncated": False,
-            "kb_weighted": False,
         }
 
         if not k_bias_options:
             return results
 
         for k, v in k_bias_options.items():
-            if k in ["epsilon", "lambd"]:
-                results[k] = float(v)
-            elif k in ["kb_truncated", "kb_weighted"]:
-                results[k] = bool(v)
+            if k == "epsilon":
+                results["epsilon"] = float(v)
+            elif k in ["lambd", "lambda"]:
+                results["lambd"] = float(v)
+            elif k == "calculate_k_bias":
+                results["calculate_k_bias"] = bool(v)
+            else:
+                raise ValueError(f"Unknown k_bias_options key: {k}")
 
         return results
 
@@ -782,12 +765,6 @@ def export(
 
         - ``lambd`` : float  
             Scaling factor of the Kolmogorov bias.
-
-        - ``kb_truncated`` : bool  
-            Whether to compute the truncated (twisted) Kolmogorov bias.
-
-        - ``kb_weighted`` : bool  
-            Whether to compute the mass-weighted (exact) Kolmogorov bias.
 
     model_summary_level : int, optional
         Depth of the model summary stored in the exported metadata.
