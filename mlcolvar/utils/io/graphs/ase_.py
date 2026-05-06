@@ -68,6 +68,14 @@ def dataset_from_ase_trajectories(trajectories: List[ase.Atoms],
     show_progress : bool, optional
         Whether to show progress while building the dataset, by default True
 
+    Notes
+    -------
+    Atom selection can be done as in ASE. Supported formats are:
+        - None: keep all atoms
+        - list/tuple/np.ndarray of indices
+        - boolean mask array-like
+        - callable(atoms) -> indices
+    
     Returns
     -------
     DictDataset
@@ -78,6 +86,7 @@ def dataset_from_ase_trajectories(trajectories: List[ase.Atoms],
 
     # create configurations objects from trajectories
     configurations = []
+    atomic_numbers = []
     for i in range(len(trajectories)):
 
         # TODO check if preselection is needed
@@ -94,11 +103,12 @@ def dataset_from_ase_trajectories(trajectories: List[ase.Atoms],
                                                            )
         # add configuration to configurations
         configurations.extend(configuration)
-
-
+        
+        # check if new atomic species have been discovered
+        atomic_numbers = _update_atomic_numbers_from_configurations(configurations=configuration,
+                                                                    atomic_numbers=atomic_numbers)
+        
     # get atomic numbers and names from ASE Atoms objects if not provided
-    if atomic_numbers is None:
-        atomic_numbers = _atomic_numbers_from_ase_atoms(trajectories)
     if atom_names is None:
         atom_names = _names_from_ase_atoms(trajectories)
 
@@ -117,8 +127,6 @@ def dataset_from_ase_trajectories(trajectories: List[ase.Atoms],
 
 
 def load_traj_with_ase(trajectory: str,
-                      topology: str = None, # TODO see if necessary,
-                      selection = None,
                       start: int = 0,
                       stop: int = None,
                       stride: int = 1) -> List[ase.Atoms]:
@@ -129,21 +137,12 @@ def load_traj_with_ase(trajectory: str,
     ----------
     trajectory : str
         Path to the trajectory file.
-    topology : str, optional
-        Unused for ASE-based loading, kept for API compatibility.
     start : int, optional
             Starting frame index, by default 0
         stop : int, optional
             Stopping frame index, by default None (load until the end)
         stride : int, optional
-            Stride for frame selection, by default 1 (load all frames)
-    # TODO copy somewhere else
-    selection : optional
-        Atom selection for each frame. Supported formats are:
-        - None: keep all atoms
-        - list/tuple/np.ndarray of indices
-        - boolean mask array-like
-        - callable(atoms) -> indices
+            Stride for frame selection, by default 1 (load all frames)    
 
     Returns
     -------
@@ -153,13 +152,27 @@ def load_traj_with_ase(trajectory: str,
     if stop is None:
         stop = ''
     frame_selection = f'{start}:{stop}:{stride}'
-    print(frame_selection)
     
     # read trajectory with ASE
     traj = read(trajectory, index=frame_selection)
     
     return [traj]
 
+
+def _update_atomic_numbers_from_configurations(configurations, 
+                                               atomic_numbers):
+    if isinstance(atomic_numbers, AtomicNumberTable):
+        atomic_numbers = atomic_numbers.zs
+    
+    for configuration in configurations:
+        aux = np.unique(np.array(configuration.atomic_numbers))
+        check = [j not in atomic_numbers for j in aux]
+
+        if any(check):
+            atomic_numbers.extend(iter([int(k) for k in aux[check]]))
+    
+    atomic_numbers = AtomicNumberTable.from_zs(atomic_numbers)
+    return atomic_numbers
 
 def _selection_to_indices(selection, atoms):
     """Convert an ASE selection to a list of indices."""
@@ -168,7 +181,7 @@ def _selection_to_indices(selection, atoms):
         return None
     
     if callable(selection):
-        indices = selection(atoms)
+        indices = np.asarray(selection(atoms))
     else:
         if isinstance(selection, str):
             raise TypeError("ASE selections do not support mdtraj-style selection strings. Use indices, boolean masks, or a callable instead.")
@@ -256,18 +269,6 @@ def _configurations_from_ase_trajectory(trajectory,
 
 
     return configurations
-
-
-def _atomic_numbers_from_ase_atoms(ase_atoms_list: List[ase.Atoms]) -> AtomicNumberTable:
-    """Create an atomic number table from a list of ASE Atoms objects."""
-
-    atomic_numbers = []
-    for t in ase_atoms_list:
-        atomic_numbers.extend([np.unique(a.get_atomic_numbers()).item() for a in t])
-    
-    atomic_numbers = AtomicNumberTable.from_zs(atomic_numbers)
-
-    return atomic_numbers
 
 
 def _names_from_ase_atoms(ase_atoms_list: List[ase.Atoms]) -> AtomicNumberTable:
@@ -371,7 +372,7 @@ def test():
                                                 cutoff=3.5,  # Ang
                                                 buffer=0.0,
                                                 atomic_numbers=None,
-                                                system_selection=lambda atoms: atoms.get_positions()[:, 2] < 0.1,
+                                                system_selection=lambda atoms: [a.symbol == 'Na' for a in atoms],
                                                 environment_selection=None,
                                                 show_progress=False,
                                             )
@@ -398,8 +399,8 @@ def test():
                                                 cutoff=3.5,  # Ang
                                                 buffer=0.0,
                                                 atomic_numbers=None,
-                                                system_selection=lambda atoms: atoms.get_positions()[:, 2] < 0.1,
-                                                environment_selection=lambda atoms: atoms.get_positions()[:, 2] > 0.1,
+                                                system_selection=lambda atoms: [a.symbol == 'Na' for a in atoms],
+                                                environment_selection=lambda atoms: [a.symbol == 'Cu' for a in atoms],
                                                 show_progress=False,
                                             )
 
