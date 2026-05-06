@@ -489,7 +489,7 @@ class ModelExporter:
 
     def _build_model_metadata(self) -> Dict[str, str]:
         if self.config.is_gnn:
-
+            # TO DO, now the gnn model's output is associated with the model.n_out, which is not necessarily the same as model.n_cvs. We should clean this up in the future.
             n_cvs = 2 if self.calculate_k_bias else int(self.model.n_cvs.item())
 
             metadata = {
