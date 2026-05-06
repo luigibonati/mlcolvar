@@ -162,70 +162,34 @@ PytorchModelExported::PytorchModelExported(const ActionOptions&ao):
   // Read metadata.
   auto metadata = _model->get_metadata();
 
-  // Check model type.
-  if (metadata.find("model_type") != metadata.end()) {
-    std::string model_type(metadata.at("model_type").c_str());
-
-    if (model_type != "ffnn") {
-      plumed_merror(
-        "PYTORCH_MODEL_EXPORTED expects a feed-forward neural-network model "
-        "with metadata model_type='ffnn', but found model_type='" +
-        model_type + "'."
-      );
-    }
-  }
-
-  // Check gradients.
-  if (metadata.find("calculate_gradients") != metadata.end()) {
-    std::string calculate_gradients(metadata.at("calculate_gradients").c_str());
-
-    if (calculate_gradients != "True" && calculate_gradients != "1") {
-      plumed_merror(
-        "PYTORCH_MODEL_EXPORTED requires a model exported with "
-        "calculate_gradients=True."
-      );
-    }
-  }
+  // Check metadata.
+  if (metadata.at("model_type") != "ffnn")
+    plumed_merror("This interface expects model_type='ffnn'.");
 
   // Dtype.
-  if (metadata.find("float_dtype") != metadata.end()) {
-    std::string float_dtype_exported(metadata.at("float_dtype").c_str());
+  std::string float_dtype_exported(metadata.at("float_dtype").c_str());
 
-    if (float_dtype_exported == "32") {
-      torch_float_dtype = torch::kFloat32;
-    }
-    else if (float_dtype_exported == "64") {
-      torch_float_dtype = torch::kFloat64;
-    }
-    else {
-      plumed_merror(
-        "Unknown float dtype '" + float_dtype_exported +
-        "' found in exported model '" + _fname + "'."
-      );
-    }
-  }
+  if (float_dtype_exported == "32")
+    torch_float_dtype = torch::kFloat32;
+  else if (float_dtype_exported == "64")
+    torch_float_dtype = torch::kFloat64;
+  else
+    plumed_merror("Unknown float dtype in exported model.");
 
   // Device.
   bool use_cuda = false;
+  std::string device_exported(metadata.at("AOTI_DEVICE_KEY").c_str());
 
-  if (metadata.find("AOTI_DEVICE_KEY") != metadata.end()) {
-    std::string device_exported(metadata.at("AOTI_DEVICE_KEY").c_str());
+  if (device_exported == "cuda") {
+    if (!torch::cuda::is_available())
+      plumed_merror("Exported model requires CUDA, but CUDA is not available.");
 
-    if (device_exported == "cuda") {
-      if (!torch::cuda::is_available()) {
-        plumed_merror(
-          "Exported model '" + _fname +
-          "' requires CUDA, but CUDA is not available in this LibTorch build."
-        );
-      }
-
-      device = torch::kCUDA;
-      use_cuda = true;
-    }
-    else {
-      device = torch::kCPU;
-      use_cuda = false;
-    }
+    device = torch::kCUDA;
+    use_cuda = true;
+  }
+  else {
+    device = torch::kCPU;
+    use_cuda = false;
   }
 
   // Number of CVs from metadata if available.
