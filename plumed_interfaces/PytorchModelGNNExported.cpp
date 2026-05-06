@@ -76,7 +76,7 @@ auto getLengthUnit(Main&, Atoms& atoms, long)
   return atoms.getUnits().getLength();
 }
 
-//+PLUMEDOC PYTORCH_GNN PYTORCH_GNN
+//+PLUMEDOC PytorchModelGNNExported PytorchModelGNNExported
 /*
 Load a Graph Neural Network (GNN) model exported with the
 `mlcolvar.utils.export.export()` method.
@@ -114,7 +114,7 @@ The outputs are exposed as `node-0`, `node-1`, etc.
 Besides, dtype and running device of the model will be fixed after export, which
 means that one can not exporting a model stored on CPU and then inference on GPU.
 What's more, The exported models are generally MUCH FASTER when running on GPUs.
-See the docstring of the `mlcolvar.graph.utils.export.export()` method for
+See the docstring of the `mlcolvar.utils.export()` method for
 details.
 
 Note that this function requires \ref installation-libtorch LibTorch C++ library.
@@ -125,24 +125,24 @@ LibTorch, when dealing with large input graphs.
 \par Examples
 The following example instructs plumed to evaluate the GNN model using the atoms 1-10. The neighbor list for determining the edges will be updated every 100 steps.
 \plumedfile
-PYTORCH_GNN ...
+PYTORCH_GNN_EXPORTED ...
   SYSTEM_SELECTION=1-10
   MODEL=model.pt2
   STRUCTURE=plumed_topo.pdb
   NL_STRIDE=100
   LABEL=gnn
-... PYTORCH_GNN
+... PYTORCH_GNN_EXPORTED
 \endplumedfile
 
 The following example instructs plumed to do the same calculation as the above example, and will add an OPES bias potential on the CV.
 \plumedfile
-PYTORCH_GNN ...
+PYTORCH_GNN_EXPORTED ...
   SYSTEM_SELECTION=1-10
   MODEL=model.pt2
   STRUCTURE=plumed_topo.pdb
   NL_STRIDE=100
   LABEL=gnn
-... PYTORCH_GNN
+... PYTORCH_GNN_EXPORTED
 
 OPES_METAD ...
   LABEL=opes
@@ -160,7 +160,7 @@ the atoms 1-10 as system atoms, and atoms 11-100 as the environment atoms.
 In addition, long-range edges will be added between the subsystem atoms (1-10). 
 The neighbor list for determining the edges will be updated every 2 steps.
 \plumedfile
-PYTORCH_GNN ...
+PYTORCH_GNN_EXPORTED ...
   SYSTEM_SELECTION=1-10
   SUBSYSTEM_SELECTION=1-10
   ENVIRONMENT_SELECTION=11-100
@@ -168,7 +168,7 @@ PYTORCH_GNN ...
   STRUCTURE=plumed_topo.pdb
   NL_STRIDE=2
   LABEL=gnn
-... PYTORCH_GNN
+... PYTORCH_GNN_EXPORTED
 \endplumedfile
 
 */

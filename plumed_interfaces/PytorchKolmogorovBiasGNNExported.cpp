@@ -76,10 +76,10 @@ auto getLengthUnit(Main&, Atoms& atoms, long)
   return atoms.getUnits().getLength();
 }
 
-//+PLUMEDOC PYTORCH_KOLMOGOROV_BIAS_GNN_Exported
+//+PLUMEDOC PYTORCH_KOLMOGOROV_BIAS_GNN_EXPORTED 
 /*
-Load a Graph Neural Network (GNN) model for the committor exported with the
-`mlcolvar.graph.utils.export.export()` method.
+Load an exported GNN model that returns the latent coordinate `z`, the committor
+value `q`, and the Kolmogorov bias `kbias`.
 
 This module uses a fixed length unit of _Angstrom_. Thus, the GNN model read by
 this module should be trained under the same unit convention. Besides, the
@@ -125,22 +125,6 @@ LibTorch, when dealing with large input graphs.
 \par Examples
 The following example instructs plumed to evaluate a committor GNN model using 
 atoms 1-10 and compute the committor outputs `z`, `q`, and the Kolmogorov bias `kbias`. The neighbor list for determining the edges will be updated every 1 steps.
-\plumedfile
-PYTORCH_KOLMOGOROV_BIAS_GNN_EXPORTED ...
-  SYSTEM_SELECTION=1-10
-  MODEL=model.pt2
-  STRUCTURE=plumed_topo.pdb
-  NL_STRIDE=1
-  LABEL=gnn
-... PYTORCH_KOLMOGOROV_BIAS_GNN_EXPORTED
-
-BIASVALUE ARG=gnn.kbias
-
-PRINT FILE=COLVAR ARG=gnn.z,gnn.q,gnn.kbias STRIDE=100
-\endplumedfile
-
-The following example instructs plumed to do the same calculation as the above example, 
-but will evaluate the model on CUDA using double precision and with custom bias parameters.
 \plumedfile
 PYTORCH_KOLMOGOROV_BIAS_GNN_EXPORTED ...
   SYSTEM_SELECTION=1-10
