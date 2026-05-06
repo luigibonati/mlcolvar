@@ -271,10 +271,7 @@ class ExportWrapper(torch.nn.Module):
 
         sigmoid_prime = sigmoid_p * q * (1.0 - q)
 
-        if self.is_gnn:
-            gradients_q = gradients_z * sigmoid_prime.reshape(-1, 1)
-        else:
-            gradients_q = gradients_z * sigmoid_prime.reshape(-1, 1)
+        gradients_q = gradients_z * sigmoid_prime.view(-1, 1)
 
         # outputs[1]: [2, n_atoms, 3] for GNN, or [2, n_features] for FFNN
         gradients = torch.stack([gradients_z, gradients_q], dim=0)
