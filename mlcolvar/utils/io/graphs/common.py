@@ -145,12 +145,11 @@ def create_dataset_from_trajectories(
         raise ValueError("Only one of `trajectory_labels` or `graph_labels` can be provided.")
 
     # check atoms selection makes sense and get the total selection
-    _setup_atom_selection(system_selection=system_selection,
+    _check_atom_selection(system_selection=system_selection,
                           environment_selection=environment_selection,
                           subsystem_selection=subsystem_selection,
                           buffer=buffer,
-                          long_range_cutoff=long_range_cutoff,
-                          return_required_atoms_selection=False)
+                          long_range_cutoff=long_range_cutoff)
 
 
     # ================================== Topology files handling ===================================

@@ -79,12 +79,14 @@ def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
          The graph dataset created from the MDtraj trajectories.
     """
     
-    required_atoms_selection = _setup_atom_selection(system_selection=system_selection,
-                                                     environment_selection=environment_selection,
-                                                     subsystem_selection=subsystem_selection,
-                                                     buffer=buffer,
-                                                     long_range_cutoff=long_range_cutoff,
-                                                     return_required_atoms_selection=True)
+    _check_atom_selection(system_selection=system_selection,
+                          environment_selection=environment_selection,
+                          subsystem_selection=subsystem_selection,
+                          buffer=buffer,
+                          long_range_cutoff=long_range_cutoff)
+    
+    required_atoms_selection = _get_required_atoms_selection(system_selection=system_selection,
+                                                             environment_selection=environment_selection)
 
 
     # create configurations objects from trajectories
@@ -213,12 +215,9 @@ def _configurations_from_mdtraj_trajectory(trajectory: mdtraj.Trajectory,
         Conversion factor for length units, by default 10.
         MDTraj uses nanometers, the default sends to Angstroms.
     """  
-
-    required_atoms_selection = _setup_atom_selection(system_selection=system_selection,
-                                                     environment_selection=environment_selection,
-                                                     subsystem_selection=subsystem_selection,
-                                                     return_required_atoms_selection=True)
-
+    required_atoms_selection = _get_required_atoms_selection(system_selection=system_selection,
+                                                             environment_selection=environment_selection)
+    
 
     # this is not strictly needed, we may remove it in the future
     subset = trajectory.top.select(required_atoms_selection)
@@ -297,3 +296,15 @@ def _names_from_top(top: List[mdtraj.Topology] ) -> List[str]:
         raise ValueError("The atoms names or their order are different in the topology files. Check or deactivate save_names")
     
     return atom_names
+
+def _get_required_atoms_selection(system_selection : str,
+                                  environment_selection : str) -> str:
+    """Define the selection string for the required atoms based on the system and environment selction"""
+
+    if environment_selection is not None:
+        required_atoms_selection = '({:s}) or ({:s})'.format(system_selection, environment_selection)
+    elif system_selection is not None:
+        required_atoms_selection = system_selection
+    else:
+        required_atoms_selection = 'all'
+    return required_atoms_selection

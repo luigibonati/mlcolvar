@@ -12,7 +12,7 @@ __all__ = ["_as_torch_if_array",
            "_broadcast_trajectory_to_graph_labels",
            "_normalize_frame_level_labels",
            "_normalize_graph_target_inputs",
-           "_setup_atom_selection"]
+           "_check_atom_selection"]
 
 def _as_torch_if_array(x):
     if isinstance(x, torch.Tensor):
@@ -196,30 +196,21 @@ def _normalize_graph_target_inputs(
 
     return graph_labels, node_labels
 
-def _setup_atom_selection(system_selection : str,
+
+def _check_atom_selection(system_selection : str,
                           environment_selection : str,
                           subsystem_selection : str,
                           buffer : float = 0,
-                          long_range_cutoff : float = -1.0, 
-                          return_required_atoms_selection : bool = True):
+                          long_range_cutoff : float = -1.0):
+    """Check compatibility of selection keywords combinations. 
+    NOTE: This doesn't check if the selection is correct."""
 
-    # check if using truncated graph
     if environment_selection is not None:
         if system_selection is None:
             raise ValueError('The `environment_selection` argument requires the `system_selection` argument to be defined!')
-        
-        required_atoms_selection = '({:s}) or ({:s})'.format(system_selection, environment_selection
-                                              )
-    elif system_selection is not None:
-        required_atoms_selection = system_selection
-    else:
-        required_atoms_selection = 'all'
      
     if environment_selection is None:
         assert buffer == 0, ('The `buffer` argument is only valid when `environment_selection` is provided!')
     
-    if ((subsystem_selection is not None) ^ (long_range_cutoff > 0)):
+    if (subsystem_selection is not None) and (long_range_cutoff <= 0):
         raise ValueError('The `subsystem_selection` argument requires a positive `long_range_cutoff` argument!')
-    
-    if return_required_atoms_selection:
-        return required_atoms_selection
