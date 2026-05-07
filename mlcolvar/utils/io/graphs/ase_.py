@@ -79,7 +79,8 @@ def dataset_from_ase_trajectories(trajectories: List[ase.Atoms],
     DictDataset
          The graph dataset created from the MDtraj trajectories.
     """
-
+    
+    # Check compatibility of selection keywords combinations. NOTE: This doesn't check if the selection is correct.
     _check_atom_selection(system_selection=system_selection,
                           environment_selection=environment_selection,
                           subsystem_selection=subsystem_selection,
@@ -156,7 +157,8 @@ def load_traj_with_ase(trajectory: str,
     # read trajectory with ASE
     traj = read(trajectory, index=frame_selection)
     
-    return [traj]
+    
+    return traj
 
 
 def _selection_to_indices(selection, atoms):
@@ -226,10 +228,12 @@ def _configurations_from_ase_trajectory(trajectory: ase.Atoms,
         - boolean mask array-like
         - callable(atoms) -> indices
     """
+    if isinstance(trajectory, Atoms):
+        trajectory = [trajectory]
 
-     # as we basically do the same for each selection, we use a dictionary initialized to the general case
+    # as we basically do the same for each selection, we use a dictionary initialized to the general case
     selected_atoms = {}
-    selected_atoms['system'] = [i for i in range(len(trajectory[0]))]
+    selected_atoms['system'] = [i for i in range(trajectory[0].get_number_of_atoms())]
     selected_atoms['environment'] = []
     selected_atoms['subsystem'] = None
     
@@ -297,8 +301,10 @@ def _configurations_from_ase_trajectory(trajectory: ase.Atoms,
 
 def _names_from_ase_atoms(ase_atoms_list: List[ase.Atoms]) -> AtomicNumberTable:
     """Create atomic names from a list of ASE Atoms objects."""
-    
-    names = ase_atoms_list[0][0].get_chemical_symbols()
+    try:
+        names = ase_atoms_list[0].get_chemical_symbols()
+    except AttributeError:
+        names = ase_atoms_list[0][0].get_chemical_symbols()
 
     return names
 
@@ -355,8 +361,6 @@ def test():
     with data_dir() as data_folder:
 
         traj = load_traj_with_ase(trajectory=f"{data_folder}/Cu.xyz",
-                                    topology=None,
-                                    selection=None,
                                     start=0, 
                                     stop=3,
                                     stride=1)
@@ -367,7 +371,6 @@ def test():
                                                 node_labels=[None for _ in traj],
                                                 cutoff=3.5,  # Ang
                                                 buffer=0.0,
-                                                atomic_numbers=None,
                                                 system_selection=None,
                                                 environment_selection=None,
                                                 show_progress=False,                                                
@@ -383,8 +386,6 @@ def test():
     with data_dir() as data_folder:
 
         traj = load_traj_with_ase(trajectory=f"{data_folder}/Cu.xyz",
-                                    topology=None,
-                                    selection=None,
                                     start=0, 
                                     stop=3,
                                     stride=1)
@@ -395,7 +396,6 @@ def test():
                                                 node_labels=[None for _ in traj],
                                                 cutoff=3.5,  # Ang
                                                 buffer=0.0,
-                                                atomic_numbers=None,
                                                 system_selection=lambda atoms: [a.symbol == 'Na' for a in atoms],
                                                 environment_selection=None,
                                                 show_progress=False,
@@ -410,8 +410,6 @@ def test():
     with data_dir() as data_folder:
 
         traj = load_traj_with_ase(trajectory=f"{data_folder}/Cu.xyz",
-                                    topology=None,
-                                    selection=None,
                                     start=0, 
                                     stop=3,
                                     stride=1)
@@ -422,7 +420,6 @@ def test():
                                                 node_labels=[None for _ in traj],
                                                 cutoff=3.5,  # Ang
                                                 buffer=0.0,
-                                                atomic_numbers=None,
                                                 system_selection=lambda atoms: [a.symbol == 'Na' for a in atoms],
                                                 environment_selection=lambda atoms: [a.symbol == 'Cu' for a in atoms],
                                                 show_progress=False,

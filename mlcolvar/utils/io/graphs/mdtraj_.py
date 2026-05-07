@@ -73,6 +73,7 @@ def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
          The graph dataset created from the MDtraj trajectories.
     """
     
+    # Check compatibility of selection keywords combinations. NOTE: This doesn't check if the selection is correct.
     _check_atom_selection(system_selection=system_selection,
                           environment_selection=environment_selection,
                           subsystem_selection=subsystem_selection,

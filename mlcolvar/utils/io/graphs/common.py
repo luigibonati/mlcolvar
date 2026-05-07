@@ -15,93 +15,81 @@ from mlcolvar.data.graph.atomic import AtomicNumberTable
 __all__ = ["create_dataset_from_trajectories"]
 
 
-def create_dataset_from_trajectories(
-    trajectories: Union[List[str], str],
-    topologies: Union[List[str], str, None],
-    cutoff: float,
-    buffer: float = 0.0,
-    long_range_cutoff: float = -1.0,
-    load_args: list = None,
-    folder: str = None,
-    labels: list = None,
-    trajectory_labels: list = None,
-    graph_labels: list = None,
-    node_labels: list = None,
-    system_selection: str = None,
-    environment_selection: str = None,
-    subsystem_selection: str = None,
-    return_trajectories: bool = False,
-    remove_isolated_nodes: bool = True,
-    show_progress: bool = False,
-    atom_names: List = None,
-    lengths_conversion : float = 10.0,
-    delete_download: bool = True,
-) -> Union[
-    DictDataset,
-    Tuple[
-        DictDataset,
-        Union[List[List[mdtraj.Trajectory]], List[mdtraj.Trajectory]]
+def create_dataset_from_trajectories(trajectories: Union[List[str], str],
+                                     cutoff: float,
+                                     topologies: Union[List[str], str, None] = None,
+                                     load_args: list = None,
+                                     folder: str = None,
+                                     trajectory_labels: list = None,
+                                     graph_labels: list = None,
+                                     node_labels: list = None,
+                                     system_selection: str = None,
+                                     environment_selection: str = None,
+                                     buffer: float = 0.0,
+                                     subsystem_selection: str = None,
+                                     long_range_cutoff: float = -1.0,
+                                     return_trajectories: bool = False,
+                                     remove_isolated_nodes: bool = True,
+                                     show_progress: bool = False,
+                                     atom_names: List = None,
+                                     lengths_conversion : float = None,
+                                     delete_download: bool = True,
+                                     backend : str = 'mdtraj',
+                                    ) -> Union[DictDataset, 
+                                               Tuple[DictDataset, Union[List[List[mdtraj.Trajectory]], List[mdtraj.Trajectory]]
     ]
 ]:
     """
-    Create a dataset from a set of trajectory files.
+    Create a dataset from a set of trajectory files using either mdtraj or ase as a backend.
 
     Parameters
     ----------
     trajectories: Union[List[str], str]
         Paths to trajectories files.
-    topologies: Union[List[str], str, None]
-        Path to topology files. Only for .xyz files it can be set to None or empty to generate automatically a topology file.
     cutoff: float (units: Ang)
-        The graph cutoff radius.
-    buffer: float
-        Buffer size used in finding active environment atoms.
-    long_range_cutoff : float
-            Cutoff radius for the long-range edges defined on subsystem atoms. 
-            If negative, no long-range interactions are considered, by default -1.0. 
-            This option should be defined with the `subsystem_selection` option.
+        The graph cutoff radius in Angstroms.
+    topologies: Union[List[str], str, None], optional
+        Path to topology files when using mdtraj as backend. When loading .xyz files it can be set to None to generate automatically a topology file.
     load_args: list[dict], optional
         List of dictionaries for loading options for each file (keys: start,stop,stride), by default None
     folder: str
-        Common path for the files to be imported. If set, filenames become
-        `folder/file_name`.
-    labels: list
-        Deprecated alias for `trajectory_labels`.
+        Common path for the files to be imported. If set, filenames become `folder/file_name`, by default None.
     trajectory_labels: list
-        One label (or vector of labels) per trajectory. It is broadcast to all
-        selected frames and saved as `graph_labels`.
+        One label (or vector of labels) per trajectory file. It is broadcast to all selected frames and saved as `graph_labels`, by default None.
     graph_labels: list
-        One label (or vector of labels) per selected frame of each trajectory.
-        Mutually exclusive with `trajectory_labels`.
+        One label (or vector of labels) per selected frame of each trajectory. Mutually exclusive with `trajectory_labels`, by default None.
     node_labels: list
-        Optional node-level labels per selected frame and trajectory.
+        Optional node-level labels per selected frame and trajectory, by default None.
     system_selection: str
-        MDTraj style atom selections [1] of the system atoms. If given, only
-        selected atoms will be loaded from the trajectories. This option may
-        increase the speed of building graphs.
+        Atom selections of the system atoms in the syntax of the chosen backend (see notes), by default None (select all atoms). 
+        If given, only the selected atoms will be loaded from the trajectories. 
     environment_selection: str
-        MDTraj style atom selections [1] of the environment atoms. If given,
-        only the system atoms and [the environment atoms within the cutoff
-        radius of the system atoms] will be kept in the graph.
+        Atom selections of the environment atoms in the syntax of the chosen backend (see notes), by default None (no environment atoms). 
+        If given, only the system atoms and [the environment atoms within the cutoff radius of the system atoms] will be kept in the graph.
+    buffer: float
+        Buffer size used in finding active environment atoms. This option should be defined with the `environment_selection` option, by default None.
     subsystem_selection: str
-        MDTraj style atom selections of the subsystem atoms. If given, long
-        edges will be put between subsystem atoms. This option should be
-        defined along with the `long_range_cutoff` option. Besides, all atoms selected
-        by this option should also be selected by the `system_selection`.
+        Atom selections of the system atoms in the syntax of the chosen backend (see notes), by default None (no susbsystem atoms). 
+        If given, long-range edges will be put between subsystem atoms. This option should be defined along with the `long_range_cutoff` option. 
+        Besides, all atoms selected by this selection should also be selected by the `system_selection`.
+    long_range_cutoff : float
+        Cutoff radius for the long-range edges defined on subsystem atoms. If negative, no long-range interactions are considered, by default -1.0. 
+        This option should be defined with the `subsystem_selection` option.
     return_trajectories: bool
-        If also return the loaded trajectory objects.
+        If also return the loaded trajectory objects, either as mdtraj or ase object based on the chose backend, by default False.
     remove_isolated_nodes: bool
-        If remove isolated nodes from the dataset.
+        If remove isolated nodes from the dataset, by default True.
     show_progress: bool
         If show the progress bar, by default False.
     atom_names : List, optional
-        Optional atom names used by the dataset constructor, by default None
-        If not provided, atomic names will be infered from the MDtraj Topology objects
+        Optional atom names used by the dataset constructor, by default None.
+        If not provided, atomic names will be infered from trajectory/topology objects
     lengths_conversion: float,
-        Conversion factor for length units, by default 10.
-        MDTraj uses nanometers, the default sends to Angstroms.
+        Conversion factor for length units, by default None. The default sends to Angstroms whatever the backend used.
     delete_download: bool, optinal
-        Whether to delete the downloaded file after it has been loaded, default True.    
+        Whether to delete the downloaded file after it has been loaded, default True.
+    backend: str
+        Which external library to be used for loading the trajectory file, either `mdtraj` or `ase`, by defualt `mdtraj`.
 
     Returns
     -------
@@ -112,17 +100,18 @@ def create_dataset_from_trajectories(
 
     Notes
     -----
-    The login behind this method is like the follows:
-        1. If only `system_selection` is given, the method will only load atoms
-        selected by this selection, from the trajectories.
-        2. If both `system_selection` and `environment_selection` are given,
-        the method will load the atoms select by both selections, but will
-        build graphs using [the system atoms] and [the environment atoms within
-        the cutoff radius of the system atoms].
+    The logic behind the system-environment-subsystem selections is as follows:
+        1. If only `system_selection` is given, only atoms selected by this selection will be loaded from the trajectories and
+         used ot build the graphs, with edges drawn according to the given `cutoff`.
+        2. If both `system_selection` and `environment_selection` are given, atoms selected by both selections will
+         be loaded from the trajectories but only [the system atoms] and [the environment atoms within the given `cutoff`+`buffer` 
+         from the system atoms] will be included in the graphs, with edges drawn according to the given `cutoff`.
+        3. If `system_selection`, `environment_selection` and `system_selection` are given, everything is as case 2, but,
+         in addition, long-range edges will be drawn between subsystem atoms within the `long_range_cutoff` from each other.
 
-    References
-    ----------
-    .. [1] https://www.mdtraj.org/1.9.8.dev0/atom_selection.html
+    The selection syntax can be either mdtraj-based or ase-based:
+        mdtraj-based: refer to https://www.mdtraj.org/1.9.8.dev0/atom_selection.html
+        ase-based: refer to https://ase-lib.org/ase/atoms.html
     """
 
     # ======================================= Initial checks =======================================
@@ -131,30 +120,36 @@ def create_dataset_from_trajectories(
     if isinstance(trajectories, str):
         trajectories = [trajectories]
 
-    # backward compatibility: labels is an alias for trajectory_labels
-    if labels is not None and trajectory_labels is not None:
-        raise ValueError("Only one of `labels` or `trajectory_labels` can be provided.")
-    if labels is not None:
-        trajectory_labels = labels
-
     if trajectory_labels is not None and graph_labels is not None:
         raise ValueError("Only one of `trajectory_labels` or `graph_labels` can be provided.")
 
-    # check atoms selection makes sense and get the total selection
+    # Check compatibility of selection keywords combinations. NOTE: This doesn't check if the selection is correct.
     _check_atom_selection(system_selection=system_selection,
                           environment_selection=environment_selection,
                           subsystem_selection=subsystem_selection,
                           buffer=buffer,
                           long_range_cutoff=long_range_cutoff)
 
+    # we want to work in Angstroms
+    if lengths_conversion is None:
+        # mdtraj uses nm, by default
+        if backend=='mdtraj':
+            lengths_conversion = 10  
+        # ase already uses A by default
+        elif backend=='ase':
+            lengths_conversion = 1  
 
     # ================================== Topology files handling ===================================
 
     # check topologies if given, with xyz it can be None
-    if topologies is not None:
-        assert len(trajectories) == len(topologies) or len(topologies)==1 or isinstance(topologies, str), (
-            'Either a single topology file or as many as the trajectory files must be provided!'
-        )
+    if backend == 'mtraj':
+        if topologies is not None:
+            assert len(trajectories) == len(topologies) or len(topologies)==1 or isinstance(topologies, str), (
+                'Either a single topology file or as many as the trajectory files must be provided!'
+            )
+    elif backend == 'ase':
+        if topologies is not None:
+            raise ValueError('Topologies must be None wwhen using `ase` as backend!')
     
     # Allow topology to be None or empty. In that case, create a list of empty strings.
     shared_top = True
@@ -211,21 +206,29 @@ def create_dataset_from_trajectories(
                                                               return_name=True
                                                             )
 
-        # check extension of file, if .xyz create topology file through ASE
-        _, ext = os.path.splitext(trajectories[i])
-        if (ext.lower() == ".xyz") and (not topologies[i]):
-            pdb_file = trajectories[i].replace(ext, '_top.pdb')
-            topologies[i] = create_pdb_from_xyz(trajectories[i], pdb_file)
+        if backend == 'mdtraj':
+            # check extension of file, if .xyz create topology file through ASE
+            _, ext = os.path.splitext(trajectories[i])
+            if (ext.lower() == ".xyz") and (not topologies[i]):
+                pdb_file = trajectories[i].replace(ext, '_top.pdb')
+                topologies[i] = create_pdb_from_xyz(trajectories[i], pdb_file)
 
 
         # ============================== LOADING ==============================
 
-        traj = load_traj_with_mdtraj(trajectory=trajectories[i],
-                                     topology=topologies[i],
-                                     start=load_args[i]['start'] if load_args is not None else 0,
-                                     stop=load_args[i]['stop']  if load_args is not None else None,
-                                     stride=load_args[i]['stride']  if load_args is not None else 1,
-                                     )
+        if backend == 'mdtraj':
+            traj = load_traj_with_mdtraj(trajectory=trajectories[i],
+                                        topology=topologies[i],
+                                        start=load_args[i]['start'] if load_args is not None else 0,
+                                        stop=load_args[i]['stop']  if load_args is not None else None,
+                                        stride=load_args[i]['stride']  if load_args is not None else 1,
+                                        )
+        elif backend == 'ase':
+            traj = load_traj_with_ase(trajectory=trajectories[i],
+                                      start=load_args[i]['start'] if load_args is not None else 0,
+                                      stop=load_args[i]['stop']  if load_args is not None else None,
+                                      stride=load_args[i]['stride']  if load_args is not None else 1,
+                                      )
 
         trajectories_in_memory.append(traj)
 
@@ -250,20 +253,34 @@ def create_dataset_from_trajectories(
                                                                graph_labels=graph_labels,
                                                                node_labels=node_labels,
                                                                )
-
-    dataset = dataset_from_mdtraj_trajectories(trajectories=trajectories_in_memory,
-                                               graph_labels=graph_labels,
-                                               node_labels=node_labels,
-                                               cutoff=cutoff, 
-                                               system_selection=system_selection,
-                                               environment_selection=environment_selection,
-                                               subsystem_selection=subsystem_selection,
-                                               lengths_conversion=lengths_conversion,
-                                               buffer=buffer,
-                                               long_range_cutoff=long_range_cutoff,
-                                               atom_names=atom_names,
-                                               remove_isolated_nodes=remove_isolated_nodes,
-                                               show_progress=show_progress)
+    if backend == 'mdtraj':
+        dataset = dataset_from_mdtraj_trajectories(trajectories=trajectories_in_memory,
+                                                   graph_labels=graph_labels,
+                                                   node_labels=node_labels,
+                                                   cutoff=cutoff, 
+                                                   system_selection=system_selection,
+                                                   environment_selection=environment_selection,
+                                                   subsystem_selection=subsystem_selection,
+                                                   lengths_conversion=lengths_conversion,
+                                                   buffer=buffer,
+                                                   long_range_cutoff=long_range_cutoff,
+                                                   atom_names=atom_names,
+                                                   remove_isolated_nodes=remove_isolated_nodes,
+                                                   show_progress=show_progress)
+    elif backend == 'ase':
+        dataset = dataset_from_ase_trajectories(trajectories=trajectories_in_memory,
+                                                graph_labels=graph_labels,
+                                                node_labels=node_labels,
+                                                cutoff=cutoff, 
+                                                system_selection=system_selection,
+                                                environment_selection=environment_selection,
+                                                subsystem_selection=subsystem_selection,
+                                                lengths_conversion=lengths_conversion,
+                                                buffer=buffer,
+                                                long_range_cutoff=long_range_cutoff,
+                                                atom_names=atom_names,
+                                                remove_isolated_nodes=remove_isolated_nodes,
+                                                show_progress=show_progress)
 
     if return_trajectories:
         return dataset, trajectories_in_memory
@@ -283,7 +300,6 @@ def test_datasesetFromTrajectories():
                         'p.pdb'],
             folder=data_folder,
             cutoff=8.0,  # Ang
-            labels=None,
             system_selection='all and not type H',
             show_progress=False,
         )
@@ -295,7 +311,7 @@ def test_datasesetFromTrajectories():
                                 'p.pdb'],
                     folder=data_folder,
                     cutoff=8.0,  # Ang
-                    labels=[0,1],
+                    trajectory_labels=[0,1],
                     system_selection='all and not type H',
                     show_progress=False,
                     load_args=[{'start' : 0, 'stop' : 10, 'stride' : 1},
@@ -310,7 +326,7 @@ def test_datasesetFromTrajectories():
                                 'p.pdb', 'p.pdb'],
                     folder=data_folder,
                     cutoff=8.0,  # Ang
-                    labels=[0,1,2,3],
+                    trajectory_labels=[0,1,2,3],
                     system_selection='all and not type H',
                     show_progress=False,
                     load_args=[{'start' : 0, 'stop' : 10, 'stride' : 1}, {'start' : 0, 'stop' : 10, 'stride' : 1},
@@ -366,7 +382,7 @@ system_selection: str = None
             trajectories=[test_dataset_path, test_dataset_path, test_dataset_path],
             topologies=test_dataset_path,
             cutoff=1.0,
-            labels=None,
+            trajectory_labels=None,
             system_selection=system_selection,
             return_trajectories=True,
             show_progress=False
@@ -585,34 +601,42 @@ def test_dataset_from_xyz():
     from mlcolvar.tests import data_dir
 
     with data_dir() as data_folder:
-        # load single file
-        load_args = [{'start' : 0, 'stop' : 2, 'stride' : 1}]
-        dataset = create_dataset_from_trajectories(trajectories="Cu.xyz",
-                                                folder=data_folder,
-                                                topologies=None,
-                                                cutoff=3.5,  # Ang
-                                                labels=None,
-                                                system_selection="index 0",
-                                                environment_selection="not index 0",
-                                                show_progress=False,
-                                                load_args=load_args,
-                                                buffer=1,
-                                            )
-        
-        print(dataset)
+        for backend in ['mdtraj', 'ase']:
+            
+            # load single file
+            system_selection = "index 0" if backend == 'mdtraj' else lambda atoms: [a.symbol == 'Na' for a in atoms]
+            env_selection = "not index 0" if backend == 'mdtraj' else lambda atoms: [a.symbol == 'Cu' for a in atoms]
 
-        # load multiple files
-        load_args = [{'start' : 0, 'stop' : 2, 'stride' : 1},
-                    {'start' : 0, 'stop' : 4, 'stride' : 2}]
-        dataset = create_dataset_from_trajectories(trajectories=["Cu.xyz", "Cu.xyz"],
-                                                folder=data_folder,
-                                                topologies=None,
-                                                cutoff=3.5,  # Ang
-                                                labels=None,
-                                                system_selection="index 0 or index 1",
-                                                environment_selection="not index 0 and not index 1",
-                                                show_progress=False,
-                                                load_args=load_args,
-                                                buffer=1,
+            load_args = [{'start' : 0, 'stop' : 2, 'stride' : 1}]
+            dataset = create_dataset_from_trajectories(trajectories="Cu.xyz",
+                                                    folder=data_folder,
+                                                    topologies=None,
+                                                    cutoff=3.5,  # Ang
+                                                    system_selection=system_selection,
+                                                    environment_selection=env_selection,
+                                                    show_progress=False,
+                                                    load_args=load_args,
+                                                    buffer=1,
+                                                    backend=backend
                                                 )
-        print(dataset)
+            
+            print(dataset)
+
+            # load multiple files
+            system_selection = "index 0 or index 1" if backend == 'mdtraj' else lambda atoms: [a.symbol == 'Na' for a in atoms]
+            env_selection = "not index 0 and not index 1" if backend == 'mdtraj' else lambda atoms: [a.symbol == 'Cu' for a in atoms]
+
+            load_args = [{'start' : 0, 'stop' : 2, 'stride' : 1},
+                        {'start' : 0, 'stop' : 4, 'stride' : 2}]
+            dataset = create_dataset_from_trajectories(trajectories=["Cu.xyz", "Cu.xyz"],
+                                                    folder=data_folder,
+                                                    topologies=None,
+                                                    cutoff=3.5,  # Ang
+                                                    system_selection=system_selection,
+                                                    environment_selection=env_selection,
+                                                    show_progress=False,
+                                                    load_args=load_args,
+                                                    buffer=1,
+                                                    backend=backend
+                                                    )
+            print(dataset)
