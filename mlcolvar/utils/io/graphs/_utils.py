@@ -3,6 +3,7 @@ import torch
 from typing import List
 import mdtraj
 from warnings import warn
+from mlcolvar.data.graph.atomic import AtomicNumberTable
 
 
 __all__ = ["_as_torch_if_array",
@@ -12,7 +13,8 @@ __all__ = ["_as_torch_if_array",
            "_broadcast_trajectory_to_graph_labels",
            "_normalize_frame_level_labels",
            "_normalize_graph_target_inputs",
-           "_check_atom_selection"]
+           "_check_atom_selection",
+           "_update_atomic_numbers_from_configurations"]
 
 def _as_torch_if_array(x):
     if isinstance(x, torch.Tensor):
@@ -214,3 +216,18 @@ def _check_atom_selection(system_selection : str,
     
     if (subsystem_selection is not None) and (long_range_cutoff <= 0):
         raise ValueError('The `subsystem_selection` argument requires a positive `long_range_cutoff` argument!')
+
+def _update_atomic_numbers_from_configurations(configurations, 
+                                               atomic_numbers):
+    if isinstance(atomic_numbers, AtomicNumberTable):
+        atomic_numbers = atomic_numbers.zs
+    
+    for configuration in configurations:
+        aux = np.unique(np.array(configuration.atomic_numbers))
+        check = [j not in atomic_numbers for j in aux]
+
+        if any(check):
+            atomic_numbers.extend(iter([int(k) for k in aux[check]]))
+    
+    atomic_numbers = AtomicNumberTable.from_zs(atomic_numbers)
+    return atomic_numbers

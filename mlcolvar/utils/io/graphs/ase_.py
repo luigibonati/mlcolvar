@@ -4,6 +4,7 @@ import numpy as np
 from warnings import warn
 
 from mlcolvar.data import DictDataset
+from mlcolvar.utils.io.graphs._utils import *
 from mlcolvar.data.graph.atomic import AtomicNumberTable, Configuration, Configurations
 from mlcolvar.data.graph.utils import create_dataset_from_configurations
 from mlcolvar.utils.io.graphs._utils import _to_torch_tensor
@@ -83,7 +84,12 @@ def dataset_from_ase_trajectories(trajectories: List[ase.Atoms],
     """
 
     # TODO add setup_atom_selection
-
+    _check_atom_selection(system_selection=system_selection,
+                          environment_selection=environment_selection,
+                          subsystem_selection=subsystem_selection,
+                          buffer=buffer,
+                          long_range_cutoff=long_range_cutoff)
+    
     # create configurations objects from trajectories
     configurations = []
     atomic_numbers = []

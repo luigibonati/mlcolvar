@@ -84,18 +84,11 @@ def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
                           subsystem_selection=subsystem_selection,
                           buffer=buffer,
                           long_range_cutoff=long_range_cutoff)
-    
-    required_atoms_selection = _get_required_atoms_selection(system_selection=system_selection,
-                                                             environment_selection=environment_selection)
-
 
     # create configurations objects from trajectories
     configurations = []
+    atomic_numbers = []
     for i in range(len(trajectories)):
-
-        # slice based on the required atoms selection for this trajectory
-        subset = trajectories[i].top.select(required_atoms_selection)
-        trajectories[i] = trajectories[i].atom_slice(subset)
 
         # TODO maybe this can be a single function with a backend argument
         # create configurations for this trajectory
@@ -109,9 +102,9 @@ def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
                                                             )
         configurations.extend(configuration)
 
-    # get common atomic numbers and atom names if not given
-    if atomic_numbers is None:
-        atomic_numbers = _atomic_numbers_from_top([trajectory.topology for trajectory in trajectories])
+        # check if new atomic species have been discovered
+        atomic_numbers = _update_atomic_numbers_from_configurations(configurations=configuration,
+                                                                    atomic_numbers=atomic_numbers)
 
     if atom_names is None:
         try:
