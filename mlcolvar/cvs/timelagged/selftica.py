@@ -68,8 +68,11 @@ class SelfTICA(BaseCV):
         regularization : float, optional
             L2 regularization strength used in the loss function (default: 1e-5).
         predictor_depth : int, optional
-            Number of layers of the predictor network (default: 2).
-            Use 1 for a linear predictor.
+            Length of the layer-size list used to build the predictor network.
+            A value of 2 corresponds to a linear predictor, i.e.,
+            ``FeedForward([d, d])`` where ``d`` is the latent dimension.
+            Values larger than 2 add hidden layers of width ``d`` and therefore
+            define a nonlinear predictor. Default is 2.
         options : dict[str, Any], optional
             Options for the building blocks of the model, by default {}. 
             Available blocks: ['norm_in', 'encoder', 'predictor', 'tica'].
@@ -118,6 +121,9 @@ class SelfTICA(BaseCV):
         else:
             raise ValueError("Cannot infer output dimension from model")
         
+        if not isinstance(predictor_depth, int) or predictor_depth < 2:
+            raise ValueError("predictor_depth must be an integer greater than or equal to 2.")
+        
         pred_layers = [out_dim] * predictor_depth
         self.predictor = FeedForward(
            layers=pred_layers,
@@ -126,10 +132,10 @@ class SelfTICA(BaseCV):
 
         # initialize TICA
         o = "tica"
-        self.tica = TICA(self.nn.out_features, n_cvs, **options[o])
+        self.tica = TICA(out_dim, n_cvs, **options[o])
 
-        self.register_buffer('current_evecs', torch.eye(self.nn.out_features, n_cvs))
-        self.register_buffer('current_means', torch.zeros(self.nn.out_features))
+        self.register_buffer('current_evecs', torch.eye(out_dim, n_cvs))
+        self.register_buffer('current_means', torch.zeros(out_dim))
         self.register_buffer('optimal_lag_time', torch.tensor(-1.0))
 
     def compute_tica(
@@ -346,7 +352,7 @@ def test_self_tica():
     print()
     from mlcolvar.core.nn.graph.schnet import SchNetModel
     from mlcolvar.data.graph.utils import create_test_graph_input
-    gnn_model = SchNetModel(2, 0.1, [1, 8])
+    gnn_model = SchNetModel(n_out=2, cutoff=0.1, atomic_numbers=[1, 8])
     model = SelfTICA(gnn_model, n_cvs=1)
 
     # change loss options

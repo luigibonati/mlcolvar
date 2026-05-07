@@ -61,7 +61,7 @@ class ContrastiveLoss(torch.nn.Module):
         lagged : torch.Tensor
             Representations at time t+τ.
         remove_average : bool, optional
-            Whether to subtract the (weighted) mean from the input representations
+            Whether to subtract the mean from the input representations
             before computing time-correlation matrices.
 
         Returns
