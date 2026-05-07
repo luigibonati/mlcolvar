@@ -21,7 +21,6 @@ def create_dataset_from_trajectories(
     cutoff: float,
     buffer: float = 0.0,
     long_range_cutoff: float = -1.0,
-    atomic_numbers: AtomicNumberTable = None,
     load_args: list = None,
     folder: str = None,
     labels: list = None,
@@ -61,9 +60,6 @@ def create_dataset_from_trajectories(
             Cutoff radius for the long-range edges defined on subsystem atoms. 
             If negative, no long-range interactions are considered, by default -1.0. 
             This option should be defined with the `subsystem_selection` option.
-    atomic_numbers: mlcolvar.graph.data.atomic.AtomicNumberTable
-        The atomic number table used to build the node attributes. If not
-        given, it will be created from the given trajectories.
     load_args: list[dict], optional
         List of dictionaries for loading options for each file (keys: start,stop,stride), by default None
     folder: str
@@ -105,7 +101,7 @@ def create_dataset_from_trajectories(
         Conversion factor for length units, by default 10.
         MDTraj uses nanometers, the default sends to Angstroms.
     delete_download: bool, optinal
-        whether to delete the downloaded file after it has been loaded, default True.    
+        Whether to delete the downloaded file after it has been loaded, default True.    
 
     Returns
     -------
@@ -259,11 +255,9 @@ def create_dataset_from_trajectories(
                                                graph_labels=graph_labels,
                                                node_labels=node_labels,
                                                cutoff=cutoff, 
-                                               atomic_numbers=atomic_numbers,
                                                system_selection=system_selection,
                                                environment_selection=environment_selection,
                                                subsystem_selection=subsystem_selection,
-                                               load_args=load_args,
                                                lengths_conversion=lengths_conversion,
                                                buffer=buffer,
                                                long_range_cutoff=long_range_cutoff,

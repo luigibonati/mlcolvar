@@ -22,11 +22,9 @@ def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
                                      graph_labels: List,
                                      node_labels: List,
                                      cutoff: float,
-                                     atomic_numbers: AtomicNumberTable, 
                                      system_selection: str = None,
                                      environment_selection: str = None,
                                      subsystem_selection: str = None,
-                                     load_args : dict = None,
                                      lengths_conversion : float = 10,
                                      buffer: float = 0.0,
                                      long_range_cutoff: float = -1.0,
@@ -48,16 +46,12 @@ def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
         Node-level labels for each trajectory.
     cutoff : float
         Cutoff distance for graph edge construction (Angstroms).
-    atomic_numbers : AtomicNumberTable
-        Atomic number table used to build node features.
     system_selection : str, optional
         MDtraj style atom selection for the system atoms, by default None
     environment_selection : str, optional
         MDtraj style atom selection for the environment atoms, by default None
     subsystem_selection : str, optional
         MDtraj style atom selection for the subsystem atoms, by default None
-    load_args : dict, optional
-        Per-trajectory load arguments with keys start/stop/stride, by default None
     lengths_conversion : float, optional
         Length unit conversion factor, by default 10 for MDtraj nanometers to Angstroms
     buffer : float, optional
@@ -140,7 +134,7 @@ def load_traj_with_mdtraj(trajectory: str,
         ----------
         trajectory : str
             Path to the trajectory file.
-        topology : str, optional
+        topology : str
             Path to the topology file.
         start : int, optional
             Starting frame index, by default 0
@@ -148,6 +142,7 @@ def load_traj_with_mdtraj(trajectory: str,
             Stopping frame index, by default None (load until the end)
         stride : int, optional
             Stride for frame selection, by default 1 (load all frames)
+       
         Returns
         -------
         List[mdtraj.Trajectory]
@@ -161,7 +156,7 @@ def load_traj_with_mdtraj(trajectory: str,
         # mdtraj does not load cell info from certain file types
         # so we try use ASE and add it
         if traj.unitcell_vectors is None:
-            warn (f"Trajectory {trajectory} does not contain cell information that can be loaded by MDtraj. Trying to load cell information with ASE...")
+            warn (f"Trajectory {trajectory} does not contain cell information that can be loaded by MDtraj. Trying to load cell information with ASE...", )
             traj.unitcell_vectors = _get_cell_with_ase(trajectory)
             if traj.unitcell_vectors is None:
                 raise ValueError("Could not load cell information with neither MDtraj nor ASE from this file format. " + 
@@ -176,7 +171,7 @@ def load_traj_with_mdtraj(trajectory: str,
 
         return traj
 
-
+# TODO maybe also this can framed into a shared function
 def _configurations_from_mdtraj_trajectory(trajectory: mdtraj.Trajectory,
                                            graph_labels = None,
                                            node_labels = None,
@@ -193,30 +188,37 @@ def _configurations_from_mdtraj_trajectory(trajectory: mdtraj.Trajectory,
         The MDTraj Trajectory object.
     graph_labels: np.ndarray
         Frame-level graph labels for selected frames of this trajectory.
+    nodel_labels: np.nda
     system_selection: str
-        MDTraj style atom selections of the system atoms. If given, only
-        selected atoms will be loaded from the trajectories. This option may
-        increase the speed of building graphs.
+        MDTraj style atom selection of the system atoms. If given, only
+        selected atoms will be loaded from the trajectories. 
     environment_selection: str
-        MDTraj style atom selections of the environment atoms. If given,
-        only the system atoms and [the environment atoms within the cutoff
-        radius of the system atoms] will be kept in the graph.
+        MDTraj style atom selection of the environment atoms. If given,
+        only the system atoms and the environment atoms within the cutoff
+        radius of the system atoms will be kept in the graph.
     subsystem_selection: str
-        MDTraj style atom selections of the subsystem atoms. If given, long
-        edges will be put between subsystem atoms.
+        MDTraj style atom selection of the subsystem atoms for long-range interactions, by default None. 
     lengths_conversion: float,
         Conversion factor for length units, by default 10.
         MDTraj uses nanometers, the default sends to Angstroms.
+
+    Returns
+    -------
+    Configurations
+        List of the Configuration objects loaded from the trajectory
     """  
+    
+    # get the indeces of the required atoms (system + environment)
     required_atoms_selection = _get_required_atoms_selection(system_selection=system_selection,
                                                              environment_selection=environment_selection)
     
 
-    # this is not strictly needed, we may remove it in the future
+    # slice trajectory based on required selection
     subset = trajectory.top.select(required_atoms_selection)
     trajectory = trajectory.atom_slice(subset)
 
-    # as we basically do the same for each selection, we use a dictionary initialized to the general case
+    # as we basically do the same for each selection (system, environment, subsystem) 
+    # we use a dictionary initialized to the general case
     selected_atoms = {}
     selected_atoms['system'] = [i for i,e in enumerate(trajectory.top.atoms)]
     selected_atoms['environment'] = []
@@ -227,6 +229,7 @@ def _configurations_from_mdtraj_trajectory(trajectory: mdtraj.Trajectory,
                             'environment': environment_selection, 
                             'subsystem': subsystem_selection}.items():
         if selection is not None:
+            # TODO maybe also this can framed into a shared function
             selected_atoms[name] = trajectory.top.select(selection)
             if not len(selected_atoms[name]) > 0:
                 raise ValueError(f"No atoms will be selected with selection {name}_selection: {selection}!")
@@ -235,6 +238,7 @@ def _configurations_from_mdtraj_trajectory(trajectory: mdtraj.Trajectory,
     if subsystem_selection is not None:
         if not set(selected_atoms['subsystem']).issubset(set(selected_atoms['system'])):
             raise ValueError("Only atoms in `system_selection` can be selected by `subsystem_selection`!")
+
 
     # get the list of the atomic numbers for the selected atoms
     atomic_numbers = [a.element.number for a in trajectory.top.atoms]
@@ -246,6 +250,8 @@ def _configurations_from_mdtraj_trajectory(trajectory: mdtraj.Trajectory,
         pbc = [False] * 3
         cell = [None] * len(trajectory)
 
+    
+    # create configurations
     configurations = []
     for i in range(len(trajectory)):
 

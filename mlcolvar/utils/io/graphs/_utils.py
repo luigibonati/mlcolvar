@@ -219,6 +219,7 @@ def _check_atom_selection(system_selection : str,
 
 def _update_atomic_numbers_from_configurations(configurations, 
                                                atomic_numbers):
+
     if isinstance(atomic_numbers, AtomicNumberTable):
         atomic_numbers = atomic_numbers.zs
     
