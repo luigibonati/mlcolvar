@@ -291,49 +291,54 @@ def create_dataset_from_trajectories(trajectories: Union[List[str], str],
 
 def test_datasesetFromTrajectories():
     from mlcolvar.tests import data_dir, github_data_dir
-    
-    for path in [data_dir, github_data_dir]:
-        with path() as data_folder:
-            create_dataset_from_trajectories(
-                trajectories=['r.dcd',
-                            'p.dcd'],
-                topologies=['r.pdb', 
-                            'p.pdb'],
-                folder=data_folder,
-                cutoff=8.0,  # Ang
-                system_selection='all and not type H',
-                show_progress=False,
-            )
+    import platform
 
-            dataset = create_dataset_from_trajectories(
-                        trajectories=['r.dcd',
-                                    'p.dcd'],
-                        topologies=['r.pdb', 
-                                    'p.pdb'],
-                        folder=data_folder,
-                        cutoff=8.0,  # Ang
-                        trajectory_labels=[0,1],
-                        system_selection='all and not type H',
-                        show_progress=False,
-                        load_args=[{'start' : 0, 'stop' : 10, 'stride' : 1},
-                                {'start' : 6, 'stop' : 10, 'stride' : 2}]
-                    )
-            assert(len(dataset)==12)
+    for i,path in enumerate([data_dir, github_data_dir]):
+        # only test download on linux due to writing permissions in github workflows
+        if i==1 and platform.system() != "Linux":
+            pass
+        else:
+            with path() as data_folder:
+                create_dataset_from_trajectories(
+                    trajectories=['r.dcd',
+                                'p.dcd'],
+                    topologies=['r.pdb', 
+                                'p.pdb'],
+                    folder=data_folder,
+                    cutoff=8.0,  # Ang
+                    system_selection='all and not type H',
+                    show_progress=False,
+                )
 
-            dataset = create_dataset_from_trajectories(
-                        trajectories=['r.dcd', 'r.dcd',
-                                    'p.dcd', 'p.dcd'],
-                        topologies=['r.pdb', 'r.pdb', 
-                                    'p.pdb', 'p.pdb'],
-                        folder=data_folder,
-                        cutoff=8.0,  # Ang
-                        trajectory_labels=[0,1,2,3],
-                        system_selection='all and not type H',
-                        show_progress=False,
-                        load_args=[{'start' : 0, 'stop' : 10, 'stride' : 1}, {'start' : 0, 'stop' : 10, 'stride' : 1},
-                                {'start' : 6, 'stop' : 10, 'stride' : 2}, {'start' : 6, 'stop' : 10, 'stride' : 2}]
-                    )
-            assert(len(dataset)==24)
+                dataset = create_dataset_from_trajectories(
+                            trajectories=['r.dcd',
+                                        'p.dcd'],
+                            topologies=['r.pdb', 
+                                        'p.pdb'],
+                            folder=data_folder,
+                            cutoff=8.0,  # Ang
+                            trajectory_labels=[0,1],
+                            system_selection='all and not type H',
+                            show_progress=False,
+                            load_args=[{'start' : 0, 'stop' : 10, 'stride' : 1},
+                                    {'start' : 6, 'stop' : 10, 'stride' : 2}]
+                        )
+                assert(len(dataset)==12)
+
+                dataset = create_dataset_from_trajectories(
+                            trajectories=['r.dcd', 'r.dcd',
+                                        'p.dcd', 'p.dcd'],
+                            topologies=['r.pdb', 'r.pdb', 
+                                        'p.pdb', 'p.pdb'],
+                            folder=data_folder,
+                            cutoff=8.0,  # Ang
+                            trajectory_labels=[0,1,2,3],
+                            system_selection='all and not type H',
+                            show_progress=False,
+                            load_args=[{'start' : 0, 'stop' : 10, 'stride' : 1}, {'start' : 0, 'stop' : 10, 'stride' : 1},
+                                    {'start' : 6, 'stop' : 10, 'stride' : 2}, {'start' : 6, 'stop' : 10, 'stride' : 2}]
+                        )
+                assert(len(dataset)==24)
 
 
 def test_create_dataset_from_trajectories(text: str = """
