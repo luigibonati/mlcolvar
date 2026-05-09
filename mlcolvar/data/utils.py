@@ -56,7 +56,7 @@ def save_dataset_configurations_as_extyz(dataset: DictDataset, file_name: str) -
     atomic_numbers = dataset.metadata.get("atomic_numbers", None)
     if atomic_numbers is None:
         raise KeyError("Dataset metadata missing 'atomic_numbers'.")
-    z_table = AtomicNumberTable.from_zs(atomic_numbers)
+    atomic_numbers = AtomicNumberTable.from_zs(atomic_numbers)
 
     # create file
     fp = open(file_name, 'w')
@@ -81,7 +81,7 @@ def save_dataset_configurations_as_extyz(dataset: DictDataset, file_name: str) -
         # write atoms positions
         for j in range(0, len(d['positions'])):
             # chemical symbol
-            s = z_table.index_to_symbol(np.where(d['node_attrs'][j])[0][0])
+            s = atomic_numbers.index_to_symbol(np.where(d['node_attrs'][j])[0][0])
             print('{:2s}'.format(s), file=fp, end=' ')
 
             # positions
@@ -122,7 +122,7 @@ def test_save_dataset():
     cell = np.identity(3, dtype=float) * 0.2
     graph_labels = np.array([[1]])
     node_labels = np.array([[0], [1], [1]])
-    z_table = AtomicNumberTable.from_zs(numbers)
+    atomic_numbers = AtomicNumberTable.from_zs(numbers)
 
     config = [Configuration(
         atomic_numbers=numbers,
@@ -133,7 +133,7 @@ def test_save_dataset():
         graph_labels=graph_labels,
     )]
     dataset = create_dataset_from_configurations(
-                config, z_table, 0.1, show_progress=False
+                config, atomic_numbers, 0.1, show_progress=False
                 )
 
     # save dataset
