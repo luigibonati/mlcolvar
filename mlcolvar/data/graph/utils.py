@@ -18,7 +18,7 @@ __all__ = ["create_dataset_from_configurations", "create_test_graph_input"]
 
 def _create_pyg_data_from_configuration(
     config: atomic.Configuration,
-    z_table: atomic.AtomicNumberTable,
+    atomic_numbers: atomic.AtomicNumberTable,
     cutoff: float,
     buffer: float = 0.0,
     long_range_cutoff: float = -1.0,
@@ -29,7 +29,7 @@ def _create_pyg_data_from_configuration(
     ----------
     config: mlcolvar.data.graph.atomic.Configuration
         The configuration from which to generate the graph data
-    z_table: mlcolvar.data.graph.atomic.AtomicNumberTable
+    atomic_numbers: mlcolvar.data.graph.atomic.AtomicNumberTable
         The atomic number table used to build the node attributes
     cutoff: float
         The graph cutoff radius
@@ -87,8 +87,8 @@ def _create_pyg_data_from_configuration(
     weight       = torch.tensor( config.weight, dtype=torch.get_default_dtype() )         if config.weight is not None else 1
 
     # get indices from atomic numbers and convert to one_hot
-    indices = z_table.zs_to_indices(config.atomic_numbers)
-    one_hot = to_one_hot( torch.tensor( indices, dtype=torch.long ).unsqueeze(-1), n_classes=len(z_table) )
+    indices = atomic_numbers.zs_to_indices(config.atomic_numbers)
+    one_hot = to_one_hot( torch.tensor( indices, dtype=torch.long ).unsqueeze(-1), n_classes=len(atomic_numbers) )
 
     # set n_system and system_mask
     if config.system is not None:
@@ -133,7 +133,7 @@ def _create_pyg_data_from_configuration(
 
 
 def create_dataset_from_configurations(config: atomic.Configurations,
-                                       z_table: atomic.AtomicNumberTable,
+                                       atomic_numbers: atomic.AtomicNumberTable,
                                        cutoff: float,
                                        buffer: float = 0.0,
                                        long_range_cutoff: float = -1.0,
@@ -147,7 +147,7 @@ def create_dataset_from_configurations(config: atomic.Configurations,
     ----------
     config: mlcolvar.graph.utils.atomic.Configurations
         The configurations from whihc to generate the dataset
-    z_table: mlcolvar.graph.utils.atomic.AtomicNumberTable
+    atomic_numbers: mlcolvar.graph.utils.atomic.AtomicNumberTable
         The atomic number table used to build the node attributes
     cutoff: float
         The graph cutoff radius
@@ -170,7 +170,7 @@ def create_dataset_from_configurations(config: atomic.Configurations,
     
     # create a list of torch_geometric data objects, one for each configuration
     data_list = [ _create_pyg_data_from_configuration(config=c, 
-                                                      z_table=z_table, 
+                                                      atomic_numbers=atomic_numbers, 
                                                       cutoff=cutoff, 
                                                       buffer=buffer, 
                                                       long_range_cutoff=long_range_cutoff,
@@ -220,8 +220,9 @@ def create_dataset_from_configurations(config: atomic.Configurations,
         unique_idx = torch.Tensor(unique_idx).to(torch.int64)
     
     # if not remove_isolated_nodes we simply take all the atoms
+    # TODO this needs to be fixed for the variable size of the environment
     else:
-        unique_idx = torch.arange(data_list[0]['n_system'].item()).to(torch.int64)
+        unique_idx = torch.arange(data_list[0]['n_system'].item() + data_list[0]['n_env'].item()).to(torch.int64)
         for i in range(len(data_list)):
             data_list[i]['names_idx'] = unique_idx
     
@@ -230,7 +231,7 @@ def create_dataset_from_configurations(config: atomic.Configurations,
     unique_names = unique_names.tolist()
 
     dataset = DictDataset(dictionary={'data_list': data_list},
-                          metadata={'atomic_numbers': z_table.zs,
+                          metadata={'atomic_numbers': atomic_numbers.zs,
                                     'cutoff': cutoff,
                                     'buffer': buffer,
                                     'long_range_cutoff': long_range_cutoff,
@@ -424,7 +425,7 @@ def create_test_graph_input(output_type: str,
     graph_labels = np.zeros((n_samples*n_states, 1, 1))
     for i in range(1, n_states):
         graph_labels[n_samples * i :] += 1
-    z_table = atomic.AtomicNumberTable.from_zs(numbers)
+    atomic_numbers = atomic.AtomicNumberTable.from_zs(numbers)
 
     if random_weights:
         weights = np.random.random_sample((n_samples*n_states, 1, 1))
@@ -452,7 +453,7 @@ def create_test_graph_input(output_type: str,
 
     dataset = create_dataset_from_configurations(
         config=config, 
-        z_table=z_table, 
+        atomic_numbers=atomic_numbers, 
         cutoff=0.1, 
         show_progress=False, 
         remove_isolated_nodes=True, 
@@ -522,7 +523,7 @@ def create_graph_tracing_example(n_species: int,
     cell = np.identity(3, dtype=float) * 0.2
     graph_labels = np.zeros((1, 1, 1))
     
-    z_table = atomic.AtomicNumberTable.from_zs(numbers)
+    atomic_numbers = atomic.AtomicNumberTable.from_zs(numbers)
     
     system_atoms = [0,1] if environment else None
     environment_atoms = [2] if environment else None
@@ -546,7 +547,7 @@ def create_graph_tracing_example(n_species: int,
 
     # here we do not remove isolated nodes
     dataset = create_dataset_from_configurations(config=config, 
-                                                 z_table=z_table, 
+                                                 atomic_numbers=atomic_numbers, 
                                                  cutoff=0.1, 
                                                  long_range_cutoff=0.3 if long_range else -1.0,
                                                  show_progress=False, 
@@ -602,7 +603,7 @@ def test_from_configuration() -> None:
     node_labels = np.array([[0], [1], [1]])
 
     # init AtomicNumber object
-    z_table = atomic.AtomicNumberTable.from_zs(numbers)
+    atomic_numbers = atomic.AtomicNumberTable.from_zs(numbers)
 
     # initialize configuration using all atoms
     config = atomic.Configuration(
@@ -615,7 +616,7 @@ def test_from_configuration() -> None:
     )
 
     # create dataset from a configuration
-    data = _create_pyg_data_from_configuration(config, z_table, 0.1)
+    data = _create_pyg_data_from_configuration(config, atomic_numbers, 0.1)
 
     # check edges and shifts are created correctly
     assert(data['edge_index'] == torch.tensor([[0, 0, 1, 1, 2, 2],
@@ -674,7 +675,7 @@ def test_from_configuration() -> None:
         environment=[2]
     )
     
-    data = _create_pyg_data_from_configuration(config, z_table, 0.1)
+    data = _create_pyg_data_from_configuration(config, atomic_numbers, 0.1)
     
     # check edges and shift are computed correctly
     assert(data['edge_index'] == torch.tensor([[1, 2],
@@ -699,7 +700,7 @@ def test_from_configuration() -> None:
         environment=[1, 2]
     )
 
-    data = _create_pyg_data_from_configuration(config, z_table, 0.1)
+    data = _create_pyg_data_from_configuration(config, atomic_numbers, 0.1)
     assert(data['edge_index'] == torch.tensor([[0, 0, 1, 1, 2, 2], 
                                                 [2, 1, 0, 2, 1, 0]])
             ).all()
@@ -723,7 +724,7 @@ def test_from_configuration() -> None:
         environment=[1, 2]
     )
     # create dataset with same cutoff
-    data = _create_pyg_data_from_configuration(config, z_table, 0.1)
+    data = _create_pyg_data_from_configuration(config, atomic_numbers, 0.1)
     
     # check third atom is not included anymore
     assert (data['edge_index'] == torch.tensor([[0, 1], 
@@ -731,7 +732,7 @@ def test_from_configuration() -> None:
         ).all()
 
     # create dataset with slightly large cutoff
-    data = _create_pyg_data_from_configuration(config, z_table, 0.11)
+    data = _create_pyg_data_from_configuration(config, atomic_numbers, 0.11)
     
     # check the edge with the third atom is created once again
     assert(data['edge_index'] == torch.tensor([[0, 0, 1, 1, 2, 2], 
@@ -740,7 +741,7 @@ def test_from_configuration() -> None:
     
     # check with buffer layer
     # the third atoms should be included but with no edge to the system atom
-    data = _create_pyg_data_from_configuration(config, z_table, 0.1, 0.01)
+    data = _create_pyg_data_from_configuration(config, atomic_numbers, 0.1, 0.01)
     assert(data['edge_index'] == torch.tensor([[0, 1, 1, 2], 
                                                 [1, 0, 2, 1]])
             ).all()
@@ -767,7 +768,7 @@ def test_from_configuration() -> None:
 
     # create dataset from list of configurations
     dataset = create_dataset_from_configurations(config, 
-                                                 z_table, 
+                                                 atomic_numbers, 
                                                  0.1, 
                                                  show_progress=False)
 
@@ -796,7 +797,7 @@ def test_from_configuration_long_cutoff() -> None:
     node_labels = np.array([[0], [1], [1]])
 
     # init AtomicNumber object
-    z_table = atomic.AtomicNumberTable.from_zs(numbers)
+    atomic_numbers = atomic.AtomicNumberTable.from_zs(numbers)
 
     # initialize configuration using all atoms
     config = atomic.Configuration(
@@ -813,7 +814,7 @@ def test_from_configuration_long_cutoff() -> None:
 
     # create dataset from a configuration
     data = _create_pyg_data_from_configuration(
-        config, z_table, 0.1, long_range_cutoff=0.11
+        config, atomic_numbers, 0.1, long_range_cutoff=0.11
     )
 
     # check edges and shifts are created correctly
@@ -884,7 +885,7 @@ def test_from_configuration_long_cutoff() -> None:
 
     # create dataset from a configuration
     data = _create_pyg_data_from_configuration(
-        config, z_table, 0.1, long_range_cutoff=0.11
+        config, atomic_numbers, 0.1, long_range_cutoff=0.11
     )
 
     # check edges and shifts are created correctly
@@ -909,7 +910,7 @@ def test_from_configuration_long_cutoff() -> None:
     cell = np.identity(3, dtype=float)
     graph_labels = np.array([[1]])
     node_labels = np.array([[0], [1], [1], [0], [1], [1]])
-    z_table = atomic.AtomicNumberTable.from_zs(numbers)
+    atomic_numbers = atomic.AtomicNumberTable.from_zs(numbers)
 
     # initialize configuration using all atoms
     config = atomic.Configuration(
@@ -926,7 +927,7 @@ def test_from_configuration_long_cutoff() -> None:
 
     # create dataset from a configuration
     data = _create_pyg_data_from_configuration(
-        config, z_table, 0.1, long_range_cutoff=0.4
+        config, atomic_numbers, 0.1, long_range_cutoff=0.4
     )
 
     # check edges and shifts are created correctly
@@ -968,7 +969,7 @@ def test_from_configuration_long_cutoff() -> None:
 
     # create dataset from a configuration
     data = _create_pyg_data_from_configuration(
-        config, z_table, 0.1, buffer=0.011, long_range_cutoff=0.4
+        config, atomic_numbers, 0.1, buffer=0.011, long_range_cutoff=0.4
     )
 
     # check edges and shifts are created correctly
@@ -1024,7 +1025,7 @@ def test_from_configurations() -> None:
     node_labels = np.array([[0], [1], [1]])
 
     # init AtomicNumber object
-    z_table = atomic.AtomicNumberTable.from_zs(numbers)
+    atomic_numbers = atomic.AtomicNumberTable.from_zs(numbers)
 
     # initialize configuration using all atoms
     config = atomic.Configuration(
@@ -1038,7 +1039,7 @@ def test_from_configurations() -> None:
 
     # create dataset from a configuration, even if single is the multiple function
     dataset = create_dataset_from_configurations([config], 
-                                              z_table, 
+                                              atomic_numbers, 
                                               0.1, 
                                               remove_isolated_nodes=True,
                                               show_progress=False
@@ -1101,7 +1102,7 @@ def test_from_configurations() -> None:
         environment=[2]
     )
     dataset = create_dataset_from_configurations([config], 
-                                              z_table, 
+                                              atomic_numbers, 
                                               0.1, 
                                               remove_isolated_nodes=True, 
                                               show_progress=False
@@ -1146,7 +1147,7 @@ def test_from_configurations_long_cutoff() -> None:
     node_labels = np.array([[0], [1], [1], [0], [1], [1]])
 
     # init AtomicNumber object
-    z_table = atomic.AtomicNumberTable.from_zs(numbers)
+    atomic_numbers = atomic.AtomicNumberTable.from_zs(numbers)
 
     # initialize configuration using all atoms
     config = atomic.Configuration(
@@ -1164,7 +1165,7 @@ def test_from_configurations_long_cutoff() -> None:
     # create dataset from a configuration, even if single is the multiple function
     dataset = create_dataset_from_configurations(
         [config],
-        z_table,
+        atomic_numbers,
         cutoff=0.11,
         long_range_cutoff=0.4,
         remove_isolated_nodes=True,
@@ -1215,7 +1216,7 @@ def test_from_configurations_long_cutoff() -> None:
     # create dataset from a configuration, even if single is the multiple function
     dataset = create_dataset_from_configurations(
         [config],
-        z_table,
+        atomic_numbers,
         cutoff=0.1,
         long_range_cutoff=0.4,
         remove_isolated_nodes=True,
