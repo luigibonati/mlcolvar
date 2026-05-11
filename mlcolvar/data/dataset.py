@@ -236,7 +236,7 @@ def test_DictDataset():
     cell = np.identity(3, dtype=float) * 0.2
     graph_labels = np.array([[1], [0], [1]])
     node_labels = np.array([[0], [1], [1]])
-    z_table = AtomicNumberTable.from_zs(numbers)
+    atomic_numbers = AtomicNumberTable.from_zs(numbers)
 
     config = [Configuration(
         atomic_numbers=numbers,
@@ -247,7 +247,7 @@ def test_DictDataset():
         graph_labels=graph_labels,
     ) for i in range(3)]
     graph_dataset = create_dataset_from_configurations(config, 
-                                              z_table, 
+                                              atomic_numbers, 
                                               0.1, 
                                               show_progress=False
                                             )
