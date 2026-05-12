@@ -240,7 +240,6 @@ def _configurations_from_mdtraj_trajectory(trajectory: mdtraj.Trajectory,
         if not set(selected_atoms['subsystem']).issubset(set(selected_atoms['system'])):
             raise ValueError("Only atoms in `system_selection` can be selected by `subsystem_selection`!")
 
-
     # get the list of the atomic numbers for the selected atoms
     atomic_numbers = [a.element.number for a in trajectory.top.atoms]
     
@@ -256,8 +255,8 @@ def _configurations_from_mdtraj_trajectory(trajectory: mdtraj.Trajectory,
     configurations = []
     for i in range(len(trajectory)):
 
-        label_i = _to_torch_tensor(graph_labels[i]).reshape(-1, 1) if graph_labels is not None else None
-        node_i = _to_torch_tensor(node_labels[i]).reshape(-1, 1) if node_labels is not None else None
+        label_i = graph_labels[i].reshape(-1, 1) if graph_labels is not None else None
+        node_i = node_labels[i].reshape(-1, 1) if node_labels is not None else None
 
         configuration = Configuration(atomic_numbers=atomic_numbers,
                                       positions=trajectory.xyz[i] * lengths_conversion,
