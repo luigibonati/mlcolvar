@@ -111,7 +111,8 @@ def dataset_from_ase_trajectories(trajectories: List[ase.Atoms],
         
     # get atomic numbers and names from ASE Atoms objects if not provided
     if atom_names is None:
-        atom_names = _names_from_ase_atoms(trajectories)
+        atom_names = _names_from_ase_atoms(ase_atoms_list=trajectories,
+                                           system_selection=system_selection)
 
     # create dataset from configurations list
     dataset = create_dataset_from_configurations(config=configurations,
@@ -299,12 +300,15 @@ def _configurations_from_ase_trajectory(trajectory: ase.Atoms,
     return configurations
 
 
-def _names_from_ase_atoms(ase_atoms_list: List[ase.Atoms]) -> AtomicNumberTable:
+def _names_from_ase_atoms(ase_atoms_list: List[ase.Atoms],
+                          system_selection: Any) -> AtomicNumberTable:
     """Create atomic names from a list of ASE Atoms objects."""
     try:
-        names = ase_atoms_list[0].get_chemical_symbols()
+        indices = _selection_to_indices(system_selection, ase_atoms_list[0])
+        names = ase_atoms_list[0][indices].get_chemical_symbols()
     except AttributeError:
-        names = ase_atoms_list[0][0].get_chemical_symbols()
+        indices = _selection_to_indices(system_selection, ase_atoms_list[0][0])
+        names = ase_atoms_list[0][0][indices].get_chemical_symbols()
 
     return names
 
