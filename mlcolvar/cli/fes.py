@@ -7,9 +7,8 @@ After installing the package in editable mode::
     pip install -e .
     mlcolvar-fes COLVAR --columns phi psi --kbt 2.494 --bandwidth 0.05 --plot fes.png
 
-The command writes a NumPy ``.npz`` archive containing ``fes``, ``bounds``,
-``error`` and either ``grid`` for 1D data or ``grid_0``, ``grid_1``, ... for
-multi-dimensional data.
+The command writes a NumPy ``.npz`` archive and a COLVAR-like text file
+containing the grid coordinates, ``fes`` and ``error``.
 """
 
 from __future__ import annotations
@@ -101,6 +100,23 @@ def _save_output(path: Path,
     np.savez(path, **arrays)
 
 
+def _save_colvar_output(path: Path, fes, grid, error, fields: Sequence[str]):
+    # Write a PLUMED-like text table that can be inspected with standard tools.
+    grid_columns = ([np.asarray(axis).ravel() for axis in grid]
+                    if isinstance(grid, list) else [np.asarray(grid).ravel()])
+    fes_column = np.asarray(fes).ravel()
+    columns = [*grid_columns, fes_column]
+    output_fields = [*fields, "fes"]
+
+    if error is not None:
+        columns.append(np.asarray(error).ravel())
+        output_fields.append("error")
+
+    table = np.column_stack(columns)
+    header = f"#! FIELDS {' '.join(output_fields)}"
+    np.savetxt(path, table, header=header, comments="", fmt=" %.10g")
+
+
 def build_parser() -> argparse.ArgumentParser:
     # Keep argparse setup separate from main so tests can inspect the CLI without running it.
     parser = argparse.ArgumentParser(description="Compute a free energy surface with mlcolvar.utils.fes.compute_fes.")
@@ -110,6 +126,8 @@ def build_parser() -> argparse.ArgumentParser:
     input_output.add_argument("input", nargs="+", help="PLUMED COLVAR file(s).")
     input_output.add_argument("-o", "--output", type=Path, default=Path("fes.npz"),
                               help="Output .npz file. Default: fes.npz.")
+    input_output.add_argument("--output-colvar", type=Path,
+                              help="COLVAR-like text output file. Default: --output path with .dat suffix.")
     input_output.add_argument("--columns", "--fields", dest="fields", nargs="+", required=True,
                               help="COLVAR field names to use as collective variables.")
     input_output.add_argument("--bias", dest="bias_fields", nargs="+",
@@ -194,8 +212,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                                                 backend=args.backend,
                                                 eps=args.eps)
 
-    # Always save the raw result arrays; plotting is optional.
+    # Always save the raw result arrays and a COLVAR-like text table; plotting is optional.
     _save_output(args.output, fes, grid, used_bounds, error, fields, bias_fields)
+    colvar_output = args.output_colvar if args.output_colvar is not None else args.output.with_suffix(".dat")
+    _save_colvar_output(colvar_output, fes, grid, error, fields)
 
     if args.plot is not None:
         plt.tight_layout()
@@ -205,6 +225,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if bias_fields is not None:
         print(f"Used bias fields: {', '.join(bias_fields)} using {args.fes_units} as units")
     print(f"Saved FES data to {args.output}")
+    print(f"Saved FES COLVAR data to {colvar_output}")
     if args.plot is not None:
         print(f"Saved FES plot to {args.plot}")
 
