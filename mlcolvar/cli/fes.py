@@ -106,43 +106,55 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Compute a free energy surface with mlcolvar.utils.fes.compute_fes.")
 
     # Input/output options.
-    parser.add_argument("input", nargs="+", help="PLUMED COLVAR file(s).")
-    parser.add_argument("-o", "--output", type=Path, default=Path("fes.npz"),
-                        help="Output .npz file. Default: fes.npz.")
-    parser.add_argument("--columns", "--fields", dest="fields", nargs="+", required=True,
-                        help="COLVAR field names to use as collective variables.")
-    parser.add_argument("--bias", dest="bias_fields", nargs="+",
-                        help=("COLVAR bias field(s). If more than one is provided, values are summed. "
-                              "If omitted, all fields containing 'bias' are used."))
+    input_output = parser.add_argument_group("Input/output options")
+    input_output.add_argument("input", nargs="+", help="PLUMED COLVAR file(s).")
+    input_output.add_argument("-o", "--output", type=Path, default=Path("fes.npz"),
+                              help="Output .npz file. Default: fes.npz.")
+    input_output.add_argument("--columns", "--fields", dest="fields", nargs="+", required=True,
+                              help="COLVAR field names to use as collective variables.")
+    input_output.add_argument("--bias", dest="bias_fields", nargs="+",
+                              help=("COLVAR bias field(s). If more than one is provided, values are summed. "
+                                    "Default: all fields containing 'bias'."))
 
     # Row slicing is delegated directly to load_dataframe.
-    parser.add_argument("--start", type=int, default=0, help="Read COLVAR rows starting from this index.")
-    parser.add_argument("--stop", type=int, help="Read COLVAR rows until this index.")
-    parser.add_argument("--stride", type=int, default=1, help="Read every Nth COLVAR row.")
+    row_slicing = parser.add_argument_group("Row slicing options")
+    row_slicing.add_argument("--start", type=int, default=0,
+                             help="Read COLVAR rows starting from this index. Default: 0.")
+    row_slicing.add_argument("--stop", type=int, help="Read COLVAR rows until this index. Default: end of file.")
+    row_slicing.add_argument("--stride", type=int, default=1, help="Read every Nth COLVAR row. Default: 1.")
 
     # compute_fes requires exactly one thermal-energy specification.
-    thermal = parser.add_mutually_exclusive_group(required=True)
+    thermal_options = parser.add_argument_group("Thermal energy options")
+    thermal = thermal_options.add_mutually_exclusive_group(required=True)
     thermal.add_argument("--kbt", type=float, help="Thermal energy in the desired FES units.")
     thermal.add_argument("--temp", type=float, help="Temperature in Kelvin.")
-    parser.add_argument("--fes-units", choices=("kJ/mol", "kcal/mol", "eV"), default="kJ/mol",
-                        help="Free-energy units when using --temp. Default: kJ/mol.")
+    thermal_options.add_argument("--fes-units", choices=("kJ/mol", "kcal/mol", "eV"), default="kJ/mol",
+                                 help="Free-energy units when using --temp. Default: kJ/mol.")
 
     # Parameters passed through to compute_fes.
-    parser.add_argument("--num-samples", type=int, default=200, help="Grid points per dimension.")
-    parser.add_argument("--bounds", nargs="+", type=float,
-                        help="Bounds as 'min max' for 1D or 'x_min x_max y_min y_max ...' "
-                             "for higher dimensions.")
-    parser.add_argument("--bandwidth", type=float, default=0.01, help="KDE bandwidth.")
-    parser.add_argument("--kernel", default="gaussian", help="KDE kernel.")
-    parser.add_argument("--scale-by", choices=("std", "range"), help="Scale input variables before KDE.")
-    parser.add_argument("--blocks", type=int, default=1, help="Number of blocks for uncertainty estimates.")
-    parser.add_argument("--backend", choices=("KDEpy", "sklearn"), help="KDE backend.")
-    parser.add_argument("--eps", type=float, help="Regularization added before taking the logarithm.")
+    fes_options = parser.add_argument_group("FES options")
+    fes_options.add_argument("--num-samples", type=int, default=200,
+                             help="Grid points per dimension. Default: 200.")
+    fes_options.add_argument("--bounds", nargs="+", type=float,
+                             help="Bounds as 'min max' for 1D or 'x_min x_max y_min y_max ...' "
+                                  "for higher dimensions. Default: data range.")
+    fes_options.add_argument("--bandwidth", type=float, default=0.01, help="KDE bandwidth. Default: 0.01.")
+    fes_options.add_argument("--kernel", default="gaussian", help="KDE kernel. Default: gaussian.")
+    fes_options.add_argument("--scale-by", choices=("std", "range"),
+                             help="Scale input variables before KDE. Default: none.")
+    fes_options.add_argument("--blocks", type=int, default=1,
+                             help="Number of blocks for uncertainty estimates. Default: 1.")
+    fes_options.add_argument("--backend", choices=("KDEpy", "sklearn"), help="KDE backend. Default: best available.")
+    fes_options.add_argument("--eps", type=float,
+                             help="Regularization added before taking the logarithm. Default: auto-tuned.")
 
     # Optional plotting controls.
-    parser.add_argument("--plot", type=Path, help="Optional image file for the FES plot.")
-    parser.add_argument("--plot-max-fes", type=float, help="Mask plot values above this FES.")
-    parser.add_argument("--plot-levels", type=int, help="Contour levels for 2D plots.")
+    plotting = parser.add_argument_group("Plotting options")
+    plotting.add_argument("--plot", type=Path, help="Optional image file for the FES plot. Default: no plot.")
+    plotting.add_argument("--plot-max-fes", type=float,
+                          help="Mask plot values above this FES. Default: no masking.")
+    plotting.add_argument("--plot-levels", type=int,
+                          help="Contour levels for 2D plots. Default: matplotlib default.")
 
     return parser
 
