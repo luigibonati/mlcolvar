@@ -48,7 +48,7 @@ def _parse_bounds(values: Sequence[float] | None, dimensions: int):
 
 def _load_input(file_names: Sequence[str],
                 fields: Sequence[str],
-                weights_field: str | None,
+                bias_fields: Sequence[str] | None,
                 start: int,
                 stop: int | None,
                 stride: int):
@@ -61,26 +61,35 @@ def _load_input(file_names: Sequence[str],
     # Fail early with the available field names when a requested field is missing.
     missing = []
     missing.extend(field for field in fields if field not in dataframe.columns)
-    if weights_field is not None and weights_field not in dataframe.columns:
-        missing.append(weights_field)
+    if bias_fields is not None:
+        missing.extend(field for field in bias_fields if field not in dataframe.columns)
     if missing:
         available = ", ".join(dataframe.columns)
         raise ValueError(f"Field(s) not found in COLVAR data: {', '.join(missing)}. Available fields: {available}.")
 
+    if bias_fields is None:
+        bias_fields = [column for column in dataframe.columns if "bias" in column.lower()]
+
     # compute_fes works on NumPy arrays, so the dataframe is only used for loading/selection.
     data = dataframe.loc[:, fields].to_numpy()
-    weights = dataframe.loc[:, weights_field].to_numpy() if weights_field is not None else None
+    bias = dataframe.loc[:, bias_fields].to_numpy().sum(axis=1) if bias_fields else None
 
-    return data, weights, list(fields)
+    return data, bias, list(fields), list(bias_fields) if bias_fields else None
 
 
-def _save_output(path: Path, fes, grid, bounds, error, fields: Sequence[str], weights_field: str | None):
+def _save_output(path: Path,
+                 fes,
+                 grid,
+                 bounds,
+                 error,
+                 fields: Sequence[str],
+                 bias_fields: Sequence[str] | None):
     # Store both numerical results and enough metadata to identify the input fields.
     arrays = {"fes": np.asarray(fes),
               "bounds": np.asarray(bounds),
               "error": np.asarray(error) if error is not None else np.array([]),
               "fields": np.asarray(fields),
-              "weights_field": np.asarray(weights_field if weights_field is not None else ""),
+              "bias_fields": np.asarray(bias_fields if bias_fields is not None else []),
              }
 
     # In 1D compute_fes returns one grid array; in higher dimensions it returns one grid per axis.
@@ -102,8 +111,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Output .npz file. Default: fes.npz.")
     parser.add_argument("--columns", "--fields", dest="fields", nargs="+", required=True,
                         help="COLVAR field names to use as collective variables.")
-    parser.add_argument("--weights-column", "--weights-field", dest="weights_field",
-                        help="COLVAR field containing sample weights.")
+    parser.add_argument("--bias", dest="bias_fields", nargs="+",
+                        help=("COLVAR bias field(s). If more than one is provided, values are summed. "
+                              "If omitted, all fields containing 'bias' are used."))
 
     # Row slicing is delegated directly to load_dataframe.
     parser.add_argument("--start", type=int, default=0, help="Read COLVAR rows starting from this index.")
@@ -143,12 +153,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         # Load and validate COLVAR fields before calling the numerical routine.
-        data, weights, fields = _load_input(args.input,
-                                            args.fields,
-                                            args.weights_field,
-                                            args.start,
-                                            args.stop,
-                                            args.stride)
+        data, bias, fields, bias_fields = _load_input(args.input,
+                                                      args.fields,
+                                                      args.bias_fields,
+                                                      args.start,
+                                                      args.stop,
+                                                      args.stride)
         dimensions = 1 if data.ndim == 1 else data.shape[1]
         bounds = _parse_bounds(args.bounds, dimensions)
     except ValueError as exc:
@@ -163,7 +173,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                                                 bounds=bounds,
                                                 bandwidth=args.bandwidth,
                                                 kernel=args.kernel,
-                                                weights=weights,
+                                                bias=bias,
                                                 scale_by=args.scale_by,
                                                 blocks=args.blocks,
                                                 plot=args.plot is not None,
@@ -173,13 +183,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                                                 eps=args.eps)
 
     # Always save the raw result arrays; plotting is optional.
-    _save_output(args.output, fes, grid, used_bounds, error, fields, args.weights_field)
+    _save_output(args.output, fes, grid, used_bounds, error, fields, bias_fields)
 
     if args.plot is not None:
         plt.tight_layout()
         plt.savefig(args.plot, dpi=200)
 
     print(f"Used COLVAR fields: {', '.join(fields)}")
+    if bias_fields is not None:
+        print(f"Used bias fields: {', '.join(bias_fields)} using {args.fes_units} as units")
     print(f"Saved FES data to {args.output}")
     if args.plot is not None:
         print(f"Saved FES plot to {args.plot}")

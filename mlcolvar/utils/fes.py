@@ -46,6 +46,7 @@ def compute_fes(
     bandwidth: float = 0.01,
     kernel: str = "gaussian",
     weights: np.ndarray = None,
+    bias: np.ndarray = None,
     scale_by: Union[str, List[float]] = None,
     blocks: int = 1,
     fes_to_zero: bool = None,
@@ -80,6 +81,8 @@ def compute_fes(
         Kernel type for the KDE. Supported values depend on the backend, by default "gaussian".
     weights : array-like, optional
         Weights associated with the data points, shape (n_samples,).
+    bias: array-like, optional
+        Bias values to be used to compute the weights as exp(1/kbt*bias), shape (n_samples,)
     scale_by : str or list, optional
         Standardize each variable before KDE. Use "std" to scale by standard deviation, "range" for range normalization, or provide a list of scaling factors.
     blocks : int, optional
@@ -165,12 +168,17 @@ def compute_fes(
     dim = X.shape[1]
 
     # weights
+    if weights is not None and bias is not None:
+        raise ValueError("The weights and bias key cannot be defined together, use only one of them!")
     if weights is None:
-        weights = np.ones(nsamples)
+        if bias is None:
+            weights = np.ones(nsamples)
+        else:
+            weights = np.exp(1/kbt*bias)
     else:
         assert weights.ndim == 1
         assert weights.shape[0] == nsamples                                                
-
+    
     # rescale
     if scale_by is not None:
         if scale_by == "std":
