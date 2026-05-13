@@ -401,11 +401,16 @@ def create_timelagged_dataset(
         elif X.metadata["data_type"] == "graphs":
             # we use deepcopy to avoid editing the original dataset
             atomic_numbers = X.metadata.get("atomic_numbers", None)
-            dataset = DictDataset(dictionary={"data_list" : copy.deepcopy(X[x_t.numpy().tolist()]["data_list"]),
-                                            "data_list_lag" : copy.deepcopy(X[x_lag.numpy().tolist()]["data_list"])},
-                                    metadata={"atomic_numbers" : atomic_numbers,
-                                            "cutoff" : X.metadata["cutoff"],
-                                            "long_range_cutoff": X.metadata["long_range_cutoff"]},
+            dataset = DictDataset(dictionary={"data_list" :     copy.deepcopy(X[x_t.numpy().tolist()]["data_list"]),
+                                              "data_list_lag" : copy.deepcopy(X[x_lag.numpy().tolist()]["data_list"])},
+                                    metadata={"atomic_numbers" :    atomic_numbers,
+                                              "cutoff" :            X.metadata["cutoff"],
+                                              "buffer":             X.metadata["buffer"],
+                                              "long_range_cutoff":  X.metadata["long_range_cutoff"],
+                                              "system_idx":         X.metadata["system_idx"],
+                                              "system_atoms_names": X.metadata["system_atoms_names"],
+                                              "is_truncated_graph": X.metadata["is_truncated_graph"]
+                                              },
                                     data_type="graphs")
             # update weights
             for i in range(len(dataset)):
