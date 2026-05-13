@@ -156,8 +156,10 @@ def create_dataset_from_configurations(config: atomic.Configurations,
         restricting the neighborhood to a subsystem (i.e., system + environment), 
         `see also mlcolvar.data.grap.neighborhood.get_neighborhood`
     long_range_cutoff : float
-            Cutoff radius for the long-range edges defined on subsystem atoms. 
-            If negative, no long-range interactions are considered, by default -1.0
+        Cutoff radius for the long-range edges defined on subsystem atoms. 
+        If negative, no long-range interactions are considered, by default -1.0
+    atom_names, List[str]
+        Names of the system atoms. If using truncated graphs, use the system atoms only
     remove_isolated_nodes: bool
         If to remove isolated nodes from the dataset
     show_progress: bool
@@ -167,7 +169,6 @@ def create_dataset_from_configurations(config: atomic.Configurations,
         items = pbar(config, frequency=0.0001, prefix='Making graphs')
     else:
         items = config
-    
     # create a list of torch_geometric data objects, one for each configuration
     data_list = [ _create_pyg_data_from_configuration(config=c, 
                                                       atomic_numbers=atomic_numbers, 
@@ -176,12 +177,14 @@ def create_dataset_from_configurations(config: atomic.Configurations,
                                                       long_range_cutoff=long_range_cutoff,
                                                      ) for c in items
                 ]
+    try:
+        truncated = True if any([c.environment.any() for c in items]) else False
+    except AttributeError:
+        truncated = True if any([c.environment for c in items]) else False
 
     # get atom names if needed
     if atom_names is None:
-        atom_names_system = [f"X{i}" for i in range(data_list[0]['n_system'].to(torch.int64).item())]
-        atom_names_env    = [f"Y{i}" for i in range(data_list[0]['n_env'].to(torch.int64).item())]
-        atom_names        = atom_names_system + atom_names_env
+        atom_names = [f"X{i}" for i in range(data_list[0]['n_system'].to(torch.int64).item())]
 
 
     if remove_isolated_nodes:
@@ -191,7 +194,8 @@ def create_dataset_from_configurations(config: atomic.Configurations,
         # So here we first have to remove the isolated nodes and then set the cell back.
         
         # this aux var is only to check what isolated nodes have been removed
-        _aux_pos = torch.Tensor((np.array([d['positions'].numpy() for d in data_list])))
+        _pre_remove_nodes_pos = torch.Tensor(np.array([d['positions'].numpy() for d in data_list]))
+        _pre_remove_nodes_system_masks = np.array([d['system_masks'].numpy() for d in data_list], dtype=bool)
         
         cell_list = [d.cell.clone() for d in data_list]
         transform = _RemoveIsolatedNodes()
@@ -203,12 +207,13 @@ def create_dataset_from_configurations(config: atomic.Configurations,
             data_list[i].cell = cell_list[i]
 
             # get and save the original index before removing isolated nodes for each entry
-            original_idx = torch.unique( torch.where(torch.isin(torch.round(_aux_pos[i], decimals=5), 
-                                                                torch.round(data_list[i]['positions'], decimals=5))
+            # we slice by the system mask as we don't care about environment atoms
+            original_idx = torch.unique( torch.where(torch.isin(torch.round(_pre_remove_nodes_pos[i][_pre_remove_nodes_system_masks[i].squeeze(), :], decimals=5), 
+                                                                torch.round(data_list[i]['positions'][data_list[i]['system_masks'].squeeze(), :], decimals=5))
                                                     )[0]
                                         )
             
-            data_list[i]['names_idx'] = original_idx.to(torch.int64)
+            data_list[i]['system_names_idx'] = original_idx.to(torch.int64)
             
             # update if needed the overall list
             check = np.isin(original_idx.numpy(), unique_idx, invert=True)
@@ -219,15 +224,15 @@ def create_dataset_from_configurations(config: atomic.Configurations,
         unique_idx.sort()
         unique_idx = torch.Tensor(unique_idx).to(torch.int64)
     
-    # if not remove_isolated_nodes we simply take all the atoms
-    # TODO this needs to be fixed for the variable size of the environment
+    # if not remove_isolated_nodes we simply take all the system atoms
     else:
-        unique_idx = torch.arange(data_list[0]['n_system'].item() + data_list[0]['n_env'].item()).to(torch.int64)
+        unique_idx = torch.arange(data_list[0]['n_system'].item()).to(torch.int64)
         for i in range(len(data_list)):
-            data_list[i]['names_idx'] = unique_idx
+            data_list[i]['system_names_idx'] = unique_idx
     
-    # we also save the names of the atoms that have been actually used
-    unique_names = np.array(atom_names)[unique_idx]
+    # we also save the names of the atoms that have been actually used, ensuring correct dimensions
+
+    unique_names = np.array(atom_names)[unique_idx] if len(unique_idx) > 1 else np.array(np.array(atom_names)[unique_idx])
     unique_names = unique_names.tolist()
 
     dataset = DictDataset(dictionary={'data_list': data_list},
@@ -235,8 +240,9 @@ def create_dataset_from_configurations(config: atomic.Configurations,
                                     'cutoff': cutoff,
                                     'buffer': buffer,
                                     'long_range_cutoff': long_range_cutoff,
-                                    'used_idx': unique_idx,
-                                    'used_names': unique_names},
+                                    'system_idx': unique_idx,
+                                    'system_atoms_names': unique_names,
+                                    'is_truncated_graph': truncated},
                           data_type='graphs')
 
     return dataset
