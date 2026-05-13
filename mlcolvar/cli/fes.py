@@ -1,0 +1,191 @@
+"""Command-line example for computing a free energy surface.
+
+Example
+-------
+After installing the package in editable mode::
+
+    pip install -e .
+    mlcolvar-fes COLVAR --columns phi psi --kbt 2.494 --bandwidth 0.05 --plot fes.png
+
+The command writes a NumPy ``.npz`` archive containing ``fes``, ``bounds``,
+``error`` and either ``grid`` for 1D data or ``grid_0``, ``grid_1``, ... for
+multi-dimensional data.
+"""
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+from typing import Sequence
+
+import matplotlib
+
+# Use a non-interactive backend so the CLI can run on machines without a display.
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
+
+from mlcolvar.utils import plot as _plot_utils  # noqa: F401 - registers fessa colormap
+from mlcolvar.utils.fes import compute_fes
+from mlcolvar.utils.io.colvar import load_dataframe
+
+
+def _parse_bounds(values: Sequence[float] | None, dimensions: int):
+    # compute_fes expects one min/max pair for each selected CV dimension.
+    if values is None:
+        return None
+
+    expected = 2 * dimensions
+    if len(values) != expected:
+        raise ValueError(f"Expected {expected} bound values for {dimensions}D data "
+                         f"(min max for each dimension), got {len(values)}.")
+
+    if dimensions == 1:
+        return (values[0], values[1])
+
+    return [(values[i], values[i + 1]) for i in range(0, expected, 2)]
+
+
+def _load_input(file_names: Sequence[str],
+                fields: Sequence[str],
+                weights_field: str | None,
+                start: int,
+                stop: int | None,
+                stride: int):
+    # load_dataframe understands PLUMED COLVAR headers and returns named columns.
+    dataframe = load_dataframe(file_names=file_names[0] if len(file_names) == 1 else list(file_names),
+                               start=start,
+                               stop=stop,
+                               stride=stride)
+
+    # Fail early with the available field names when a requested field is missing.
+    missing = []
+    missing.extend(field for field in fields if field not in dataframe.columns)
+    if weights_field is not None and weights_field not in dataframe.columns:
+        missing.append(weights_field)
+    if missing:
+        available = ", ".join(dataframe.columns)
+        raise ValueError(f"Field(s) not found in COLVAR data: {', '.join(missing)}. Available fields: {available}.")
+
+    # compute_fes works on NumPy arrays, so the dataframe is only used for loading/selection.
+    data = dataframe.loc[:, fields].to_numpy()
+    weights = dataframe.loc[:, weights_field].to_numpy() if weights_field is not None else None
+
+    return data, weights, list(fields)
+
+
+def _save_output(path: Path, fes, grid, bounds, error, fields: Sequence[str], weights_field: str | None):
+    # Store both numerical results and enough metadata to identify the input fields.
+    arrays = {"fes": np.asarray(fes),
+              "bounds": np.asarray(bounds),
+              "error": np.asarray(error) if error is not None else np.array([]),
+              "fields": np.asarray(fields),
+              "weights_field": np.asarray(weights_field if weights_field is not None else ""),
+             }
+
+    # In 1D compute_fes returns one grid array; in higher dimensions it returns one grid per axis.
+    if isinstance(grid, list):
+        arrays.update({f"grid_{i}": np.asarray(axis) for i, axis in enumerate(grid)})
+    else:
+        arrays["grid"] = np.asarray(grid)
+
+    np.savez(path, **arrays)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    # Keep argparse setup separate from main so tests can inspect the CLI without running it.
+    parser = argparse.ArgumentParser(description="Compute a free energy surface with mlcolvar.utils.fes.compute_fes.")
+
+    # Input/output options.
+    parser.add_argument("input", nargs="+", help="PLUMED COLVAR file(s).")
+    parser.add_argument("-o", "--output", type=Path, default=Path("fes.npz"),
+                        help="Output .npz file. Default: fes.npz.")
+    parser.add_argument("--columns", "--fields", dest="fields", nargs="+", required=True,
+                        help="COLVAR field names to use as collective variables.")
+    parser.add_argument("--weights-column", "--weights-field", dest="weights_field",
+                        help="COLVAR field containing sample weights.")
+
+    # Row slicing is delegated directly to load_dataframe.
+    parser.add_argument("--start", type=int, default=0, help="Read COLVAR rows starting from this index.")
+    parser.add_argument("--stop", type=int, help="Read COLVAR rows until this index.")
+    parser.add_argument("--stride", type=int, default=1, help="Read every Nth COLVAR row.")
+
+    # compute_fes requires exactly one thermal-energy specification.
+    thermal = parser.add_mutually_exclusive_group(required=True)
+    thermal.add_argument("--kbt", type=float, help="Thermal energy in the desired FES units.")
+    thermal.add_argument("--temp", type=float, help="Temperature in Kelvin.")
+    parser.add_argument("--fes-units", choices=("kJ/mol", "kcal/mol", "eV"), default="kJ/mol",
+                        help="Free-energy units when using --temp. Default: kJ/mol.")
+
+    # Parameters passed through to compute_fes.
+    parser.add_argument("--num-samples", type=int, default=200, help="Grid points per dimension.")
+    parser.add_argument("--bounds", nargs="+", type=float,
+                        help="Bounds as 'min max' for 1D or 'x_min x_max y_min y_max ...' "
+                             "for higher dimensions.")
+    parser.add_argument("--bandwidth", type=float, default=0.01, help="KDE bandwidth.")
+    parser.add_argument("--kernel", default="gaussian", help="KDE kernel.")
+    parser.add_argument("--scale-by", choices=("std", "range"), help="Scale input variables before KDE.")
+    parser.add_argument("--blocks", type=int, default=1, help="Number of blocks for uncertainty estimates.")
+    parser.add_argument("--backend", choices=("KDEpy", "sklearn"), help="KDE backend.")
+    parser.add_argument("--eps", type=float, help="Regularization added before taking the logarithm.")
+
+    # Optional plotting controls.
+    parser.add_argument("--plot", type=Path, help="Optional image file for the FES plot.")
+    parser.add_argument("--plot-max-fes", type=float, help="Mask plot values above this FES.")
+    parser.add_argument("--plot-levels", type=int, help="Contour levels for 2D plots.")
+
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    try:
+        # Load and validate COLVAR fields before calling the numerical routine.
+        data, weights, fields = _load_input(args.input,
+                                            args.fields,
+                                            args.weights_field,
+                                            args.start,
+                                            args.stop,
+                                            args.stride)
+        dimensions = 1 if data.ndim == 1 else data.shape[1]
+        bounds = _parse_bounds(args.bounds, dimensions)
+    except ValueError as exc:
+        parser.error(str(exc))
+
+    # This is the only scientific computation done by the CLI wrapper.
+    fes, grid, used_bounds, error = compute_fes(X=data,
+                                                temp=args.temp,
+                                                fes_units=args.fes_units,
+                                                kbt=args.kbt,
+                                                num_samples=args.num_samples,
+                                                bounds=bounds,
+                                                bandwidth=args.bandwidth,
+                                                kernel=args.kernel,
+                                                weights=weights,
+                                                scale_by=args.scale_by,
+                                                blocks=args.blocks,
+                                                plot=args.plot is not None,
+                                                plot_max_fes=args.plot_max_fes,
+                                                plot_levels=args.plot_levels,
+                                                backend=args.backend,
+                                                eps=args.eps)
+
+    # Always save the raw result arrays; plotting is optional.
+    _save_output(args.output, fes, grid, used_bounds, error, fields, args.weights_field)
+
+    if args.plot is not None:
+        plt.tight_layout()
+        plt.savefig(args.plot, dpi=200)
+
+    print(f"Used COLVAR fields: {', '.join(fields)}")
+    print(f"Saved FES data to {args.output}")
+    if args.plot is not None:
+        print(f"Saved FES plot to {args.plot}")
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -46,6 +46,9 @@ dependencies = [
 "Source" = "https://github.com/luigibonati/mlcolvar/"
 "Documentation" = "https://mlcolvar.readthedocs.io/"
 
+[project.scripts]
+mlcolvar-fes = "mlcolvar.cli.fes:main"
+
 [project.optional-dependencies]
 test = [
   "pytest>=6.1.2",
