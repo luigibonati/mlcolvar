@@ -102,10 +102,9 @@ def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
                                                                     atomic_numbers=atomic_numbers)
 
     if atom_names is None:
-        try:
-            atom_names = _names_from_top([trajectory.topology for trajectory in trajectories])
-        except:
-            atom_names = None
+        atom_names = _names_from_top(top= [trajectory.topology for trajectory in trajectories],
+                                     system_selection=system_selection)
+
     
 
     # create dataset from configurations list
@@ -240,7 +239,6 @@ def _configurations_from_mdtraj_trajectory(trajectory: mdtraj.Trajectory,
         if not set(selected_atoms['subsystem']).issubset(set(selected_atoms['system'])):
             raise ValueError("Only atoms in `system_selection` can be selected by `subsystem_selection`!")
 
-
     # get the list of the atomic numbers for the selected atoms
     atomic_numbers = [a.element.number for a in trajectory.top.atoms]
     
@@ -256,8 +254,8 @@ def _configurations_from_mdtraj_trajectory(trajectory: mdtraj.Trajectory,
     configurations = []
     for i in range(len(trajectory)):
 
-        label_i = _to_torch_tensor(graph_labels[i]).reshape(-1, 1) if graph_labels is not None else None
-        node_i = _to_torch_tensor(node_labels[i]).reshape(-1, 1) if node_labels is not None else None
+        label_i = graph_labels[i].reshape(-1, 1) if graph_labels is not None else None
+        node_i = node_labels[i].reshape(-1, 1) if node_labels is not None else None
 
         configuration = Configuration(atomic_numbers=atomic_numbers,
                                       positions=trajectory.xyz[i] * lengths_conversion,
@@ -287,15 +285,22 @@ def _atomic_numbers_from_top(top: List[mdtraj.Topology]) -> AtomicNumberTable:
     return atomic_numbers
 
 
-def _names_from_top(top: List[mdtraj.Topology] ) -> List[str]:
+def _names_from_top(top: List[mdtraj.Topology],
+                    system_selection: str) -> List[str]:
     """Retrieve atom names from the topologies."""
+    
+    if system_selection is None:
+        system_selection = 'all'
+
+    # apply selection
+    top = [t.subset(t.select(system_selection)) for t in top]
 
     it = iter(top)
     atom_names = list(next(it).atoms)
     if not all([atom_names == list(n.atoms) for n in it]):
         raise ValueError("The atoms names or their order are different in the topology files. Check or deactivate save_names")
-    
     return atom_names
+
 
 def _get_required_atoms_selection(system_selection : str,
                                   environment_selection : str) -> str:
