@@ -102,8 +102,8 @@ def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
                                                                     atomic_numbers=atomic_numbers)
 
     if atom_names is None:
-            atom_names = _names_from_top(top= [trajectory.topology for trajectory in trajectories],
-                                         system_selection=system_selection)
+        atom_names = _names_from_top(top= [trajectory.topology for trajectory in trajectories],
+                                     system_selection=system_selection)
 
     
 
@@ -289,6 +289,9 @@ def _names_from_top(top: List[mdtraj.Topology],
                     system_selection: str) -> List[str]:
     """Retrieve atom names from the topologies."""
     
+    if system_selection is None:
+        system_selection = 'all'
+
     # apply selection
     top = [t.subset(t.select(system_selection)) for t in top]
 

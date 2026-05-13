@@ -407,9 +407,9 @@ def create_timelagged_dataset(
                                               "cutoff" :            X.metadata["cutoff"],
                                               "buffer":             X.metadata["buffer"],
                                               "long_range_cutoff":  X.metadata["long_range_cutoff"],
-                                              "system_idx":         X.metadata["unique_idx"],
-                                              "system_atoms_names": X.metadata["unique_names"],
-                                              "is_truncated_graph": X.metadata["truncated"]
+                                              "system_idx":         X.metadata["system_idx"],
+                                              "system_atoms_names": X.metadata["system_atoms_names"],
+                                              "is_truncated_graph": X.metadata["is_truncated_graph"]
                                               },
                                     data_type="graphs")
             # update weights

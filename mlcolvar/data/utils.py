@@ -65,6 +65,8 @@ def save_dataset_configurations_as_extyz(dataset: DictDataset,
             if extra_key_value.shape[0] != len(dataset['data_list'][0]['positions']) or extra_key_value.shape[-1] != 1:
                 raise ValueError(f"The selected extra_key {key} is not a single per-atom quantity!")
             extra_keys_string = extra_keys_string + f':{key}:R:{extra_key_value.shape[-1]}'
+    else:
+        extra_keys = []
     
     # initialize the atomic number object
     atomic_numbers = dataset.metadata.get("atomic_numbers", None)
