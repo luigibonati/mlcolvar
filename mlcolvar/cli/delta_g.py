@@ -24,59 +24,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
+from mlcolvar.cli.utils import get_colvar_output_path, load_colvar_data, parse_min_max_bounds, save_colvar_table
 from mlcolvar.utils import plot as _plot_utils  # noqa: F401 - registers fessa colormap
 from mlcolvar.utils.fes import compute_deltaG
-from mlcolvar.utils.io.colvar import load_dataframe
-
-
-def _parse_state_bounds(values: Sequence[float], dimensions: int, name: str):
-    # compute_deltaG expects one min/max pair for each selected CV dimension.
-    expected = 2 * dimensions
-    if len(values) != expected:
-        raise ValueError(f"Expected {expected} values for {name} with {dimensions}D data "
-                         f"(min max for each dimension), got {len(values)}.")
-
-    if dimensions == 1:
-        return (values[0], values[1])
-
-    return [(values[i], values[i + 1]) for i in range(0, expected, 2)]
-
-
-def _load_input(file_names: Sequence[str],
-                fields: Sequence[str],
-                bias_fields: Sequence[str] | None,
-                time_field: str | None,
-                start: int,
-                stop: int | None,
-                stride: int):
-    # load_dataframe understands PLUMED COLVAR headers and returns named columns.
-    dataframe = load_dataframe(file_names=file_names[0] if len(file_names) == 1 else list(file_names),
-                               start=start,
-                               stop=stop,
-                               stride=stride)
-
-    # Fail early with the available field names when a requested field is missing.
-    missing = []
-    missing.extend(field for field in fields if field not in dataframe.columns)
-    if bias_fields is not None:
-        missing.extend(field for field in bias_fields if field not in dataframe.columns)
-    if time_field is not None and time_field not in dataframe.columns:
-        missing.append(time_field)
-    if missing:
-        available = ", ".join(dataframe.columns)
-        raise ValueError(f"Field(s) not found in COLVAR data: {', '.join(missing)}. Available fields: {available}.")
-
-    if bias_fields is None:
-        bias_fields = [column for column in dataframe.columns if "bias" in column.lower()]
-
-    # compute_deltaG expects 1D input for one CV and a 2D array for two CVs.
-    data = dataframe.loc[:, fields].to_numpy()
-    if len(fields) == 1:
-        data = data.ravel()
-    bias = dataframe.loc[:, bias_fields].to_numpy().sum(axis=1) if bias_fields else None
-    time = dataframe.loc[:, time_field].to_numpy() if time_field is not None else None
-
-    return data, bias, time, list(fields), list(bias_fields) if bias_fields else None
 
 
 def _save_output(path: Path,
@@ -101,11 +51,8 @@ def _save_output(path: Path,
 
 
 def _save_colvar_output(path: Path, grid, delta_g, time_field: str | None):
-    # Write a PLUMED-like text table that can be inspected with standard tools.
-    table = np.column_stack([np.asarray(grid).ravel(), np.asarray(delta_g).ravel()])
     coordinate_field = time_field if time_field is not None else "frame"
-    header = f"#! FIELDS {coordinate_field} deltaG"
-    np.savetxt(path, table, header=header, comments="", fmt=" %.10g")
+    save_colvar_table(path, [grid, delta_g], [coordinate_field, "deltaG"])
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -172,16 +119,17 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         # Load and validate COLVAR fields before calling the numerical routine.
-        data, bias, time, fields, bias_fields = _load_input(args.input,
-                                                            args.fields,
-                                                            args.bias_fields,
-                                                            args.time_field,
-                                                            args.start,
-                                                            args.stop,
-                                                            args.stride)
+        data, bias, time, fields, bias_fields = load_colvar_data(args.input,
+                                                                 args.fields,
+                                                                 args.bias_fields,
+                                                                 args.start,
+                                                                 args.stop,
+                                                                 args.stride,
+                                                                 time_field=args.time_field,
+                                                                 flatten_single_cv=True)
         dimensions = 1 if np.ndim(data) == 1 else data.shape[1]
-        state_a_bounds = _parse_state_bounds(args.state_a_bounds, dimensions, "state A bounds")
-        state_b_bounds = _parse_state_bounds(args.state_b_bounds, dimensions, "state B bounds")
+        state_a_bounds = parse_min_max_bounds(args.state_a_bounds, dimensions, "state A bounds")
+        state_b_bounds = parse_min_max_bounds(args.state_b_bounds, dimensions, "state B bounds")
     except ValueError as exc:
         parser.error(str(exc))
 
@@ -202,7 +150,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     # Always save the raw result arrays and a COLVAR-like text table; plotting is optional.
     _save_output(args.output, grid, delta_g, fields, state_a_bounds, state_b_bounds, bias_fields, args.time_field)
-    colvar_output = args.output_colvar if args.output_colvar is not None else args.output.with_suffix(".dat")
+    colvar_output = get_colvar_output_path(args.output, args.output_colvar)
     _save_colvar_output(colvar_output, grid, delta_g, args.time_field)
 
     if args.plot is not None:

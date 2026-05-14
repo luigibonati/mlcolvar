@@ -24,9 +24,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
+from mlcolvar.cli.utils import get_colvar_output_path, load_colvar_data, parse_min_max_bounds, save_colvar_table
 from mlcolvar.utils import plot as _plot_utils  # noqa: F401 - registers fessa colormap
 from mlcolvar.utils.fes import compute_fes
-from mlcolvar.utils.io.colvar import load_dataframe
 
 
 def _parse_bounds(values: Sequence[float] | None, dimensions: int):
@@ -34,46 +34,7 @@ def _parse_bounds(values: Sequence[float] | None, dimensions: int):
     if values is None:
         return None
 
-    expected = 2 * dimensions
-    if len(values) != expected:
-        raise ValueError(f"Expected {expected} bound values for {dimensions}D data "
-                         f"(min max for each dimension), got {len(values)}.")
-
-    if dimensions == 1:
-        return (values[0], values[1])
-
-    return [(values[i], values[i + 1]) for i in range(0, expected, 2)]
-
-
-def _load_input(file_names: Sequence[str],
-                fields: Sequence[str],
-                bias_fields: Sequence[str] | None,
-                start: int,
-                stop: int | None,
-                stride: int):
-    # load_dataframe understands PLUMED COLVAR headers and returns named columns.
-    dataframe = load_dataframe(file_names=file_names[0] if len(file_names) == 1 else list(file_names),
-                               start=start,
-                               stop=stop,
-                               stride=stride)
-
-    # Fail early with the available field names when a requested field is missing.
-    missing = []
-    missing.extend(field for field in fields if field not in dataframe.columns)
-    if bias_fields is not None:
-        missing.extend(field for field in bias_fields if field not in dataframe.columns)
-    if missing:
-        available = ", ".join(dataframe.columns)
-        raise ValueError(f"Field(s) not found in COLVAR data: {', '.join(missing)}. Available fields: {available}.")
-
-    if bias_fields is None:
-        bias_fields = [column for column in dataframe.columns if "bias" in column.lower()]
-
-    # compute_fes works on NumPy arrays, so the dataframe is only used for loading/selection.
-    data = dataframe.loc[:, fields].to_numpy()
-    bias = dataframe.loc[:, bias_fields].to_numpy().sum(axis=1) if bias_fields else None
-
-    return data, bias, list(fields), list(bias_fields) if bias_fields else None
+    return parse_min_max_bounds(values, dimensions, "bounds")
 
 
 def _save_output(path: Path,
@@ -112,9 +73,7 @@ def _save_colvar_output(path: Path, fes, grid, error, fields: Sequence[str]):
         columns.append(np.asarray(error).ravel())
         output_fields.append("error")
 
-    table = np.column_stack(columns)
-    header = f"#! FIELDS {' '.join(output_fields)}"
-    np.savetxt(path, table, header=header, comments="", fmt=" %.10g")
+    save_colvar_table(path, columns, output_fields)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -183,12 +142,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         # Load and validate COLVAR fields before calling the numerical routine.
-        data, bias, fields, bias_fields = _load_input(args.input,
-                                                      args.fields,
-                                                      args.bias_fields,
-                                                      args.start,
-                                                      args.stop,
-                                                      args.stride)
+        data, bias, _time, fields, bias_fields = load_colvar_data(args.input,
+                                                                  args.fields,
+                                                                  args.bias_fields,
+                                                                  args.start,
+                                                                  args.stop,
+                                                                  args.stride)
         dimensions = 1 if data.ndim == 1 else data.shape[1]
         bounds = _parse_bounds(args.bounds, dimensions)
     except ValueError as exc:
@@ -214,7 +173,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     # Always save the raw result arrays and a COLVAR-like text table; plotting is optional.
     _save_output(args.output, fes, grid, used_bounds, error, fields, bias_fields)
-    colvar_output = args.output_colvar if args.output_colvar is not None else args.output.with_suffix(".dat")
+    colvar_output = get_colvar_output_path(args.output, args.output_colvar)
     _save_colvar_output(colvar_output, fes, grid, error, fields)
 
     if args.plot is not None:
