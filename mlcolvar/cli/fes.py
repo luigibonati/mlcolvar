@@ -85,9 +85,9 @@ def build_parser() -> argparse.ArgumentParser:
     input_output.add_argument("input", nargs="+", help="PLUMED COLVAR file(s).")
     input_output.add_argument("-o", "--output", type=Path, default=Path("fes.npz"),
                               help="Output .npz file. Default: fes.npz.")
-    input_output.add_argument("--output-colvar", type=Path,
+    input_output.add_argument("--output-colvar", "--o-colvar", type=Path,
                               help="COLVAR-like text output file. Default: --output path with .dat suffix.")
-    input_output.add_argument("--cvs", dest="fields", nargs="+", required=True,
+    input_output.add_argument("--cvs", "--cv", dest="fields", nargs="+", required=True,
                               help="COLVAR field names to use as collective variables.")
     input_output.add_argument("--bias", dest="bias_fields", nargs="+",
                               help=("COLVAR bias field(s). If more than one is provided, values are summed. "
@@ -115,7 +115,7 @@ def build_parser() -> argparse.ArgumentParser:
     fes_options.add_argument("--bounds", nargs="+", type=float,
                              help="Bounds as 'min max' for 1D or 'x_min x_max y_min y_max ...' "
                                   "for higher dimensions. Default: data range.")
-    fes_options.add_argument("--bandwidth", type=float, default=0.01, help="KDE bandwidth. Default: 0.01.")
+    fes_options.add_argument("--bandwidth", "--bw", type=float, default=0.01, help="KDE bandwidth. Default: 0.01.")
     fes_options.add_argument("--kernel", default="gaussian", help="KDE kernel. Default: gaussian.")
     fes_options.add_argument("--scale-by", choices=("std", "range"),
                              help="Scale input variables before KDE. Default: none.")
