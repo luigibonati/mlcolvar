@@ -1,0 +1,226 @@
+"""Command-line example for computing a free-energy difference.
+
+Example
+-------
+After installing the package in editable mode::
+
+    pip install -e .
+    mlcolvar-deltag COLVAR --columns cv --state-a-bounds -2 -1 --state-b-bounds 1 2 --kbt 2.494
+
+The command writes a NumPy ``.npz`` archive and a COLVAR-like text file
+containing the interval coordinate and ``deltaG``.
+"""
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+from typing import Sequence
+
+import matplotlib
+
+# Use a non-interactive backend so the CLI can run on machines without a display.
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
+
+from mlcolvar.utils import plot as _plot_utils  # noqa: F401 - registers fessa colormap
+from mlcolvar.utils.fes import compute_deltaG
+from mlcolvar.utils.io.colvar import load_dataframe
+
+
+def _parse_state_bounds(values: Sequence[float], dimensions: int, name: str):
+    # compute_deltaG expects one min/max pair for each selected CV dimension.
+    expected = 2 * dimensions
+    if len(values) != expected:
+        raise ValueError(f"Expected {expected} values for {name} with {dimensions}D data "
+                         f"(min max for each dimension), got {len(values)}.")
+
+    if dimensions == 1:
+        return (values[0], values[1])
+
+    return [(values[i], values[i + 1]) for i in range(0, expected, 2)]
+
+
+def _load_input(file_names: Sequence[str],
+                fields: Sequence[str],
+                bias_fields: Sequence[str] | None,
+                time_field: str | None,
+                start: int,
+                stop: int | None,
+                stride: int):
+    # load_dataframe understands PLUMED COLVAR headers and returns named columns.
+    dataframe = load_dataframe(file_names=file_names[0] if len(file_names) == 1 else list(file_names),
+                               start=start,
+                               stop=stop,
+                               stride=stride)
+
+    # Fail early with the available field names when a requested field is missing.
+    missing = []
+    missing.extend(field for field in fields if field not in dataframe.columns)
+    if bias_fields is not None:
+        missing.extend(field for field in bias_fields if field not in dataframe.columns)
+    if time_field is not None and time_field not in dataframe.columns:
+        missing.append(time_field)
+    if missing:
+        available = ", ".join(dataframe.columns)
+        raise ValueError(f"Field(s) not found in COLVAR data: {', '.join(missing)}. Available fields: {available}.")
+
+    if bias_fields is None:
+        bias_fields = [column for column in dataframe.columns if "bias" in column.lower()]
+
+    # compute_deltaG expects 1D input for one CV and a 2D array for two CVs.
+    data = dataframe.loc[:, fields].to_numpy()
+    if len(fields) == 1:
+        data = data.ravel()
+    bias = dataframe.loc[:, bias_fields].to_numpy().sum(axis=1) if bias_fields else None
+    time = dataframe.loc[:, time_field].to_numpy() if time_field is not None else None
+
+    return data, bias, time, list(fields), list(bias_fields) if bias_fields else None
+
+
+def _save_output(path: Path,
+                 grid,
+                 delta_g,
+                 fields: Sequence[str],
+                 state_a_bounds,
+                 state_b_bounds,
+                 bias_fields: Sequence[str] | None,
+                 time_field: str | None):
+    # Store both numerical results and enough metadata to identify the input fields.
+    arrays = {"grid": np.asarray(grid),
+              "deltaG": np.asarray(delta_g),
+              "fields": np.asarray(fields),
+              "state_a_bounds": np.asarray(state_a_bounds),
+              "state_b_bounds": np.asarray(state_b_bounds),
+              "bias_fields": np.asarray(bias_fields if bias_fields is not None else []),
+              "time_field": np.asarray(time_field if time_field is not None else ""),
+             }
+
+    np.savez(path, **arrays)
+
+
+def _save_colvar_output(path: Path, grid, delta_g, time_field: str | None):
+    # Write a PLUMED-like text table that can be inspected with standard tools.
+    table = np.column_stack([np.asarray(grid).ravel(), np.asarray(delta_g).ravel()])
+    coordinate_field = time_field if time_field is not None else "frame"
+    header = f"#! FIELDS {coordinate_field} deltaG"
+    np.savetxt(path, table, header=header, comments="", fmt=" %.10g")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    # Keep argparse setup separate from main so tests can inspect the CLI without running it.
+    parser = argparse.ArgumentParser(
+        description="Compute a free-energy difference with mlcolvar.utils.fes.compute_deltaG."
+    )
+
+    # Input/output options.
+    input_output = parser.add_argument_group("Input/output options")
+    input_output.add_argument("input", nargs="+", help="PLUMED COLVAR file(s).")
+    input_output.add_argument("-o", "--output", type=Path, default=Path("deltaG.npz"),
+                              help="Output .npz file. Default: deltaG.npz.")
+    input_output.add_argument("--output-colvar", type=Path,
+                              help="COLVAR-like text output file. Default: --output path with .dat suffix.")
+    input_output.add_argument("--columns", "--fields", dest="fields", nargs="+", required=True,
+                              help="COLVAR field names to use as collective variables.")
+    input_output.add_argument("--bias", dest="bias_fields", nargs="+",
+                              help=("COLVAR bias field(s). If more than one is provided, values are summed. "
+                                    "Default: all fields containing 'bias'."))
+    input_output.add_argument("--time-field",
+                              help="COLVAR time field to use for the output grid. Default: frame index.")
+
+    # Row slicing is delegated directly to load_dataframe.
+    row_slicing = parser.add_argument_group("Row slicing options")
+    row_slicing.add_argument("--start", type=int, default=0,
+                             help="Read COLVAR rows starting from this index. Default: 0.")
+    row_slicing.add_argument("--stop", type=int, help="Read COLVAR rows until this index. Default: end of file.")
+    row_slicing.add_argument("--stride", type=int, default=1, help="Read every Nth COLVAR row. Default: 1.")
+
+    # compute_deltaG requires exactly one thermal-energy specification.
+    thermal_options = parser.add_argument_group("Thermal energy options")
+    thermal = thermal_options.add_mutually_exclusive_group(required=True)
+    thermal.add_argument("--kbt", type=float, help="Thermal energy in the desired deltaG units.")
+    thermal.add_argument("--temp", type=float, help="Temperature in Kelvin.")
+    thermal_options.add_argument("--fes-units", choices=("kJ/mol", "kcal/mol", "eV"), default="kJ/mol",
+                                 help="Free-energy units when using --temp. Default: kJ/mol.")
+
+    # Parameters passed through to compute_deltaG.
+    delta_g_options = parser.add_argument_group("DeltaG options")
+    delta_g_options.add_argument("--state-a-bounds", nargs="+", type=float, required=True,
+                                 help=("State A bounds as 'min max' for 1D or "
+                                       "'x_min x_max y_min y_max' for 2D."))
+    delta_g_options.add_argument("--state-b-bounds", nargs="+", type=float, required=True,
+                                 help=("State B bounds as 'min max' for 1D or "
+                                       "'x_min x_max y_min y_max' for 2D."))
+    delta_g_options.add_argument("--intervals", type=int, default=10,
+                                 help="Number of intervals for progressive deltaG estimates. Default: 10.")
+    delta_g_options.add_argument("--reverse", action="store_true", help="Reverse the input data. Default: false.")
+    delta_g_options.add_argument("--eps", type=float, default=1e-8,
+                                 help="Regularization for empty state counts. Default: 1e-8.")
+
+    # Optional plotting controls.
+    plotting = parser.add_argument_group("Plotting options")
+    plotting.add_argument("--plot", type=Path, help="Optional image file for the deltaG plot. Default: no plot.")
+    plotting.add_argument("--plot-color", default="fessa6", help="Line color for the deltaG plot. Default: fessa6.")
+
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    try:
+        # Load and validate COLVAR fields before calling the numerical routine.
+        data, bias, time, fields, bias_fields = _load_input(args.input,
+                                                            args.fields,
+                                                            args.bias_fields,
+                                                            args.time_field,
+                                                            args.start,
+                                                            args.stop,
+                                                            args.stride)
+        dimensions = 1 if np.ndim(data) == 1 else data.shape[1]
+        state_a_bounds = _parse_state_bounds(args.state_a_bounds, dimensions, "state A bounds")
+        state_b_bounds = _parse_state_bounds(args.state_b_bounds, dimensions, "state B bounds")
+    except ValueError as exc:
+        parser.error(str(exc))
+
+    # This is the only scientific computation done by the CLI wrapper.
+    grid, delta_g = compute_deltaG(X=data,
+                                   stateA_bounds=state_a_bounds,
+                                   stateB_bounds=state_b_bounds,
+                                   temp=args.temp,
+                                   fes_units=args.fes_units,
+                                   kbt=args.kbt,
+                                   intervals=args.intervals,
+                                   bias=bias,
+                                   reverse=args.reverse,
+                                   time=time,
+                                   plot=args.plot is not None,
+                                   plot_color=args.plot_color,
+                                   eps=args.eps)
+
+    # Always save the raw result arrays and a COLVAR-like text table; plotting is optional.
+    _save_output(args.output, grid, delta_g, fields, state_a_bounds, state_b_bounds, bias_fields, args.time_field)
+    colvar_output = args.output_colvar if args.output_colvar is not None else args.output.with_suffix(".dat")
+    _save_colvar_output(colvar_output, grid, delta_g, args.time_field)
+
+    if args.plot is not None:
+        plt.tight_layout()
+        plt.savefig(args.plot, dpi=200)
+
+    print(f"Used COLVAR fields: {', '.join(fields)}")
+    if bias_fields is not None:
+        print(f"Used bias fields: {', '.join(bias_fields)} using {args.fes_units} as units")
+    if args.time_field is not None:
+        print(f"Used time field: {args.time_field}")
+    print(f"Saved deltaG data to {args.output}")
+    print(f"Saved deltaG COLVAR data to {colvar_output}")
+    if args.plot is not None:
+        print(f"Saved deltaG plot to {args.plot}")
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

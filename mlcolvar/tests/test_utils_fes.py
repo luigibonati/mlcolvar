@@ -134,6 +134,29 @@ def test_delta_g():
     assert "$\\Delta$G" in ax1.get_ylabel()
     plt.close(fig1)
 
+    # Case 1b: bias-derived weights should match explicitly supplied weights.
+    positive_weights = weights + 0.1
+    grid_w, delta_g_w = compute_deltaG(
+        X=x,
+        stateA_bounds=[-6, -4],
+        stateB_bounds=[4, 6],
+        kbt=1.0,
+        intervals=10,
+        weights=positive_weights,
+        plot=False,
+    )
+    grid_b, delta_g_b = compute_deltaG(
+        X=x,
+        stateA_bounds=[-6, -4],
+        stateB_bounds=[4, 6],
+        kbt=1.0,
+        intervals=10,
+        bias=np.log(positive_weights),
+        plot=False,
+    )
+    np.testing.assert_allclose(grid_b, grid_w)
+    np.testing.assert_allclose(delta_g_b, delta_g_w)
+
     # Case 2: 2D deltaG branch with plot disabled.
     x2_a = rng.normal(loc=-5.0, scale=0.2, size=(200, 2))
     x2_b = rng.normal(loc=5.0, scale=0.2, size=(200, 2))

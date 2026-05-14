@@ -48,6 +48,7 @@ dependencies = [
 
 [project.scripts]
 mlcolvar-fes = "mlcolvar.cli.fes:main"
+mlcolvar-deltag = "mlcolvar.cli.delta_g:main"
 
 [project.optional-dependencies]
 test = [

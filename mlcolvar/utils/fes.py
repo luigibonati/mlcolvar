@@ -340,6 +340,7 @@ def compute_deltaG(X: np.ndarray,
                    kbt: float = None,
                    intervals: int = 10, 
                    weights: np.ndarray = None,
+                   bias: np.ndarray = None,
                    reverse: bool = False,
                    time: np.ndarray = None,
                    plot: bool = False,
@@ -367,6 +368,8 @@ def compute_deltaG(X: np.ndarray,
         Number of intervals on which the deltaG is progressively computed, by default 10.
     weights : np.ndarray, optional
         Weights associated with the data points, shape (n_samples,), by default None.
+    bias : np.ndarray, optional
+        Bias values to be used to compute the weights as exp(1/kbt*bias), shape (n_samples,), by default None.
     reverse : bool, optional
         Switch to reverse the data, by default False.
     time : np.ndarray, optional
@@ -390,8 +393,12 @@ def compute_deltaG(X: np.ndarray,
     """
 
     # check that input are consistent with each other
+    if weights is not None and bias is not None:
+        raise ValueError("The weights and bias key cannot be defined together, use only one of them!")
     if weights is not None and len(X) != len(weights):
         raise ValueError(f"Input data and weights must have the same number of entries! Found {len(X)} and {len(weights)}.")
+    if bias is not None and len(X) != len(bias):
+        raise ValueError(f"Input data and bias must have the same number of entries! Found {len(X)} and {len(bias)}.")
     if time is not None and len(X) != len(time):
         raise ValueError(f"Input data and time must have the same number of entries! Found {len(X)} and {len(time)}.")
 
@@ -410,7 +417,10 @@ def compute_deltaG(X: np.ndarray,
 
     # initialize unitary weights if not provided
     if weights is None:
-        weights = np.ones_like(X)
+        if bias is None:
+            weights = np.ones(len(X))
+        else:
+            weights = np.exp(1/kbt*bias)
 
     deltaG = []
     if reverse:
