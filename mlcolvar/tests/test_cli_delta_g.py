@@ -26,6 +26,8 @@ def test_delta_g_cli_writes_outputs(tmp_path, monkeypatch):
         np.testing.assert_allclose(kwargs["bias"], np.array([2.5, 3.5]))
         assert kwargs["intervals"] == 4
         assert kwargs["time"] is None
+        assert kwargs["plot"] is True
+        assert kwargs["plot_color"] == "fessa6"
 
         grid = np.array([0, 1])
         delta_g = np.array([0.2, 0.0])
@@ -47,6 +49,7 @@ def test_delta_g_cli_writes_outputs(tmp_path, monkeypatch):
 
     # The binary NumPy archive is the machine-readable output.
     assert output.exists()
+    assert (tmp_path / "deltaG.png").exists()
 
     # The CLI also writes a COLVAR-like text file next to the .npz output by default.
     colvar_output = tmp_path / "deltaG.dat"

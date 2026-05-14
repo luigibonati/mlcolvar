@@ -7,8 +7,8 @@ After installing the package in editable mode::
     pip install -e .
     mlcolvar-deltag COLVAR --cvs cv --state-a-bounds -2 -1 --state-b-bounds 1 2 --kbt 2.494
 
-The command writes a NumPy ``.npz`` archive and a COLVAR-like text file
-containing the interval coordinate and ``deltaG``.
+The command writes a NumPy ``.npz`` archive, a COLVAR-like text file
+containing the interval coordinate and ``deltaG``, and a plot image.
 """
 
 from __future__ import annotations
@@ -105,9 +105,12 @@ def build_parser() -> argparse.ArgumentParser:
     delta_g_options.add_argument("--eps", type=float, default=1e-8,
                                  help="Regularization for empty state counts. Default: 1e-8.")
 
-    # Optional plotting controls.
+    # Plotting controls.
     plotting = parser.add_argument_group("Plotting options")
-    plotting.add_argument("--plot", type=Path, help="Optional image file for the deltaG plot. Default: no plot.")
+    plot_target = plotting.add_mutually_exclusive_group()
+    plot_target.add_argument("--plot", type=Path,
+                             help="Image file for the deltaG plot. Default: --output path with .png suffix.")
+    plot_target.add_argument("--no-plot", action="store_true", help="Do not write a deltaG plot. Default: false.")
     plotting.add_argument("--plot-color", default="fessa6", help="Line color for the deltaG plot. Default: fessa6.")
 
     return parser
@@ -133,6 +136,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ValueError as exc:
         parser.error(str(exc))
 
+    plot_output = None if args.no_plot else args.plot if args.plot is not None else args.output.with_suffix(".png")
+
     # This is the only scientific computation done by the CLI wrapper.
     grid, delta_g = compute_deltaG(X=data,
                                    stateA_bounds=state_a_bounds,
@@ -144,18 +149,18 @@ def main(argv: Sequence[str] | None = None) -> int:
                                    bias=bias,
                                    reverse=args.reverse,
                                    time=time,
-                                   plot=args.plot is not None,
+                                   plot=plot_output is not None,
                                    plot_color=args.plot_color,
                                    eps=args.eps)
 
-    # Always save the raw result arrays and a COLVAR-like text table; plotting is optional.
+    # Always save the raw result arrays and a COLVAR-like text table; plotting is enabled by default.
     _save_output(args.output, grid, delta_g, fields, state_a_bounds, state_b_bounds, bias_fields, args.time_field)
     colvar_output = get_colvar_output_path(args.output, args.output_colvar)
     _save_colvar_output(colvar_output, grid, delta_g, args.time_field)
 
-    if args.plot is not None:
+    if plot_output is not None:
         plt.tight_layout()
-        plt.savefig(args.plot, dpi=200)
+        plt.savefig(plot_output, dpi=200)
 
     print(f"Used COLVAR fields: {', '.join(fields)}")
     if bias_fields is not None:
@@ -164,8 +169,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Used time field: {args.time_field}")
     print(f"Saved deltaG data to {args.output}")
     print(f"Saved deltaG COLVAR data to {colvar_output}")
-    if args.plot is not None:
-        print(f"Saved deltaG plot to {args.plot}")
+    if plot_output is not None:
+        print(f"Saved deltaG plot to {plot_output}")
 
     return 0
 
