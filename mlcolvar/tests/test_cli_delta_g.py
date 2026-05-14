@@ -37,7 +37,7 @@ def test_delta_g_cli_writes_outputs(tmp_path, monkeypatch):
 
     main([
         str(colvar),
-        "--columns", "cv",
+        "--cvs", "cv",
         "--kbt", "1.0",
         "--state-a-bounds", "-1.5", "-0.5",
         "--state-b-bounds", "0.5", "1.5",
@@ -93,7 +93,7 @@ def test_delta_g_cli_writes_2d_outputs_and_plot(tmp_path, monkeypatch):
 
     main([
         str(colvar),
-        "--columns", "cv1", "cv2",
+        "--cvs", "cv1", "cv2",
         "--kbt", "1.0",
         "--state-a-bounds", "0.0", "1.5", "0.0", "1.0",
         "--state-b-bounds", "1.5", "2.5", "1.0", "2.0",

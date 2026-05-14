@@ -37,7 +37,7 @@ def test_fes_cli_writes_outputs(tmp_path, monkeypatch):
 
     main([
         str(colvar),
-        "--columns", "cv",
+        "--cvs", "cv",
         "--kbt", "1.0",
         "--bounds", "0.0", "3.0",
         "--output", str(output),
@@ -91,7 +91,7 @@ def test_fes_cli_writes_2d_outputs_with_error(tmp_path, monkeypatch):
 
     main([
         str(colvar),
-        "--columns", "cv1", "cv2",
+        "--cvs", "cv1", "cv2",
         "--kbt", "1.0",
         "--bounds", "0.0", "3.0", "0.0", "2.0",
         "--output", str(output),

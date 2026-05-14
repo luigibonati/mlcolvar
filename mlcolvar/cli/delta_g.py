@@ -5,7 +5,7 @@ Example
 After installing the package in editable mode::
 
     pip install -e .
-    mlcolvar-deltag COLVAR --columns cv --state-a-bounds -2 -1 --state-b-bounds 1 2 --kbt 2.494
+    mlcolvar-deltag COLVAR --cvs cv --state-a-bounds -2 -1 --state-b-bounds 1 2 --kbt 2.494
 
 The command writes a NumPy ``.npz`` archive and a COLVAR-like text file
 containing the interval coordinate and ``deltaG``.
@@ -121,7 +121,7 @@ def build_parser() -> argparse.ArgumentParser:
                               help="Output .npz file. Default: deltaG.npz.")
     input_output.add_argument("--output-colvar", type=Path,
                               help="COLVAR-like text output file. Default: --output path with .dat suffix.")
-    input_output.add_argument("--columns", "--fields", dest="fields", nargs="+", required=True,
+    input_output.add_argument("--cvs", dest="fields", nargs="+", required=True,
                               help="COLVAR field names to use as collective variables.")
     input_output.add_argument("--bias", dest="bias_fields", nargs="+",
                               help=("COLVAR bias field(s). If more than one is provided, values are summed. "
