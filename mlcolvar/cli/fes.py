@@ -14,7 +14,7 @@ containing the grid coordinates, ``fes`` and ``error``.
 from __future__ import annotations
 
 import argparse
-from pathlib import Pathc
+from pathlib import Path
 from typing import Sequence
 
 import matplotlib
