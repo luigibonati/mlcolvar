@@ -2,6 +2,16 @@ import numpy as np
 from mlcolvar.cli.delta_g import main
 
 
+def test_delta_g_cli_prints_yaml_template(capsys):
+    assert main(["--yaml-template"]) == 0
+
+    text = capsys.readouterr().out
+    assert text.startswith("input: null")
+    assert "output: deltaG.npz" in text
+    assert "state_a_bounds: null" in text
+    assert "yaml_template" not in text
+
+
 def test_delta_g_cli_writes_outputs(tmp_path, monkeypatch):
     # Use tmp_path so the CLI can read and write real files without touching the repository.
     colvar = tmp_path / "COLVAR"

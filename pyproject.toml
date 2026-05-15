@@ -98,9 +98,6 @@ where = ["."]
 mlcolvar = [
     "py.typed"
 ]
-"mlcolvar.cli" = [
-    "templates/*.yaml"
-]
 "mlcolvar.tests" = [
     "data/**/*"
 ]

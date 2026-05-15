@@ -3,6 +3,21 @@ import pytest
 from mlcolvar.cli.fes import main
 
 
+def test_fes_cli_prints_yaml_template(capsys, tmp_path):
+    assert main(["--yaml-template"]) == 0
+
+    text = capsys.readouterr().out
+    assert text.startswith("input: null")
+    assert "output: fes.npz" in text
+    assert "num_samples: 200" in text
+    assert "yaml_template" not in text
+
+    template = tmp_path / "template_fes.yaml"
+    assert main(["--yaml-template", str(template)]) == 0
+    assert capsys.readouterr().out == ""
+    assert template.read_text() == text
+
+
 def test_fes_cli_writes_outputs(tmp_path, monkeypatch):
     # Use tmp_path so the CLI can read and write real files without touching the repository.
     colvar = tmp_path / "COLVAR"

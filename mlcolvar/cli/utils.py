@@ -79,6 +79,57 @@ def get_yaml_output_path(output: Path, output_yaml: Path | None) -> Path:
     return output_yaml if output_yaml is not None else output.with_suffix(".yaml")
 
 
+def _yaml_template_key(action: argparse.Action, aliases: Mapping[str, str]) -> str:
+    return aliases.get(action.dest, action.dest)
+
+
+def _yaml_template_value(value: Any) -> str:
+    if value is None or value is argparse.SUPPRESS:
+        return "null"
+    if isinstance(value, bool):
+        return str(value).lower()
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, float):
+        return np.format_float_positional(value, trim="-")
+    if isinstance(value, list):
+        return f"[{', '.join(_yaml_template_value(item) for item in value)}]"
+
+    return str(value)
+
+
+def _yaml_template_comment(help_text: str | None) -> str:
+    return "" if help_text in (None, argparse.SUPPRESS) else " ".join(help_text.split())
+
+
+def yaml_template_from_parser(parser: argparse.ArgumentParser,
+                              aliases: Mapping[str, str] | None = None,
+                              skip: Sequence[str] = ("help", "config", "yaml_template")) -> str:
+    aliases = aliases or {}
+    rows = []
+    for action in parser._actions:
+        if action.dest in skip or action.dest == argparse.SUPPRESS:
+            continue
+        key = _yaml_template_key(action, aliases)
+        value = _yaml_template_value(action.default)
+        rows.append((f"{key}: {value}", _yaml_template_comment(action.help)))
+
+    comment_column = max(max(len(prefix) for prefix, _comment in rows) + 2, 22)
+    lines = [f"{prefix.ljust(comment_column)}# {comment}".rstrip() for prefix, comment in rows]
+    return "\n".join(lines) + "\n"
+
+
+def write_yaml_template(parser: argparse.ArgumentParser,
+                        output: str | Path | None = None,
+                        aliases: Mapping[str, str] | None = None):
+    text = yaml_template_from_parser(parser, aliases=aliases)
+    if output in (None, "-"):
+        sys.stdout.write(text)
+        return
+
+    Path(output).write_text(text)
+
+
 def flatten_min_max_bounds(bounds):
     # Keep YAML bounds in the same flat format accepted by argparse: min max [min max ...].
     return None if bounds is None else np.asarray(bounds).ravel().tolist()

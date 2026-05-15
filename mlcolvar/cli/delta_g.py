@@ -31,7 +31,8 @@ from mlcolvar.cli.utils import (flatten_min_max_bounds,
                                 parse_args_with_yaml_config,
                                 parse_min_max_bounds,
                                 save_colvar_table,
-                                save_yaml_config)
+                                save_yaml_config,
+                                write_yaml_template)
 from mlcolvar.utils import plot as _plot_utils  # noqa: F401 - registers fessa colormap
 from mlcolvar.utils.fes import compute_deltaG
 
@@ -88,6 +89,9 @@ def build_parser() -> argparse.ArgumentParser:
     input_output.add_argument("input", nargs="*", help="PLUMED COLVAR file(s).")
     input_output.add_argument("--config", type=Path,
                               help="YAML file with CLI options; exclusive with other options. Default: none.")
+    input_output.add_argument("--yaml-template", nargs="?", const="-", metavar="PATH",
+                              help=("Print the YAML configuration template, or write it to PATH, and exit. "
+                                    "Default: false."))
     input_output.add_argument("-o", "--output", type=Path, default=Path("deltaG.npz"),
                               help="Output .npz file. Default: deltaG.npz.")
     input_output.add_argument("--output-colvar", "--o-colvar", type=Path,
@@ -146,10 +150,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     try:
         # YAML uses user-facing names; aliases map them to argparse destinations.
-        aliases = {"cv": "fields", "cvs": "fields", "bias": "bias_fields"}
-        args = parse_args_with_yaml_config(parser, argv, aliases=aliases)
+        config_aliases = {"cv": "fields", "cvs": "fields", "bias": "bias_fields"}
+        args = parse_args_with_yaml_config(parser, argv, aliases=config_aliases)
     except ValueError as exc:
         parser.error(str(exc))
+
+    if args.yaml_template:
+        write_yaml_template(parser, args.yaml_template, aliases={"fields": "cvs", "bias_fields": "bias"})
+        return 0
+
     _validate_args(parser, args)
 
     try:
