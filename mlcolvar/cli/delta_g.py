@@ -24,7 +24,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from mlcolvar.cli.utils import (flatten_min_max_bounds,
+from mlcolvar.cli.utils import (YAML_CONFIG_ALIASES,
+                                YAML_TEMPLATE_ALIASES,
+                                flatten_min_max_bounds,
                                 get_colvar_output_path,
                                 get_yaml_output_path,
                                 load_colvar_data,
@@ -32,6 +34,7 @@ from mlcolvar.cli.utils import (flatten_min_max_bounds,
                                 parse_min_max_bounds,
                                 save_colvar_table,
                                 save_yaml_config,
+                                validate_common_args,
                                 write_yaml_template)
 from mlcolvar.utils import plot as _plot_utils  # noqa: F401 - registers fessa colormap
 from mlcolvar.utils.fes import compute_deltaG
@@ -64,14 +67,7 @@ def _save_colvar_output(path: Path, grid, delta_g, time_field: str | None):
 
 
 def _validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace):
-    if not args.input:
-        parser.error("input is required, either as command-line argument or as 'input' in --config.")
-    if not args.fields:
-        parser.error("--cvs is required, either as command-line argument or as 'cvs' in --config.")
-    if args.kbt is None and args.temp is None:
-        parser.error("one of --kbt or --temp is required, either as command-line argument or in --config.")
-    if args.kbt is not None and args.temp is not None:
-        parser.error("--kbt and --temp cannot be used together.")
+    validate_common_args(parser, args)
     if args.state_a_bounds is None:
         parser.error("--state-a-bounds is required, either as command-line argument or in --config.")
     if args.state_b_bounds is None:
@@ -149,14 +145,12 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     try:
-        # YAML uses user-facing names; aliases map them to argparse destinations.
-        config_aliases = {"cv": "fields", "cvs": "fields", "bias": "bias_fields"}
-        args = parse_args_with_yaml_config(parser, argv, aliases=config_aliases)
+        args = parse_args_with_yaml_config(parser, argv, aliases=YAML_CONFIG_ALIASES)
     except ValueError as exc:
         parser.error(str(exc))
 
     if args.yaml_template:
-        write_yaml_template(parser, args.yaml_template, aliases={"fields": "cvs", "bias_fields": "bias"})
+        write_yaml_template(parser, args.yaml_template, aliases=YAML_TEMPLATE_ALIASES)
         return 0
 
     _validate_args(parser, args)

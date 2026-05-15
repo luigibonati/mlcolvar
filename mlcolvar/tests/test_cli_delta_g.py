@@ -2,7 +2,7 @@ import numpy as np
 from mlcolvar.cli.delta_g import main
 
 
-def test_delta_g_cli_prints_yaml_template(capsys):
+def test_delta_g_cli_prints_yaml_template(capsys, tmp_path):
     assert main(["--yaml-template"]) == 0
 
     text = capsys.readouterr().out
@@ -11,6 +11,12 @@ def test_delta_g_cli_prints_yaml_template(capsys):
     assert "output: deltaG.npz" in text
     assert "state_a_bounds: null" in text
     assert "yaml_template" not in text
+
+    template = tmp_path / "template_delta_g.yaml"
+    assert main(["--yaml-template", str(template)]) == 0
+    assert capsys.readouterr().out == ""
+    assert template.exists()
+    assert template.read_text() == text
 
 
 def test_delta_g_cli_writes_outputs(tmp_path, monkeypatch):

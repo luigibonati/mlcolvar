@@ -16,6 +16,7 @@ def test_fes_cli_prints_yaml_template(capsys, tmp_path):
     template = tmp_path / "template_fes.yaml"
     assert main(["--yaml-template", str(template)]) == 0
     assert capsys.readouterr().out == ""
+    assert template.exists()
     assert template.read_text() == text
 
 

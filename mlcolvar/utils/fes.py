@@ -82,7 +82,7 @@ def compute_fes(
     weights : array-like, optional
         Weights associated with the data points, shape (n_samples,).
     bias: array-like, optional
-        Bias values to be used to compute the weights as exp(1/kbt*bias), shape (n_samples,)
+        Bias values to be used to compute the weights as exp(bias / kbt), shape (n_samples,)
     scale_by : str or list, optional
         Standardize each variable before KDE. Use "std" to scale by standard deviation, "range" for range normalization, or provide a list of scaling factors.
     blocks : int, optional
@@ -169,16 +169,21 @@ def compute_fes(
 
     # weights
     if weights is not None and bias is not None:
-        raise ValueError("The weights and bias key cannot be defined together, use only one of them!")
+        raise ValueError("The weights and bias keywords cannot be defined together, use only one of them!")
     if weights is None:
         if bias is None:
             weights = np.ones(nsamples)
         else:
-            weights = np.exp(1/kbt*bias)
+            bias = np.asarray(bias)
+            n_bias = bias.shape[0] if bias.ndim > 0 else 1
+            if bias.ndim != 1 or n_bias != nsamples:
+                raise ValueError(f"Input data and bias must have the same number of entries! "
+                                 f"Found {nsamples} and {n_bias}.")
+            weights = np.exp(bias / kbt)
     else:
         assert weights.ndim == 1
         assert weights.shape[0] == nsamples                                                
-    
+
     # rescale
     if scale_by is not None:
         if scale_by == "std":
@@ -369,7 +374,7 @@ def compute_deltaG(X: np.ndarray,
     weights : np.ndarray, optional
         Weights associated with the data points, shape (n_samples,), by default None.
     bias : np.ndarray, optional
-        Bias values to be used to compute the weights as exp(1/kbt*bias), shape (n_samples,), by default None.
+        Bias values to be used to compute the weights as exp(bias / kbt), shape (n_samples,), by default None.
     reverse : bool, optional
         Switch to reverse the data, by default False.
     time : np.ndarray, optional
@@ -392,17 +397,22 @@ def compute_deltaG(X: np.ndarray,
         DeltaG values computed up to each block, shape is (n_blocks,).
     """
 
-    # check that input are consistent with each other
+    # check that inputs are consistent with each other
     if weights is not None and bias is not None:
-        raise ValueError("The weights and bias key cannot be defined together, use only one of them!")
+        raise ValueError("The weights and bias keywords cannot be defined together, use only one of them!")
     if weights is not None and len(X) != len(weights):
-        raise ValueError(f"Input data and weights must have the same number of entries! Found {len(X)} and {len(weights)}.")
+        raise ValueError(f"Input data and weights must have the same number of entries! "
+                         f"Found {len(X)} and {len(weights)}.")
     if bias is not None and len(X) != len(bias):
-        raise ValueError(f"Input data and bias must have the same number of entries! Found {len(X)} and {len(bias)}.")
+        raise ValueError(f"Input data and bias must have the same number of entries! "
+                         f"Found {len(X)} and {len(bias)}.")
     if time is not None and len(X) != len(time):
-        raise ValueError(f"Input data and time must have the same number of entries! Found {len(X)} and {len(time)}.")
+        raise ValueError(f"Input data and time must have the same number of entries! "
+                         f"Found {len(X)} and {len(time)}.")
 
     # ensure to have np.ndarrays
+    if bias is not None:
+        bias = np.asarray(bias)
     stateA_bounds = np.array(stateA_bounds)
     stateB_bounds = np.array(stateB_bounds)
 
@@ -420,7 +430,7 @@ def compute_deltaG(X: np.ndarray,
         if bias is None:
             weights = np.ones(len(X))
         else:
-            weights = np.exp(1/kbt*bias)
+            weights = np.exp(bias / kbt)
 
     deltaG = []
     if reverse:

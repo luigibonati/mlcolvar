@@ -19,8 +19,13 @@ _BOUND_KEYS = {"bounds", "state_a_bounds", "state_b_bounds"}
 _LIST_KEYS = {"input", "fields", "bias_fields", *_BOUND_KEYS}
 _PATH_KEYS = {"config", "output", "output_colvar", "output_yaml", "plot"}
 
+# Config files use user-facing names, while argparse stores values by destination.
+YAML_CONFIG_ALIASES = {"cv": "fields", "cvs": "fields", "bias": "bias_fields"}
+YAML_TEMPLATE_ALIASES = {"fields": "cvs", "bias_fields": "bias"}
+
 
 def parse_min_max_bounds(values: Sequence[float], dimensions: int, name: str):
+    """Parse a flat sequence of min/max values into bounds for each CV dimension."""
     # CLI bounds are passed as min/max pairs, one pair for each selected CV dimension.
     expected = 2 * dimensions
     if len(values) != expected:
@@ -41,6 +46,7 @@ def load_colvar_data(file_names: Sequence[str],
                      stride: int,
                      time_field: str | None = None,
                      flatten_single_cv: bool = False):
+    """Load selected CV, bias and time columns from one or more PLUMED COLVAR files."""
     # load_dataframe understands PLUMED COLVAR headers and returns named columns.
     dataframe = load_dataframe(file_names=file_names[0] if len(file_names) == 1 else list(file_names),
                                start=start,
@@ -72,18 +78,35 @@ def load_colvar_data(file_names: Sequence[str],
 
 
 def get_colvar_output_path(output: Path, output_colvar: Path | None) -> Path:
+    """Return the COLVAR-like output path, deriving it from the .npz path when needed."""
     return output_colvar if output_colvar is not None else output.with_suffix(".dat")
 
 
 def get_yaml_output_path(output: Path, output_yaml: Path | None) -> Path:
+    """Return the YAML keyword output path, deriving it from the .npz path when needed."""
     return output_yaml if output_yaml is not None else output.with_suffix(".yaml")
 
 
+def validate_common_args(parser: argparse.ArgumentParser, args: argparse.Namespace):
+    """Validate CLI arguments shared by the FES and deltaG commands."""
+    # YAML defaults are loaded before the final parse, so required arguments are checked manually.
+    if not args.input:
+        parser.error("input is required, either as command-line argument or as 'input' in --config.")
+    if not args.fields:
+        parser.error("--cvs is required, either as command-line argument or as 'cvs' in --config.")
+    if args.kbt is None and args.temp is None:
+        parser.error("one of --kbt or --temp is required, either as command-line argument or in --config.")
+    if args.kbt is not None and args.temp is not None:
+        parser.error("--kbt and --temp cannot be used together.")
+
+
 def _yaml_template_key(action: argparse.Action, aliases: Mapping[str, str]) -> str:
+    """Return the user-facing YAML key for an argparse action."""
     return aliases.get(action.dest, action.dest)
 
 
 def _yaml_template_value(value: Any) -> str:
+    """Format a parser default value as a compact YAML scalar."""
     if value is None or value is argparse.SUPPRESS:
         return "null"
     if isinstance(value, bool):
@@ -99,12 +122,14 @@ def _yaml_template_value(value: Any) -> str:
 
 
 def _yaml_template_comment(help_text: str | None) -> str:
+    """Condense an argparse help string into a single YAML comment."""
     return "" if help_text in (None, argparse.SUPPRESS) else " ".join(help_text.split())
 
 
 def yaml_template_from_parser(parser: argparse.ArgumentParser,
                               aliases: Mapping[str, str] | None = None,
                               skip: Sequence[str] = ("help", "config", "yaml_template")) -> str:
+    """Build a grouped YAML template from an argparse parser."""
     aliases = aliases or {}
     sections = []
     seen_actions = set()
@@ -132,6 +157,7 @@ def yaml_template_from_parser(parser: argparse.ArgumentParser,
 def write_yaml_template(parser: argparse.ArgumentParser,
                         output: str | Path | None = None,
                         aliases: Mapping[str, str] | None = None):
+    """Print or write a YAML configuration template generated from a parser."""
     text = yaml_template_from_parser(parser, aliases=aliases)
     if output in (None, "-"):
         sys.stdout.write(text)
@@ -141,11 +167,13 @@ def write_yaml_template(parser: argparse.ArgumentParser,
 
 
 def flatten_min_max_bounds(bounds):
+    """Flatten min/max bounds into the CLI/YAML representation."""
     # Keep YAML bounds in the same flat format accepted by argparse: min max [min max ...].
     return None if bounds is None else np.asarray(bounds).ravel().tolist()
 
 
 def save_colvar_table(path: Path, columns: Sequence[np.ndarray], fields: Sequence[str]):
+    """Write arrays as a PLUMED-like text table with a FIELDS header."""
     # Write a PLUMED-like text table that can be inspected with standard tools.
     table = np.column_stack([np.asarray(column).ravel() for column in columns])
     header = f"#! FIELDS {' '.join(fields)}"
@@ -153,12 +181,14 @@ def save_colvar_table(path: Path, columns: Sequence[np.ndarray], fields: Sequenc
 
 
 def _normalize_config_key(key: str, aliases: Mapping[str, str]) -> str:
+    """Normalize a YAML key to the corresponding argparse destination."""
     # YAML can use command-line spelling, such as state-a-bounds, or user-facing aliases like cvs.
     normalized = key.replace("-", "_")
     return aliases.get(normalized, normalized)
 
 
 def _normalize_config_value(key: str, value: Any):
+    """Normalize YAML values to the types and shapes expected after argparse parsing."""
     # YAML scalars are convenient for one-value CLI options; argparse stores these as lists.
     if key in _LIST_KEYS and value is not None and not isinstance(value, list):
         value = [value]
@@ -174,6 +204,7 @@ def _normalize_config_value(key: str, value: Any):
 
 
 def _load_yaml_config(path: Path, aliases: Mapping[str, str]) -> dict[str, Any]:
+    """Load a YAML config file and normalize its keys and values."""
     # The YAML file is expected to mirror parser keyword names, not positional argparse syntax.
     with path.open() as file:
         data = yaml.safe_load(file) or {}
@@ -194,16 +225,19 @@ def _load_yaml_config(path: Path, aliases: Mapping[str, str]) -> dict[str, Any]:
 
 
 def _valid_parser_dests(parser: argparse.ArgumentParser) -> set[str]:
+    """Return the set of destination names accepted by an argparse parser."""
     # argparse stores values by destination name; YAML keys must map to one of these destinations.
     return {action.dest for action in parser._actions if action.dest != argparse.SUPPRESS}
 
 
 def _option_strings(parser: argparse.ArgumentParser) -> set[str]:
+    """Return every option spelling registered on an argparse parser."""
     # Collect every registered option spelling, including aliases like --bw and --bandwidth.
     return {option for action in parser._actions for option in action.option_strings}
 
 
 def _disallowed_options_with_config(parser: argparse.ArgumentParser, argv: Sequence[str]) -> list[str]:
+    """Find command-line options that cannot be combined with --config."""
     # When --config is used, all keyword options should come from YAML.
     # Positional input files are still allowed because they do not start with "-".
     option_strings = _option_strings(parser)
@@ -233,7 +267,7 @@ def _disallowed_options_with_config(parser: argparse.ArgumentParser, argv: Seque
         if token.startswith("--"):
             option = token.split("=", 1)[0]
             # Accept argparse abbreviations as disallowed too, e.g. --band for --bandwidth.
-            if option in long_options or any(item.startswith(option) for item in long_options):
+            if option in long_options or any(long_option.startswith(option) for long_option in long_options):
                 disallowed.append(option)
         elif token.startswith("-") and token[:2] in short_options:
             disallowed.append(token)
@@ -244,6 +278,7 @@ def _disallowed_options_with_config(parser: argparse.ArgumentParser, argv: Seque
 def parse_args_with_yaml_config(parser: argparse.ArgumentParser,
                                 argv: Sequence[str] | None,
                                 aliases: Mapping[str, str] | None = None):
+    """Parse CLI arguments after optionally loading defaults from a YAML config."""
     aliases = aliases or {}
     argv = sys.argv[1:] if argv is None else list(argv)
 
@@ -270,6 +305,7 @@ def parse_args_with_yaml_config(parser: argparse.ArgumentParser,
 
 
 def _to_yaml_value(value: Any):
+    """Convert Python, pathlib and NumPy objects into YAML-serializable values."""
     # Convert parser/numpy objects to plain Python values that yaml.safe_dump can serialize.
     if isinstance(value, Path):
         return str(value)
@@ -288,6 +324,7 @@ def _to_yaml_value(value: Any):
 
 
 def save_yaml_config(path: Path, data: Mapping[str, Any]):
+    """Save the resolved CLI keyword values to a YAML file."""
     # Save the fully resolved CLI keywords so the command can be reproduced later.
     with path.open("w") as file:
         yaml.safe_dump(_to_yaml_value(dict(data)), file, sort_keys=False)

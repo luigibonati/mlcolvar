@@ -101,6 +101,10 @@ def test_fes():
         assert fes4.shape == (20, 20)
         assert isinstance(grid4, list) and len(grid4) == 2
 
+    # Case 6: bias-derived weights must match the number of samples.
+    with pytest.raises(ValueError, match="bias"):
+        compute_fes(X=x, kbt=1.0, bias=np.ones(len(x) - 1), backend="KDEpy")
+
 
 def test_delta_g():
     rng = np.random.default_rng(42)
