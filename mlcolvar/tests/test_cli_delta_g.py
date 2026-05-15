@@ -36,20 +36,25 @@ def test_delta_g_cli_writes_outputs(tmp_path, monkeypatch):
     monkeypatch.setattr("mlcolvar.cli.delta_g.compute_deltaG", fake_compute_deltaG)
 
     output = tmp_path / "deltaG.npz"
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        f"cvs: cv\n"
+        f"kbt: 1.0\n"
+        f"state-a-bounds: [-1.5, -0.5]\n"
+        f"state-b-bounds: [0.5, 1.5]\n"
+        f"intervals: 4\n"
+        f"output: {output}\n"
+    )
 
-    main([
-        str(colvar),
-        "--cvs", "cv",
-        "--kbt", "1.0",
-        "--state-a-bounds", "-1.5", "-0.5",
-        "--state-b-bounds", "0.5", "1.5",
-        "--intervals", "4",
-        "--output", str(output),
-    ])
+    # This test uses YAML aliases such as cvs and state-a-bounds to exercise
+    # the config-file path. The input file remains positional and is the only
+    # value allowed on the command line together with --config.
+    main(["--config", str(config), str(colvar)])
 
     # The binary NumPy archive is the machine-readable output.
     assert output.exists()
     assert (tmp_path / "deltaG.png").exists()
+    assert (tmp_path / "deltaG.yaml").exists()
 
     # The CLI also writes a COLVAR-like text file next to the .npz output by default.
     colvar_output = tmp_path / "deltaG.dat"
@@ -57,6 +62,10 @@ def test_delta_g_cli_writes_outputs(tmp_path, monkeypatch):
 
     text = colvar_output.read_text()
     assert text.startswith("#! FIELDS frame deltaG")
+
+    yaml_text = (tmp_path / "deltaG.yaml").read_text()
+    assert "cvs:" in yaml_text
+    assert "state_a_bounds:" in yaml_text
 
 
 def test_delta_g_cli_writes_2d_outputs_and_plot(tmp_path, monkeypatch):
@@ -110,6 +119,7 @@ def test_delta_g_cli_writes_2d_outputs_and_plot(tmp_path, monkeypatch):
 
     assert output.exists()
     assert plot.exists()
+    assert (tmp_path / "deltaG_2d.yaml").exists()
 
     colvar_output = tmp_path / "deltaG_2d.dat"
     assert colvar_output.exists()

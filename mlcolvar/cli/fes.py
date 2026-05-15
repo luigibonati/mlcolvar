@@ -24,7 +24,14 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from mlcolvar.cli.utils import get_colvar_output_path, load_colvar_data, parse_min_max_bounds, save_colvar_table
+from mlcolvar.cli.utils import (flatten_min_max_bounds,
+                                get_colvar_output_path,
+                                get_yaml_output_path,
+                                load_colvar_data,
+                                parse_args_with_yaml_config,
+                                parse_min_max_bounds,
+                                save_colvar_table,
+                                save_yaml_config)
 from mlcolvar.utils import plot as _plot_utils  # noqa: F401 - registers fessa colormap
 from mlcolvar.utils.fes import compute_fes
 
@@ -76,18 +83,33 @@ def _save_colvar_output(path: Path, fes, grid, error, fields: Sequence[str]):
     save_colvar_table(path, columns, output_fields)
 
 
+def _validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace):
+    if not args.input:
+        parser.error("input is required, either as command-line argument or as 'input' in --config.")
+    if not args.fields:
+        parser.error("--cvs is required, either as command-line argument or as 'cvs' in --config.")
+    if args.kbt is None and args.temp is None:
+        parser.error("one of --kbt or --temp is required, either as command-line argument or in --config.")
+    if args.kbt is not None and args.temp is not None:
+        parser.error("--kbt and --temp cannot be used together.")
+
+
 def build_parser() -> argparse.ArgumentParser:
     # Keep argparse setup separate from main so tests can inspect the CLI without running it.
     parser = argparse.ArgumentParser(description="Compute a free energy surface with mlcolvar.utils.fes.compute_fes.")
 
     # Input/output options.
     input_output = parser.add_argument_group("Input/output options")
-    input_output.add_argument("input", nargs="+", help="PLUMED COLVAR file(s).")
+    input_output.add_argument("input", nargs="*", help="PLUMED COLVAR file(s).")
+    input_output.add_argument("--config", type=Path,
+                              help="YAML file with CLI options; exclusive with other options. Default: none.")
     input_output.add_argument("-o", "--output", type=Path, default=Path("fes.npz"),
                               help="Output .npz file. Default: fes.npz.")
     input_output.add_argument("--output-colvar", "--o-colvar", type=Path,
                               help="COLVAR-like text output file. Default: --output path with .dat suffix.")
-    input_output.add_argument("--cvs", "--cv", dest="fields", nargs="+", required=True,
+    input_output.add_argument("--output-yaml", "--o-yaml", type=Path,
+                              help="YAML file with the used CLI options. Default: --output path with .yaml suffix.")
+    input_output.add_argument("--cvs", "--cv", dest="fields", nargs="+",
                               help="COLVAR field names to use as collective variables.")
     input_output.add_argument("--bias", dest="bias_fields", nargs="+",
                               help=("COLVAR bias field(s). If more than one is provided, values are summed. "
@@ -102,7 +124,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # compute_fes requires exactly one thermal-energy specification.
     thermal_options = parser.add_argument_group("Thermal energy options")
-    thermal = thermal_options.add_mutually_exclusive_group(required=True)
+    thermal = thermal_options.add_mutually_exclusive_group()
     thermal.add_argument("--kbt", type=float, help="Thermal energy in the desired FES units.")
     thermal.add_argument("--temp", type=float, help="Temperature in Kelvin.")
     thermal_options.add_argument("--fes-units", choices=("kJ/mol", "kcal/mol", "eV"), default="kJ/mol",
@@ -138,7 +160,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
-    args = parser.parse_args(argv)
+    try:
+        # YAML uses user-facing names; aliases map them to argparse destinations.
+        aliases = {"cv": "fields", "cvs": "fields", "bias": "bias_fields"}
+        args = parse_args_with_yaml_config(parser, argv, aliases=aliases)
+    except ValueError as exc:
+        parser.error(str(exc))
+    _validate_args(parser, args)
 
     try:
         # Load and validate COLVAR fields before calling the numerical routine.
@@ -174,7 +202,33 @@ def main(argv: Sequence[str] | None = None) -> int:
     # Always save the raw result arrays and a COLVAR-like text table; plotting is optional.
     _save_output(args.output, fes, grid, used_bounds, error, fields, bias_fields)
     colvar_output = get_colvar_output_path(args.output, args.output_colvar)
+    yaml_output = get_yaml_output_path(args.output, args.output_yaml)
     _save_colvar_output(colvar_output, fes, grid, error, fields)
+    # Record the effective options after defaults, YAML, and automatic bias-field detection.
+    save_yaml_config(yaml_output, {"config": args.config,
+                                   "input": args.input,
+                                   "output": args.output,
+                                   "output_colvar": colvar_output,
+                                   "output_yaml": yaml_output,
+                                   "cvs": fields,
+                                   "bias": bias_fields,
+                                   "start": args.start,
+                                   "stop": args.stop,
+                                   "stride": args.stride,
+                                   "kbt": args.kbt,
+                                   "temp": args.temp,
+                                   "fes_units": args.fes_units,
+                                   "num_samples": args.num_samples,
+                                   "bounds": flatten_min_max_bounds(bounds),
+                                   "bandwidth": args.bandwidth,
+                                   "kernel": args.kernel,
+                                   "scale_by": args.scale_by,
+                                   "blocks": args.blocks,
+                                   "backend": args.backend,
+                                   "eps": args.eps,
+                                   "plot": args.plot,
+                                   "plot_max_fes": args.plot_max_fes,
+                                   "plot_levels": args.plot_levels})
 
     if args.plot is not None:
         plt.tight_layout()
@@ -185,6 +239,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Used bias fields: {', '.join(bias_fields)} using {args.fes_units} as units")
     print(f"Saved FES data to {args.output}")
     print(f"Saved FES COLVAR data to {colvar_output}")
+    print(f"Saved FES YAML keywords to {yaml_output}")
     if args.plot is not None:
         print(f"Saved FES plot to {args.plot}")
 

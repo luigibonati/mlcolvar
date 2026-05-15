@@ -1,0 +1,21 @@
+input: null           # PLUMED COLVAR file(s).
+output: deltaG.npz    # Output .npz file. Default: deltaG.npz.
+output_colvar: null   # COLVAR-like text output file. Default: --output path with .dat suffix.
+output_yaml: null     # YAML file with the used CLI options. Default: --output path with .yaml suffix.
+cvs: null             # COLVAR field names to use as collective variables.
+bias: null            # COLVAR bias field(s). If more than one is provided, values are summed. Default: all fields containing 'bias'.
+time_field: null      # COLVAR time field to use for the output grid. Default: frame index.
+start: 0              # Read COLVAR rows starting from this index. Default: 0.
+stop: null            # Read COLVAR rows until this index. Default: end of file.
+stride: 1             # Read every Nth COLVAR row. Default: 1.
+kbt: null             # Thermal energy in the desired deltaG units.
+temp: null            # Temperature in Kelvin.
+fes_units: kJ/mol     # Free-energy units when using --temp. Default: kJ/mol.
+state_a_bounds: null  # State A bounds as 'min max' for 1D or 'x_min x_max y_min y_max' for 2D.
+state_b_bounds: null  # State B bounds as 'min max' for 1D or 'x_min x_max y_min y_max' for 2D.
+intervals: 10         # Number of intervals for progressive deltaG estimates. Default: 10.
+reverse: false        # Reverse the input data. Default: false.
+eps: 0.00000001       # Regularization for empty state counts. Default: 1e-8.
+plot: null            # Image file for the deltaG plot. Default: --output path with .png suffix.
+no_plot: false        # Do not write a deltaG plot. Default: false.
+plot_color: fessa6    # Line color for the deltaG plot. Default: fessa6.

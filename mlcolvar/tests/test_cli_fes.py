@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from mlcolvar.cli.fes import main
 
 
@@ -34,17 +35,24 @@ def test_fes_cli_writes_outputs(tmp_path, monkeypatch):
     monkeypatch.setattr("mlcolvar.cli.fes.compute_fes", fake_compute_fes)
 
     output = tmp_path / "fes.npz"
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        f"cvs:\n"
+        f"  - cv\n"
+        f"kbt: 1.0\n"
+        f"bounds: [0.0, 3.0]\n"
+        f"output: {output}\n"
+    )
 
-    main([
-        str(colvar),
-        "--cvs", "cv",
-        "--kbt", "1.0",
-        "--bounds", "0.0", "3.0",
-        "--output", str(output),
-    ])
+    # This test passes the CLI keywords through YAML to check that configuration
+    # files can provide the same values as command-line options. The input file
+    # is intentionally passed on the command line because it is the only allowed
+    # exception when --config is used.
+    main(["--config", str(config), str(colvar)])
 
     # The binary NumPy archive is the machine-readable output.
     assert output.exists()
+    assert (tmp_path / "fes.yaml").exists()
 
     # The CLI also writes a COLVAR-like text file next to the .npz output by default.
     colvar_output = tmp_path / "fes.dat"
@@ -54,6 +62,22 @@ def test_fes_cli_writes_outputs(tmp_path, monkeypatch):
     text = colvar_output.read_text()
     assert text.startswith("#! FIELDS cv fes")
     assert "error" not in text.splitlines()[0]
+
+    yaml_text = (tmp_path / "fes.yaml").read_text()
+    assert "cvs:" in yaml_text
+    assert "bias:" in yaml_text
+
+
+def test_fes_yaml_config_rejects_other_keywords(tmp_path):
+    config = tmp_path / "config.yaml"
+    config.write_text("cvs: cv\nkbt: 1.0\n")
+
+    # When --config is used, all keyword options must live in the YAML file;
+    # only positional input files can still be supplied on the command line.
+    with pytest.raises(SystemExit) as exc:
+        main(["--config", str(config), "--kbt", "2.0", "COLVAR"])
+
+    assert exc.value.code == 2
 
 
 def test_fes_cli_writes_2d_outputs_with_error(tmp_path, monkeypatch):
@@ -102,6 +126,7 @@ def test_fes_cli_writes_2d_outputs_with_error(tmp_path, monkeypatch):
 
     assert output.exists()
     assert plot.exists()
+    assert (tmp_path / "fes_2d.yaml").exists()
 
     colvar_output = tmp_path / "fes_2d.dat"
     assert colvar_output.exists()

@@ -37,6 +37,7 @@ dependencies = [
     "KDEpy",
     "scikit-learn<1.8", 
     "pydantic<2",
+    "PyYAML",
     "torch_geometric",
     "matscipy",
     "mdtraj"
@@ -96,6 +97,9 @@ where = ["."]
 [tool.setuptools.package-data]
 mlcolvar = [
     "py.typed"
+]
+"mlcolvar.cli" = [
+    "templates/*.yaml"
 ]
 "mlcolvar.tests" = [
     "data/**/*"
