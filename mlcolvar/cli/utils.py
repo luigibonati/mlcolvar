@@ -106,16 +106,26 @@ def yaml_template_from_parser(parser: argparse.ArgumentParser,
                               aliases: Mapping[str, str] | None = None,
                               skip: Sequence[str] = ("help", "config", "yaml_template")) -> str:
     aliases = aliases or {}
-    rows = []
-    for action in parser._actions:
-        if action.dest in skip or action.dest == argparse.SUPPRESS:
-            continue
-        key = _yaml_template_key(action, aliases)
-        value = _yaml_template_value(action.default)
-        rows.append((f"{key}: {value}", _yaml_template_comment(action.help)))
+    sections = []
+    seen_actions = set()
+    for group in parser._action_groups:
+        # Follow the same action groups that argparse uses in --help.
+        rows = []
+        for action in group._group_actions:
+            if id(action) in seen_actions or action.dest in skip or action.dest == argparse.SUPPRESS:
+                continue
+            seen_actions.add(id(action))
+            key = _yaml_template_key(action, aliases)
+            value = _yaml_template_value(action.default)
+            rows.append((f"{key}: {value}", _yaml_template_comment(action.help)))
+        if rows:
+            sections.append((group.title, rows))
 
-    comment_column = max(max(len(prefix) for prefix, _comment in rows) + 2, 22)
-    lines = [f"{prefix.ljust(comment_column)}# {comment}".rstrip() for prefix, comment in rows]
+    comment_column = max(max(len(prefix) for _title, rows in sections for prefix, _comment in rows) + 2, 22)
+    lines = []
+    for title, rows in sections:
+        lines.append(f"# {title}")
+        lines.extend(f"{prefix.ljust(comment_column)}# {comment}".rstrip() for prefix, comment in rows)
     return "\n".join(lines) + "\n"
 
 

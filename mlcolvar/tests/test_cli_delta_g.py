@@ -6,7 +6,8 @@ def test_delta_g_cli_prints_yaml_template(capsys):
     assert main(["--yaml-template"]) == 0
 
     text = capsys.readouterr().out
-    assert text.startswith("input: null")
+    assert text.startswith("# Input/output options\ninput: null")
+    assert "# DeltaG options" in text
     assert "output: deltaG.npz" in text
     assert "state_a_bounds: null" in text
     assert "yaml_template" not in text

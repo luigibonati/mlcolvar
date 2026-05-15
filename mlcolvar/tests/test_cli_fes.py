@@ -7,7 +7,8 @@ def test_fes_cli_prints_yaml_template(capsys, tmp_path):
     assert main(["--yaml-template"]) == 0
 
     text = capsys.readouterr().out
-    assert text.startswith("input: null")
+    assert text.startswith("# Input/output options\ninput: null")
+    assert "# FES options" in text
     assert "output: fes.npz" in text
     assert "num_samples: 200" in text
     assert "yaml_template" not in text
