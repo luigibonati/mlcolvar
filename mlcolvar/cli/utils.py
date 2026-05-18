@@ -17,7 +17,8 @@ _BOUND_KEYS = {"bounds", "state_a_bounds", "state_b_bounds"}
 # These option families need light type normalization when they are read from YAML.
 # argparse normally performs this conversion for command-line values.
 _LIST_KEYS = {"input", "fields", "bias_fields", *_BOUND_KEYS}
-_PATH_KEYS = {"config", "output", "output_colvar", "output_yaml", "plot"}
+_PATH_KEYS = {"config", "output", "plot"}
+_OUTPUT_SUFFIXES = {".npz", ".dat", ".yaml", ".yml", ".png"}
 
 # Config files use user-facing names, while argparse stores values by destination.
 YAML_CONFIG_ALIASES = {"cv": "fields", "cvs": "fields", "bias": "bias_fields"}
@@ -77,14 +78,17 @@ def load_colvar_data(file_names: Sequence[str],
     return data, bias, time, list(fields), list(bias_fields) if bias_fields else None
 
 
-def get_colvar_output_path(output: Path, output_colvar: Path | None) -> Path:
-    """Return the COLVAR-like output path, deriving it from the .npz path when needed."""
-    return output_colvar if output_colvar is not None else output.with_suffix(".dat")
+def get_output_prefix(output: Path) -> Path:
+    """Return the shared output prefix used to derive every output file."""
+    if output.suffix in _OUTPUT_SUFFIXES:
+        return output.with_suffix("")
+
+    return output
 
 
-def get_yaml_output_path(output: Path, output_yaml: Path | None) -> Path:
-    """Return the YAML keyword output path, deriving it from the .npz path when needed."""
-    return output_yaml if output_yaml is not None else output.with_suffix(".yaml")
+def get_output_path_with_suffix(output_prefix: Path, suffix: str) -> Path:
+    """Append an output suffix to a prefix without replacing dotted prefix text."""
+    return Path(f"{output_prefix}{suffix}")
 
 
 def validate_common_args(parser: argparse.ArgumentParser, args: argparse.Namespace):

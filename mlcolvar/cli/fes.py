@@ -28,8 +28,8 @@ import numpy as np
 from mlcolvar.cli.utils import (YAML_CONFIG_ALIASES,
                                 YAML_TEMPLATE_ALIASES,
                                 flatten_min_max_bounds,
-                                get_colvar_output_path,
-                                get_yaml_output_path,
+                                get_output_prefix,
+                                get_output_path_with_suffix,
                                 load_colvar_data,
                                 parse_args_with_yaml_config,
                                 parse_min_max_bounds,
@@ -108,12 +108,9 @@ def build_parser() -> argparse.ArgumentParser:
     input_output.add_argument("--yaml-template", nargs="?", const="-", metavar="PATH",
                               help=("Print the YAML configuration template, or write it to PATH, and exit. "
                                     "Default: false."))
-    input_output.add_argument("-o", "--output", type=Path, default=Path("fes.npz"),
-                              help="Output .npz file. Default: fes.npz.")
-    input_output.add_argument("--output-colvar", "--o-colvar", type=Path,
-                              help="COLVAR-like text output file. Default: --output path with .dat suffix.")
-    input_output.add_argument("--output-yaml", "--o-yaml", type=Path,
-                              help="YAML file with the used CLI options. Default: --output path with .yaml suffix.")
+    input_output.add_argument("-o", "--output", type=Path, default=Path("fes"),
+                              help=("Output prefix used for the .npz, .dat and .yaml files. "
+                                    "Default: fes."))
     input_output.add_argument("--cvs", "--cv", dest="fields", nargs="+",
                               help="COLVAR field names to use as collective variables.")
     input_output.add_argument("--bias", dest="bias_fields", nargs="+",
@@ -189,6 +186,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ValueError as exc:
         parser.error(str(exc))
 
+    output_prefix = get_output_prefix(args.output)
+    data_output = get_output_path_with_suffix(output_prefix, suffix='npz')
+    colvar_output = get_output_path_with_suffix(output_prefix, suffix='dat')
+    yaml_output = get_output_path_with_suffix(output_prefix, suffix='yaml')
+
+
     # This is the only scientific computation done by the CLI wrapper.
     fes, grid, used_bounds, error = compute_fes(X=data,
                                                 temp=args.temp,
@@ -208,16 +211,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                                                 eps=args.eps)
 
     # Always save the raw result arrays and a COLVAR-like text table; plotting is optional.
-    _save_output(args.output, fes, grid, used_bounds, error, fields, bias_fields)
-    colvar_output = get_colvar_output_path(args.output, args.output_colvar)
-    yaml_output = get_yaml_output_path(args.output, args.output_yaml)
+    _save_output(data_output, fes, grid, used_bounds, error, fields, bias_fields)
     _save_colvar_output(colvar_output, fes, grid, error, fields)
     # Record the effective options after defaults, YAML, and automatic bias-field detection.
     save_yaml_config(yaml_output, {"config": args.config,
                                    "input": args.input,
-                                   "output": args.output,
-                                   "output_colvar": colvar_output,
-                                   "output_yaml": yaml_output,
+                                   "output": output_prefix,
                                    "cvs": fields,
                                    "bias": bias_fields,
                                    "start": args.start,
@@ -245,7 +244,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"Used COLVAR fields: {', '.join(fields)}")
     if bias_fields is not None:
         print(f"Used bias fields: {', '.join(bias_fields)} using {args.fes_units} as units")
-    print(f"Saved FES data to {args.output}")
+    print(f"Saved FES data to {data_output}")
     print(f"Saved FES COLVAR data to {colvar_output}")
     print(f"Saved FES YAML keywords to {yaml_output}")
     if args.plot is not None:

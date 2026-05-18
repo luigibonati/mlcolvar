@@ -8,7 +8,8 @@ def test_delta_g_cli_prints_yaml_template(capsys, tmp_path):
     text = capsys.readouterr().out
     assert text.startswith("# Input/output options\ninput: null")
     assert "# DeltaG options" in text
-    assert "output: deltaG.npz" in text
+    assert "output: deltaG" in text
+    assert "Output prefix" in text
     assert "State A bounds as a YAML list of floats" in text
     assert "state_a_bounds:" in text
     assert "\n  - 0\n  - 1\nstate_b_bounds:" in text
@@ -58,7 +59,7 @@ def test_delta_g_cli_writes_outputs(tmp_path, monkeypatch):
 
     monkeypatch.setattr("mlcolvar.cli.delta_g.compute_deltaG", fake_compute_deltaG)
 
-    output = tmp_path / "deltaG.npz"
+    output = tmp_path / "deltaG"
     config = tmp_path / "config.yaml"
     config.write_text(
         f"cvs: cv\n"
@@ -75,7 +76,7 @@ def test_delta_g_cli_writes_outputs(tmp_path, monkeypatch):
     main(["--config", str(config), str(colvar)])
 
     # The binary NumPy archive is the machine-readable output.
-    assert output.exists()
+    assert output.with_suffix(".npz").exists()
     assert (tmp_path / "deltaG.png").exists()
     assert (tmp_path / "deltaG.yaml").exists()
 
@@ -87,6 +88,7 @@ def test_delta_g_cli_writes_outputs(tmp_path, monkeypatch):
     assert text.startswith("#! FIELDS frame deltaG")
 
     yaml_text = (tmp_path / "deltaG.yaml").read_text()
+    assert f"output: {output}" in yaml_text
     assert "cvs:" in yaml_text
     assert "state_a_bounds:" in yaml_text
 
@@ -123,7 +125,7 @@ def test_delta_g_cli_writes_2d_outputs_and_plot(tmp_path, monkeypatch):
 
     monkeypatch.setattr("mlcolvar.cli.delta_g.compute_deltaG", fake_compute_deltaG)
 
-    output = tmp_path / "deltaG_2d.npz"
+    output = tmp_path / "deltaG_2d"
     plot = tmp_path / "deltaG_2d.png"
 
     main([
@@ -140,7 +142,7 @@ def test_delta_g_cli_writes_2d_outputs_and_plot(tmp_path, monkeypatch):
         "--plot-color", "C0",
     ])
 
-    assert output.exists()
+    assert output.with_suffix(".npz").exists()
     assert plot.exists()
     assert (tmp_path / "deltaG_2d.yaml").exists()
 

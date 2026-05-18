@@ -28,8 +28,8 @@ import numpy as np
 from mlcolvar.cli.utils import (YAML_CONFIG_ALIASES,
                                 YAML_TEMPLATE_ALIASES,
                                 flatten_min_max_bounds,
-                                get_colvar_output_path,
-                                get_yaml_output_path,
+                                get_output_prefix,
+                                get_output_path_with_suffix,
                                 load_colvar_data,
                                 parse_args_with_yaml_config,
                                 parse_min_max_bounds,
@@ -95,12 +95,9 @@ def build_parser() -> argparse.ArgumentParser:
     input_output.add_argument("--yaml-template", nargs="?", const="-", metavar="PATH",
                               help=("Print the YAML configuration template, or write it to PATH, and exit. "
                                     "Default: false."))
-    input_output.add_argument("-o", "--output", type=Path, default=Path("deltaG.npz"),
-                              help="Output .npz file. Default: deltaG.npz.")
-    input_output.add_argument("--output-colvar", "--o-colvar", type=Path,
-                              help="COLVAR-like text output file. Default: --output path with .dat suffix.")
-    input_output.add_argument("--output-yaml", "--o-yaml", type=Path,
-                              help="YAML file with the used CLI options. Default: --output path with .yaml suffix.")
+    input_output.add_argument("-o", "--output", type=Path, default=Path("deltaG"),
+                              help=("Output prefix used for the .npz, .dat, .yaml and default .png files. "
+                                    "Default: deltaG."))
     input_output.add_argument("--cvs", "--cv", dest="fields", nargs="+",
                               help="COLVAR field names to use as collective variables.")
     input_output.add_argument("--bias", dest="bias_fields", nargs="+",
@@ -157,7 +154,7 @@ def build_parser() -> argparse.ArgumentParser:
     plotting = parser.add_argument_group("Plotting options")
     plot_target = plotting.add_mutually_exclusive_group()
     plot_target.add_argument("--plot", type=Path,
-                             help="Image file for the deltaG plot. Default: --output path with .png suffix.")
+                             help="Image file for the deltaG plot. Default: output prefix with .png suffix.")
     plot_target.add_argument("--no-plot", action="store_true", help="Do not write a deltaG plot. Default: false.")
     plotting.add_argument("--plot-color", default="fessa6", help="Line color for the deltaG plot. Default: fessa6.")
 
@@ -193,7 +190,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ValueError as exc:
         parser.error(str(exc))
 
-    plot_output = None if args.no_plot else args.plot if args.plot is not None else args.output.with_suffix(".png")
+    output_prefix = get_output_prefix(args.output)
+    data_output = get_output_path_with_suffix(output_prefix, suffix='npz')
+    colvar_output = get_output_path_with_suffix(output_prefix, suffix='dat')
+    yaml_output = get_output_path_with_suffix(output_prefix, suffix='yaml')
+    plot_output = None if args.no_plot else args.plot if args.plot is not None else get_output_path_with_suffix(output_prefix, suffix='png')
 
     # This is the only scientific computation done by the CLI wrapper.
     grid, delta_g = compute_deltaG(X=data,
@@ -211,16 +212,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                                    eps=args.eps)
 
     # Always save the raw result arrays and a COLVAR-like text table; plotting is enabled by default.
-    _save_output(args.output, grid, delta_g, fields, state_a_bounds, state_b_bounds, bias_fields, args.time_field)
-    colvar_output = get_colvar_output_path(args.output, args.output_colvar)
-    yaml_output = get_yaml_output_path(args.output, args.output_yaml)
+    _save_output(data_output, grid, delta_g, fields, state_a_bounds, state_b_bounds, bias_fields, args.time_field)
     _save_colvar_output(colvar_output, grid, delta_g, args.time_field)
     # Record the effective options after defaults, YAML, and automatic bias-field detection.
     save_yaml_config(yaml_output, {"config": args.config,
                                    "input": args.input,
-                                   "output": args.output,
-                                   "output_colvar": colvar_output,
-                                   "output_yaml": yaml_output,
+                                   "output": output_prefix,
                                    "cvs": fields,
                                    "bias": bias_fields,
                                    "time_field": args.time_field,
@@ -248,7 +245,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Used bias fields: {', '.join(bias_fields)} using {args.fes_units} as units")
     if args.time_field is not None:
         print(f"Used time field: {args.time_field}")
-    print(f"Saved deltaG data to {args.output}")
+    print(f"Saved deltaG data to {data_output}")
     print(f"Saved deltaG COLVAR data to {colvar_output}")
     print(f"Saved deltaG YAML keywords to {yaml_output}")
     if plot_output is not None:
