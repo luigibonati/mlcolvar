@@ -166,7 +166,7 @@ def _selection_to_indices(selection, atoms):
     """Convert an ASE selection to a list of indices."""
 
     if selection is None:
-        return None
+        return np.arange(len(atoms)).tolist()
     
     if callable(selection):
         indices = np.asarray(selection(atoms))
@@ -234,7 +234,7 @@ def _configurations_from_ase_trajectory(trajectory: ase.Atoms,
 
     # as we basically do the same for each selection, we use a dictionary initialized to the general case
     selected_atoms = {}
-    selected_atoms['system'] = [i for i in range(trajectory[0].get_number_of_atoms())]
+    selected_atoms['system'] = [i for i in range(len(trajectory[0]))]
     selected_atoms['environment'] = []
     selected_atoms['subsystem'] = None
     
@@ -306,7 +306,8 @@ def _names_from_ase_atoms(ase_atoms_list: List[ase.Atoms],
     try:
         indices = _selection_to_indices(system_selection, ase_atoms_list[0])
         names = ase_atoms_list[0][indices].get_chemical_symbols()
-    except AttributeError:
+        
+    except (AttributeError, TypeError):
         indices = _selection_to_indices(system_selection, ase_atoms_list[0][0])
         names = ase_atoms_list[0][0][indices].get_chemical_symbols()
 
