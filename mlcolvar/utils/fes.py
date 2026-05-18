@@ -485,7 +485,7 @@ def compute_deltaG(X: np.ndarray,
             fig, ax = plt.subplots() 
         ax.plot(grid, deltaG, color=plot_color)
         ax.set_xlabel('Time' if time is not None else "Frame")
-        ax.set_ylabel(f"$\Delta$G [{fes_units}]" if fes_units is not None else "$\Delta$G")
+        ax.set_ylabel(f"$\\Delta$G [{fes_units}]" if fes_units is not None else "$\\Delta$G")
         
 
     return grid, deltaG

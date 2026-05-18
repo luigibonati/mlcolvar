@@ -14,6 +14,7 @@ containing the grid coordinates, ``fes`` and ``error``.
 from __future__ import annotations
 
 import argparse
+import textwrap
 from pathlib import Path
 from typing import Sequence
 
@@ -89,7 +90,15 @@ def _save_colvar_output(path: Path, fes, grid, error, fields: Sequence[str]):
 
 def build_parser() -> argparse.ArgumentParser:
     # Keep argparse setup separate from main so tests can inspect the CLI without running it.
-    parser = argparse.ArgumentParser(description="Compute a free energy surface with mlcolvar.utils.fes.compute_fes.")
+    parser = argparse.ArgumentParser(description=textwrap.dedent("""\
+                                    Compute a free energy surface with mlcolvar.utils.fes.compute_fes.                            
+                                    It can be used in two ways:
+                                        1. Writing the input as a YAML file and passed as --config. A template YAML file with all the options can be generated with --yaml-template [PATH].
+                                        2. Passing the options as keywords, which can be listed with --help.
+                                    Whatever the mode, the used options are saved as a YAML file.
+                                    The function returns the grid coordinates, fes and error as a COLVAR-like text file (.dat) and a NumPy archive (.npz).
+                                    """),
+                                    formatter_class=argparse.RawDescriptionHelpFormatter)
 
     # Input/output options.
     input_output = parser.add_argument_group("Input/output options")
