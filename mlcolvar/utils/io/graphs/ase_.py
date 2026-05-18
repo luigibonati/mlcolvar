@@ -166,7 +166,7 @@ def _selection_to_indices(selection, atoms):
     """Convert an ASE selection to a list of indices."""
 
     if selection is None:
-        return None
+        return np.arange(len(atoms)).tolist()
     
     if callable(selection):
         indices = np.asarray(selection(atoms))
