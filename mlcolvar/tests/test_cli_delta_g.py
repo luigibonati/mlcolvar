@@ -9,7 +9,13 @@ def test_delta_g_cli_prints_yaml_template(capsys, tmp_path):
     assert text.startswith("# Input/output options\ninput: null")
     assert "# DeltaG options" in text
     assert "output: deltaG.npz" in text
-    assert "state_a_bounds: null" in text
+    assert "State A bounds as a YAML list of floats" in text
+    assert "state_a_bounds:" in text
+    assert "\n  - 0\n  - 1\nstate_b_bounds:" in text
+    assert "state_a_bounds: null" not in text
+    assert "state_b_bounds:" in text
+    assert "\n  - 1\n  - 2\nintervals:" in text
+    assert "state_b_bounds: null" not in text
     assert "yaml_template" not in text
 
     template = tmp_path / "template_delta_g.yaml"

@@ -115,15 +115,39 @@ def _yaml_template_value(value: Any) -> str:
         return str(value)
     if isinstance(value, float):
         return np.format_float_positional(value, trim="-")
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple)):
         return f"[{', '.join(_yaml_template_value(item) for item in value)}]"
 
     return str(value)
 
 
-def _yaml_template_comment(help_text: str | None) -> str:
+def _yaml_template_comment(action: argparse.Action) -> str:
     """Condense an argparse help string into a single YAML comment."""
+    help_text = getattr(action, "yaml_help", action.help)
     return "" if help_text in (None, argparse.SUPPRESS) else " ".join(help_text.split())
+
+
+def _yaml_template_action_value(action: argparse.Action, key: str):
+    """Return a parser default, overridden by YAML-specific examples when present."""
+    if not hasattr(action, "yaml_example"):
+        return action.default
+
+    value = getattr(action, "yaml_example")
+    if isinstance(value, Mapping):
+        return value.get(key, value.get(action.dest, action.default))
+
+    return value
+
+
+def _yaml_template_prefix_lines(key: str, value: Any) -> list[str]:
+    """Format a YAML key/value pair, using block style for sequences."""
+    if isinstance(value, (list, tuple)):
+        if not value:
+            return [f"{key}: []"]
+        return [f"{key}:",
+                *(f"  - {_yaml_template_value(item)}" for item in value)]
+
+    return [f"{key}: {_yaml_template_value(value)}"]
 
 
 def yaml_template_from_parser(parser: argparse.ArgumentParser,
@@ -141,16 +165,19 @@ def yaml_template_from_parser(parser: argparse.ArgumentParser,
                 continue
             seen_actions.add(id(action))
             key = _yaml_template_key(action, aliases)
-            value = _yaml_template_value(action.default)
-            rows.append((f"{key}: {value}", _yaml_template_comment(action.help)))
+            value = _yaml_template_action_value(action, key)
+            rows.append((_yaml_template_prefix_lines(key, value), _yaml_template_comment(action)))
         if rows:
             sections.append((group.title, rows))
 
-    comment_column = max(max(len(prefix) for _title, rows in sections for prefix, _comment in rows) + 2, 22)
+    comment_column = max(max(len(prefix_lines[0]) for _title, rows in sections
+                             for prefix_lines, _comment in rows) + 2, 22)
     lines = []
     for title, rows in sections:
         lines.append(f"# {title}")
-        lines.extend(f"{prefix.ljust(comment_column)}# {comment}".rstrip() for prefix, comment in rows)
+        for prefix_lines, comment in rows:
+            lines.append(f"{prefix_lines[0].ljust(comment_column)}# {comment}".rstrip())
+            lines.extend(prefix_lines[1:])
     return "\n".join(lines) + "\n"
 
 

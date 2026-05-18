@@ -126,12 +126,27 @@ def build_parser() -> argparse.ArgumentParser:
 
     # Parameters passed through to compute_deltaG.
     delta_g_options = parser.add_argument_group("DeltaG options")
-    delta_g_options.add_argument("--state-a-bounds", "--bounds-a", dest="state_a_bounds", nargs="+", type=float,
-                                 help=("State A bounds as 'min max' for 1D or "
-                                       "'x_min x_max y_min y_max' for 2D."))
-    delta_g_options.add_argument("--state-b-bounds", "--bounds-b", dest="state_b_bounds", nargs="+", type=float,
-                                 help=("State B bounds as 'min max' for 1D or "
-                                       "'x_min x_max y_min y_max' for 2D."))
+    state_a_bounds = delta_g_options.add_argument("--state-a-bounds", "--bounds-a",
+                                                  dest="state_a_bounds",
+                                                  nargs="+",
+                                                  type=float,
+                                                  metavar="BOUND",
+                                                  help=("State A bounds. Use 2 values for 1D: MIN MAX, "
+                                                        "or 4 values for 2D: X_MIN X_MAX Y_MIN Y_MAX."))
+    state_a_bounds.yaml_example = [0.0, 1.0]
+    state_a_bounds.yaml_help = ("State A bounds as a YAML list of floats. Use [min, max] for 1D or "
+                                "[x_min, x_max, y_min, y_max] for 2D.")
+
+    state_b_bounds = delta_g_options.add_argument("--state-b-bounds", "--bounds-b",
+                                                  dest="state_b_bounds",
+                                                  nargs="+",
+                                                  type=float,
+                                                  metavar="BOUND",
+                                                  help=("State B bounds. Use 2 values for 1D: MIN MAX, "
+                                                        "or 4 values for 2D: X_MIN X_MAX Y_MIN Y_MAX."))
+    state_b_bounds.yaml_example = [1.0, 2.0]
+    state_b_bounds.yaml_help = ("State B bounds as a YAML list of floats. Use [min, max] for 1D or "
+                                "[x_min, x_max, y_min, y_max] for 2D.")
     delta_g_options.add_argument("--intervals", "--ints", "--n-ints", dest="intervals", type=int, default=10,
                                  help="Number of intervals for progressive deltaG estimates. Default: 10.")
     delta_g_options.add_argument("--reverse", action="store_true", help="Reverse the input data. Default: false.")
