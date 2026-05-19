@@ -1,7 +1,7 @@
 
 import numpy as np
 import os
-from typing import  List
+from typing import  List, Union
 import mdtraj
 
 from warnings import warn
@@ -18,10 +18,10 @@ __all__ = ["load_traj_with_mdtraj",
            "_names_from_top"]
 
 
-def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
-                                     graph_labels: List,
-                                     node_labels: List,
+def dataset_from_mdtraj_trajectories(trajectories: Union[List[mdtraj.Trajectory], List[List[mdtraj.Trajectory]]],
                                      cutoff: float,
+                                     graph_labels: Union[list, List[list]] = None,
+                                     node_labels: Union[list, List[list]] = None,
                                      system_selection: str = None,
                                      environment_selection: str = None,
                                      subsystem_selection: str = None,
@@ -29,8 +29,8 @@ def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
                                      buffer: float = 0.0,
                                      long_range_cutoff: float = -1.0,
                                      atom_names: List = None,
-                                     remove_isolated_nodes: bool = False,
-                                     show_progress: bool = True,
+                                     remove_isolated_nodes: bool = True,
+                                     show_progress: bool = False,
                                      ) -> DictDataset:
     """    
     Create a graph dataset from MDtraj trajectories.
@@ -38,14 +38,14 @@ def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
 
     Parameters
     ----------
-    trajectories : List[mdtraj.Trajectory]
+    trajectories : List[mdtraj.Trajectory] or List[List[mdtraj.Trajectory]]
         List of MDtraj trajectory frame sequences loaded with MDtraj.
-    graph_labels : List
-        Frame-level graph labels for each trajectory.
-    node_labels : List
-        Node-level labels for each trajectory.
     cutoff : float
         Cutoff distance for graph edge construction (Angstroms).
+    graph_labels : List
+        Frame-level graph labels for each trajectory, by default None.
+    node_labels : List
+        Node-level labels for each trajectory, by default None.
     system_selection : str, optional
         MDtraj style atom selection for the system atoms, by default None
     environment_selection : str, optional
@@ -63,9 +63,9 @@ def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
         Optional atom names used by the dataset constructor, by default None
         If not provided, atomic names will be infered from the MDtraj Topology objects
     remove_isolated_nodes : bool, optional
-        Whether to remove isolated nodes from the final dataset, by default False
+        Whether to remove isolated nodes from the final dataset, by default True
     show_progress : bool, optional
-        Whether to show progress while building the dataset, by default True
+        Whether to show progress while building the dataset, by default False
 
     Returns
     -------
@@ -73,6 +73,9 @@ def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
          The graph dataset created from the MDtraj trajectories.
     """
     
+    graph_labels = _format_labels(trajectories=trajectories, labels=graph_labels)
+    node_labels = _format_labels(trajectories=trajectories, labels=node_labels)
+
     # Check compatibility of selection keywords combinations. NOTE: This doesn't check if the selection is correct.
     _check_atom_selection(system_selection=system_selection,
                           environment_selection=environment_selection,
@@ -122,7 +125,7 @@ def dataset_from_mdtraj_trajectories(trajectories: List[mdtraj.Trajectory],
 
 
 def load_traj_with_mdtraj(trajectory: str, 
-                          topology: str,
+                          topology: str = None,
                           start: int = 0,
                           stop: int = None,
                           stride: int = 1, 
@@ -148,6 +151,10 @@ def load_traj_with_mdtraj(trajectory: str,
         List[mdtraj.Trajectory]
             Loaded MDtraj trajectory frames.
         """
+        if topology is None:
+            raise ValueError("Mdtraj requires topolgy file(s) to load trajectories. " 
+                             "If the traj is in xyz format, the mlcolvar.utils.io.graph.ase_create_pdb_from_xyz "
+                             "can be used to generate a topology file with ase.")
 
         # load trajectory with mdtraj
         traj = mdtraj.load(trajectory, top=topology)
@@ -173,8 +180,8 @@ def load_traj_with_mdtraj(trajectory: str,
 
 # TODO maybe also this can framed into a shared function
 def _configurations_from_mdtraj_trajectory(trajectory: mdtraj.Trajectory,
-                                           graph_labels = None,
-                                           node_labels = None,
+                                           graph_labels: list = None,
+                                           node_labels: list = None,
                                            system_selection: str = None,
                                            environment_selection: str = None,
                                            subsystem_selection: str = None,

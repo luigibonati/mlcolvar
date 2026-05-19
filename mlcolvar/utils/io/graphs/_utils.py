@@ -14,7 +14,8 @@ __all__ = ["_as_torch_if_array",
            "_normalize_frame_level_labels",
            "_normalize_graph_target_inputs",
            "_check_atom_selection",
-           "_update_atomic_numbers_from_configurations"]
+           "_update_atomic_numbers_from_configurations",
+           "_format_labels"]
 
 def _as_torch_if_array(x):
     if isinstance(x, torch.Tensor):
@@ -232,3 +233,12 @@ def _update_atomic_numbers_from_configurations(configurations,
     
     atomic_numbers = AtomicNumberTable.from_zs(atomic_numbers)
     return atomic_numbers
+
+def _format_labels(trajectories, 
+                   labels):
+    if labels is None:
+        labels = [None for _ in range(len(trajectories))]
+    elif len(labels) != len(trajectories):
+        labels = [labels for _ in range(len(trajectories))]
+    
+    return labels
