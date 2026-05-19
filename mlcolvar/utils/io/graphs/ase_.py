@@ -194,7 +194,7 @@ def _selection_to_indices(selection, atoms):
 
 
 # TODO maybe also this can framed into a shared function
-def _configurations_from_ase_trajectory(trajectory: ase.Atoms,
+def _configurations_from_ase_trajectory(trajectory: List[ase.Atoms],
                                         graph_labels: list = None,
                                         node_labels: list = None,
                                         system_selection: Any = None,
