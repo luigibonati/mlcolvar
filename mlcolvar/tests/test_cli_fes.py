@@ -107,6 +107,35 @@ def test_fes_yaml_config_rejects_other_keywords(tmp_path):
     assert exc.value.code == 2
 
 
+def test_fes_cli_warns_periodic_cv_from_colvar_header(tmp_path, monkeypatch):
+    colvar = tmp_path / "COLVAR"
+    colvar.write_text(
+        "#! FIELDS time phi opes.bias\n"
+        "#! SET min_phi -pi\n"
+        "#! SET max_phi pi\n"
+        "0 0.0 0.5\n"
+        "1 1.0 0.5\n"
+    )
+
+    def fake_compute_fes(**_kwargs):
+        return np.array([0.0, 0.1]), np.array([0.0, 1.0]), [(0.0, 1.0)], None
+
+    monkeypatch.setattr("mlcolvar.cli.fes.compute_fes", fake_compute_fes)
+
+    output = tmp_path / "fes_periodic"
+
+    with pytest.warns(UserWarning, match="periodic.*phi"):
+        assert main([
+            str(colvar),
+            "--cvs", "phi",
+            "--kbt", "1.0",
+            "--output", str(output),
+            "--no-plot",
+        ]) == 0
+
+    assert output.with_suffix(".npz").exists()
+
+
 def test_fes_cli_writes_2d_outputs_with_error(tmp_path, monkeypatch):
     # Two CV columns let us check the 2D data selection and the min/max pair
     # required for each dimension. Both points are inside the bounds below.

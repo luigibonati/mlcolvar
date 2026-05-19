@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from mlcolvar.cli.delta_g import main
 
 
@@ -93,6 +94,37 @@ def test_delta_g_cli_writes_outputs(tmp_path, monkeypatch):
     assert "cvs:" in yaml_text
     assert "state_a_bounds:" in yaml_text
     assert "\nplot:" not in yaml_text
+
+
+def test_delta_g_cli_warns_periodic_cv_from_colvar_header(tmp_path, monkeypatch):
+    colvar = tmp_path / "COLVAR"
+    colvar.write_text(
+        "#! FIELDS time phi opes.bias\n"
+        "#! SET min_phi -pi\n"
+        "#! SET max_phi pi\n"
+        "0 -0.5 0.5\n"
+        "1 0.5 0.5\n"
+    )
+
+    def fake_compute_deltaG(**_kwargs):
+        return np.array([0, 1]), np.array([0.0, 0.1])
+
+    monkeypatch.setattr("mlcolvar.cli.delta_g.compute_deltaG", fake_compute_deltaG)
+
+    output = tmp_path / "deltaG_periodic"
+
+    with pytest.warns(UserWarning, match="periodic.*phi"):
+        assert main([
+            str(colvar),
+            "--cvs", "phi",
+            "--kbt", "1.0",
+            "--state-a-bounds", "-1.0", "0.0",
+            "--state-b-bounds", "0.0", "1.0",
+            "--output", str(output),
+            "--no-plot",
+        ]) == 0
+
+    assert output.with_suffix(".npz").exists()
 
 
 def test_delta_g_cli_writes_2d_outputs_and_plot(tmp_path, monkeypatch):
