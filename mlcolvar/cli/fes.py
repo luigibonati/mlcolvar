@@ -27,7 +27,6 @@ import numpy as np
 
 from mlcolvar.cli.utils import (YAML_CONFIG_ALIASES,
                                 YAML_TEMPLATE_ALIASES,
-                                flatten_min_max_bounds,
                                 get_output_prefix,
                                 get_output_path_with_suffix,
                                 load_colvar_data,
@@ -228,7 +227,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                                    "temp": args.temp,
                                    "units": args.units,
                                    "num_samples": args.num_samples,
-                                   "bounds": flatten_min_max_bounds(bounds),
+                                   "bounds": None if bounds is None else np.asarray(bounds).ravel().tolist(),
                                    "bandwidth": args.bandwidth,
                                    "kernel": args.kernel,
                                    "scale_by": args.scale_by,
