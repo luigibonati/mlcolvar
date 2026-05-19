@@ -1,14 +1,9 @@
-"""Shared helpers for mlcolvar command-line interfaces."""
-
-from __future__ import annotations
-
 import argparse
 import sys
+import yaml
+import numpy as np
 from pathlib import Path
 from typing import Any, Mapping, Sequence
-
-import numpy as np
-import yaml
 from warnings import warn
 
 from mlcolvar.utils.io.colvar import load_dataframe
@@ -40,18 +35,14 @@ def parse_min_max_bounds(values: Sequence[float], dimensions: int, name: str):
     return [(values[i], values[i + 1]) for i in range(0, expected, 2)]
 
 
-def _colvar_file_names(file_names: Sequence[str]) -> list[str]:
-    """Normalize one or more COLVAR file names into a list."""
-    return [file_names] if isinstance(file_names, (str, Path)) else list(file_names)
-
-
-def _plumed_set_metadata(path: str | Path) -> dict[str, str]:
-    """Read leading PLUMED SET metadata from a COLVAR-like text file."""
-    path = Path(path)
+def _periodic_colvar_fields(file_name: str | Path, fields: Sequence[str]) -> list[str]:
+    """Return selected CV fields declared periodic in a PLUMED COLVAR header."""
+    selected_fields = set(fields)
+    min_fields, max_fields = set(), set()
+    path = Path(file_name)
     if not path.exists():
-        return {}
+        return []
 
-    metadata = {}
     with path.open() as file:
         for line in file:
             stripped = line.strip()
@@ -61,39 +52,22 @@ def _plumed_set_metadata(path: str | Path) -> dict[str, str]:
                 break
 
             tokens = stripped.split(maxsplit=3)
-            if len(tokens) == 4 and tokens[0] == "#!" and tokens[1] == "SET":
-                metadata[tokens[2]] = tokens[3]
+            if tokens[:2] != ["#!", "SET"] or len(tokens) < 3:
+                continue
+            key = tokens[2]
+            if key.startswith("min_") and key[4:] in selected_fields:
+                min_fields.add(key[4:])
+            elif key.startswith("max_") and key[4:] in selected_fields:
+                max_fields.add(key[4:])
 
-    return metadata
-
-
-def _periodic_colvar_fields(file_names: Sequence[str], fields: Sequence[str]) -> dict[str, tuple[str, str, str]]:
-    """Return selected CV fields declared periodic by PLUMED min_/max_ metadata."""
-    periodic_fields = {}
-    for file_name in _colvar_file_names(file_names):
-        metadata = _plumed_set_metadata(file_name)
-        for field in fields:
-            min_key = f"min_{field}"
-            max_key = f"max_{field}"
-            if min_key in metadata and max_key in metadata:
-                periodic_fields.setdefault(field, (str(file_name), metadata[min_key], metadata[max_key]))
-
-    return periodic_fields
+    return [field for field in fields if field in min_fields and field in max_fields]
 
 
-def validate_non_periodic_colvar_fields(file_names: Sequence[str], fields: Sequence[str]):
-    """Raise when selected CV fields are declared periodic in a PLUMED COLVAR header."""
-    periodic_fields = _periodic_colvar_fields(file_names, fields)
-    if not periodic_fields:
-        return
-
-    declarations = []
-    warn_fields = []
-    for field, (file_name, minimum, maximum) in periodic_fields.items():
-        warn_fields.append(field)
-        declarations.append(f"{field} in {file_name} (min_{field}={minimum}, max_{field}={maximum})")
-    print(declarations)
-    warn(f"Selected CV field(s) are periodic according to the PLUMED COLVAR header and may be treated incorrectly: {', '.join(warn_fields)}!")
+def validate_non_periodic_colvar_fields(file_name: str | Path, fields: Sequence[str]):
+    """Warn when selected CV fields are declared periodic in a PLUMED COLVAR header."""
+    periodic_fields = _periodic_colvar_fields(file_name, fields)
+    if periodic_fields:
+        warn(f"Selected CV field(s) are periodic according to the PLUMED COLVAR header and may be treated incorrectly: {', '.join(periodic_fields)}!")
 
 
 def load_colvar_data(file_names: Sequence[str],
@@ -122,7 +96,7 @@ def load_colvar_data(file_names: Sequence[str],
         available = ", ".join(dataframe.columns)
         raise ValueError(f"Field(s) not found in COLVAR data: {', '.join(missing)}. Available fields: {available}.")
 
-    validate_non_periodic_colvar_fields(file_names, fields)
+    validate_non_periodic_colvar_fields(file_names[0], fields)
 
     if bias_fields is None:
         bias_fields = [column for column in dataframe.columns if "bias" in column.lower()]
