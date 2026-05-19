@@ -5,7 +5,7 @@ Example
 After installing the package in editable mode::
 
     pip install -e .
-    mlcolvar-fes COLVAR --cvs phi psi --kbt 2.494 --bandwidth 0.05 --plot fes.png
+    mlcolvar-fes COLVAR --cvs phi psi --kbt 2.494 --bandwidth 0.05
 
 The command writes a NumPy ``.npz`` archive and a COLVAR-like text file
 containing the grid coordinates, ``fes`` and ``error``.
@@ -96,7 +96,7 @@ def build_parser() -> argparse.ArgumentParser:
                                         1. Writing the input as a YAML file and passed as --config. A template YAML file with all the options can be generated with --yaml-template [PATH].
                                         2. Passing the options as keywords, which can be listed with --help.
                                     Whatever the mode, the used options are saved as a YAML file.
-                                    The function returns the grid coordinates, fes and error as a COLVAR-like text file (.dat) and a NumPy archive (.npz).
+                                    The function returns the grid coordinates, fes and error as a COLVAR-like text file (.dat), a plot, and a NumPy archive (.npz).
                                     """),
                                     formatter_class=argparse.RawDescriptionHelpFormatter)
 
@@ -109,7 +109,7 @@ def build_parser() -> argparse.ArgumentParser:
                               help=("Print the YAML configuration template, or write it to PATH, and exit. "
                                     "Default: false."))
     input_output.add_argument("-o", "--output", type=Path, default=Path("fes"),
-                              help=("Output prefix used for the .npz, .dat and .yaml files. "
+                              help=("Output prefix used for the .npz, .dat, .yaml and default .png files. "
                                     "Default: fes."))
     input_output.add_argument("--cvs", "--cv", dest="fields", nargs="+",
                               help="COLVAR field names to use as collective variables.")
@@ -129,7 +129,7 @@ def build_parser() -> argparse.ArgumentParser:
     thermal = thermal_options.add_mutually_exclusive_group()
     thermal.add_argument("--kbt", type=float, help="Thermal energy in the desired FES units.")
     thermal.add_argument("--temp", type=float, help="Temperature in Kelvin.")
-    thermal_options.add_argument("--fes-units", choices=("kJ/mol", "kcal/mol", "eV"), default="kJ/mol",
+    thermal_options.add_argument("--units", choices=("kJ/mol", "kcal/mol", "eV"), default="kJ/mol",
                                  help="Free-energy units when using --temp. Default: kJ/mol.")
 
     # Parameters passed through to compute_fes.
@@ -149,9 +149,10 @@ def build_parser() -> argparse.ArgumentParser:
     fes_options.add_argument("--eps", type=float,
                              help="Regularization added before taking the logarithm. Default: auto-tuned.")
 
-    # Optional plotting controls.
+    # Plotting controls.
     plotting = parser.add_argument_group("Plotting options")
-    plotting.add_argument("--plot", type=Path, help="Optional image file for the FES plot. Default: no plot.")
+    plotting.add_argument("--no-plot", action="store_true", help="Do not write a FES plot. Default: false.")
+    plotting.add_argument("--plot-color", default="fessa6", help="Line color for the FES plot. Default: fessa6.")
     plotting.add_argument("--plot-max-fes", type=float,
                           help="Mask plot values above this FES. Default: no masking.")
     plotting.add_argument("--plot-levels", type=int,
@@ -190,12 +191,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     data_output = get_output_path_with_suffix(output_prefix, suffix='npz')
     colvar_output = get_output_path_with_suffix(output_prefix, suffix='dat')
     yaml_output = get_output_path_with_suffix(output_prefix, suffix='yaml')
-
+    plot_output = None if args.no_plot else get_output_path_with_suffix(output_prefix, suffix='png')
 
     # This is the only scientific computation done by the CLI wrapper.
     fes, grid, used_bounds, error = compute_fes(X=data,
                                                 temp=args.temp,
-                                                fes_units=args.fes_units,
+                                                units=args.units,
                                                 kbt=args.kbt,
                                                 num_samples=args.num_samples,
                                                 bounds=bounds,
@@ -204,7 +205,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                                                 bias=bias,
                                                 scale_by=args.scale_by,
                                                 blocks=args.blocks,
-                                                plot=args.plot is not None,
+                                                plot=plot_output is not None,
+                                                plot_color=args.plot_color,
                                                 plot_max_fes=args.plot_max_fes,
                                                 plot_levels=args.plot_levels,
                                                 backend=args.backend,
@@ -224,7 +226,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                                    "stride": args.stride,
                                    "kbt": args.kbt,
                                    "temp": args.temp,
-                                   "fes_units": args.fes_units,
+                                   "units": args.units,
                                    "num_samples": args.num_samples,
                                    "bounds": flatten_min_max_bounds(bounds),
                                    "bandwidth": args.bandwidth,
@@ -233,22 +235,23 @@ def main(argv: Sequence[str] | None = None) -> int:
                                    "blocks": args.blocks,
                                    "backend": args.backend,
                                    "eps": args.eps,
-                                   "plot": args.plot,
+                                   "no_plot": args.no_plot,
+                                   "plot_color": args.plot_color,
                                    "plot_max_fes": args.plot_max_fes,
                                    "plot_levels": args.plot_levels})
 
-    if args.plot is not None:
+    if plot_output is not None:
         plt.tight_layout()
-        plt.savefig(args.plot, dpi=200)
+        plt.savefig(plot_output, dpi=200)
 
     print(f"Used COLVAR fields: {', '.join(fields)}")
     if bias_fields is not None:
-        print(f"Used bias fields: {', '.join(bias_fields)} using {args.fes_units} as units")
+        print(f"Used bias fields: {', '.join(bias_fields)} using {args.units} as units")
     print(f"Saved FES data to {data_output}")
     print(f"Saved FES COLVAR data to {colvar_output}")
     print(f"Saved FES YAML keywords to {yaml_output}")
-    if args.plot is not None:
-        print(f"Saved FES plot to {args.plot}")
+    if plot_output is not None:
+        print(f"Saved FES plot to {plot_output}")
 
     return 0
 

@@ -12,6 +12,9 @@ def test_fes_cli_prints_yaml_template(capsys, tmp_path):
     assert "output: fes" in text
     assert "Output prefix" in text
     assert "num_samples: 200" in text
+    assert "plot: null" not in text
+    assert "no_plot: false" in text
+    assert "plot_color: fessa6" in text
 
     template = tmp_path / "template_fes.yaml"
     assert main(["--yaml-template", str(template)]) == 0
@@ -43,6 +46,8 @@ def test_fes_cli_writes_outputs(tmp_path, monkeypatch):
 
         # Because --bias is omitted, all COLVAR fields containing "bias" should be summed.
         assert kwargs["bias"].tolist() == [2.5, 3.5]
+        assert kwargs["plot"] is True
+        assert kwargs["plot_color"] == "fessa6"
 
         # Return a simple 1D FES without block errors so the text output has no error column.
         grid = np.array([0.0, 1.0])
@@ -70,6 +75,7 @@ def test_fes_cli_writes_outputs(tmp_path, monkeypatch):
     # The binary NumPy archive is the machine-readable output.
     assert output.with_suffix(".npz").exists()
     assert (tmp_path / "fes.yaml").exists()
+    assert (tmp_path / "fes.png").exists()
 
     # The CLI also writes a COLVAR-like text file next to the .npz output by default.
     colvar_output = tmp_path / "fes.dat"
@@ -84,6 +90,9 @@ def test_fes_cli_writes_outputs(tmp_path, monkeypatch):
     assert f"output: {output}" in yaml_text
     assert "cvs:" in yaml_text
     assert "bias:" in yaml_text
+    assert "no_plot: false" in yaml_text
+    assert "\nplot:" not in yaml_text
+    assert "plot_color: fessa6" in yaml_text
 
 
 def test_fes_yaml_config_rejects_other_keywords(tmp_path):
@@ -118,6 +127,7 @@ def test_fes_cli_writes_2d_outputs_with_error(tmp_path, monkeypatch):
 
         # The plotting options should be forwarded to compute_fes exactly as parsed by the CLI.
         assert kwargs["plot"] is True
+        assert kwargs["plot_color"] == "C0"
         assert kwargs["plot_max_fes"] == 2.0
         assert kwargs["plot_levels"] == 5
 
@@ -129,7 +139,6 @@ def test_fes_cli_writes_2d_outputs_with_error(tmp_path, monkeypatch):
     monkeypatch.setattr("mlcolvar.cli.fes.compute_fes", fake_compute_fes)
 
     output = tmp_path / "fes_2d"
-    plot = tmp_path / "fes_2d.png"
 
     main([
         str(colvar),
@@ -137,13 +146,13 @@ def test_fes_cli_writes_2d_outputs_with_error(tmp_path, monkeypatch):
         "--kbt", "1.0",
         "--bounds", "0.0", "3.0", "0.0", "2.0",
         "--output", str(output),
-        "--plot", str(plot),
+        "--plot-color", "C0",
         "--plot-max-fes", "2.0",
         "--plot-levels", "5",
     ])
 
     assert output.with_suffix(".npz").exists()
-    assert plot.exists()
+    assert (tmp_path / "fes_2d.png").exists()
     assert (tmp_path / "fes_2d.yaml").exists()
 
     colvar_output = tmp_path / "fes_2d.dat"

@@ -17,6 +17,7 @@ def test_delta_g_cli_prints_yaml_template(capsys, tmp_path):
     assert "state_b_bounds:" in text
     assert "\n  - 1\n  - 2\nintervals:" in text
     assert "state_b_bounds: null" not in text
+    assert "plot: null" not in text
     assert "yaml_template" not in text
 
     template = tmp_path / "template_delta_g.yaml"
@@ -91,6 +92,7 @@ def test_delta_g_cli_writes_outputs(tmp_path, monkeypatch):
     assert f"output: {output}" in yaml_text
     assert "cvs:" in yaml_text
     assert "state_a_bounds:" in yaml_text
+    assert "\nplot:" not in yaml_text
 
 
 def test_delta_g_cli_writes_2d_outputs_and_plot(tmp_path, monkeypatch):
@@ -126,7 +128,6 @@ def test_delta_g_cli_writes_2d_outputs_and_plot(tmp_path, monkeypatch):
     monkeypatch.setattr("mlcolvar.cli.delta_g.compute_deltaG", fake_compute_deltaG)
 
     output = tmp_path / "deltaG_2d"
-    plot = tmp_path / "deltaG_2d.png"
 
     main([
         str(colvar),
@@ -138,12 +139,11 @@ def test_delta_g_cli_writes_2d_outputs_and_plot(tmp_path, monkeypatch):
         "--reverse",
         "--eps", "1e-6",
         "--output", str(output),
-        "--plot", str(plot),
         "--plot-color", "C0",
     ])
 
     assert output.with_suffix(".npz").exists()
-    assert plot.exists()
+    assert (tmp_path / "deltaG_2d.png").exists()
     assert (tmp_path / "deltaG_2d.yaml").exists()
 
     colvar_output = tmp_path / "deltaG_2d.dat"

@@ -118,7 +118,7 @@ def build_parser() -> argparse.ArgumentParser:
     thermal = thermal_options.add_mutually_exclusive_group()
     thermal.add_argument("--kbt", type=float, help="Thermal energy in the desired deltaG units.")
     thermal.add_argument("--temp", type=float, help="Temperature in Kelvin.")
-    thermal_options.add_argument("--fes-units", choices=("kJ/mol", "kcal/mol", "eV"), default="kJ/mol",
+    thermal_options.add_argument("--units", choices=("kJ/mol", "kcal/mol", "eV"), default="kJ/mol",
                                  help="Free-energy units when using --temp. Default: kJ/mol.")
 
     # Parameters passed through to compute_deltaG.
@@ -152,10 +152,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # Plotting controls.
     plotting = parser.add_argument_group("Plotting options")
-    plot_target = plotting.add_mutually_exclusive_group()
-    plot_target.add_argument("--plot", type=Path,
-                             help="Image file for the deltaG plot. Default: output prefix with .png suffix.")
-    plot_target.add_argument("--no-plot", action="store_true", help="Do not write a deltaG plot. Default: false.")
+    plotting.add_argument("--no-plot", action="store_true", help="Do not write a deltaG plot. Default: false.")
     plotting.add_argument("--plot-color", default="fessa6", help="Line color for the deltaG plot. Default: fessa6.")
 
     return parser
@@ -194,14 +191,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     data_output = get_output_path_with_suffix(output_prefix, suffix='npz')
     colvar_output = get_output_path_with_suffix(output_prefix, suffix='dat')
     yaml_output = get_output_path_with_suffix(output_prefix, suffix='yaml')
-    plot_output = None if args.no_plot else args.plot if args.plot is not None else get_output_path_with_suffix(output_prefix, suffix='png')
+    plot_output = None if args.no_plot else get_output_path_with_suffix(output_prefix, suffix='png')
 
     # This is the only scientific computation done by the CLI wrapper.
     grid, delta_g = compute_deltaG(X=data,
                                    stateA_bounds=state_a_bounds,
                                    stateB_bounds=state_b_bounds,
                                    temp=args.temp,
-                                   fes_units=args.fes_units,
+                                   units=args.units,
                                    kbt=args.kbt,
                                    intervals=args.intervals,
                                    bias=bias,
@@ -226,13 +223,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                                    "stride": args.stride,
                                    "kbt": args.kbt,
                                    "temp": args.temp,
-                                   "fes_units": args.fes_units,
+                                   "units": args.units,
                                    "state_a_bounds": flatten_min_max_bounds(state_a_bounds),
                                    "state_b_bounds": flatten_min_max_bounds(state_b_bounds),
                                    "intervals": args.intervals,
                                    "reverse": args.reverse,
                                    "eps": args.eps,
-                                   "plot": plot_output,
                                    "no_plot": args.no_plot,
                                    "plot_color": args.plot_color})
 
@@ -242,7 +238,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     print(f"Used COLVAR fields: {', '.join(fields)}")
     if bias_fields is not None:
-        print(f"Used bias fields: {', '.join(bias_fields)} using {args.fes_units} as units")
+        print(f"Used bias fields: {', '.join(bias_fields)} using {args.units} as units")
     if args.time_field is not None:
         print(f"Used time field: {args.time_field}")
     print(f"Saved deltaG data to {data_output}")

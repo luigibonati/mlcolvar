@@ -91,7 +91,7 @@ def test_fes():
         fes4, grid4, _, _ = compute_fes(
             X=[x2, y2],
             temp=300.0,
-            fes_units="kJ/mol",
+            units="kJ/mol",
             bandwidth=0.2,
             num_samples=20,
             blocks=1,

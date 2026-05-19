@@ -39,7 +39,7 @@ else:
 def compute_fes(
     X: np.ndarray,
     temp: float = None,
-    fes_units: str = "kJ/mol",
+    units: str = "kJ/mol",
     kbt: float = None,
     num_samples: int = 200,
     bounds: List[float] = None,
@@ -67,7 +67,7 @@ def compute_fes(
         Input data of shape (n_samples, n_features), or list of 1D arrays (one per dimension).
     temp : float, optional
         Temperature (in Kelvin). Required if `kbt` is not provided.
-    fes_units : str, optional
+    units : str, optional
         Units of the FES if using `temp`, by default "kJ/mol".
     kbt : float, optional
         Thermal energy in the same units as the FES. Required if `temp` is not provided.
@@ -121,7 +121,7 @@ def compute_fes(
     Notes
     -----
     - The KDE can be computed using either KDEpy (recommended for speed in 2D) or scikit-learn. Use `backend="KDEpy"` or `backend="sklearn"` to specify.
-    - Either `temp` or `kbt` must be provided (not both). If using `temp`, ensure `fes_units` is set correctly.
+    - Either `temp` or `kbt` must be provided (not both). If using `temp`, ensure `units` is set correctly.
     - If `scale_by` is used, input variables are rescaled before KDE. This means that if using ``scale_by='range'`` a bandwidth of 0.01 corresponds to a 1/100 of the range of values assumed by the variable.
     - If `blocks > 1`, the function performs block averaging to estimate uncertainty [1].
     - The FES is computed on a regular grid; the grid ordering is consistent with `numpy.meshgrid(..., indexing='xy')`, so no manual transpose is needed for plotting.
@@ -150,7 +150,7 @@ def compute_fes(
         backend = kdelib
 
     # check temperature / units
-    kbt, temp, fes_units = _check_kbt_units(kbt, temp, fes_units)
+    kbt, temp, units = _check_kbt_units(kbt, temp, units)
         
     # dataset
     if PANDAS_IS_INSTALLED:
@@ -325,7 +325,7 @@ def compute_fes(
                         )
             else:
                 ax.plot(grid, fes2, color=plot_color)
-            ax.set_ylabel(f"FES [{fes_units}]" if fes_units is not None else "FES")
+            ax.set_ylabel(f"FES [{units}]" if units is not None else "FES")
         elif dim == 2:
             fes2 = np.copy(fes)
             if plot_max_fes is not None:
@@ -333,7 +333,7 @@ def compute_fes(
             extent = [item for sublist in bounds for item in sublist]
             pp = ax.contourf(fes2, cmap="fessa", levels=plot_levels, extent=extent)  # ,vmax=max_fes)
             cbar = plt.colorbar(pp, ax=ax)
-            cbar.set_label(f"FES [{fes_units}]" if fes_units is not None else "FES")
+            cbar.set_label(f"FES [{units}]" if units is not None else "FES")
 
     return fes, grid, bounds, error
 
@@ -341,7 +341,7 @@ def compute_deltaG(X: np.ndarray,
                    stateA_bounds: Union[ List[float], List[List[float]], np.ndarray ],
                    stateB_bounds: Union[ List[float], List[List[float]], np.ndarray ], 
                    temp=None,
-                   fes_units="kJ/mol",
+                   units="kJ/mol",
                    kbt: float = None,
                    intervals: int = 10, 
                    weights: np.ndarray = None,
@@ -365,7 +365,7 @@ def compute_deltaG(X: np.ndarray,
         Bounds of state B along the CV.
     temp : float, optional
         Temperature (in Kelvin). Required if `kbt` is not provided.
-    fes_units : str, optional
+    units : str, optional
         Units of the FES if using `temp`, by default "kJ/mol".
     kbt : float, optional
         Thermal energy in the same units as the FES. Required if `temp` is not provided.
@@ -423,7 +423,7 @@ def compute_deltaG(X: np.ndarray,
             raise ValueError("Input data are 2D, state bounds must be 2D as well!")
 
     # check temperature / units
-    kbt, temp, fes_units = _check_kbt_units(kbt, temp, fes_units)
+    kbt, temp, units = _check_kbt_units(kbt, temp, units)
 
     # initialize unitary weights if not provided
     if weights is None:
@@ -485,36 +485,36 @@ def compute_deltaG(X: np.ndarray,
             fig, ax = plt.subplots() 
         ax.plot(grid, deltaG, color=plot_color)
         ax.set_xlabel('Time' if time is not None else "Frame")
-        ax.set_ylabel(f"$\\Delta$G [{fes_units}]" if fes_units is not None else "$\\Delta$G")
+        ax.set_ylabel(f"$\\Delta$G [{units}]" if units is not None else "$\\Delta$G")
         
 
     return grid, deltaG
 
 
-def _check_kbt_units(kbt, temp, fes_units):
+def _check_kbt_units(kbt, temp, units):
     "Helper function to handle inputs to specify free energy units in free energy utils"
     if kbt is not None:
         if temp is not None:
             raise ValueError("Only one of kbt and temp can be specified.")
      
-        fes_units = None
+        units = None
     else: 
         if temp is None:
             raise ValueError("One of kbt and temp must be specified.")
     
-        if fes_units == "kJ/mol":
+        if units == "kJ/mol":
                 kb = 0.00831441
-        elif fes_units == "kcal/mol":
+        elif units == "kcal/mol":
             kb = 0.0019872041
-        elif fes_units == "eV":
+        elif units == "eV":
             kb = 8.6173324e-5
         else:
             raise ValueError(
-                "fes_units must be one of 'kJ/mol', 'kcal/mol', 'eV'."
+                "units must be one of 'kJ/mol', 'kcal/mol', 'eV'."
             )
         kbt = kb * temp
 
-    return kbt, temp, fes_units
+    return kbt, temp, units
 
 
 def test_compute_fes():
@@ -538,7 +538,7 @@ def test_compute_fes():
         fes, bins, bounds, error_ = compute_fes(
             X=[Y[0], Y[1]],
             temp=300,
-            fes_units="kJ/mol",
+            units="kJ/mol",
             weights=np.ones_like(X),
             bandwidth=0.02,
             num_samples=50,

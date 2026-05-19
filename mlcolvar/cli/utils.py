@@ -88,6 +88,9 @@ def get_output_prefix(output: Path) -> Path:
 
 def get_output_path_with_suffix(output_prefix: Path, suffix: str) -> Path:
     """Append an output suffix to a prefix without replacing dotted prefix text."""
+    if not suffix.startswith("."):
+        suffix = f".{suffix}"
+
     return Path(f"{output_prefix}{suffix}")
 
 
