@@ -609,6 +609,44 @@ def test_dataset_from_xyz():
     with data_dir() as data_folder:
         for backend in ['mdtraj', 'ase']:
             
+            # load single file with all atoms
+            system_selection = None
+            env_selection = None
+
+            load_args = [{'start' : 0, 'stop' : 2, 'stride' : 1}]
+            dataset = create_dataset_from_trajectories(trajectories="Cu.xyz",
+                                                    folder=data_folder,
+                                                    topologies=None,
+                                                    cutoff=3.5,  # Ang
+                                                    system_selection=system_selection,
+                                                    environment_selection=env_selection,
+                                                    show_progress=False,
+                                                    load_args=load_args,
+                                                    backend=backend
+                                                )
+            
+            print(dataset)
+
+
+            # load single file with only system selection
+            system_selection = "index 0" if backend == 'mdtraj' else lambda atoms: [a.symbol == 'Na' for a in atoms]
+            env_selection = None
+
+            load_args = [{'start' : 0, 'stop' : 2, 'stride' : 1}]
+            dataset = create_dataset_from_trajectories(trajectories="Cu.xyz",
+                                                    folder=data_folder,
+                                                    topologies=None,
+                                                    cutoff=3.5,  # Ang
+                                                    system_selection=system_selection,
+                                                    environment_selection=env_selection,
+                                                    show_progress=False,
+                                                    load_args=load_args,
+                                                    backend=backend
+                                                )
+            
+            print(dataset)
+
+
             # load single file
             system_selection = "index 0" if backend == 'mdtraj' else lambda atoms: [a.symbol == 'Na' for a in atoms]
             env_selection = "not index 0" if backend == 'mdtraj' else lambda atoms: [a.symbol == 'Cu' for a in atoms]
@@ -627,6 +665,7 @@ def test_dataset_from_xyz():
                                                 )
             
             print(dataset)
+
 
             # load multiple files
             system_selection = "index 0 or index 1" if backend == 'mdtraj' else lambda atoms: [a.symbol == 'Na' for a in atoms]
