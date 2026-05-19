@@ -11,8 +11,6 @@ The command writes a NumPy ``.npz`` archive, a COLVAR-like text file
 containing the interval coordinate and ``deltaG``, and a plot image.
 """
 
-from __future__ import annotations
-
 import argparse
 import textwrap
 from pathlib import Path
@@ -59,19 +57,6 @@ def _save_output(path: Path,
              }
 
     np.savez(path, **arrays)
-
-
-def _save_colvar_output(path: Path, grid, delta_g, time_field: str | None):
-    coordinate_field = time_field if time_field is not None else "frame"
-    save_colvar_table(path, [grid, delta_g], [coordinate_field, "deltaG"])
-
-
-def _validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace):
-    validate_common_args(parser, args)
-    if args.state_a_bounds is None:
-        parser.error("--state-a-bounds is required, either as command-line argument or in --config.")
-    if args.state_b_bounds is None:
-        parser.error("--state-b-bounds is required, either as command-line argument or in --config.")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -168,7 +153,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         write_yaml_template(parser, args.yaml_template, aliases=YAML_TEMPLATE_ALIASES)
         return 0
 
-    _validate_args(parser, args)
+    validate_common_args(parser, args)
+    if args.state_a_bounds is None:
+        parser.error("--state-a-bounds is required, either as command-line argument or in --config.")
+    if args.state_b_bounds is None:
+        parser.error("--state-b-bounds is required, either as command-line argument or in --config.")
 
     try:
         # Load and validate COLVAR fields before calling the numerical routine.
@@ -209,7 +198,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     # Always save the raw result arrays and a COLVAR-like text table; plotting is enabled by default.
     _save_output(data_output, grid, delta_g, fields, state_a_bounds, state_b_bounds, bias_fields, args.time_field)
-    _save_colvar_output(colvar_output, grid, delta_g, args.time_field)
+    
+    # colvar output
+    coordinate_field = args.time_field if args.time_field is not None else "frame"
+    save_colvar_table(colvar_output, [grid, delta_g], [coordinate_field, "deltaG"])
+    
     # Record the effective options after defaults, YAML, and automatic bias-field detection.
     save_yaml_config(yaml_output, {"config": args.config,
                                    "input": args.input,

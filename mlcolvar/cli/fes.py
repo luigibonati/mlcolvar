@@ -11,8 +11,6 @@ The command writes a NumPy ``.npz`` archive and a COLVAR-like text file
 containing the grid coordinates, ``fes`` and ``error``.
 """
 
-from __future__ import annotations
-
 import argparse
 import textwrap
 from pathlib import Path
@@ -38,14 +36,6 @@ from mlcolvar.cli.utils import (YAML_CONFIG_ALIASES,
                                 write_yaml_template)
 from mlcolvar.utils import plot as _plot_utils  # noqa: F401 - registers fessa colormap
 from mlcolvar.utils.fes import compute_fes
-
-
-def _parse_bounds(values: Sequence[float] | None, dimensions: int):
-    # compute_fes expects one min/max pair for each selected CV dimension.
-    if values is None:
-        return None
-
-    return parse_min_max_bounds(values, dimensions, "bounds")
 
 
 def _save_output(path: Path,
@@ -182,7 +172,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                                                                   args.stop,
                                                                   args.stride)
         dimensions = 1 if data.ndim == 1 else data.shape[1]
-        bounds = _parse_bounds(args.bounds, dimensions)
+        bounds = None if args.bounds is None else parse_min_max_bounds(args.bounds, dimensions, "bounds")
     except ValueError as exc:
         parser.error(str(exc))
 
