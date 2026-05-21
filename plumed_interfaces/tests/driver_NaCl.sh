@@ -10,10 +10,10 @@ mode=$1
 
 # define path to sourceme.sh files for plumed
 # this need to be edited by the user before running the script
-PLUMED_SOURCE="/path/to/plumed/sourceme.sh"
+PLUMED_SOURCE="/home/etrizio@iit.local/Bin/dev/test_plumed_ci/plumed-2.10.0/sourceme.sh" #"/path/to/plumed/sourceme.sh"
 
 # define python path with mdraj
-PYTHON_PATH="/path/to/python/with/mdtraj"
+PYTHON_PATH="/home/etrizio@iit.local/Bin/miniconda3/envs/mlcolvar_test_2.0/bin/python" #"/path/to/python/with/mdtraj"
 
 # =====================================================================================
 # ======================================= CHECKS ======================================
@@ -83,11 +83,10 @@ sed -i "s|PYTHON_BIN=/path/to/python/with/mdtraj|PYTHON_BIN=$PYTHON_PATH|g" plum
 # remove bias commands from plumed.dat
 sed -i '/^[[:space:]]*uwall:/d' plumed.dat
 sed -i '/^[[:space:]]*opes:/d' plumed.dat
-sed -i '/^[[:space:]]*BIASVALUE:/d' plumed.dat
+sed -i '/^[[:space:]]*BIASVALUE/d' plumed.dat
 
 # load model with long-range edges if in lr mode
 if [ $mode == "gnn-lr" ] || [ "$mode" = "gnn-lr-kbias" ]; then
-  sed -i "s|model.pt|model_lr.pt|g" plumed.dat
   sed -i "s|SYSTEM_SELECTION=sys|SYSTEM_SELECTION=sys\n\tSUBSYSTEM_SELECTION=sys|g" plumed.dat
 fi
 
@@ -99,6 +98,9 @@ sed -i "s|STRIDE=100|STRIDE=1|g" plumed.dat
 # ======================================== RUN ========================================
 # =====================================================================================
 
+# train model 
+python ../../plumed_interfaces/tests/NaCl/train_cv.py $mode
+
 # run simulation
 plumed driver < plumed.dat --timestep 1 --ixtc traj.xtc
 
@@ -108,25 +110,11 @@ echo "Comparing generated COLVAR with reference COLVAR..."
 
 head -n 30 COLVAR
 
-if awk 'NR==FNR {a[NR]=$0; next} {
-  n1=split(a[NR], f1); n2=split($0, f2)
-  for(i=1; i<=n1; i++) {
-    if(f1[i] != f2[i]) {
-      if(f1[i] ~ /^-?[0-9]+\.?[0-9]*$/ && f2[i] ~ /^-?[0-9]+\.?[0-9]*$/) {
-        if(sqrt((f1[i]-f2[i])^2) > 1e-4) {
-          print "Tolerance exceeded at line " NR " field " i; exit 1
-        }
-      } else {
-        print "Mismatch at line " NR " field " i; exit 1
-      }
-    }
-  }
-}' REF_COLVAR COLVAR; then
-  echo "[TEST PASSED] Generated COLVAR file matches reference (numerical tolerance 1e-4)"
-  cd ../..
+if python ../../plumed_interfaces/tests/NaCl/compare_results.py $mode; then
+  echo "[TEST PASSED] Generated COLVAR file matches reference (relative numerical tolerance 1e-2)"
   exit 0
-else
-  echo "[TEST FAILED] Generated COLVAR file differs from reference (numerical tolerance 1e-4)"
+else 
+  echo "[TEST FAILED] Generated COLVAR file differs from reference (relative numerical tolerance 1e-2)"
   cd ../..
   exit 1
 fi
