@@ -7,7 +7,7 @@ from warnings import warn
 import numpy as np
 import yaml
 
-from mlcolvar.utils.io.colvar import load_dataframe
+from mlcolvar.io.colvar import load_dataframe
 
 
 _BOUND_KEYS = {"bounds", "state_a_bounds", "state_b_bounds"}

@@ -7,8 +7,8 @@ import mdtraj
 from warnings import warn
 
 from mlcolvar.data import DictDataset
-from mlcolvar.utils.io.graphs._utils import *
-from mlcolvar.utils.io.graphs.ase_ import _get_cell_with_ase
+from mlcolvar.io.graphs._utils import *
+from mlcolvar.io.graphs.ase_ import _get_cell_with_ase
 from mlcolvar.data.graph.atomic import AtomicNumberTable, Configuration, Configurations
 from mlcolvar.data.graph.utils import create_dataset_from_configurations
 
@@ -153,7 +153,7 @@ def load_traj_with_mdtraj(trajectory: str,
         """
         if topology is None:
             raise ValueError("Mdtraj requires topolgy file(s) to load trajectories. " 
-                             "If the traj is in xyz format, the mlcolvar.utils.io.graph.ase_create_pdb_from_xyz "
+                             "If the traj is in xyz format, the mlcolvar.io.graph.ase_create_pdb_from_xyz "
                              "can be used to generate a topology file with ase.")
 
         # load trajectory with mdtraj

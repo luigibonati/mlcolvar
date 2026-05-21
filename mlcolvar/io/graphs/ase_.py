@@ -4,10 +4,10 @@ import numpy as np
 from warnings import warn
 
 from mlcolvar.data import DictDataset
-from mlcolvar.utils.io.graphs._utils import *
+from mlcolvar.io.graphs._utils import *
 from mlcolvar.data.graph.atomic import AtomicNumberTable, Configuration, Configurations
 from mlcolvar.data.graph.utils import create_dataset_from_configurations
-from mlcolvar.utils.io.graphs._utils import _to_torch_tensor
+from mlcolvar.io.graphs._utils import _to_torch_tensor
 
 import ase
 from ase.io import read, write

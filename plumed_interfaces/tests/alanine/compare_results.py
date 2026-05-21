@@ -1,6 +1,6 @@
 import torch
 import sys
-from mlcolvar.utils.io import create_dataset_from_files, create_dataset_from_trajectories, load_dataframe
+from mlcolvar.io import create_dataset_from_files, create_dataset_from_trajectories, load_dataframe
 
 # get arguments
 mode = sys.argv[1]

@@ -4,10 +4,10 @@ import os
 from typing import Union, List, Tuple
 import mdtraj
 
-from mlcolvar.utils.io._utils import _download_temp_file
-from mlcolvar.utils.io.graphs._utils import *
-from mlcolvar.utils.io.graphs.mdtraj_ import *
-from mlcolvar.utils.io.graphs.ase_ import *
+from mlcolvar.io._utils import _download_temp_file
+from mlcolvar.io.graphs._utils import *
+from mlcolvar.io.graphs.mdtraj_ import *
+from mlcolvar.io.graphs.ase_ import *
 
 from mlcolvar.data import DictDataset
 from mlcolvar.data.graph.atomic import AtomicNumberTable

@@ -3,7 +3,7 @@ try:
     import pandas as pd
 except ImportError as e:
     raise ImportError(
-        "pandas is required to use the i/o utils (mlcolvar.utils.io)\n", e
+        "pandas is required to use the i/o utils (mlcolvar.io)\n", e
     )
 
 import numpy as np
@@ -12,7 +12,7 @@ import os
 from typing import Union, List
 
 
-from mlcolvar.utils.io._utils import _download_temp_file
+from mlcolvar.io._utils import _download_temp_file
 from mlcolvar.data import DictDataset
 
 __all__ = ["load_dataframe", "plumed_to_pandas", "create_dataset_from_files"]
@@ -221,7 +221,7 @@ def create_dataset_from_files(
     verbose : bool, optional
         Print info on the datasets, by default True
     kwargs : optional
-        args passed to mlcolvar.utils.io.load_dataframe
+        args passed to mlcolvar.io.load_dataframe
 
     Returns
     -------
@@ -232,7 +232,7 @@ def create_dataset_from_files(
 
     See also
     --------
-    mlcolvar.utils.io.load_dataframe
+    mlcolvar.io.load_dataframe
         Function that is used to load the files
 
     """
