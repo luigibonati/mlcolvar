@@ -85,13 +85,14 @@ rm plumed_*
 
 # update python path
 sed -i "s|PYTHON_BIN=/path/to/python/with/mdtraj|PYTHON_BIN=$PYTHON_PATH|g" plumed.dat
-if [ $mode == "gnn-lr" ] || [ "$mode" = "gnn-lr-kbias" ]; then
-  sed -i "s|model.pt|model_lr.pt|g" plumed.dat
-fi
+
 
 # =====================================================================================
 # ======================================== RUN ========================================
 # =====================================================================================
+
+# train model 
+python ../../plumed_interfaces/tests/NaCl/train_cv.py $mode
 
 # run simulation
 lmp -i input.lmp -l log.lammps &

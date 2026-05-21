@@ -1,12 +1,12 @@
 import pytest
 import urllib
 from mlcolvar.tests import data_dir
-from mlcolvar.utils.io.colvar import load_dataframe
-from mlcolvar.utils.io.colvar import test_datasetFromFile, test_load_dataframe
-from mlcolvar.utils.io.graphs.common import test_datasesetFromTrajectories
-from mlcolvar.utils.io.graphs.common import test_create_dataset_from_trajectories
-from mlcolvar.utils.io.graphs.common import test_dataset_from_xyz
-from mlcolvar.utils.io.graphs.common import test_graph_and_node_labels_syntax
+from mlcolvar.io.colvar import load_dataframe
+from mlcolvar.io.colvar import test_datasetFromFile, test_load_dataframe
+from mlcolvar.io.graphs.common import test_datasesetFromTrajectories
+from mlcolvar.io.graphs.common import test_create_dataset_from_trajectories
+from mlcolvar.io.graphs.common import test_dataset_from_xyz
+from mlcolvar.io.graphs.common import test_graph_and_node_labels_syntax
 
 
 @pytest.mark.parametrize("file_type", ["str", "list", "url"])

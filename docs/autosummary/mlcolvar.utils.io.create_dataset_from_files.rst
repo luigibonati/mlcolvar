@@ -1,7 +1,7 @@
-﻿mlcolvar.utils.io.create\_dataset\_from\_files
+﻿mlcolvar.io.create\_dataset\_from\_files
 ==============================================
 
-.. currentmodule:: mlcolvar.utils.io
+.. currentmodule:: mlcolvar.io
 
 .. autoclass:: create_dataset_from_files
    :members:                                   

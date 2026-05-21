@@ -541,9 +541,9 @@ PytorchKolmogorovBiasGNN::PytorchKolmogorovBiasGNN(const ActionOptions& ao):
 
   // get buffer size
   if (model.hasattr("buffer")) {
-    if (atom_list_b.size() == 0)
+    if ( (atom_list_b.size() == 0) & (model.attr("buffer").toTensor().item<double>() > 0.0) )
       plumed_merror(
-        "Model attribute 'buffer' is defined but no ENVIRONMENT_SELECTION given!"
+        "Model attribute 'buffer' is defined and > 0 but no ENVIRONMENT_SELECTION given!"
       );
     buffer = model.attr("buffer").toTensor().item<double>();
     } else
@@ -1117,6 +1117,10 @@ void PytorchKolmogorovBiasGNN::calculate()
       torch::ones({n_edges_l, 1}, torch::dtype(torch::kBool)),
     });
     edge_masks_lr = edge_masks_lr.to(device);
+    input.insert("edge_masks_lr", edge_masks_lr);
+  }
+  else {
+    auto edge_masks_lr = torch::zeros({n_edges, 1}, torch::dtype(torch::kBool));
     input.insert("edge_masks_lr", edge_masks_lr);
   }
 

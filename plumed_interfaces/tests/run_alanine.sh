@@ -106,6 +106,9 @@ sed -i "s|PYTHON_BIN=/path/to/python/with/mdtraj|PYTHON_BIN=$PYTHON_PATH|g" plum
 # ======================================== RUN ========================================
 # =====================================================================================
 
+# train model 
+python ../../plumed_interfaces/tests/alanine/train_cv.py $mode
+
 # run simulation
 gmx mdrun -s stateA.tpr -nsteps $NSTEPS -cpi state.cpt -plumed plumed.dat -gpu_id 0 -ntmpi 1 -pin on &
 
