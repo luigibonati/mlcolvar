@@ -11,7 +11,7 @@ from mlcolvar.core.nn.graph.gnn import BaseGNN
 from typing import List, Dict, Optional
 
 """
-The SchNet components. This module is taken from the pgy package:
+The SchNet components. This module is adapted from the pgy package:
 https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/nn/models/schnet.py
 """
 
@@ -19,34 +19,9 @@ __all__ = ["SchNetModel", "InteractionBlock"]
 
 class SchNetModel(BaseGNN):
     """
-    The SchNet [1] model. This implementation is taken from torch_geometric:
+    The SchNet [1] model. This implementation is adapted from torch_geometric:
     https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/nn/models/schnet.py
     
-    Parameters
-    ----------
-    n_out: int
-        Size of the output node features.
-    cutoff: float
-        Cutoff radius of the basis functions. Should be the same as the cutoff
-        radius used to build the graphs.
-    atomic_numbers: List[int]
-        The atomic numbers mapping, e.g. the `atomic_numbers` attribute of a
-        `mlcolvar.graph.data.GraphDataSet` instance.
-    long_range_cutoff : float
-            Cutoff radius for the long-range edges defined on subsystem atoms. 
-            If negative, no long-range interactions are considered, by default -1.0
-    n_bases: int
-        Size of the basis set.
-    n_layers: int
-        Number of the graph convolution layers.
-    n_filters: int
-        Number of filters.
-    n_hidden_channels: int
-        Size of hidden embeddings.
-    aggr: str
-        Type of aggregation function for the GNN message passing.
-    w_out_after_pool: bool
-        If apply the readout MLP layer after the scatter sum.
     References
     ----------
     .. [1] Schütt, Kristof T., et al. "Schnet–a deep learning architecture for
@@ -67,18 +42,16 @@ class SchNetModel(BaseGNN):
         w_out_after_pool: bool = False,
         **kwargs
     ) -> None:
-        """The SchNet model. This implementation is taken from torch_geometric:
-        https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/nn/models/schnet.py
-
+        """
         Parameters
         ----------
         n_out : int
             Size of the output node features.
         dataset_for_initialization : DictDataset, optional
             Dataset containing the graphs on which the gnn model will be applied. 
-            This is used to initialize and register the cutoff, buffer, and atomic_numbers from the dataset metadata.
+            This is used to initialize and register the cutoff, buffer, long_range_cutoff and atomic_numbers from the dataset metadata.
             This is the preferred way to initialize the gnn model, as it ensures consistency between the model and the dataset.
-            As an alternative this can be set to None and the cutoff, buffer, and atomic_numbers can be provided as kwargs.
+            As an alternative this can be set to None and the cutoff, buffer, long_range_cutoff and atomic_numbers can be provided as kwargs.
         pooling_operation : str
             Type of pooling operation to combine node-level features into graph-level features, either mean or sum, by default 'mean'
         n_bases : int, optional

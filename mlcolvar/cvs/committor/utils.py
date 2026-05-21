@@ -75,7 +75,7 @@ def compute_committor_weights(dataset : DictDataset,
     ----------
     dataset : 
         Labeled dataset containig data from different simulations, the labels must identify each of them. 
-        For example, it can be created using `mlcolvar.utils.io.create_dataset_from_files(filenames=[file1, ..., fileN], ... , create_labels=True)`
+        For example, it can be created using `mlcolvar.io.create_dataset_from_files(filenames=[file1, ..., fileN], ... , create_labels=True)`
     bias : torch.Tensor
         Bias values for the data in the dataset, usually it should be the committor-based bias
     data_groups : List[int]

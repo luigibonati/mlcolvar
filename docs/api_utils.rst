@@ -7,7 +7,7 @@ Input/Output
 
 Helper functions for loading dataframes (incl. PLUMED files) and directly creating datasets from them.
 
-.. currentmodule:: mlcolvar.utils.io
+.. currentmodule:: mlcolvar.io
 
 .. autosummary::
    :toctree: autosummary
