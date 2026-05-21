@@ -3,7 +3,7 @@ import sys
 from lightning import Trainer
 
 from mlcolvar.data import DictModule
-from mlcolvar.utils.io import create_dataset_from_files, create_dataset_from_trajectories
+from mlcolvar.io import create_dataset_from_files, create_dataset_from_trajectories
 from mlcolvar.core.nn.graph.schnet import SchNetModel
 from mlcolvar.cvs import DeepTDA
 

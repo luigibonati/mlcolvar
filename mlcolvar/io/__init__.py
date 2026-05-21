@@ -3,7 +3,7 @@ try:
     import pandas as pd
 except ImportError as e:
     raise ImportError(
-        "pandas is required to use the i/o utils (mlcolvar.utils.io)\n", e
+        "pandas is required to use the i/o utils (mlcolvar.io)\n", e
     )
 
 __all__ = ["load_dataframe", 
