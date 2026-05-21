@@ -121,9 +121,9 @@ head -n 30 COLVAR
 
 if python ../../plumed_interfaces/tests/alanine/compare_results.py $mode; then
   echo "[TEST PASSED] Generated COLVAR file matches reference (relative numerical tolerance 1e-2)"
-  exit 1
+  exit 0
 else 
   echo "[TEST FAILED] Generated COLVAR file differs from reference (relative numerical tolerance 1e-2)"
   cd ../..
-  exit 0
+  exit 1
 fi
