@@ -23,7 +23,7 @@ if mode in ['descriptors', 'descriptors-kbias']:
                 {'start' : 0, 'stop' : 10, 'stride' : 1}]
 
     # load dataset
-    dataset = create_dataset_from_files(filenames,
+    dataset = create_dataset_from_files(file_names=filenames,
                                         filter_args={'regex':'x' }, # select distances between heavy atoms
                                         create_labels=True, 
                                         )
@@ -43,12 +43,12 @@ elif mode in ["gnn", "gnn-kbias"]:
 
     # load dataset
     dataset = create_dataset_from_trajectories(trajectories=filenames,
-                                            topologies="https://github.com/EnricoTrizio/alanine_gnn_committor_data/raw/refs/heads/main/unbiased/A/confAvac.gro", # with xyz use none                 
-                                            cutoff=10.0,
-                                            system_selection='all and not type H',
-                                            load_args=load_args,
-                                            lengths_conversion=10.0,
-                                            )
+                                               topologies=topology,
+                                               cutoff=10.0,
+                                               system_selection='all and not type H',
+                                               load_args=load_args,
+                                               lengths_conversion=10.0,
+                                              )
     
     # initialize SchNet model
     model_arch = SchNetModel(n_out=1,
