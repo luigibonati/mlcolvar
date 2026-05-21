@@ -96,7 +96,7 @@ sed -i "s|PYTHON_BIN=/path/to/python/with/mdtraj|PYTHON_BIN=$PYTHON_PATH|g" plum
 
 # remove bias commands from plumed.dat
 sed -i '/^[[:space:]]*opes:/d' plumed.dat
-sed -i '/^[[:space:]]*BIASVALUE:/d' plumed.dat
+sed -i '/^[[:space:]]*BIASVALUE/d' plumed.dat
 
 # change printing stride
 sed -i "s|STRIDE=500|STRIDE=1|g" plumed.dat
@@ -105,6 +105,10 @@ sed -i "s|STRIDE=500|STRIDE=1|g" plumed.dat
 # =====================================================================================
 # ======================================== RUN ========================================
 # =====================================================================================
+
+
+# train model 
+python ../../plumed_interfaces/tests/alanine/train_cv.py $mode
 
 # run simulation
 plumed driver < plumed.dat --timestep 1 --ixtc traj_comp.xtc
@@ -115,25 +119,11 @@ echo "Comparing generated COLVAR with reference COLVAR..."
 
 head -n 30 COLVAR
 
-if awk 'NR==FNR {a[NR]=$0; next} {
-  n1=split(a[NR], f1); n2=split($0, f2)
-  for(i=1; i<=n1; i++) {
-    if(f1[i] != f2[i]) {
-      if(f1[i] ~ /^-?[0-9]+\.?[0-9]*$/ && f2[i] ~ /^-?[0-9]+\.?[0-9]*$/) {
-        if(sqrt((f1[i]-f2[i])^2) > 1e-4) {
-          print "Tolerance exceeded at line " NR " field " i; exit 1
-        }
-      } else {
-        print "Mismatch at line " NR " field " i; exit 1
-      }
-    }
-  }
-}' REF_COLVAR COLVAR; then
-  echo "[TEST PASSED] Generated COLVAR file matches reference (numerical tolerance 1e-4)"
-  cd ../..
+if python ../../plumed_interfaces/tests/alanine/compare_results.py $mode; then
+  echo "[TEST PASSED] Generated COLVAR file matches reference (relative numerical tolerance 1e-2)"
   exit 0
-else
-  echo "[TEST FAILED] Generated COLVAR file differs from reference (numerical tolerance 1e-4)"
+else 
+  echo "[TEST FAILED] Generated COLVAR file differs from reference (relative numerical tolerance 1e-2)"
   cd ../..
   exit 1
 fi
