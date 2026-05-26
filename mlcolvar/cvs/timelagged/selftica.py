@@ -334,7 +334,7 @@ def test_self_tica():
         # test TICA computation
         datamodule.setup()
 
-        eigvals, eigvecs = model.compute_tica(datamodule, lag_time=10)
+        eigvals, eigvecs = model.compute_tica(datamodule, lag_time=10, update_optimal=True)
         print("TICA eigenvalues:", eigvals)
 
         # trace model
@@ -374,7 +374,7 @@ def test_self_tica():
     # test TICA computation
     datamodule.setup()
 
-    eigvals, eigvecs = model.compute_tica(datamodule, lag_time=10)
+    eigvals, eigvecs = model.compute_tica(datamodule, lag_time=10, update_optimal=True)
     print("TICA eigenvalues:", eigvals)
 
     example_input_graph_test = create_test_graph_input(output_type='example', n_atoms=4, n_samples=3, n_states=2)
