@@ -26,21 +26,27 @@ import math
 
 
 class ContrastiveLoss(torch.nn.Module):
-    """
-    Contrastive Loss module.
-
-    This loss combines a contrastive spectral objective with an L2 regularization
-    term on the learned representations.
-
-    Parameters
-    ----------
-    mode : str, optional
-        Contrastive loss type: {"l2", "kl_DV", "kl_NWJ"}.
-    reg : float, optional
-        Regularization coefficient (default: 1e-5).
+    """Compute a loss function that combines a contrastive spectral objective 
+    with an L2 regularization term on the learned representations.
     """
 
-    def __init__(self, mode: str = "l2", reg: float = 1e-5):
+    def __init__(self, 
+                mode: str = "l2", 
+                reg: float = 1e-5):
+        """Compute a contrastive loss combining spectral objective with an L2 
+        regularization term on the learned representations.
+
+        Parameters
+        ----------
+        mode : str, optional
+            Contrastive loss type, by default "l2". 
+            Possible modes are:
+                - "l2": L2 decorrelation loss (closely related to the VAMP-2 score)
+                - "kl_DV": KL-based loss via Donsker-Varadhan bound
+                - "kl_NWJ": KL-based loss via Nguyen-Wainwright-Jordan bound
+        reg : float, optional
+            Regularization coefficient (default: 1e-5).
+        """
         super().__init__()
         self.mode = mode
         self.reg = reg
@@ -120,12 +126,12 @@ def contrastive_loss(
         Input tensors of shape (n_samples, n_features), representing
         configurations at time t and t+τ.
     mode : str, optional
-        Contrastive loss type: {"l2", "kl_DV", "kl_NWJ"}.
+        Contrastive loss type: {"l2", "kl_DV", "kl_NWJ"}, by default "l2".
     reg : float, optional
-        Regularization strength.
+        Regularization strength, by default 1e-5.
     remove_average : bool, optional
         Whether to subtract the (weighted) mean from the input representations
-        before computing time-correlation matrices.
+        before computing time-correlation matrices, by default True.
 
     Returns
     -------
