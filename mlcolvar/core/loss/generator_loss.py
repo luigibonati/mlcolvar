@@ -11,7 +11,27 @@ from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
 from mlcolvar.utils._code import scatter_sum
 
 class GeneratorLoss(torch.nn.Module):
-    """Computes the loss function to learn a representation for the resolvent of the infinitesimal generator"""
+    """
+    Loss function used to learn a representation of the eigenspace of the
+    infinitesimal generator.
+
+    The loss jointly optimizes:
+
+    1. A representation produced by the neural network.
+    2. A set of trainable parameters ``lambdas`` that approximate the
+       eigenvalues of the shifted resolvent operator.
+
+    The objective combines:
+
+    - a variational term enforcing consistency with the generator dynamics;
+    - an orthonormality penalty on the learned representation.
+
+    References
+    ----------
+    T. Devergne, V. Kostic, M. Pontil, M. Parrinello,
+    "Slow dynamical modes from static averages",
+    J. Chem. Phys., 2025.
+    """
 
     def __init__(self,
                  r: int, 
@@ -23,32 +43,60 @@ class GeneratorLoss(torch.nn.Module):
                  split: bool = True,
                  softmax_postproc=True,
                  ):
-        """Computes the loss to learn a representation on which the resolvent of the infinitesimal generator can be learned
+        """
+        Initialize the generator loss.
 
         Parameters
         ----------
         r : int
-            Number of eigenfunctions wanted, i.e., number of outputs of model.
-        eta : float
-            Hyperparameter for the shift to define the resolvent, i.e., $(\eta I-_mathcal{L})^{-1}$
-        friction : torch.Tensor
-            Langevin friction, i.e., $\sqrt{k_B*T/(gamma*m_i)}$
-        alpha : float
-            Hyperparamer that scales the contribution of orthonormality loss to the total loss, i.e., L = L_ef + alpha*L_ortho
-        cell : float, optional
-            CUBIC cell size length, used to scale the positions from reduce coordinates to real coordinates, by default None 
-        descriptors_derivatives : Union[SmartDerivatives, torch.Tensor], optional
-            Derivatives of descriptors wrt atomic positions (if used) to speed up calculation of gradients, by default None. 
-            Can be either:
-                - A `SmartDerivatives` object to save both memory and time, see also mlcolvar.core.loss.committor_loss.SmartDerivatives
-                - A torch.Tensor with the derivatives to save time, memory-wise could be less efficient
-        n_dim : int
-            Number of dimensions, by default 3.
-        split : bool
-            Do we use U-statistics to compute the loss
-        """
-        super().__init__()
+            Number of latent functions (network outputs) used to represent the
+            generator eigenspace.
 
+        eta : float
+            Resolvent shift parameter defining the operator
+
+            .. math::
+
+                (\eta I - \mathcal{L})^{-1}
+
+            where :math:`\mathcal{L}` is the infinitesimal generator.
+
+        friction : torch.Tensor
+            Langevin prefactor associated with each atom. The tensor is used to
+            weight coordinate gradients when constructing the Dirichlet form.
+
+        alpha : float
+            Weight of the orthonormality regularization term:
+
+            .. math::
+
+                L = L_{\mathrm{var}} + \alpha L_{\mathrm{ortho}}
+
+        descriptors_derivatives : SmartDerivatives or torch.Tensor, optional
+            Descriptor derivatives with respect to atomic coordinates.
+
+            Providing these derivatives avoids recomputing descriptor Jacobians
+            during training.
+
+            Supported formats are:
+
+            - ``SmartDerivatives`` for memory-efficient sparse evaluation.
+            - ``torch.Tensor`` containing the full descriptor Jacobian.
+
+        n_dim : int, default=3
+            Number of spatial dimensions.
+
+        split : bool, default=True
+            Whether to use the split-batch estimator when computing
+            covariance matrices.
+
+        softmax_postproc : bool, default=True
+            Whether the model output has been augmented by the softmax
+            post-processing layer. When enabled, a constant basis function is
+            appended internally before constructing the loss.
+        """
+       
+        super().__init__()
         self.eta = eta
         self.register_buffer("friction", friction)
         self.lambdas = torch.nn.Parameter(10 * torch.randn(r), requires_grad=True)
@@ -109,7 +157,22 @@ def generator_loss(input : torch.Tensor,
                    split : bool = True,
                    softmax_postproc=True,
                    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Optimizes r functions to be the representation on which the resolvent of the infinitesimal generator can be learned
+    """
+    Compute the variational objective used to learn generator eigenfunctions.
+
+    The neural-network outputs define a low-dimensional representation on which
+    the shifted resolvent operator is approximated. The loss jointly optimizes
+    the representation and a set of trainable eigenvalue parameters.
+
+    The objective consists of:
+
+    1. A variational term involving covariance matrices of the learned
+    representation and its gradients.
+    2. An orthonormality penalty that encourages independent eigenfunctions.
+
+    When ``split=True``, unbiased covariance estimates are obtained using a
+    two-way batch split
+
 
     Parameters
     ----------

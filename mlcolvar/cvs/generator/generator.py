@@ -11,15 +11,36 @@ from mlcolvar.data import DictDataset
 __all__ = ["Generator"]
 
 class Softmax_PostProc(torch.nn.Module):
-    def __init__(self, r=4):
-        super(Softmax_PostProc, self).__init__()
+    """Apply a softmax normalization followed by a learnable linear mixing.
+
+    Parameters
+    ----------
+    r : int, default=4
+        Number of representation channels. This is both the input and output
+        dimension of the final linear layer.
+    """
+
+    def __init__(self, r: int = 4):
+        super().__init__()
         self.p = r
         self.final_linear = torch.nn.Linear(r, r)
 
-    def forward(self, input):
-        input=torch.nn.functional.softmax(input,dim=-1)
-        input=self.final_linear(input)
-        return input
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        """Normalize the last dimension and apply the final linear layer.
+
+        Parameters
+        ----------
+        input : torch.Tensor
+            Tensor of shape ``(..., r)``.
+
+        Returns
+        -------
+        torch.Tensor
+            Tensor of shape ``(..., r)`` after softmax normalization and
+            linear projection.
+        """
+        input = torch.nn.functional.softmax(input, dim=-1)
+        return self.final_linear(input)
 
 class Generator(BaseCV):
     """
@@ -60,32 +81,36 @@ class Generator(BaseCV):
                  options: dict = None,
                  **kwargs
                  ):
-        """Define a NN-based generator model
+        """Initialize a neural-network representation of generator eigenfunctions.
 
         Parameters
         ----------
         r : int
-            Number of eigenfunctions wanted, i.e., number of neural networks to be initialized
-        layers : list
-            Number of neurons per layer of each of the `r` neural networks
+            Number of eigenfunctions to learn.
+        model : list[int] or FeedForward or BaseGNN
+            Neural-network architecture. If a list is provided, it is used as the
+            layer sizes for a :class:`FeedForward` model. If a model instance is
+            provided, it is used directly.
         eta : float
-            Hyperparameter for the shift to define the resolvent, i.e., $(\eta I-_mathcal{L})^{-1}$
+            Resolvent shift parameter used in ``( I - L/eta)^-1``.
         alpha : float
-            Hyperparamer that scales the contribution of orthonormality loss to the total loss, i.e., L = L_ef + alpha*L_ortho        
-        friction: torch.Tensor
-            Langevin friction, i.e., $\sqrt{k_B*T/(gamma*m_i)}$
-        descriptors_derivatives : Union[SmartDerivatives, torch.Tensor], optional
-            Derivatives of descriptors wrt atomic positions (if used) to speed up calculation of gradients, by default None. 
-            Can be either:
-                - A `SmartDerivatives` object to save both memory and time, see also mlcolvar.core.loss.committor_loss.SmartDerivatives
-                - A torch.Tensor with the derivatives to save time, memory-wise could be less efficient
-        n_dim : int
-            Number of dimensions, by default 3
-        split : bool, optional
-            Do we split the data when computing the loss
-        options : dict[str, Any], optional
-            Options for the building blocks of the model, by default {}.
-            Available blocks: ['nn'] .
+            Weight of the orthonormality penalty in the total loss,
+            ``loss = loss_ef + alpha * loss_ortho``.
+        friction : torch.Tensor
+            Langevin friction-related prefactor, usually one value per atom.
+        descriptors_derivatives : SmartDerivatives or torch.Tensor, optional
+            Derivatives of descriptors with respect to atomic positions. Supplying
+            this can avoid recomputing descriptor derivatives during loss evaluation.
+        n_dim : int, default=3
+            Number of spatial dimensions.
+        split : bool, default=True
+            Whether to split the data internally when computing the loss.
+        softmax_postproc : bool, default=True
+            Whether to apply softmax-based post-processing to the network output.
+        options : dict, optional
+            Options passed to model blocks and optimizer configuration.
+        **kwargs
+            Additional keyword arguments passed to :class:`BaseCV`.
         """
         super().__init__(model, **kwargs)
 
@@ -141,37 +166,42 @@ class Generator(BaseCV):
                                descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None,
                                batch_size=100,
                                ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Computes the eigenfunctions based on the representation learned given by the neural networks.
+        """Compute generator eigenfunctions from the learned representation.
+
+        If eigenvectors have already been computed and ``recompute=False``, this
+        method reuses the cached eigenvectors and eigenvalues and only evaluates the
+        current model on ``dataset``.
 
         Parameters
         ----------
         dataset : DictDataset
-            Dictionary containing:
-            - 'data' : Input descriptors or positions.
-            - 'weights' : Biasing weights associated with the data points.
+            Dataset containing at least ``"data"`` and ``"weights"``. If the model
+            uses runtime-cell preprocessing, the dataset must also contain ``"cell"``.
         eta : float, optional
-            Set only if different from the one used in training, Hyperparameter for the shift to define the resolvent, i.e., $(\eta I-_mathcal{L})^{-1}$
-        friction:torch.tensor, optional
-            Set only if different from the one used in training, Langevin friction, i.e., $\sqrt{k_B*T/(gamma*m_i)}$
-        tikhonov_reg: float, optional
-            Hyperparameter for the regularization of the inverse (Ridge regression parameter)
-        recompute: Boolean, optional
-            Whether to recompute the eigenfucntions or not, by default False
-        descriptors_derivatives : Union[SmartDerivatives, torch.Tensor], optional
-            Derivatives of descriptors wrt atomic positions (if used) to speed up calculation of gradients, by default None. 
-            Can be either:
-                - A `SmartDerivatives` object to save both memory and time, see also mlcolvar.core.loss.committor_loss.SmartDerivatives
-                - A torch.Tensor with the derivatives to save time, memory-wise could be less efficient
+            Resolvent shift used for this computation. Defaults to the value used at
+            initialization.
+        friction : torch.Tensor, optional
+            Friction prefactor used for this computation. Defaults to the value used
+            at initialization.
+        tikhonov_reg : float, default=1e-4
+            Tikhonov regularization parameter used when solving the linear problem.
+        recompute : bool, default=False
+            If ``True``, recompute eigenvectors/eigenvalues even when cached values
+            are available.
+        descriptors_derivatives : SmartDerivatives or torch.Tensor, optional
+            Descriptor derivatives used to compute gradients efficiently.
+        batch_size : int, default=100
+            Batch size used during eigenfunction computation.
 
         Returns
         -------
-        Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
-            eigenfunctions : torch.Tensor, shape (N, r)
-                The computed eigenfunctions evaluated at each data point.
-            evals : torch.Tensor, shape (r,)
-                The eigenvalues associated with the generator, sorted in descending order.
-            evecs : torch.Tensor, shape (r, r)
-                The eigenvectors of the operator.
+        eigenfunctions : torch.Tensor
+            Eigenfunctions evaluated on the dataset, with shape ``(n_samples, r)``.
+        evals : torch.Tensor
+            Generator eigenvalues, with shape ``(r,)``.
+        evecs : torch.Tensor
+            Eigenvectors mapping the learned representation to eigenfunctions, with
+            shape ``(r, r)``.
         """
         if friction is None:
             friction = self.friction

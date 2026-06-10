@@ -22,6 +22,52 @@ def sqrtmh(A: torch.Tensor):
     return (Q * L.sqrt().unsqueeze(-2)) @ Q.mH
 
 def compute_covariances(input,output,weights,r,friction,n_dim=3,descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None, ref_idx=None):
+    """Compute covariance of features and covariance of gradient matrices.
+
+    The function evaluates two weighted matrices:
+
+    - the covariance of the learned representation;
+    - the covariance of its gradients with respect to atomic positions.
+
+    If the model input is a descriptor rather than atomic coordinates,
+    ``descriptors_derivatives`` is used to map descriptor gradients back to
+    position gradients.
+
+    Parameters
+    ----------
+    input : torch.Tensor or torch_geometric.data.Batch
+        Model input. Can be atomic positions, descriptors, or graph data.
+    output : torch.Tensor
+        Model output with shape ``(n_samples, r)``.
+    weights : torch.Tensor
+        Statistical weights associated with each sample.
+    r : int
+        Number of learned representation components.
+    friction : torch.Tensor
+        Langevin friction-related prefactor used to weight position
+        gradients.
+    n_dim : int, default=3
+        Number of spatial dimensions.
+    descriptors_derivatives : SmartDerivatives or torch.Tensor, optional
+        Descriptor derivatives with respect to atomic positions. Required
+        when ``input`` contains descriptors instead of positions.
+    ref_idx : torch.Tensor, optional
+        Reference indices mapping the batch entries to the original dataset.
+        Required when using ``SmartDerivatives``.
+
+    Returns
+    -------
+    cov_X : torch.Tensor
+        Weighted covariance matrix of the augmented representation, with
+        shape ``(r + 1, r + 1)``.
+    dcov_X : torch.Tensor
+        Weighted gradient covariance matrix, with shape ``(r + 1, r + 1)``.
+
+    Notes
+    -----
+    A constant column is appended internally to ``output`` before covariance
+    computation.
+    """
     if isinstance(input, torch_geometric.data.batch.Batch):
         _is_graph_data = True
         batch = torch.clone(input['batch'])
@@ -115,51 +161,67 @@ def compute_eigenfunctions(dataset : DictDataset,
                            soft_max_postproc=True,
                            is_graph=False,
                            ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Computes eigenfunctions and eigenvalues from a learned representation.
+    """Compute generator eigenfunctions from a learned representation.
 
-    This function estimates the eigenfunctions and eigenvalues of the infinitesimal generator
-    associated with the Langevin process. The eigenvalues are computed using a resolvent approach,
-    where `evals` relate to the generator's eigenvalues as: `lambda = eta - 1/evals`.
+    The function estimates the covariance and gradient covariance matrices of
+    the learned representation, constructs the shifted generator-resolvent
+    problem, and solves the resulting generalized eigenvalue problem.
+
+    The returned eigenvalues correspond to the infinitesimal generator, not
+    directly to the resolvent. If ``mu`` is a resolvent eigenvalue, the
+    generator eigenvalue is computed as:
+
+    .. math::
+
+        \\lambda = \\eta \\left(1 - \\frac{1}{\\mu}\\right)
 
     Parameters
     ----------
-    input : torch.Tensor
-        Input of the model
-    output : torch.Tensor
-        Output containing the learned representation of the data, i.e., output of the (set of) neural networks
-    weights : torch.Tensor
-        Statistical weights of the samples, this could be from reweighting.
+    dataset : DictDataset
+        Dataset containing ``"data"`` and ``"weights"``. For graph models,
+        the dataset must provide graph inputs through ``get_graph_inputs``.
+    model : torch.nn.Module
+        Trained model exposing ``forward_nn``. If preprocessing requires a
+        runtime cell, the model must also be able to retrieve it from the
+        dataset.
     r : int
-        Number of eigenfunctions to compute.
+        Number of learned representation components.
     eta : float
-        Hyperparameter for the shift to define the resolvent, i.e., $(\eta I-_mathcal{L})^{-1}$
+        Resolvent shift parameter.
     friction : torch.Tensor
-        Langevin friction, i.e., $\sqrt{k_B*T/(gamma*m_i)}$
-
-    tikhonov_reg : float, optional
-        Hyperparameter for the regularization of the inverse (Ridge regression parameter), by default 1e-4
-    descriptors_derivatives : Union[SmartDerivatives, torch.Tensor], optional
-        Derivatives of descriptors wrt atomic positions (if used) to speed up calculation of gradients, by default None. 
-        Can be either:
-            - A `SmartDerivatives` object to save both memory and time, see also mlcolvar.core.loss.committor_loss.SmartDerivatives
-            - A torch.Tensor with the derivatives to save time, memory-wise could be less efficient
-    n_dim : int
-        Number of dimensions, by default 3.
+        Langevin friction-related prefactor used to weight gradients.
+    tikhonov_reg : float, default=1e-4
+        Regularization parameter kept for API compatibility. Currently the
+        implementation uses a pseudo-inverse of the matrix square root.
+    descriptors_derivatives : SmartDerivatives or torch.Tensor, optional
+        Descriptor derivatives with respect to atomic positions.
+    n_dim : int, default=3
+        Number of spatial dimensions.
+    batch_size : int, optional
+        Batch size used to estimate covariances. Defaults to the full dataset.
+    soft_max_postproc : bool, default=True
+        Whether to apply softmax to the model output before covariance
+        estimation.
+    is_graph : bool, default=False
+        Whether the dataset contains graph samples.
 
     Returns
     -------
-    Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
-        g : torch.Tensor, shape (N, r)
-            The computed eigenfunctions evaluated at each data point.
-        lambdas : torch.Tensor, shape (r,)
-            The eigenvalues associated with the generator, sorted in descending order.
-        evecs : torch.Tensor, shape (r, r)
-            The eigenvectors of the operator.
-    
-    Notes:
-    ------
-    - Eigenfunctions are normalized using the dataset weights.
-    - The operator matrix is regularized to improve numerical stability.
+    eigenfunctions : torch.Tensor
+        Eigenfunctions evaluated on the dataset.
+    evals : torch.Tensor
+        Generator eigenvalues sorted in descending order.
+    evecs : torch.Tensor
+        Eigenvectors mapping the augmented learned representation to
+        eigenfunctions.
+    output : torch.Tensor
+        Augmented model output used to compute the eigenfunctions.
+
+    Notes
+    -----
+    A constant basis function is appended internally to the learned
+    representation. The eigenvectors therefore have dimension ``r + 1`` in
+    the augmented basis.
     """
 
     # ------------------------ SETUP ------------------------
