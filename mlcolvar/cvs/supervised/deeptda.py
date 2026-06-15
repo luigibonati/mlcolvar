@@ -236,7 +236,7 @@ def test_deeptda_cv():
         # gnn external 
         from mlcolvar.core.nn.graph.schnet import SchNetModel
         from mlcolvar.data.graph.utils import create_test_graph_input
-        gnn_model = SchNetModel(n_cvs, 0.1, [1, 8])
+        gnn_model = SchNetModel(n_out=n_cvs, cutoff=0.1, atomic_numbers=[1, 8])
         model = DeepTDA(
             n_states=n_states,
             n_cvs=n_cvs,

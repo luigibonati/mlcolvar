@@ -37,6 +37,7 @@ dependencies = [
     "KDEpy",
     "scikit-learn<1.8", 
     "pydantic<2",
+    "PyYAML",
     "torch_geometric",
     "matscipy",
     "mdtraj"
@@ -45,6 +46,10 @@ dependencies = [
 [project.urls]
 "Source" = "https://github.com/luigibonati/mlcolvar/"
 "Documentation" = "https://mlcolvar.readthedocs.io/"
+
+[project.scripts]
+mlcolvar-fes = "mlcolvar.cli.fes:main"
+mlcolvar-deltag = "mlcolvar.cli.delta_g:main"
 
 [project.optional-dependencies]
 test = [

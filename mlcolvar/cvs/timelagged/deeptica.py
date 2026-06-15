@@ -96,6 +96,9 @@ class DeepTICA(BaseCV):
         
         elif self._override_model:
             self.nn = model
+            if self.out_features is not None:
+                self.register_buffer('n_out', torch.as_tensor(self.out_features))    
+
 
         # initialize tica
         o = "tica"
@@ -214,7 +217,7 @@ def test_deep_tica():
     print()
     from mlcolvar.core.nn.graph.schnet import SchNetModel
     from mlcolvar.data.graph.utils import create_test_graph_input
-    gnn_model = SchNetModel(2, 0.1, [1, 8])
+    gnn_model = SchNetModel(n_out=2, cutoff=0.1, atomic_numbers=[1, 8])
     model = DeepTICA(gnn_model, n_cvs=1)
 
     # change loss options

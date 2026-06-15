@@ -91,7 +91,7 @@ def test_fes():
         fes4, grid4, _, _ = compute_fes(
             X=[x2, y2],
             temp=300.0,
-            fes_units="kJ/mol",
+            units="kJ/mol",
             bandwidth=0.2,
             num_samples=20,
             blocks=1,
@@ -100,6 +100,10 @@ def test_fes():
         )
         assert fes4.shape == (20, 20)
         assert isinstance(grid4, list) and len(grid4) == 2
+
+    # Case 6: bias-derived weights must match the number of samples.
+    with pytest.raises(ValueError, match="bias"):
+        compute_fes(X=x, kbt=1.0, bias=np.ones(len(x) - 1), backend="KDEpy")
 
 
 def test_delta_g():
@@ -133,6 +137,29 @@ def test_delta_g():
     assert ax1.get_xlabel() == "Time"
     assert "$\\Delta$G" in ax1.get_ylabel()
     plt.close(fig1)
+
+    # Case 1b: bias-derived weights should match explicitly supplied weights.
+    positive_weights = weights + 0.1
+    grid_w, delta_g_w = compute_deltaG(
+        X=x,
+        stateA_bounds=[-6, -4],
+        stateB_bounds=[4, 6],
+        kbt=1.0,
+        intervals=10,
+        weights=positive_weights,
+        plot=False,
+    )
+    grid_b, delta_g_b = compute_deltaG(
+        X=x,
+        stateA_bounds=[-6, -4],
+        stateB_bounds=[4, 6],
+        kbt=1.0,
+        intervals=10,
+        bias=np.log(positive_weights),
+        plot=False,
+    )
+    np.testing.assert_allclose(grid_b, grid_w)
+    np.testing.assert_allclose(delta_g_b, delta_g_w)
 
     # Case 2: 2D deltaG branch with plot disabled.
     x2_a = rng.normal(loc=-5.0, scale=0.2, size=(200, 2))

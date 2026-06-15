@@ -1,0 +1,49 @@
+#LAMMPS init file for NaCl dissociation in water
+# ------------------------------- Initialization Section --------------------
+units        real                            # A, fs, Kcal/mol
+atom_style   full                            # Accepts positions, masses, bonds, angles, charges
+pair_style lj/charmm/coul/long 9.0 10.0      # Classical LJ style potential + coulomb interaction with two cutoffs
+bond_style  harmonic                         # Uses an harmonic potential around an equilibrium value for bonds
+angle_style harmonic                         # Uses an harmonic potential around an equilibrium value for angles
+
+# ------------------------------- Atom Definition Section -------------------
+read_data    "NaCl_216wat_bound.data"           # Read from file the positions, masses, velocities, bonds and charges of the atoms
+
+group wat type  1  2                         # Define a group for the water molecules (types 1=O, 2=H)
+
+# ------------------------------- Settings Section --------------------------
+
+### TIP3P Potential Parameters --> Water ###
+set type 1 charge -0.834                     # Set charge for O
+set type 2 charge  0.417                     # Set charge for H
+pair_coeff 1 1 0.1521 3.1507                 # Set O interaction parameters
+pair_coeff 2 2 0.0460 0.4000                 # Set H interaction parameters
+pair_coeff 1 2 0.0836 1.7753                 # Set O-H interaction parameters
+bond_coeff  1 450 0.9572                     # Set O-H bond parameters
+angle_coeff 1 55 104.52                      # Set H-O-H angle parameters
+kspace_style pppm 1.0e-5                     # final npt relaxation
+pair_coeff 3 3  0.3526418 2.1595384928       # Set Na interaction parameters
+pair_coeff 4 4   0.0127850  4.8304528498     # Set Cl interaction parameter
+
+# ------------------------------- Run Section -------------------------------
+
+# The dump command is used to print output, here: atom-id, molecule-id, lammps-type, xyz coord, image-xyz (for PBC box)
+dump         1 all custom 100 traj.lammpstrj id mol type x y z ix iy iz
+dump         2 all extxyz 100 traj.xyz
+dump_modify  2 append yes element O H Na Cl
+dump         3 all xtc 100 traj.xtc
+
+timestep     2.0                                       # fs
+
+# The fix command is used to act on your system
+fix          fxnvt all nvt temp 300.0 300.0 500.0      # 300K Nose-Hoover thermostat to sample the NVT canonical ensemble, tau = 500*dt
+fix pl all plumed plumedfile plumed.dat outfile p.log  # Make LAMMPS aware that we want to use PLUMED! Load the plumed.dat input file         
+fix fRattleWat wat rattle 0.0001 10 0 b 1 a 1        # Fix bonds and angles of water molecules, allow to use longer dt and it's fine for us
+
+# The thermo command computes the thermodynamic quantities we may be interested in, can specify which ones with thermo_style
+thermo         500                                       # compute and print on screen every 500dt
+thermo_style   custom step temp press epair etotal
+
+run            2000                                    # run the simualtion for N steps
+
+write_data  end.data                                   # write a lammps.data file with the final configuration, can be used to start new simulations

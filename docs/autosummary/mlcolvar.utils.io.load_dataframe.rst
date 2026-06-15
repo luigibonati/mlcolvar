@@ -1,7 +1,7 @@
-﻿mlcolvar.utils.io.load\_dataframe
+﻿mlcolvar.io.load\_dataframe
 =================================
 
-.. currentmodule:: mlcolvar.utils.io
+.. currentmodule:: mlcolvar.io
 
 .. autoclass:: load_dataframe
    :members:                                   

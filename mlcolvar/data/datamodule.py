@@ -257,7 +257,7 @@ class DictModule(lightning.LightningDataModule):
                 f"batch_size={self.batch_size[2]}, "
                 f"shuffle={self.shuffle[2]})"
             )
-        return ",\n\t\t     ".join(parts) + ")"
+        return ",\n\t     ".join(parts) + ")"
 
     def __str__(self) -> str:
         return self.__repr__()

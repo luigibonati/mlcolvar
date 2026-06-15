@@ -11,3 +11,8 @@ def data_dir():
     else:
         with resources.path(__name__, "data") as path:
             yield path
+
+# TODO this needs to be changed upon merging into main
+@contextmanager
+def github_data_dir():
+    yield "https://github.com/luigibonati/mlcolvar/raw/refs/heads/release/2.0/mlcolvar/tests/data"
