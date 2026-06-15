@@ -519,6 +519,16 @@ def compute_funnel_deltaG(
     This reproduces the logic of the original reweighting script with funnel correction:
     the unbound region z > uat is used as the reference plateau, the bound region
     z < bat is integrated, and the funnel volume correction is added.
+    
+    The funnel volume correction follows the standard funnel-metadynamics treatment,
+    where the finite cylindrical volume accessible to the ligand in the unbound
+    region is converted to the 1 M standard-state volume.
+    
+    References
+    ----------
+    [1] V. Limongelli, M. Bonomi, and M. Parrinello, “Funnel metadynamics as
+    accurate binding free-energy method,” PNAS USA 110, 6358-6363 (2013).
+    
 
     Parameters
     ----------
