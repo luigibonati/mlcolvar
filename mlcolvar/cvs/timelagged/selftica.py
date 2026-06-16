@@ -29,8 +29,11 @@ class SelfTICA(BaseCV):
 
     References
     ----------
-    .. [1] Turri, G., Bonati, L., Zhu, K., Pontil, M., & Novelli, P, "Self-Supervised Evolution 
-        Operator Learning for High-Dimensional Dynamical Systems," arXiv preprint arXiv:2505.18671. (2025).
+    .. [1] Zhu, K., Zhang, J., Novelli, P., Hou, T., & Bonati, L., "Contrastive Learning of 
+    Dynamical Representations for Enhanced Molecular Sampling," arXiv preprint arXiv:2606.15495 (2026).
+    .. [2] Turri, G., Bonati, L., Zhu, K., Pontil, M., & Novelli, P, "Self-Supervised Evolution 
+        Operator Learning for High-Dimensional Dynamical Systems," International Conference on Learning 
+        Representations (ICLR), 2026.
 
     See also
     --------
