@@ -31,8 +31,6 @@ class SelfTICA(BaseCV):
     ----------
     .. [1] Turri, G., Bonati, L., Zhu, K., Pontil, M., & Novelli, P, "Self-Supervised Evolution 
         Operator Learning for High-Dimensional Dynamical Systems," arXiv preprint arXiv:2505.18671. (2025).
-    .. [2] L. Bonati, G. Piccini, and M. Parrinello, “ Deep learning the slow modes for
-        rare events sampling,” PNAS USA 118, e2113533118 (2021)
 
     See also
     --------
