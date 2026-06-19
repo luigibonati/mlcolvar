@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from mlcolvar.utils import plot as _plot_utils  # register fessa colormap/colors
-from mlcolvar.utils.fes import SKLEARN_IS_INSTALLED, test_compute_fes, test_compute_deltaG, compute_deltaG, compute_fes
+from mlcolvar.utils.fes import SKLEARN_IS_INSTALLED, test_compute_fes, test_compute_deltaG, compute_deltaG, compute_fes, compute_funnel_deltaG
 
 
 def test_fes():
@@ -182,7 +182,82 @@ def test_delta_g():
     assert grid2.shape == (10,)
     assert delta_g2.shape == (10,)
     assert np.allclose(delta_g2[-1], 0.0, atol=0.8)
+    
+def test_funnel_delta_g():
+    rng = np.random.default_rng(123)
+
+    # Case 1: 1D funnel deltaG with plotting enabled and explicit time axis.
+    x_bound = rng.normal(loc=0.6, scale=0.05, size=200)
+    x_unbound = rng.normal(loc=1.6, scale=0.05, size=200)
+    x = np.concatenate((x_bound, x_unbound))
+    rng.shuffle(x)
+
+    time = np.arange(len(x))
+    weights = rng.random(len(x)) + 0.1
+
+    fig1, ax1 = plt.subplots()
+    grid, delta_g = compute_funnel_deltaG(
+        X=x,
+        rfunnel=0.2,
+        bat=0.8,
+        uat=1.4,
+        kbt=1.0,
+        intervals=5,
+        weights=weights,
+        reverse=True,
+        time=time,
+        bandwidth=0.04,
+        num_samples=80,
+        bounds=(0.4, 1.8),
+        plot=True,
+        plot_color="C0",
+        ax=ax1,
+        backend="KDEpy",
+    )
+
+    assert grid.shape == (5,)
+    assert delta_g.shape == (5,)
+    assert np.all(np.isfinite(delta_g))
+    assert ax1.get_xlabel() == "Time"
+    assert "$\\Delta G_{funnel}$" in ax1.get_ylabel()
+    plt.close(fig1)
+
+    # Case 1b: bias-derived weights should match explicitly supplied weights.
+    positive_weights = weights + 0.1
+    grid_w, delta_g_w = compute_funnel_deltaG(
+        X=x,
+        rfunnel=0.2,
+        bat=0.8,
+        uat=1.4,
+        kbt=1.0,
+        intervals=5,
+        weights=positive_weights,
+        bandwidth=0.04,
+        num_samples=80,
+        bounds=(0.4, 1.8),
+        plot=False,
+        backend="KDEpy",
+    )
+
+    grid_b, delta_g_b = compute_funnel_deltaG(
+        X=x,
+        rfunnel=0.2,
+        bat=0.8,
+        uat=1.4,
+        kbt=1.0,
+        intervals=5,
+        bias=np.log(positive_weights),
+        bandwidth=0.04,
+        num_samples=80,
+        bounds=(0.4, 1.8),
+        plot=False,
+        backend="KDEpy",
+    )
+
+    np.testing.assert_allclose(grid_b, grid_w)
+    np.testing.assert_allclose(delta_g_b, delta_g_w)
 
 if __name__ == "__main__":
     test_compute_fes()
     test_compute_deltaG()
+    test_funnel_delta_g()
