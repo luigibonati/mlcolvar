@@ -338,8 +338,8 @@ def compute_fes(
     return fes, grid, bounds, error 
 
 def compute_deltaG(X: np.ndarray,
-                   stateA_bounds: Union[List[float], List[List[float]], np.ndarray] = None,
-                   stateB_bounds: Union[List[float], List[List[float]], np.ndarray] = None,
+                   stateA_bounds: Union[List[float], List[List[float]], np.ndarray],
+                   stateB_bounds: Union[List[float], List[List[float]], np.ndarray],
                    temp=None,
                    units="kJ/mol",
                    kbt: float = None,
@@ -353,6 +353,7 @@ def compute_deltaG(X: np.ndarray,
                    ax: matplotlib.axes = None,
                    eps: float = 1e-8,
                    rfunnel: float = None,
+                   c0: float = 1.0,
                   ):
     """Compute the difference in free energy (deltaG) between two states A and B.
 
@@ -384,8 +385,8 @@ def compute_deltaG(X: np.ndarray,
     weights : np.ndarray, optional
         Weights associated with the data points, shape (n_samples,), by default None.
     bias : np.ndarray, optional
-        Bias values used to compute weights as exp(bias / kbt), by default None.
-        `weights` and `bias` cannot be provided at the same time.
+        Bias values to be used to compute the weights as exp(bias / kbt),
+        shape (n_samples,), by default None.
     reverse : bool, optional
         Switch to reverse the data, by default False.
     time : np.ndarray, optional
@@ -400,8 +401,13 @@ def compute_deltaG(X: np.ndarray,
         Small regularization term to prevent logarithm from having zero argument,
         by default 1e-8.
     rfunnel : float, optional
-        Funnel radius in nm. If provided, a funnel-volume correction is applied,
+        Funnel radius in nm. If provided, the funnel-volume correction is applied,
         by default None.
+    c0 : float, optional
+        Standard-state concentration in mol/L used for the funnel-volume
+        correction, by default 1.0. The default corresponds to the standard
+        1 M state and gives the same correction as using a standard volume
+        of 1.66 nm^3.
 
     Returns
     -------
@@ -410,69 +416,81 @@ def compute_deltaG(X: np.ndarray,
         If `time` is provided, the time bounds are returned.
     deltaG : np.ndarray
         DeltaG values computed up to each block, shape is (n_blocks,).
+        
+    References
+    ----------
+    [1] Limongelli, Bonomi, and Parrinello, Proc. Natl. Acad. Sci. U.S.A.
+        110, 6358-6363 (2013).
     """
 
+    # ensure to have np.ndarrays
     X = np.asarray(X)
+
+    if weights is not None:
+        weights = np.asarray(weights)
+
+    if bias is not None:
+        bias = np.asarray(bias)
+
+    if time is not None:
+        time = np.asarray(time)
+
+    stateA_bounds = np.asarray(stateA_bounds)
+    stateB_bounds = np.asarray(stateB_bounds)
+
     use_funnel = rfunnel is not None
 
     if use_funnel:
+        if rfunnel <= 0:
+            raise ValueError("rfunnel must be positive.")
+
         if X.ndim > 1 and X.shape[-1] != 1:
             raise ValueError("Funnel correction only supports 1D data.")
+
         X = X.reshape(-1)
 
-    n_samples = len(X)
-
-    # Check that input arrays are consistent with each other.
+    # check that inputs are consistent with each other
     if weights is not None and bias is not None:
         raise ValueError(
             "The weights and bias keywords cannot be defined together, use only one of them!"
         )
 
-    if weights is not None and n_samples != len(weights):
+    if weights is not None and len(X) != len(weights):
         raise ValueError(
             f"Input data and weights must have the same number of entries! "
-            f"Found {n_samples} and {len(weights)}."
+            f"Found {len(X)} and {len(weights)}."
         )
 
-    if bias is not None and n_samples != len(bias):
+    if bias is not None and len(X) != len(bias):
         raise ValueError(
             f"Input data and bias must have the same number of entries! "
-            f"Found {n_samples} and {len(bias)}."
+            f"Found {len(X)} and {len(bias)}."
         )
 
-    if time is not None and n_samples != len(time):
+    if time is not None and len(X) != len(time):
         raise ValueError(
             f"Input data and time must have the same number of entries! "
-            f"Found {n_samples} and {len(time)}."
+            f"Found {len(X)} and {len(time)}."
         )
 
-    if stateA_bounds is None or stateB_bounds is None:
-        raise ValueError(
-            "stateA_bounds and stateB_bounds must be provided. "
-            "If rfunnel is provided, stateA_bounds defines the bound region "
-            "and stateB_bounds defines the unbound region."
-        )
+    n_dim = 1
+    if not use_funnel and X.ndim > 1 and X.shape[-1] == 2:
+        n_dim = 2
+        if stateA_bounds.shape[-1] != n_dim or stateB_bounds.shape[-1] != n_dim:
+            raise ValueError("Input data are 2D, state bounds must be 2D as well!")
 
-    # Ensure to have np.ndarrays.
-    stateA_bounds = np.asarray(stateA_bounds)
-    stateB_bounds = np.asarray(stateB_bounds)
-
-    # Check temperature / units.
+    # check temperature / units
     kbt, temp, units = _check_kbt_units(kbt, temp, units)
 
-    # Initialize or compute weights.
-    if bias is not None:
-        bias = np.asarray(bias)
-        weights = np.exp(bias / kbt)
-    elif weights is None:
-        weights = np.ones(n_samples)
-    else:
-        weights = np.asarray(weights)
+    # initialize unitary weights if not provided
+    if weights is None:
+        if bias is None:
+            weights = np.ones(len(X))
+        else:
+            weights = np.exp(bias / kbt)
 
-    if time is not None:
-        time = np.asarray(time)
+    deltaG = []
 
-    # Reverse data if needed.
     if reverse:
         X = np.flip(X, axis=0)
         weights = np.flip(weights, axis=0)
@@ -480,176 +498,111 @@ def compute_deltaG(X: np.ndarray,
         if time is not None:
             time = np.flip(time, axis=0)
 
-    deltaG = []
+    # compute the estimate by reweighting the energy in the two basins
+    if n_dim == 1:
+        X_1d = X.reshape(-1)
 
-    # ------------------------------------------------------------------
-    # Funnel-corrected deltaG without KDE/FES
-    # ------------------------------------------------------------------
-    if use_funnel:
-
-        if rfunnel <= 0:
-            raise ValueError("rfunnel must be positive.")
-
-        # In funnel correction:
-        #   stateA_bounds = bound region
-        #   stateB_bounds = unbound region
         mask_A = np.logical_and(
-            X > stateA_bounds[0],
-            X < stateA_bounds[1],
+            X_1d > stateA_bounds[0],
+            X_1d < stateA_bounds[1],
         )
         mask_B = np.logical_and(
-            X > stateB_bounds[0],
-            X < stateB_bounds[1],
+            X_1d > stateB_bounds[0],
+            X_1d < stateB_bounds[1],
         )
 
-        if not np.any(mask_A):
-            raise ValueError("No samples found in the bound region.")
-
-        if not np.any(mask_B):
-            raise ValueError("No samples found in the unbound region.")
-
-        volume_correction = np.pi * rfunnel**2 / 1.66
-
-        # Build intervals.
-        interval_len = n_samples / intervals
-        interval_bounds = np.arange(0, n_samples, interval_len)
-        interval_bounds = np.ceil(interval_bounds).astype(int)
-        interval_bounds = np.concatenate(
-            (interval_bounds, np.array([n_samples]))
-        )
-
-        # We progressively store the data.
-        tot_A = eps
-        tot_B = eps
-
-        # Iterate over intervals.
-        for i in range(intervals):
-            start = interval_bounds[i]
-            end = interval_bounds[i + 1]
-
-            aux_A = weights[start:end][mask_A[start:end]]
-            aux_B = weights[start:end][mask_B[start:end]]
-
-            tot_A += np.sum(aux_A)
-            tot_B += np.sum(aux_B)
-
-            population_ratio = tot_A / tot_B
-
-            delta_funnel = -kbt * np.log(
-                population_ratio * volume_correction
-            )
-
-            deltaG.append(delta_funnel)
-
-        # Switch to time if needed.
-        if time is not None:
-            grid = time[interval_bounds[1:] - 1]
-        else:
-            grid = interval_bounds[1:]
-
-        ylabel = (
-            f"$\\Delta G_{{funnel}}$ [{units}]"
-            if units is not None
-            else "$\\Delta G_{funnel}$"
-        )
-
-    # ------------------------------------------------------------------
-    # Standard state-based deltaG
-    # ------------------------------------------------------------------
     else:
-
-        n_dim = 1
-        if X.ndim > 1 and X.shape[-1] == 2:
-            n_dim = 2
-            if stateA_bounds.shape[-1] != n_dim or stateB_bounds.shape[-1] != n_dim:
-                raise ValueError("Input data are 2D, state bounds must be 2D as well!")
-
-        # Compute the estimate by reweighting the energy in the two basins.
-        if n_dim == 1:
-            X_1d = X.reshape(-1)
-
-            mask_A = np.logical_and(
-                X_1d > stateA_bounds[0],
-                X_1d < stateA_bounds[1],
-            )
-            mask_B = np.logical_and(
-                X_1d > stateB_bounds[0],
-                X_1d < stateB_bounds[1],
-            )
-
-        else:
-            mask_A = np.logical_and(
-                np.logical_and(
-                    X[:, 0] > stateA_bounds[0, 0],
-                    X[:, 0] < stateA_bounds[0, 1],
-                ),
-                np.logical_and(
-                    X[:, 1] > stateA_bounds[1, 0],
-                    X[:, 1] < stateA_bounds[1, 1],
-                ),
-            )
-            mask_B = np.logical_and(
-                np.logical_and(
-                    X[:, 0] > stateB_bounds[0, 0],
-                    X[:, 0] < stateB_bounds[0, 1],
-                ),
-                np.logical_and(
-                    X[:, 1] > stateB_bounds[1, 0],
-                    X[:, 1] < stateB_bounds[1, 1],
-                ),
-            )
-
-        # Build intervals.
-        interval_len = n_samples / intervals
-        interval_bounds = np.arange(0, n_samples, interval_len)
-        interval_bounds = np.ceil(interval_bounds).astype(int)
-        interval_bounds = np.concatenate(
-            (interval_bounds, np.array([n_samples - 1]))
+        mask_A = np.logical_and(
+            np.logical_and(
+                X[:, 0] > stateA_bounds[0, 0],
+                X[:, 0] < stateA_bounds[0, 1],
+            ),
+            np.logical_and(
+                X[:, 1] > stateA_bounds[1, 0],
+                X[:, 1] < stateA_bounds[1, 1],
+            ),
         )
 
-        # We progressively store the data.
-        tot_A = eps
-        tot_B = eps
+        mask_B = np.logical_and(
+            np.logical_and(
+                X[:, 0] > stateB_bounds[0, 0],
+                X[:, 0] < stateB_bounds[0, 1],
+            ),
+            np.logical_and(
+                X[:, 1] > stateB_bounds[1, 0],
+                X[:, 1] < stateB_bounds[1, 1],
+            ),
+        )
 
-        # Iterate over intervals.
-        for i in range(intervals):
-            start = interval_bounds[i]
-            end = interval_bounds[i + 1]
+    # build intervals
+    interval_len = len(X) / intervals
+    interval_bounds = np.arange(0, len(X), interval_len)
+    interval_bounds = np.ceil(interval_bounds).astype("int")
+    interval_bounds = np.concatenate((interval_bounds, np.array([len(X) - 1])))
 
-            aux_A = weights[start:end][mask_A[start:end]]
-            aux_B = weights[start:end][mask_B[start:end]]
+    # we progressively store the data
+    tot_A = eps
+    tot_B = eps
 
-            tot_A += np.sum(aux_A)
-            tot_B += np.sum(aux_B)
+    if use_funnel:
+        if c0 <= 0:
+            raise ValueError("c0 must be positive.")
 
-            G_A = -kbt * np.log(tot_A)
-            G_B = -kbt * np.log(tot_B)
+        standard_volume = 1.66 / c0
+        volume_correction = np.pi * rfunnel**2 / standard_volume
 
+    # iterate over intervals
+    for i in range(intervals):
+        start = interval_bounds[i]
+        end = interval_bounds[i + 1]
+
+        aux_A = weights[start:end][mask_A[start:end]]
+        aux_B = weights[start:end][mask_B[start:end]]
+
+        tot_A += np.sum(aux_A)
+        tot_B += np.sum(aux_B)
+
+        G_A = -kbt * np.log(tot_A)
+        G_B = -kbt * np.log(tot_B)
+
+        if use_funnel:
+            # stateA_bounds = bound region
+            # stateB_bounds = unbound region
+            population_ratio = tot_A / tot_B
+            deltaG.append(
+                -kbt * np.log(population_ratio * volume_correction)
+            )
+        else:
             deltaG.append(G_B - G_A)
 
-        # Switch to time if needed.
-        if time is not None:
-            interval_bounds = time[interval_bounds]
+    # switch to time if needed
+    if time is not None:
+        interval_bounds = time[interval_bounds]
 
-        grid = interval_bounds[1:]
+    # prepare for return
+    deltaG = np.array(deltaG)
+    grid = interval_bounds[1:]
 
-        ylabel = (
-            f"$\\Delta$G [{units}]"
-            if units is not None
-            else "$\\Delta$G"
-        )
-
-    # Prepare for return.
-    deltaG = np.asarray(deltaG)
-
-    # Plot if needed.
+    # plot if needed
     if plot:
         if ax is None:
             fig, ax = plt.subplots()
 
         ax.plot(grid, deltaG, color=plot_color)
         ax.set_xlabel("Time" if time is not None else "Frame")
-        ax.set_ylabel(ylabel)
+
+        if use_funnel:
+            ax.set_ylabel(
+                f"$\\Delta G_{{funnel}}$ [{units}]"
+                if units is not None
+                else "$\\Delta G_{funnel}$"
+            )
+        else:
+            ax.set_ylabel(
+                f"$\\Delta$G [{units}]"
+                if units is not None
+                else "$\\Delta$G"
+            )
 
     return grid, deltaG
 
