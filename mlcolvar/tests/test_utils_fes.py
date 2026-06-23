@@ -195,25 +195,28 @@ def test_funnel_delta_g():
     time = np.arange(len(x))
     weights = rng.random(len(x)) + 0.1
 
+    rfunnel = 0.2
+    bat = 0.8
+    uat = 1.4
+    bounds = (0.4, 1.8)
+
+    bound_region = [bounds[0], bat]
+    unbound_region = [uat, bounds[1]]
+
     fig1, ax1 = plt.subplots()
     grid, delta_g = compute_deltaG(
         X=x,
-        mode="funnel",
-        rfunnel=0.2,
-        bat=0.8,
-        uat=1.4,
+        stateA_bounds=bound_region,
+        stateB_bounds=unbound_region,
+        rfunnel=rfunnel,
         kbt=1.0,
         intervals=5,
         weights=weights,
         reverse=True,
         time=time,
-        bandwidth=0.04,
-        num_samples=80,
-        bounds=(0.4, 1.8),
         plot=True,
         plot_color="C0",
         ax=ax1,
-        backend="KDEpy",
     )
 
     assert grid.shape == (5,)
@@ -228,39 +231,28 @@ def test_funnel_delta_g():
 
     grid_w, delta_g_w = compute_deltaG(
         X=x,
-        mode="funnel",
-        rfunnel=0.2,
-        bat=0.8,
-        uat=1.4,
+        stateA_bounds=bound_region,
+        stateB_bounds=unbound_region,
+        rfunnel=rfunnel,
         kbt=1.0,
         intervals=5,
         weights=positive_weights,
-        bandwidth=0.04,
-        num_samples=80,
-        bounds=(0.4, 1.8),
         plot=False,
-        backend="KDEpy",
     )
 
     grid_b, delta_g_b = compute_deltaG(
         X=x,
-        mode="funnel",
-        rfunnel=0.2,
-        bat=0.8,
-        uat=1.4,
+        stateA_bounds=bound_region,
+        stateB_bounds=unbound_region,
+        rfunnel=rfunnel,
         kbt=1.0,
         intervals=5,
         bias=np.log(positive_weights),
-        bandwidth=0.04,
-        num_samples=80,
-        bounds=(0.4, 1.8),
         plot=False,
-        backend="KDEpy",
     )
 
     np.testing.assert_allclose(grid_b, grid_w)
     np.testing.assert_allclose(delta_g_b, delta_g_w)
-
 
 if __name__ == "__main__":
     test_fes()
