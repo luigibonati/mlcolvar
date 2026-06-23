@@ -196,6 +196,7 @@ def test_funnel_delta_g():
     weights = rng.random(len(x)) + 0.1
 
     rfunnel = 0.2
+    c0 = 1.0
     bat = 0.8
     uat = 1.4
     bounds = (0.4, 1.8)
@@ -209,6 +210,7 @@ def test_funnel_delta_g():
         stateA_bounds=bound_region,
         stateB_bounds=unbound_region,
         rfunnel=rfunnel,
+        c0=c0,
         kbt=1.0,
         intervals=5,
         weights=weights,
@@ -234,6 +236,7 @@ def test_funnel_delta_g():
         stateA_bounds=bound_region,
         stateB_bounds=unbound_region,
         rfunnel=rfunnel,
+        c0=c0,
         kbt=1.0,
         intervals=5,
         weights=positive_weights,
@@ -245,6 +248,7 @@ def test_funnel_delta_g():
         stateA_bounds=bound_region,
         stateB_bounds=unbound_region,
         rfunnel=rfunnel,
+        c0=c0,
         kbt=1.0,
         intervals=5,
         bias=np.log(positive_weights),
@@ -253,6 +257,18 @@ def test_funnel_delta_g():
 
     np.testing.assert_allclose(grid_b, grid_w)
     np.testing.assert_allclose(delta_g_b, delta_g_w)
+
+    # Case 1c: final value should match the direct population-based formula.
+    mask_bound = np.logical_and(x > bound_region[0], x < bound_region[1])
+    mask_unbound = np.logical_and(x > unbound_region[0], x < unbound_region[1])
+
+    p_bound = np.sum(positive_weights[mask_bound])
+    p_unbound = np.sum(positive_weights[mask_unbound])
+
+    volume_correction = np.pi * rfunnel**2 * c0 / 1.66
+    expected_delta_g = -np.log((p_bound / p_unbound) * volume_correction)
+
+    np.testing.assert_allclose(delta_g_w[-1], expected_delta_g)
 
 if __name__ == "__main__":
     test_fes()
