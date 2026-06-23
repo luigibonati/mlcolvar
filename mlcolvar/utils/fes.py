@@ -338,12 +338,12 @@ def compute_fes(
     return fes, grid, bounds, error
 
 def compute_deltaG(X: np.ndarray,
-                   stateA_bounds: Union[ List[float], List[List[float]], np.ndarray ],
-                   stateB_bounds: Union[ List[float], List[List[float]], np.ndarray ], 
+                   stateA_bounds: Union[List[float], List[List[float]], np.ndarray] = None,
+                   stateB_bounds: Union[List[float], List[List[float]], np.ndarray] = None,
                    temp=None,
                    units="kJ/mol",
                    kbt: float = None,
-                   intervals: int = 10, 
+                   intervals: int = 10,
                    weights: np.ndarray = None,
                    bias: np.ndarray = None,
                    reverse: bool = False,
@@ -352,322 +352,379 @@ def compute_deltaG(X: np.ndarray,
                    plot_color: str = "fessa6",
                    ax: matplotlib.axes = None,
                    eps: float = 1e-8,
+                   mode: str = "state",
+                   rfunnel: float = None,
+                   bat: float = None,
+                   uat: float = None,
+                   bandwidth: float = 0.01,
+                   num_samples: int = 200,
+                   bounds: List[float] = None,
+                   kernel: str = "gaussian",
+                   backend: str = None,
                   ):
-    """Compute the difference in free energy (deltaG) between two states A and B.
+    """Compute free-energy differences.
+
+    This function supports two modes:
+
+    1. mode="state"
+       Compute the difference in free energy between two states A and B
+       from reweighted populations.
+
+    2. mode="funnel"
+       Compute funnel-corrected binding free energy from a 1D FES/KDE estimate.
 
     Parameters
     ----------
     X : np.ndarray
-        Input data with the values of the CV used to define the state.
-    stateA_bounds : List[float]
-        Bounds of state A along the CV. 
-    stateB_bounds : List[float]
-        Bounds of state B along the CV.
+        Input CV data.
+
+    stateA_bounds : List[float] or List[List[float]], optional
+        Bounds of state A. Required when mode="state".
+
+    stateB_bounds : List[float] or List[List[float]], optional
+        Bounds of state B. Required when mode="state".
+
     temp : float, optional
-        Temperature (in Kelvin). Required if `kbt` is not provided.
+        Temperature in Kelvin. Required if `kbt` is not provided.
+
     units : str, optional
         Units of the FES if using `temp`, by default "kJ/mol".
+
     kbt : float, optional
-        Thermal energy in the same units as the FES. Required if `temp` is not provided.
+        Thermal energy in the same units as the FES.
+        Required if `temp` is not provided.
+
     intervals : int, optional
-        Number of intervals on which the deltaG is progressively computed, by default 10.
+        Number of intervals on which deltaG is progressively computed,
+        by default 10.
+
     weights : np.ndarray, optional
-        Weights associated with the data points, shape (n_samples,), by default None.
+        Weights associated with the data points.
+
     bias : np.ndarray, optional
-        Bias values to be used to compute the weights as exp(bias / kbt), shape (n_samples,), by default None.
+        Bias values used to compute weights as exp(bias / kbt).
+
     reverse : bool, optional
-        Switch to reverse the data, by default False.
+        Whether to reverse the data before computing deltaG.
+
     time : np.ndarray, optional
-        Time reference for the input data, by default None.
+        Time reference for the input data.
+
     plot : bool, optional
-        Whether to plot the deltaF, by default False.
+        Whether to plot deltaG.
+
     plot_color : str, optional
-        Color for 1D FES plot, by default "fessa6".
+        Color for the deltaG plot.
+
     ax : matplotlib.axes, optional
-        Axis object to plot into. If None, a new figure is created, by default None.
+        Axis object to plot into.
+
     eps : float, optional
-        Small regularization term to prevent logarithm from having zero argument, by default 1e-8.
+        Small regularization term to prevent logarithm from having zero argument.
+
+    mode : {"state", "states", "funnel"}, optional
+        Calculation mode.
+
+    rfunnel : float, optional
+        Funnel radius in nm. Required when mode="funnel".
+
+    bat : float, optional
+        Bound cutoff. The bound region is z < bat.
+        Required when mode="funnel".
+
+    uat : float, optional
+        Unbound cutoff. The unbound plateau is z > uat.
+        Required when mode="funnel".
+
+    bandwidth : float, optional
+        KDE bandwidth used in compute_fes when mode="funnel".
+
+    num_samples : int, optional
+        Number of grid points used in compute_fes when mode="funnel".
+
+    bounds : List[float], optional
+        Bounds used in compute_fes when mode="funnel".
+
+    kernel : str, optional
+        KDE kernel used in compute_fes when mode="funnel".
+
+    backend : str, optional
+        Backend used in compute_fes when mode="funnel".
 
     Returns
     -------
-    grid: np.ndarray
-        Bounds of the intervals used for computing the deltaG, shape is (n_blocks,). 
-        If `time` is provided, the time bounds are returned.
-    deltaG: np.array
-        DeltaG values computed up to each block, shape is (n_blocks,).
+    grid : np.ndarray
+        Interval or time grid.
+
+    deltaG : np.ndarray
+        DeltaG values computed up to each interval.
     """
 
-    # check that inputs are consistent with each other
-    if weights is not None and bias is not None:
-        raise ValueError("The weights and bias keywords cannot be defined together, use only one of them!")
-    if weights is not None and len(X) != len(weights):
-        raise ValueError(f"Input data and weights must have the same number of entries! "
-                         f"Found {len(X)} and {len(weights)}.")
-    if bias is not None and len(X) != len(bias):
-        raise ValueError(f"Input data and bias must have the same number of entries! "
-                         f"Found {len(X)} and {len(bias)}.")
-    if time is not None and len(X) != len(time):
-        raise ValueError(f"Input data and time must have the same number of entries! "
-                         f"Found {len(X)} and {len(time)}.")
+    mode = mode.lower()
+    if mode not in ["state", "states", "funnel"]:
+        raise ValueError("mode must be either 'state', 'states', or 'funnel'.")
 
-    # ensure to have np.ndarrays
-    if bias is not None:
-        bias = np.asarray(bias)
-    stateA_bounds = np.array(stateA_bounds)
-    stateB_bounds = np.array(stateB_bounds)
-
-    n_dim = 1
-    if X.shape[-1] == 2:
-        n_dim = 2
-        if stateA_bounds.shape[-1] != n_dim or stateB_bounds.shape[-1] != n_dim:
-            raise ValueError("Input data are 2D, state bounds must be 2D as well!")
-
-    # check temperature / units
-    kbt, temp, units = _check_kbt_units(kbt, temp, units)
-
-    # initialize unitary weights if not provided
-    if weights is None:
-        if bias is None:
-            weights = np.ones(len(X))
-        else:
-            weights = np.exp(bias / kbt)
-
-    deltaG = []
-    if reverse:
-        X = np.flip(X, axis=0)
-        weights = np.flip(weights, axis=0)
-
-    # compute the estimate by reweighting the energy in the two basins
-        # compute the delta F on progressive blocks of data
-    if n_dim == 1:
-        mask_A = np.logical_and(X > stateA_bounds[0], X < stateA_bounds[1])
-        mask_B = np.logical_and(X > stateB_bounds[0], X < stateB_bounds[1])
-    else:
-        mask_A = np.logical_and(np.logical_and(X[:, 0] > stateA_bounds[0, 0], X[:, 0] < stateA_bounds[0, 1]),
-                                np.logical_and(X[:, 1] > stateA_bounds[1, 0], X[:, 1] < stateA_bounds[1, 1]))
-        mask_B = np.logical_and(np.logical_and(X[:, 0] > stateB_bounds[0, 0], X[:, 0] < stateB_bounds[0, 1]),
-                                np.logical_and(X[:, 1] > stateB_bounds[1, 0], X[:, 1] < stateB_bounds[1, 1]))
-        
-    # build intervals
-    interval_len = len(X) / intervals
-    interval_bounds = np.arange(0, len(X), interval_len)
-    interval_bounds = np.ceil(interval_bounds).astype('int')
-    interval_bounds = np.concatenate((interval_bounds, np.array([len(X) - 1])))
-
-    # we progressively store the data
-    tot_A = eps
-    tot_B = eps
-
-    # iterate over intervals
-    for i in range(intervals):
-        aux_A = weights[interval_bounds[i]:interval_bounds[i+1]][mask_A[interval_bounds[i]:interval_bounds[i+1]]]
-        aux_B = weights[interval_bounds[i]:interval_bounds[i+1]][mask_B[interval_bounds[i]:interval_bounds[i+1]]]
-
-        tot_A += np.sum(aux_A)
-        tot_B += np.sum(aux_B)
-
-        G_A = - kbt * np.log(tot_A)
-        G_B = - kbt * np.log(tot_B)
-
-        deltaG.append(G_B - G_A)
-    
-    # switch to time if needed
-    if time is not None:
-        interval_bounds = time[interval_bounds]
-
-    # prepare for return
-    deltaG = np.array(deltaG)
-    grid = interval_bounds[1:]
-
-    # plot if needed
-    if plot:
-        if ax is None:
-            fig, ax = plt.subplots() 
-        ax.plot(grid, deltaG, color=plot_color)
-        ax.set_xlabel('Time' if time is not None else "Frame")
-        ax.set_ylabel(f"$\\Delta$G [{units}]" if units is not None else "$\\Delta$G")
-        
-
-    return grid, deltaG
-
-def compute_funnel_deltaG(
-    X: np.ndarray,
-    rfunnel: float,
-    bat: float,
-    uat: float,
-    temp: float = None,
-    units: str = "kJ/mol",
-    kbt: float = None,
-    intervals: int = 10,
-    weights: np.ndarray = None,
-    bias: np.ndarray = None,
-    reverse: bool = False,
-    time: np.ndarray = None,
-    bandwidth: float = 0.01,
-    num_samples: int = 200,
-    bounds: List[float] = None,
-    kernel: str = "gaussian",
-    backend: str = None,
-    eps: float = None,
-    plot: bool = False,
-    plot_color: str = "fessa6",
-    ax: matplotlib.axes = None,
-):
-    """
-    Compute funnel-corrected binding free energy from a 1D FES/KDE estimate.
-
-    This reproduces the logic of the original reweighting script with funnel correction:
-    the unbound region z > uat is used as the reference plateau, the bound region
-    z < bat is integrated, and the funnel volume correction is added.
-    
-    The funnel volume correction follows the standard funnel-metadynamics treatment,
-    where the finite cylindrical volume accessible to the ligand in the unbound
-    region is converted to the 1 M standard-state volume.
-    
-    References
-    ----------
-    [1] V. Limongelli, M. Bonomi, and M. Parrinello, “Funnel metadynamics as
-    accurate binding free-energy method,” PNAS USA 110, 6358-6363 (2013).
-    
-
-    Parameters
-    ----------
-    X : np.ndarray
-        1D funnel z coordinate.
-    rfunnel : float
-        Funnel radius in nm.
-    bat : float
-        Bound cutoff. The bound region is z < bat.
-    uat : float
-        Unbound cutoff. The unbound plateau is z > uat.
-    """
-
-    # check temperature / units
-    kbt, temp, units = _check_kbt_units(kbt, temp, units)
-
-    # input format
+    # Ensure numpy array
     X = np.asarray(X)
-    if X.ndim > 1:
+
+    # Funnel mode only supports 1D data
+    if mode == "funnel":
         X = X.reshape(-1)
 
     n_samples = len(X)
 
+    # Check input consistency
     if weights is not None and bias is not None:
-        raise ValueError("The weights and bias keywords cannot be defined together, use only one of them!")
+        raise ValueError(
+            "The weights and bias keywords cannot be defined together, use only one of them!"
+        )
 
-    if weights is not None:
-        weights = np.asarray(weights)
-        if len(weights) != n_samples:
-            raise ValueError("Input data and weights must have the same number of entries!")
-    elif bias is not None:
+    if weights is not None and n_samples != len(weights):
+        raise ValueError(
+            f"Input data and weights must have the same number of entries! "
+            f"Found {n_samples} and {len(weights)}."
+        )
+
+    if bias is not None and n_samples != len(bias):
+        raise ValueError(
+            f"Input data and bias must have the same number of entries! "
+            f"Found {n_samples} and {len(bias)}."
+        )
+
+    if time is not None and n_samples != len(time):
+        raise ValueError(
+            f"Input data and time must have the same number of entries! "
+            f"Found {n_samples} and {len(time)}."
+        )
+
+    # Check temperature / units
+    kbt, temp, units = _check_kbt_units(kbt, temp, units)
+
+    # Prepare weights
+    if bias is not None:
         bias = np.asarray(bias)
-        if len(bias) != n_samples:
-            raise ValueError("Input data and bias must have the same number of entries!")
-        weights = np.exp(bias / kbt)
+
+    if weights is None:
+        if bias is None:
+            weights = np.ones(n_samples)
+        else:
+            weights = np.exp(bias / kbt)
     else:
-        weights = np.ones(n_samples)
+        weights = np.asarray(weights)
 
     if time is not None:
         time = np.asarray(time)
-        if len(time) != n_samples:
-            raise ValueError("Input data and time must have the same number of entries!")
 
+    # Reverse data if requested
     if reverse:
         X = np.flip(X, axis=0)
         weights = np.flip(weights, axis=0)
         if time is not None:
             time = np.flip(time, axis=0)
 
-    if rfunnel <= 0:
-        raise ValueError("rfunnel must be positive.")
-    if bat >= uat:
-        raise ValueError("bat should be smaller than uat.")
-
-    # original funnel prefactor:
-    # pref = pi * (1 / 1.66) * rfunnel^2
-    prefactor_funnel = np.log(np.pi * rfunnel**2 / 1.66)
-
-    # cumulative intervals
-    interval_len = n_samples / intervals
-    interval_bounds = np.arange(0, n_samples, interval_len)
-    interval_bounds = np.ceil(interval_bounds).astype(int)
-    interval_bounds = np.concatenate((interval_bounds, np.array([n_samples])))
-
     deltaG = []
 
-    for i in range(intervals):
-        end = interval_bounds[i + 1]
+    # ------------------------------------------------------------------
+    # Mode 1: original state-based deltaG
+    # ------------------------------------------------------------------
+    if mode in ["state", "states"]:
 
-        X_i = X[:end]
-        w_i = weights[:end]
+        if stateA_bounds is None or stateB_bounds is None:
+            raise ValueError(
+                "stateA_bounds and stateB_bounds must be provided when mode='state'."
+            )
 
-        fes, grid, used_bounds, error = compute_fes(
-            X=X_i,
-            kbt=kbt,
-            num_samples=num_samples,
-            bounds=bounds,
-            bandwidth=bandwidth,
-            kernel=kernel,
-            weights=w_i,
-            scale_by=None,
-            blocks=1,
-            fes_to_zero=None,
-            plot=False,
-            backend=backend,
-            eps=eps,
+        stateA_bounds = np.array(stateA_bounds)
+        stateB_bounds = np.array(stateB_bounds)
+
+        n_dim = 1
+        if X.ndim > 1 and X.shape[-1] == 2:
+            n_dim = 2
+            if stateA_bounds.shape[-1] != n_dim or stateB_bounds.shape[-1] != n_dim:
+                raise ValueError("Input data are 2D, state bounds must be 2D as well!")
+
+        # Define masks for states A and B
+        if n_dim == 1:
+            X_1d = X.reshape(-1)
+            mask_A = np.logical_and(X_1d > stateA_bounds[0], X_1d < stateA_bounds[1])
+            mask_B = np.logical_and(X_1d > stateB_bounds[0], X_1d < stateB_bounds[1])
+        else:
+            mask_A = np.logical_and(
+                np.logical_and(
+                    X[:, 0] > stateA_bounds[0, 0],
+                    X[:, 0] < stateA_bounds[0, 1],
+                ),
+                np.logical_and(
+                    X[:, 1] > stateA_bounds[1, 0],
+                    X[:, 1] < stateA_bounds[1, 1],
+                ),
+            )
+
+            mask_B = np.logical_and(
+                np.logical_and(
+                    X[:, 0] > stateB_bounds[0, 0],
+                    X[:, 0] < stateB_bounds[0, 1],
+                ),
+                np.logical_and(
+                    X[:, 1] > stateB_bounds[1, 0],
+                    X[:, 1] < stateB_bounds[1, 1],
+                ),
+            )
+
+        # Build intervals
+        interval_len = n_samples / intervals
+        interval_bounds = np.arange(0, n_samples, interval_len)
+        interval_bounds = np.ceil(interval_bounds).astype("int")
+        interval_bounds = np.concatenate(
+            (interval_bounds, np.array([n_samples - 1]))
         )
 
-        grid = np.asarray(grid)
-        fes = np.asarray(fes)
+        # Progressive accumulation
+        tot_A = eps
+        tot_B = eps
 
-        mask_bound = grid < bat
-        mask_unbound = grid > uat
+        for i in range(intervals):
+            start = interval_bounds[i]
+            end = interval_bounds[i + 1]
 
-        if not np.any(mask_bound):
-            raise ValueError("No grid points found in the bound region. Check bat or bounds.")
-        if not np.any(mask_unbound):
-            raise ValueError("No grid points found in the unbound region. Check uat or bounds.")
+            aux_A = weights[start:end][mask_A[start:end]]
+            aux_B = weights[start:end][mask_B[start:end]]
 
-        # same as original script:
-        # shift2 = average FES in the unbound plateau
-        shift_unbound = np.average(fes[mask_unbound])
+            tot_A += np.sum(aux_A)
+            tot_B += np.sum(aux_B)
 
-        # grid spacing along z
-        dz = (grid[-1] - grid[0]) / (len(grid) - 1)
-        extra_factor = np.log(dz)
+            G_A = -kbt * np.log(tot_A)
+            G_B = -kbt * np.log(tot_B)
 
-        # shifted FES
-        fes_shifted = fes - shift_unbound
+            deltaG.append(G_B - G_A)
 
-        # bound free energy integral
-        G_bound = -kbt * np.logaddexp.reduce(-fes_shifted[mask_bound] / kbt)
+        deltaG = np.array(deltaG)
 
-        # original formula:
-        # deltafunnel = -(G_bound - kbt * (prefactor_funnel + extra_factor))
-        delta_funnel = -(G_bound - kbt * (prefactor_funnel + extra_factor))
+        # Switch to time if needed
+        if time is not None:
+            interval_bounds = time[interval_bounds]
 
-        deltaG.append(delta_funnel)
+        grid = interval_bounds[1:]
 
-    deltaG = np.asarray(deltaG)
+        ylabel = (
+            f"$\\Delta$G [{units}]"
+            if units is not None
+            else "$\\Delta$G"
+        )
 
-    if time is not None:
-        grid_out = time[interval_bounds[1:] - 1]
-    else:
-        grid_out = interval_bounds[1:]
+    # ------------------------------------------------------------------
+    # Mode 2: funnel-corrected deltaG
+    # ------------------------------------------------------------------
+    elif mode == "funnel":
 
-    if plot:
-        if ax is None:
-            fig, ax = plt.subplots()
+        if rfunnel is None or bat is None or uat is None:
+            raise ValueError(
+                "rfunnel, bat, and uat must be provided when mode='funnel'."
+            )
 
-        ax.plot(grid_out, deltaG, color=plot_color)
-        ax.set_xlabel("Time" if time is not None else "Frame")
-        ax.set_ylabel(
+        if rfunnel <= 0:
+            raise ValueError("rfunnel must be positive.")
+
+        if bat >= uat:
+            raise ValueError("bat should be smaller than uat.")
+
+        # Original funnel prefactor:
+        # pref = pi * (1 / 1.66) * rfunnel^2
+        prefactor_funnel = np.log(np.pi * rfunnel**2 / 1.66)
+
+        # Build cumulative intervals
+        interval_len = n_samples / intervals
+        interval_bounds = np.arange(0, n_samples, interval_len)
+        interval_bounds = np.ceil(interval_bounds).astype(int)
+        interval_bounds = np.concatenate(
+            (interval_bounds, np.array([n_samples]))
+        )
+
+        for i in range(intervals):
+            end = interval_bounds[i + 1]
+
+            X_i = X[:end]
+            w_i = weights[:end]
+
+            fes, grid_fes, used_bounds, error = compute_fes(
+                X=X_i,
+                kbt=kbt,
+                num_samples=num_samples,
+                bounds=bounds,
+                bandwidth=bandwidth,
+                kernel=kernel,
+                weights=w_i,
+                scale_by=None,
+                blocks=1,
+                fes_to_zero=None,
+                plot=False,
+                backend=backend,
+                eps=eps,
+            )
+
+            grid_fes = np.asarray(grid_fes)
+            fes = np.asarray(fes)
+
+            mask_bound = grid_fes < bat
+            mask_unbound = grid_fes > uat
+
+            if not np.any(mask_bound):
+                raise ValueError(
+                    "No grid points found in the bound region. Check bat or bounds."
+                )
+
+            if not np.any(mask_unbound):
+                raise ValueError(
+                    "No grid points found in the unbound region. Check uat or bounds."
+                )
+
+            # Same as original script:
+            # shift2 = average FES in the unbound plateau
+            shift_unbound = np.average(fes[mask_unbound])
+
+            # Grid spacing along z
+            dz = (grid_fes[-1] - grid_fes[0]) / (len(grid_fes) - 1)
+            extra_factor = np.log(dz)
+
+            # Shifted FES
+            fes_shifted = fes - shift_unbound
+
+            # Bound free energy integral
+            G_bound = -kbt * np.logaddexp.reduce(
+                -fes_shifted[mask_bound] / kbt
+            )
+
+            # Original formula:
+            # deltafunnel = -(G_bound - kbt * (prefactor_funnel + extra_factor))
+            delta_funnel = -(
+                G_bound - kbt * (prefactor_funnel + extra_factor)
+            )
+
+            deltaG.append(delta_funnel)
+
+        deltaG = np.asarray(deltaG)
+
+        if time is not None:
+            grid = time[interval_bounds[1:] - 1]
+        else:
+            grid = interval_bounds[1:]
+
+        ylabel = (
             f"$\\Delta G_{{funnel}}$ [{units}]"
             if units is not None
             else "$\\Delta G_{funnel}$"
         )
 
-    return grid_out, deltaG
+    # Plot if needed
+    if plot:
+        if ax is None:
+            fig, ax = plt.subplots()
+
+        ax.plot(grid, deltaG, color=plot_color)
+        ax.set_xlabel("Time" if time is not None else "Frame")
+        ax.set_ylabel(ylabel)
+
+    return grid, deltaG
 
 
 def _check_kbt_units(kbt, temp, units):

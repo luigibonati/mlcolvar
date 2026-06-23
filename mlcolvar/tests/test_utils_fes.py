@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from mlcolvar.utils import plot as _plot_utils  # register fessa colormap/colors
-from mlcolvar.utils.fes import SKLEARN_IS_INSTALLED, test_compute_fes, test_compute_deltaG, compute_deltaG, compute_fes, compute_funnel_deltaG
+from mlcolvar.utils.fes import SKLEARN_IS_INSTALLED, test_compute_fes, test_compute_deltaG, compute_deltaG, compute_fes
 
 
 def test_fes():
@@ -196,8 +196,9 @@ def test_funnel_delta_g():
     weights = rng.random(len(x)) + 0.1
 
     fig1, ax1 = plt.subplots()
-    grid, delta_g = compute_funnel_deltaG(
+    grid, delta_g = compute_deltaG(
         X=x,
+        mode="funnel",
         rfunnel=0.2,
         bat=0.8,
         uat=1.4,
@@ -224,8 +225,10 @@ def test_funnel_delta_g():
 
     # Case 1b: bias-derived weights should match explicitly supplied weights.
     positive_weights = weights + 0.1
-    grid_w, delta_g_w = compute_funnel_deltaG(
+
+    grid_w, delta_g_w = compute_deltaG(
         X=x,
+        mode="funnel",
         rfunnel=0.2,
         bat=0.8,
         uat=1.4,
@@ -239,8 +242,9 @@ def test_funnel_delta_g():
         backend="KDEpy",
     )
 
-    grid_b, delta_g_b = compute_funnel_deltaG(
+    grid_b, delta_g_b = compute_deltaG(
         X=x,
+        mode="funnel",
         rfunnel=0.2,
         bat=0.8,
         uat=1.4,
@@ -257,7 +261,8 @@ def test_funnel_delta_g():
     np.testing.assert_allclose(grid_b, grid_w)
     np.testing.assert_allclose(delta_g_b, delta_g_w)
 
+
 if __name__ == "__main__":
-    test_compute_fes()
-    test_compute_deltaG()
+    test_fes()
+    test_delta_g()
     test_funnel_delta_g()
