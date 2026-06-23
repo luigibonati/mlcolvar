@@ -15,8 +15,9 @@ import torch_geometric
 from lightning import LightningModule
 from torch.fx.experimental.proxy_tensor import make_fx
 
-from mlcolvar.core.nn import FeedForward, BaseGNN
+from mlcolvar.core.nn import BaseGNN
 from mlcolvar.utils import _code
+
 
 # Maximum optimization settings for exporting models with AOTInductor.
 # Activated only when MLCOLVAR_EXPORT_MAXIMUM_OPT=1.
@@ -32,6 +33,7 @@ if os.environ.get("MLCOLVAR_EXPORT_MAXIMUM_OPT") == "1":
         torch._inductor.config.aot_inductor.compile_wrapper_opt_level = "O3"
 
     os.environ["MLCOLVAR_EXPORT_FLOAT_TOL"] = "1E-4"
+
 
 # Graph serialization schema used by the exported GNN models.
 GRAPH_FIELDS = [
@@ -60,6 +62,7 @@ EXCLUDED_AGGR_MODULES = [
     "MaxAggregation",
 ]
 
+
 # Static fallback implementations of scatter operations used during export.
 def _scatter_sum_static(
     src: torch.Tensor,
@@ -83,7 +86,7 @@ def _scatter_mean_static(
 
 class ExportWrapper(torch.nn.Module):
     """
-    Wrapper used during model export.
+    Wrapper used during GNN model export.
 
     Normal CV mode:
         returns (CV, ∇CV, 0, 0)
@@ -96,6 +99,7 @@ class ExportWrapper(torch.nn.Module):
         - model.forward_nn(...)
         - model.sigmoid(...)
     """
+
     def __init__(
         self,
         model,
@@ -104,7 +108,6 @@ class ExportWrapper(torch.nn.Module):
         epsilon: float = 1e-14,
         lambd: float = -1.0,
         beta: float = 1.0,
-        is_gnn: bool = False,
     ):
         super().__init__()
 
@@ -112,17 +115,9 @@ class ExportWrapper(torch.nn.Module):
         self.calculate_gradients = calculate_gradients
         self.calculate_k_bias = calculate_k_bias
 
-        self.is_gnn = is_gnn
-
-        self.epsilon = torch.tensor(
-            epsilon, dtype=torch.get_default_dtype()
-        )
-        self.lambd = torch.tensor(
-            lambd, dtype=torch.get_default_dtype()
-        )
-        self.beta = torch.tensor(
-            beta, dtype=torch.get_default_dtype()
-        )
+        self.epsilon = torch.tensor(epsilon, dtype=torch.get_default_dtype())
+        self.lambd = torch.tensor(lambd, dtype=torch.get_default_dtype())
+        self.beta = torch.tensor(beta, dtype=torch.get_default_dtype())
 
         if self.calculate_k_bias:
             if not hasattr(self.model, "forward_nn"):
@@ -150,30 +145,21 @@ class ExportWrapper(torch.nn.Module):
             return self._forward_kbias(inputs)
 
         return self._forward_cv(inputs)
-    
+
     def _compute_cv_outputs(self, inputs):
-        if self.is_gnn:
-            data = GraphAdapter.tuple_to_dict(inputs)
+        data = GraphAdapter.tuple_to_dict(inputs)
 
-            x = data["positions"].requires_grad_(True)
-            data["positions"] = x
+        x = data["positions"].requires_grad_(True)
+        data["positions"] = x
 
-            outputs = self.model(data)
-
-        else:
-            data = None
-
-            x = inputs[0].requires_grad_(True)
-            outputs = self.model(x)
+        outputs = self.model(data)
 
         return outputs, x, data
-    
+
     def _forward_cv(self, inputs):
         outputs, x, data = self._compute_cv_outputs(inputs)
 
-        zero = torch.tensor(
-            0, device=outputs.device, dtype=outputs.dtype
-        )
+        zero = torch.tensor(0, device=outputs.device, dtype=outputs.dtype)
 
         if self.calculate_gradients:
             gradients = self._compute_cv_gradients(outputs, x, data)
@@ -183,36 +169,22 @@ class ExportWrapper(torch.nn.Module):
         return outputs, gradients, zero, zero
 
     def _compute_cv_gradients(self, outputs, x, data):
-        # Multi-output CV: compute full Jacobian
+        # Multi-output CV: compute full Jacobian.
         if outputs.shape[1] > 1:
-            if self.is_gnn:
 
-                def wrapper(pos):
-                    data["positions"] = pos
-                    return self.model(data)
+            def wrapper(pos):
+                data["positions"] = pos
+                return self.model(data)
 
-                gradients = torch.autograd.functional.jacobian(
-                    wrapper,
-                    x,
-                    create_graph=False,
-                    strict=False,
-                    vectorize=False,
-                )[0]
+            gradients = torch.autograd.functional.jacobian(
+                wrapper,
+                x,
+                create_graph=False,
+                strict=False,
+                vectorize=False,
+            )[0]
 
-            else:
-
-                def wrapper(inp):
-                    return self.model(inp)
-
-                gradients = torch.autograd.functional.jacobian(
-                    wrapper,
-                    x,
-                    create_graph=False,
-                    strict=False,
-                    vectorize=False,
-                )[0]
-
-        # Single-output CV: ordinary gradient
+        # Single-output CV: ordinary gradient.
         else:
             gradients = torch.autograd.grad(
                 outputs.sum(),
@@ -232,19 +204,12 @@ class ExportWrapper(torch.nn.Module):
         return outputs, gradients, k_bias_value, gradients_b
 
     def _compute_kbias_outputs(self, inputs):
-        if self.is_gnn:
-            data = GraphAdapter.tuple_to_dict(inputs)
+        data = GraphAdapter.tuple_to_dict(inputs)
 
-            x = data["positions"].requires_grad_(True)
-            data["positions"] = x
+        x = data["positions"].requires_grad_(True)
+        data["positions"] = x
 
-            outputs_raw = self.model.forward_nn(data)
-
-        else:
-            data = None
-
-            x = inputs[0].requires_grad_(True)
-            outputs_raw = self.model.forward_nn(x)
+        outputs_raw = self.model.forward_nn(data)
 
         dtype = outputs_raw.dtype
         device = outputs_raw.device
@@ -261,7 +226,7 @@ class ExportWrapper(torch.nn.Module):
         # outputs[0]: [batch, 2] = [z, q]
         outputs = torch.stack([z, q], dim=1)
 
-        # Need create_graph=True because grad_kbias requires second derivatives
+        # Need create_graph=True because grad_kbias requires second derivatives.
         gradients_z = torch.autograd.grad(
             z.sum(),
             x,
@@ -270,10 +235,9 @@ class ExportWrapper(torch.nn.Module):
         )[0]
 
         sigmoid_prime = sigmoid_p * q * (1.0 - q)
-
         gradients_q = gradients_z * sigmoid_prime.view(-1, 1)
 
-        # outputs[1]: [2, n_atoms, 3] for GNN, or [2, n_features] for FFNN
+        # outputs[1]: [2, n_atoms, 3] for GNN.
         gradients = torch.stack([gradients_z, gradients_q], dim=0)
 
         gradients_z_sum = torch.sum(gradients_z.pow(2))
@@ -307,13 +271,12 @@ class ExportConfig:
     k_bias_options: Optional[Dict[str, Any]] = None
     model_summary_level: int = 3
     run_check: bool = False
-    is_gnn: bool = False
 
 
 class GraphAdapter:
     """
     Utility class for converting between PyG graph objects,
-    dictionaries and tensor tuples used by the exported model.
+    dictionaries and tensor tuples used by the exported GNN model.
     """
 
     @staticmethod
@@ -321,7 +284,6 @@ class GraphAdapter:
         data: Union[torch_geometric.data.Data, Dict[str, Any], List[Any]],
         device: str = "cpu",
     ) -> Tuple[torch.Tensor, ...]:
-
         if isinstance(data, dict) and "data_list" in data:
             data = data["data_list"]
 
@@ -338,7 +300,6 @@ class GraphAdapter:
 
     @staticmethod
     def dict_to_tuple(inputs: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, ...]:
-
         dtype = inputs["positions"].dtype
         device = inputs["positions"].device
 
@@ -354,7 +315,6 @@ class GraphAdapter:
 
     @staticmethod
     def tuple_to_dict(inputs: Tuple[torch.Tensor, ...]) -> Dict[str, torch.Tensor]:
-
         outputs: Dict[str, torch.Tensor] = {}
 
         for i, k in enumerate(GRAPH_FIELDS):
@@ -372,9 +332,10 @@ class GraphAdapter:
 
 class ModelExporter:
     """
-    Exporter for FFNN and GNN models.
+    Exporter for GNN models.
+
     This class manages:
-      - input normalization
+      - graph input normalization
       - metadata generation
       - symbolic tracing + AOT compile
       - packaging
@@ -384,7 +345,7 @@ class ModelExporter:
     def __init__(
         self,
         model: LightningModule,
-        example_inputs: Union[torch.Tensor, torch_geometric.data.Data, Dict[str, Any], List[Any]],
+        example_inputs: Union[torch_geometric.data.Data, Dict[str, Any], List[Any]],
         config: ExportConfig,
     ):
         self.model = model
@@ -398,16 +359,11 @@ class ModelExporter:
             config.k_bias_options,
         )
 
-    # -------------------------------------------------------------------------
-    # static helpers
-    # -------------------------------------------------------------------------
-
     @staticmethod
     def _normalize_k_bias_options(
         model,
         k_bias_options: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-
         dtype = next(model.parameters()).dtype
 
         results = {
@@ -437,25 +393,11 @@ class ModelExporter:
 
         return results
 
-    # -------------------------------------------------------------------------
-    # input preparation
-    # -------------------------------------------------------------------------
-
     def _prepare_example_inputs(self) -> Tuple[torch.Tensor, ...]:
-        if self.config.is_gnn:
-            return GraphAdapter.data_to_tuple(
-                self.example_inputs,
-                self.model.device,
-            )
-
-        x = self.example_inputs.to(self.model.device)
-        if x.dim() == 1:
-            x = x.unsqueeze(0)
-        return (x,)
-
-    # -------------------------------------------------------------------------
-    # model summary / metadata
-    # -------------------------------------------------------------------------
+        return GraphAdapter.data_to_tuple(
+            self.example_inputs,
+            self.model.device,
+        )
 
     def _build_model_summary(
         self,
@@ -488,58 +430,39 @@ class ModelExporter:
         return result
 
     def _build_model_metadata(self) -> Dict[str, str]:
-        if self.config.is_gnn:
-            # TO DO, now the gnn model's output is associated with the model.n_out, which is not necessarily the same as model.n_cvs. We should clean this up in the future.
-            n_cvs = 2 if self.calculate_k_bias else int(self.model.n_cvs.item())
+        # TODO: currently the GNN output is associated with model.n_out, which is
+        # not necessarily the same as model.n_cvs. This should be cleaned up.
+        n_cvs = 2 if self.calculate_k_bias else int(self.model.n_cvs.item())
 
-            metadata = {
-                "n_cvs": str(n_cvs),
-                "cutoff": str(self.model.cutoff.item()),
-                "buffer": str(self.model.buffer.item()),
-                "long_range_cutoff": str(self.model.long_range_cutoff.item()),
-                "n_atom_types": str(len(self.model.atomic_numbers)),
-                "float_dtype": str(self.model.dtype)[-2:],
-                "calculate_gradients": str(self.config.calculate_gradients),
-                "calculate_k_bias": str(self.calculate_k_bias),
-                "model_type": "gnn",
-            }
+        metadata = {
+            "n_cvs": str(n_cvs),
+            "cutoff": str(self.model.cutoff.item()),
+            "buffer": str(self.model.buffer.item()),
+            "long_range_cutoff": str(self.model.long_range_cutoff.item()),
+            "n_atom_types": str(len(self.model.atomic_numbers)),
+            "float_dtype": str(self.model.dtype)[-2:],
+            "calculate_gradients": str(self.config.calculate_gradients),
+            "calculate_k_bias": str(self.calculate_k_bias),
+            "model_type": "gnn",
+        }
 
-            for i in range(len(self.model.atomic_numbers)):
-                metadata[f"atomic_number_{i:d}"] = str(
-                    self.model.atomic_numbers[i].item()
-                )
-
-            metadata["model_summary"] = self._build_model_summary(
-                "CV", self.model, self.config.model_summary_level, 0
+        for i in range(len(self.model.atomic_numbers)):
+            metadata[f"atomic_number_{i:d}"] = str(
+                self.model.atomic_numbers[i].item()
             )
 
-            metadata["n_parameters"] = str(
-                sum(p.numel() for p in self.model.parameters() if p.requires_grad)
-            )
+        metadata["model_summary"] = self._build_model_summary(
+            "CV", self.model, self.config.model_summary_level, 0
+        )
 
-            for k, v in self.k_bias_options.items():
-                metadata[k] = str(v)
+        metadata["n_parameters"] = str(
+            sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        )
 
-            return metadata
-        else:
-            n_cvs = 2 if self.calculate_k_bias else int(self.model.n_cvs)
+        for k, v in self.k_bias_options.items():
+            metadata[k] = str(v)
 
-            metadata = {
-                "n_cvs": str(n_cvs),
-                "float_dtype": str(next(self.model.parameters()).dtype)[-2:],
-                "calculate_gradients": str(self.config.calculate_gradients),
-                "calculate_k_bias": str(self.calculate_k_bias),
-                "model_type": "ffnn",
-            }
-
-            for k, v in self.k_bias_options.items():
-                metadata[k] = str(v)
-
-            return metadata
-
-    # -------------------------------------------------------------------------
-    # package metadata update
-    # -------------------------------------------------------------------------
+        return metadata
 
     @staticmethod
     def _update_package_metadata(file_name: str, data: Dict[str, str]) -> None:
@@ -559,10 +482,6 @@ class ModelExporter:
 
         os.remove(file_name)
         os.rename(tmp, file_name)
-
-    # -------------------------------------------------------------------------
-    # checks / patches
-    # -------------------------------------------------------------------------
 
     def _check_aggr_modules(self) -> None:
         model_summary = self._build_model_summary("", self.model, 100, 0)
@@ -603,7 +522,11 @@ class ModelExporter:
 
         float_dtype = metadata["float_dtype"]
         calculate_gradients = metadata["calculate_gradients"] in ("True", "1", True)
-        calculate_k_bias = metadata.get("calculate_k_bias", "False") in ("True", "1", True)
+        calculate_k_bias = metadata.get("calculate_k_bias", "False") in (
+            "True",
+            "1",
+            True,
+        )
         n_cvs = int(metadata["n_cvs"])
 
         model_outputs = model(example_inputs)
@@ -655,15 +578,10 @@ class ModelExporter:
             else:
                 delattr(self.model, "_exporting")
 
-    # -------------------------------------------------------------------------
-    # compile / package
-    # -------------------------------------------------------------------------
-
     def _wrap_model_for_export(self) -> ExportWrapper:
         return ExportWrapper(
             self.model,
             calculate_gradients=self.config.calculate_gradients,
-            is_gnn=self.config.is_gnn,
             **self.k_bias_options,
         )
 
@@ -712,33 +630,22 @@ class ModelExporter:
 
         return output_path
 
-    # -------------------------------------------------------------------------
-    # public
-    # -------------------------------------------------------------------------
-
     def export(self) -> str:
-        if self.config.is_gnn:
-            self._check_aggr_modules()
-            torch._dynamo.allow_in_graph(torch.autograd.grad)
-            torch._dynamo.allow_in_graph(torch.autograd.functional.jacobian)
+        self._check_aggr_modules()
+        torch._dynamo.allow_in_graph(torch.autograd.grad)
+        torch._dynamo.allow_in_graph(torch.autograd.functional.jacobian)
 
         inputs = self._prepare_example_inputs()
         metadata = self._build_model_metadata()
         exportable = self._wrap_model_for_export()
 
         with self._exporting_flag():
-            if self.config.is_gnn:
-                with self._patched_graph_ops():
-                    return self._compile_and_export(
-                        exportable_model=exportable,
-                        inputs=inputs,
-                        metadata=metadata,
-                    )
-            return self._compile_and_export(
-                exportable_model=exportable,
-                inputs=inputs,
-                metadata=metadata,
-            )
+            with self._patched_graph_ops():
+                return self._compile_and_export(
+                    exportable_model=exportable,
+                    inputs=inputs,
+                    metadata=metadata,
+                )
 
 
 def export(
@@ -751,29 +658,24 @@ def export(
     run_check: bool = False,
 ):
     """
-    Export a CV model using symbolic tracing and Ahead-Of-Time (AOT)
+    Export a GNN CV model using symbolic tracing and Ahead-Of-Time (AOT)
     compilation.
-
-    Models exported with this method are typically significantly faster
-    than models compiled with JIT methods such as ``torch.jit.script``.
 
     Parameters
     ----------
     model : lightning.LightningModule
-        The CV model to export.
+        The GNN CV model to export. The model itself, or ``model.nn``, must be
+        an instance of ``BaseGNN``.
 
-    example_inputs : Any
-        Example inputs used to trace the model. This can be a tensor
-        (for FFNN models) or a ``torch_geometric.data.Data`` object
-        (for GNN models).
+    example_inputs : torch_geometric.data.Data or dict/list containing Data
+        Example graph input used to trace the model.
 
     file_name : str, optional
-        Name of the exported model file. The filename should include
-        the ``.pt2`` extension.
+        Name of the exported model file. The filename should include the
+        ``.pt2`` extension.
 
     calculate_gradients : bool, optional
-        Whether gradient calculations should be included in the exported
-        model. This option should normally remain enabled.
+        Whether gradient calculations should be included in the exported model.
 
     k_bias_options : dict[str, Any], optional
         Options for enabling the Kolmogorov bias :math:`V_K` for committor
@@ -782,46 +684,26 @@ def export(
 
         Supported fields include:
 
-        - ``epsilon`` : float  
+        - ``epsilon`` : float
             Numerical regularization parameter used in the Kolmogorov bias.
 
-        - ``lambd`` : float  
+        - ``lambd`` : float
             Scaling factor of the Kolmogorov bias.
+
+        - ``beta`` : float
+            Inverse-temperature-like scaling parameter.
 
     model_summary_level : int, optional
         Depth of the model summary stored in the exported metadata.
 
     run_check : bool, optional
-        If ``True``, a precision check is performed by comparing the outputs
-        of the original model and the exported model.
+        If ``True``, a precision check is performed by comparing the outputs of
+        the original model and the exported model.
 
     Notes
     -----
-    **1. Fixed dtype and device**
-
-    The dtype and device of the model are fixed after export. Therefore,
-    move the model to the desired device and dtype before exporting:
-
-    ```python
-    model = mlcolvar.cvs.DeepTICA(...)
-    model = model.to(torch.float64).to("cuda")
-
-    dataset = mlcolvar.utils.io.create_dataset_from_files(...) 
-    mlcolvar.graph.utils.export.export(model, example_inputs=dataset[0])
-    ```
-
-    **2. GPU performance**
-
-    Exported models usually run much faster on GPUs. It is therefore
-    recommended to compile the PLUMED interface with a CUDA-enabled
-    version of LibTorch.
-
-    **3. Static gradient graph**
-
-    In exported models, the gradient computation graph is statically
-    compiled. As a result, Kolmogorov bias parameters cannot be changed
-    at runtime. If these parameters need to be modified, the model must
-    be re-exported.
+    The dtype and device of the model are fixed after export. Move the model to
+    the desired device and dtype before exporting.
 
     Example:
 
@@ -829,44 +711,19 @@ def export(
     export(
         model,
         example_inputs=dataset[0],
-        file_name="model_kbias_lambda_1.0.pt2",
-        k_bias_options={"lambd": 1.0},
+        file_name="model.pt2",
+        run_check=True,
     )
     ```
-
-    **4. CUDA toolkit requirement**
-
-    When exporting CUDA models, the CUDA toolkit must be visible to
-    PyTorch. For example:
-
-    ```bash
-    export CUDA_HOME=/usr/local/cuda-12.9
-    export PATH=$PATH:/usr/local/cuda-12.9/bin
-    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-12.9/lib64
-    export C_INCLUDE_PATH=$C_INCLUDE_PATH:/usr/local/cuda-12.9/include
-    ```
-
-    **5. Portability**
-
-    Exported models are not guaranteed to be portable across machines.
-    They may only run correctly on the system where they were exported.
-
-    **6. Unsupported PyG aggregation modules**
-
-    Some ``torch_geometric`` aggregation modules (e.g.
-    ``MedianAggregation``, ``MinAggregation``, and ``MaxAggregation``)
-    may not export correctly and can lead to incorrect gradient
-    computations. Avoid using these modules when exporting models.
-
-    **7. PyTorch version**
-
-    PyTorch v2.9 or newer is recommended for reliable export support.
     """
-
-    # detect model type
     is_gnn = isinstance(model, BaseGNN) or (
         hasattr(model, "nn") and isinstance(model.nn, BaseGNN)
     )
+    if not is_gnn:
+        raise TypeError(
+            "This GNN-only exporter only supports BaseGNN models or wrappers "
+            "whose `nn` attribute is a BaseGNN."
+        )
 
     exporter = ModelExporter(
         model=model,
@@ -876,7 +733,6 @@ def export(
             calculate_gradients=calculate_gradients,
             k_bias_options=k_bias_options,
             model_summary_level=model_summary_level,
-            is_gnn=is_gnn,
             run_check=run_check,
         ),
     )
@@ -888,80 +744,17 @@ def load_exported(
     file_name: str,
 ) -> torch._inductor.package.package.AOTICompiledModel:
     """
-    Load an exported CV model.
+    Load an exported GNN CV model.
 
     Parameters
     ----------
     file_name: str
         Name of the `.pt2` file.
     """
-
-    model = torch._inductor.aoti_load_package(file_name)
-
-    return model
+    return torch._inductor.aoti_load_package(file_name)
 
 
-
-def test_export_1():
-    torch.manual_seed(0)
-    torch.set_default_dtype(torch.float32)
-
-    model = FeedForward(layers=[5, 16, 16, 2])
-    model.n_cvs = 2
-    model.device = "cpu"
-
-    x = torch.randn(1,5)
-
-    export(
-        model,
-        example_inputs=x,
-        file_name="test.pt2",
-        run_check=True
-    )
-
-    os.remove("test.pt2")
-
-
-def test_export_2():
-
-    torch.manual_seed(0)
-    torch.set_default_dtype(torch.float32)
-
-    from mlcolvar.cvs import Committor
-    from mlcolvar.cvs.committor.utils import initialize_committor_masses
-
-    atomic_masses = initialize_committor_masses(
-        atom_types=[0,1],
-        masses=[15.999, 1.008]
-    )
-
-    x = torch.randn((1,5))
-
-    model = Committor(
-        model=[5,4,2,1],
-        atomic_masses=atomic_masses,
-        alpha=1e-1,
-        delta_f=0
-    )
-
-    k_bias_options = dict(
-        epsilon=1e-6,
-        lambd=1,
-        beta=1,
-    )
-
-    export(
-        model,
-        example_inputs=x,
-        file_name="test.pt2",
-        k_bias_options=k_bias_options,
-        run_check=True
-    )
-
-    os.remove("test.pt2")
-
-
-def test_export_3() -> None:
+def test_export_gnn() -> None:
     torch.manual_seed(0)
     torch.set_default_dtype(torch.float32)
 
@@ -993,7 +786,7 @@ def test_export_3() -> None:
         model,
         example_inputs=dataset,
         file_name="model.pt2",
-        run_check=True
+        run_check=True,
     )
 
     os.remove("model.pt2")
