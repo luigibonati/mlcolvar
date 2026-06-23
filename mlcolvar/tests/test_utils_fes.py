@@ -262,8 +262,17 @@ def test_funnel_delta_g():
     mask_bound = np.logical_and(x > bound_region[0], x < bound_region[1])
     mask_unbound = np.logical_and(x > unbound_region[0], x < unbound_region[1])
 
-    p_bound = np.sum(positive_weights[mask_bound])
-    p_unbound = np.sum(positive_weights[mask_unbound])
+    # Reproduce the same interval construction used internally by compute_deltaG.
+    interval_len = len(x) / 5
+    interval_bounds = np.arange(0, len(x), interval_len)
+    interval_bounds = np.ceil(interval_bounds).astype("int")
+    interval_bounds = np.concatenate((interval_bounds, np.array([len(x) - 1])))
+
+    # compute_deltaG uses Python slicing [start:end], so the final index is excluded.
+    end = interval_bounds[-1]
+
+    p_bound = 1e-8 + np.sum(positive_weights[:end][mask_bound[:end]])
+    p_unbound = 1e-8 + np.sum(positive_weights[:end][mask_unbound[:end]])
 
     volume_correction = np.pi * rfunnel**2 * c0 / 1.66
     expected_delta_g = -np.log((p_bound / p_unbound) * volume_correction)
