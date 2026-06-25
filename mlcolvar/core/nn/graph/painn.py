@@ -513,5 +513,6 @@ def test_painn_2() -> None:
     )
     data['edge_masks_lr'][:-6] = True
     torch.set_printoptions(precision=16)
-    ref_out = torch.tensor([[0.0720856700379041, -0.0420276151917215]] * 5)
+    ref_out = torch.tensor([[ 0.0580523212375041, -0.0220428793692266]] * 4
+                           + [[ 0.0720856700379041, -0.0420276151917215]])
     assert ( torch.allclose(model(data), ref_out) )
