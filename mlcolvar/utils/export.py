@@ -50,11 +50,13 @@ GRAPH_FIELDS = [
     "n_system",
 ]
 
+
 OPTIONAL_GRAPH_FIELDS = [
     "system_masks",
     "subsystem_masks",
     "edge_masks_lr",
 ]
+
 
 EXCLUDED_AGGR_MODULES = [
     "MedianAggregation",
@@ -64,6 +66,11 @@ EXCLUDED_AGGR_MODULES = [
 
 
 # Static fallback implementations of scatter operations used during export.
+#
+# These fallback functions are only used inside the export context. They are not
+# general replacements for scatter_sum/scatter_mean, because they intentionally
+# ignore index/out/dim_size. They should only be used when the exported graph
+# operations have already been reduced to fixed-shape reductions for AOT tracing.
 def _scatter_sum_static(
     src: torch.Tensor,
     index: torch.Tensor,
@@ -88,14 +95,20 @@ class ExportWrapper(torch.nn.Module):
     """
     Wrapper used during GNN model export.
 
+    The exported model always returns four tensors for compatibility with the
+    exported-model interface.
+
     Normal CV mode:
-        returns (CV, ∇CV, 0, 0)
+        returns (CV, dCV/dx, 0, 0)
 
     Kolmogorov-bias mode:
-        returns ([z, q], [∇z, ∇q], V_K, ∇V_K)
+        returns ([z, q], [dz/dx, dq/dx], V_K, dV_K/dx)
 
-    The Kolmogorov-bias mode is enabled by passing k_bias_options to export().
-    It assumes that the model has:
+    In normal CV mode, the third and fourth outputs are scalar zero placeholders.
+    They are only meaningful when Kolmogorov-bias export is explicitly enabled
+    through k_bias_options.
+
+    The Kolmogorov-bias mode assumes that the model has:
         - model.forward_nn(...)
         - model.sigmoid(...)
     """
@@ -140,6 +153,7 @@ class ExportWrapper(torch.nn.Module):
         if self.calculate_k_bias and not self.calculate_gradients:
             raise RuntimeError("Can not calculate k_bias without gradients")
 
+    # The token argument is kept for compatibility with the AOT export wrapper.
     def forward(self, inputs, token: bool = False):
         if self.calculate_k_bias:
             return self._forward_kbias(inputs)
@@ -275,8 +289,8 @@ class ExportConfig:
 
 class GraphAdapter:
     """
-    Utility class for converting between PyG graph objects,
-    dictionaries and tensor tuples used by the exported GNN model.
+    Utility class for converting between PyG graph objects, dictionaries and
+    tensor tuples used by the exported GNN model.
     """
 
     @staticmethod
@@ -352,22 +366,25 @@ class ModelExporter:
         self.example_inputs = example_inputs
         self.config = config
 
-        self.calculate_k_bias = config.k_bias_options is not None
-
         self.k_bias_options = self._normalize_k_bias_options(
             model,
             config.k_bias_options,
         )
+
+        # Kolmogorov-bias export is enabled whenever k_bias_options is provided.
+        self.calculate_k_bias = config.k_bias_options is not None
 
     @staticmethod
     def _normalize_k_bias_options(
         model,
         k_bias_options: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        dtype = next(model.parameters()).dtype
+        try:
+            dtype = next(model.parameters()).dtype
+        except StopIteration:
+            dtype = torch.get_default_dtype()
 
         results = {
-            "calculate_k_bias": k_bias_options is not None,
             "epsilon": 1e-14 if dtype == torch.float64 else 1e-7,
             "lambd": 1.0,
             "beta": 1.0,
@@ -383,8 +400,6 @@ class ModelExporter:
                 results["lambd"] = float(v)
             elif k == "beta":
                 results["beta"] = float(v)
-            elif k == "calculate_k_bias":
-                results["calculate_k_bias"] = bool(v)
             else:
                 raise ValueError(f"Unknown k_bias_options key: {k}")
 
@@ -591,7 +606,7 @@ class ModelExporter:
         inputs: Tuple[torch.Tensor, ...],
         metadata: Dict[str, str],
     ) -> str:
-        # taken from: https://depyf.readthedocs.io/en/latest/walk_through.html
+        # Taken from: https://depyf.readthedocs.io/en/latest/walk_through.html
         def forward_and_backward(_inputs, kwargs={}):
             return exportable_model(_inputs, False)
 
@@ -682,6 +697,11 @@ def export(
         models. If this dictionary is provided, the Kolmogorov bias is
         automatically enabled in the exported model.
 
+        When enabled, the exported CV output contains two components,
+        ``[z, q]``, where ``z`` is the raw committor coordinate and ``q`` is the
+        sigmoid-transformed committor. The third and fourth returned tensors
+        contain ``V_K`` and ``dV_K/dx``, respectively.
+
         Supported fields include:
 
         - ``epsilon`` : float
@@ -692,6 +712,11 @@ def export(
 
         - ``beta`` : float
             Inverse-temperature-like scaling parameter.
+
+        - ``calculate_k_bias`` : bool
+            Whether to enable the Kolmogorov-bias outputs. This is normally
+            inferred from whether ``k_bias_options`` is provided, but can be set
+            explicitly.
 
     model_summary_level : int, optional
         Depth of the model summary stored in the exported metadata.
@@ -704,6 +729,11 @@ def export(
     -----
     The dtype and device of the model are fixed after export. Move the model to
     the desired device and dtype before exporting.
+
+    The exported model always returns four tensors for compatibility with the
+    exported-model interface. In normal CV mode, only the first two tensors are
+    meaningful: the CV values and their gradients. The third and fourth tensors
+    are scalar zero placeholders.
 
     Example:
 
@@ -749,7 +779,7 @@ def load_exported(
     Parameters
     ----------
     file_name: str
-        Name of the `.pt2` file.
+        Name of the ``.pt2`` file.
     """
     return torch._inductor.aoti_load_package(file_name)
 
