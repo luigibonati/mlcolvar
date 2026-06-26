@@ -12,7 +12,36 @@ import numpy as np
 from mlcolvar.data import DictDataset
 import gc
 
+class SoftmaxPostProcessing(torch.nn.Module):
+    """Apply a softmax normalization followed by a learnable linear mixing.
 
+    Parameters
+    ----------
+    r : int, default=4
+        Number of representation channels. This is both the input and output
+        dimension of the final linear layer.
+    """
+
+    def __init__(self, r: int = 4):
+        super().__init__()
+        self.final_linear = torch.nn.Linear(r, r)
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        """Normalize the last dimension and apply the final linear layer.
+
+        Parameters
+        ----------
+        input : torch.Tensor
+            Tensor of shape ``(..., r)``.
+
+        Returns
+        -------
+        torch.Tensor
+            Tensor of shape ``(..., r)`` after softmax normalization and
+            linear projection.
+        """
+        input = torch.nn.functional.softmax(input, dim=-1)
+        return self.final_linear(input)
 
 def sqrtmh(A: torch.Tensor):
     L, Q = torch.linalg.eigh(A)
@@ -114,11 +143,9 @@ def compute_covariances(input,output,weights,r,friction,n_dim=3,descriptors_deri
                                                         descriptors_derivatives.shape[1] * 3, # number of atoms * 3 
                                                         output.shape[-1] # number of outputs
                                                         )
-        
     # If the input was already positions
     else:
         gradient_positions = gradient
-
     
 
     if r==1:
@@ -245,6 +272,7 @@ def compute_eigenfunctions(dataset : DictDataset,
     covariance = torch.zeros((r+1,r+1),device=weights.device)
     dcov = torch.zeros((r+1,r+1),device=weights.device)
     output = torch.zeros((len(weights),r+1),device=weights.device)
+
     for i,batch in enumerate(loader):
         print(f"Processing batch {i}/{len(loader)}", end='\r')
         batch_start, batch_stop = i*batch_size, (i+1) * batch_size
@@ -303,7 +331,7 @@ def compute_eigenfunctions(dataset : DictDataset,
     M = W_sq_inv @ covariance @ W_sq_inv
     evals, evecs = torch.linalg.eigh(M)
     evecs = W_sq_inv @ evecs
-
+    
     idx = torch.argsort(-evals)
     evals = evals[idx]
     evecs = evecs[:, idx]

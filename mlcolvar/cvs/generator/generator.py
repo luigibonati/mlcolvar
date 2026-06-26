@@ -4,42 +4,11 @@ from typing import Union, Tuple,List
 from mlcolvar.cvs import BaseCV
 from mlcolvar.core import FeedForward, BaseGNN
 from mlcolvar.core.loss.generator_loss import GeneratorLoss
-from mlcolvar.cvs.generator.utils import compute_eigenfunctions
+from mlcolvar.cvs.generator.utils import SoftmaxPostProcessing,compute_eigenfunctions
 from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
 from mlcolvar.data import DictDataset
 
 __all__ = ["Generator"]
-
-class Softmax_PostProc(torch.nn.Module):
-    """Apply a softmax normalization followed by a learnable linear mixing.
-
-    Parameters
-    ----------
-    r : int, default=4
-        Number of representation channels. This is both the input and output
-        dimension of the final linear layer.
-    """
-
-    def __init__(self, r: int = 4):
-        super().__init__()
-        self.final_linear = torch.nn.Linear(r, r)
-
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
-        """Normalize the last dimension and apply the final linear layer.
-
-        Parameters
-        ----------
-        input : torch.Tensor
-            Tensor of shape ``(..., r)``.
-
-        Returns
-        -------
-        torch.Tensor
-            Tensor of shape ``(..., r)`` after softmax normalization and
-            linear projection.
-        """
-        input = torch.nn.functional.softmax(input, dim=-1)
-        return self.final_linear(input)
 
 class Generator(BaseCV):
     """
@@ -66,6 +35,7 @@ class Generator(BaseCV):
     """
 
     DEFAULT_BLOCKS = ["nn"]
+    MODEL_BLOCKS = ["nn"]
 
     def __init__(self,
                  r: int,
@@ -133,12 +103,14 @@ class Generator(BaseCV):
         # these are initialized by compute_eigenfunctions method
         self.evecs = None
         self.evals = None
+
         # ======= OPTIONS =======
         # parse and sanitize
         options = self.parse_options(options)
-        # ======= BLOCKS =======
-        # initialize NN turning
+
+        # ======= BLOCKS ======= 
         if not self._override_model:
+            # initialize NN
             o = "nn"
             # set default activation to tanh
             if "activation" not in options[o]:
@@ -147,19 +119,16 @@ class Generator(BaseCV):
             self.nn = FeedForward(self.layers, **options[o])
         else:
             self.nn = model
-        #if self.nn.out_features != r:
-        #    raise ValueError ( 
-        #        f"The last layer of the neural network should have dimension {r}! Found {self.nn.out_features}."
-        #        )
+        
         if self.softmax_postproc:
-            self.postprocessing=Softmax_PostProc(r)
+            self.postprocessing=SoftmaxPostProcessing(r)
 
 
     def compute_eigenfunctions(self,
                                dataset : DictDataset,        
                                eta : float = None, 
                                friction : float = None,         
-                               tikhonov_reg : float = 1e-4,      
+                               tikhonov_reg : float = 1e-4, # TODO is it needed?     
                                recompute : bool = False,        
                                descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None,
                                batch_size=None,
@@ -181,7 +150,7 @@ class Generator(BaseCV):
         friction : torch.Tensor, optional
             Friction prefactor used for this computation. Defaults to the value used
             at initialization.
-        tikhonov_reg : float, default=1e-4
+        tikhonov_reg : float, default=1e-4 # TODO is it needed?
             Tikhonov regularization parameter used when solving the linear problem.
         recompute : bool, default=False
             If ``True``, recompute eigenvectors/eigenvalues even when cached values
@@ -201,33 +170,38 @@ class Generator(BaseCV):
             Eigenvectors mapping the learned representation to eigenfunctions, with
             shape ``(r, r)``.
         """
+        # inherit friction and eta from the model if not provided
         if friction is None:
             friction = self.friction
         if eta is None:
             eta = self.eta
         
+        # check if using GNN
         is_graph = isinstance(self.nn, BaseGNN)
         
         if (recompute or self.evecs is None): 
             # get eigenfunctions
-                eigenfunctions, evals, evecs, output = compute_eigenfunctions(
-                dataset=dataset,
-                model=self,
-                r=self.r,
-                eta=eta,
-                friction=friction,
-                tikhonov_reg=tikhonov_reg,
-                descriptors_derivatives=descriptors_derivatives,
-                n_dim=self.n_dim,
-                batch_size=batch_size,
-                soft_max_postproc=self.softmax_postproc,
-                is_graph=is_graph
-                )
-                self.evals = evals
-                self.evecs = evecs
-                return eigenfunctions, evals, evecs
+            eigenfunctions, evals, evecs, output = compute_eigenfunctions(dataset=dataset,
+                                                                          model=self,
+                                                                          r=self.r,
+                                                                          eta=eta,
+                                                                          friction=friction,
+                                                                          tikhonov_reg=tikhonov_reg,
+                                                                          descriptors_derivatives=descriptors_derivatives,
+                                                                          n_dim=self.n_dim,
+                                                                          batch_size=batch_size,
+                                                                          soft_max_postproc=self.softmax_postproc,
+                                                                          is_graph=is_graph
+                                                                         )
+            
+            # register evals and evecs to the model
+            self.evals = evals
+            self.evecs = evecs
+
+            return eigenfunctions, evals, evecs
 
         else:
+            # prepare data 
             if isinstance(self.nn, FeedForward):
                 x = dataset["data"]
                 x = x.reshape((x.shape[0], -1))
@@ -235,6 +209,8 @@ class Generator(BaseCV):
             elif isinstance(self.nn, BaseGNN):
                 x = dataset.get_graph_inputs()
                 cell_preprocessing = None
+
+            # get out    
             output = self.forward_nn(x, cell=cell_preprocessing)
             eigenfunctions = output @ self.evecs
             return eigenfunctions, self.evals, self.evecs
