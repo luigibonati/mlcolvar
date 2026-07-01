@@ -25,6 +25,7 @@ class BaseCV(lightning.LightningModule):
         model: Union[List[int], FeedForward, BaseGNN],
         preprocessing: torch.nn.Module = None,
         postprocessing: torch.nn.Module = None,
+        premodel: torch.nn.Module = None,
         *args,
         **kwargs,
     ):
@@ -43,7 +44,7 @@ class BaseCV(lightning.LightningModule):
         # The parent class sets in_features and out_features based on their own
         # init arguments so we don't need to save them here (see #103).        
         # It is needed for compatibility with multiclass CVs
-        self.save_hyperparameters(ignore=['in_features', 'out_features'])
+        self.save_hyperparameters(ignore=['in_features', 'out_features', "premodel"])
 
         # MODEL
         self.parse_model(model=model)
@@ -59,6 +60,34 @@ class BaseCV(lightning.LightningModule):
         self.preprocessing = preprocessing
         self.postprocessing = postprocessing
         self._preprocessing_training_warning_shown = False
+        
+        # PREMODEL
+        # The premodel is assumed to be a pretrained upstream model,
+        # e.g. a SelfTICA model used only through forward_nn().
+        self.premodel = premodel
+
+        if self.premodel is not None:
+            if not isinstance(self.premodel, torch.nn.Module):
+                raise TypeError("premodel must be a torch.nn.Module.")
+
+            if not hasattr(self.premodel, "forward_nn"):
+                raise AttributeError(
+                    f"{self.premodel.__class__.__name__} must define `forward_nn` "
+                    "to be used as a premodel."
+                )
+
+            self.premodel.eval()
+            for p in self.premodel.parameters():
+                p.requires_grad_(False)
+                
+    def train(self, mode: bool = True):
+        """Set training mode, keeping the pretrained premodel in eval mode."""
+        super().train(mode)
+
+        if hasattr(self, "premodel") and self.premodel is not None:
+            self.premodel.eval()
+
+        return self
 
     @property
     def n_cvs(self):
@@ -67,18 +96,39 @@ class BaseCV(lightning.LightningModule):
 
     @property
     def example_input_array(self):
-        if self.in_features is not None:
-            return torch.randn(
-                (1,self.in_features)
-                if self.preprocessing is None
-                or not hasattr(self.preprocessing, "in_features")
-                else self.preprocessing.in_features
-            )
-        else:
-            return create_graph_tracing_example(n_species=len(self.atomic_numbers), 
-                                                environment=True,
-                                                long_range=True if hasattr(self, 'long_range_cutoff') and self.long_range_cutoff > 0 else False)
+        # If a premodel is provided, the full model input is the input of the premodel,
+        # i.e. the raw descriptor dimension before SelfTICA.forward_nn().
+        if self.premodel is not None:
+            if hasattr(self.premodel, "in_features") and self.premodel.in_features is not None:
+                return torch.randn((1, self.premodel.in_features))
 
+            if hasattr(self.premodel, "atomic_numbers"):
+                return create_graph_tracing_example(
+                    n_species=len(self.premodel.atomic_numbers),
+                    environment=True,
+                    long_range=True
+                    if hasattr(self.premodel, "long_range_cutoff")
+                    and self.premodel.long_range_cutoff > 0
+                    else False,
+                )
+
+        # Otherwise keep the standard behavior.
+        if self.in_features is not None:
+            if self.preprocessing is not None and hasattr(self.preprocessing, "in_features"):
+                in_features = self.preprocessing.in_features
+            else:
+                in_features = self.in_features
+
+            return torch.randn((1, in_features))
+
+        else:
+            return create_graph_tracing_example(
+                n_species=len(self.atomic_numbers),
+                environment=True,
+                long_range=True
+                if hasattr(self, "long_range_cutoff") and self.long_range_cutoff > 0
+                else False,
+            )
 
     # TODO add general torch.nn.Module
     def parse_model(self, model: Union[List[int], FeedForward, BaseGNN]):
@@ -154,11 +204,46 @@ class BaseCV(lightning.LightningModule):
             self.initialize_transforms(self.trainer.datamodule)
 
     def initialize_transforms(self, datamodule):
-        for b in self.BLOCKS:
-            if isinstance(getattr(self, b), Transform):
-                getattr(self, b).setup_from_datamodule(datamodule)
+        """
+        Initialize preprocessing and transform blocks from the datamodule.
 
-    def forward(self, x: torch.Tensor, cell=None) -> torch.Tensor:
+        When a premodel is provided, the preprocessing module acts on the
+        representation produced by premodel.forward_nn(), not on the raw input.
+        Therefore, it is not automatically fitted from the original datamodule.
+        """
+        if isinstance(self.preprocessing, Transform):
+            if self.premodel is None:
+                self.preprocessing.setup_from_datamodule(datamodule)
+            else:
+                warn(
+                    "A preprocessing Transform is used after a frozen premodel. "
+                    "It will not be automatically initialized from the datamodule, "
+                    "because it acts on premodel.forward_nn(x), not on the raw input. "
+                    "Please make sure it has been fitted on the premodel output space."
+                )
+
+        for b in self.BLOCKS:
+            block = getattr(self, b)
+            if isinstance(block, Transform):
+                block.setup_from_datamodule(datamodule)
+                
+    def _apply_premodel(self, x: Any, cell=None) -> Any:
+        """
+        Apply the frozen upstream model, if present.
+
+        The premodel is expected to expose a forward_nn method. For consistency
+        with descriptor-based or graph-based models, forward_nn should ideally
+        accept cell=None.
+        """
+        if self.premodel is None:
+            return x
+
+        if cell is None:
+            return self.premodel.forward_nn(x)
+
+        return self.premodel.forward_nn(x, cell=cell)
+
+    def forward(self, x: Any, cell=None) -> torch.Tensor:
         """
         Evaluation of the CV
 
@@ -176,34 +261,49 @@ class BaseCV(lightning.LightningModule):
         torch.Tensor
             Output of the forward operation of the model
         """
-
-        if self.preprocessing is not None:
-            x = self._apply_module(self.preprocessing, x, cell=cell)
-
-        x = self.forward_cv(x)
+        
+        x = self.forward_cv(x, cell=cell)
 
         if self.postprocessing is not None:
             x = self._apply_module(self.postprocessing, x)
 
         return x
 
-    def forward_cv(self, x: torch.Tensor) -> torch.Tensor:
+    def forward_cv(self, x: Any, cell=None) -> torch.Tensor:
         """
-        Execute sequentially all the blocks in self.BLOCKS unless they are not initialized.
+        Execute the CV part of the model.
 
-        No pre/post processing will be executed here. This is supposed to be called during training/validation and to be overloaded if necessary.
+        This method applies the input pipeline and then sequentially executes all
+        initialized blocks in self.BLOCKS:
+
+            x -> optional premodel.forward_nn
+            -> optional preprocessing
+            -> CV blocks
+
+        Postprocessing is intentionally not applied here. It is only applied in
+        forward(). This keeps training/validation calls consistent with inference
+        while leaving any final output transformation to forward().
 
         Parameters
         ----------
-        x : torch.Tensor
-            Input of the forward operation of the model
+        x : Any
+            Input of the model. It can be a tensor, graph data, or any input type
+            accepted by the premodel/preprocessing/CV blocks.
+        cell : optional
+            Optional simulation cell passed to the premodel and/or preprocessing
+            when required.
 
         Returns
         -------
         torch.Tensor
-            Output of the forward operation of the model
+            Output of the CV blocks before postprocessing.
         """
 
+        x = self._apply_premodel(x, cell=cell)
+
+        if self.preprocessing is not None:
+            x = self._apply_module(self.preprocessing, x, cell=cell)
+            
         for b in self.BLOCKS:
             block = getattr(self, b)
             if block is not None:
@@ -231,21 +331,27 @@ class BaseCV(lightning.LightningModule):
             return
 
         class_name = self.__class__.__name__
-        is_position_dependent_cv = ("Committor" in class_name) or ("Generator" in class_name)
+        is_position_dependent_cv = (
+            "Committor" in class_name or "Generator" in class_name
+        )
 
         if is_position_dependent_cv:
-                warn(
-                    "Found a preprocessing module during training. For position-dependent losses "
-                    "(Committor/Generator), this is valid, but it is recommended to use "
-                    "`descriptors_derivatives` (e.g., `SmartDerivatives`) for efficiency and potentially "
-                    "large computational savings."
-                )
+            warn(
+                "Found a preprocessing module during training. This is valid for "
+                "position-dependent losses such as Committor/Generator, because the "
+                "loss may require derivatives with respect to the original input "
+                "coordinates. However, for expensive descriptor preprocessing, using "
+                "`descriptors_derivatives` such as `SmartDerivatives` can be much more "
+                "efficient."
+            )
         else:
-            raise ValueError(
-                "Found a preprocessing module during training. For this CV class, it is generally "
-                "recommended to compute descriptors and store them in a DictDataset instead of  "
-                "re-applying the preprocessing at each training step. This choice typically provides" 
-                "large computational savings."
+            warn(
+                "Found a preprocessing module during training. This preprocessing "
+                "will be applied inside forward_cv(), so training and inference use "
+                "the same input pipeline. For expensive descriptor preprocessing, it "
+                "may be more efficient to precompute descriptors and store them in a "
+                "DictDataset instead of re-applying the preprocessing at each training "
+                "step."
             )
 
         self._preprocessing_training_warning_shown = True
@@ -280,8 +386,13 @@ class BaseCV(lightning.LightningModule):
         """
 
         # Create the optimizer from the optimizer name and kwargs
+        trainable_parameters = [p for p in self.parameters() if p.requires_grad]
+
+        if len(trainable_parameters) == 0:
+            raise ValueError("No trainable parameters found in the model.")
+
         optimizer = getattr(torch.optim, self._optimizer_name)(
-            self.parameters(), **self.optimizer_kwargs
+            trainable_parameters, **self.optimizer_kwargs
         )
         
         # Return just the optimizer if no scheduler is defined
