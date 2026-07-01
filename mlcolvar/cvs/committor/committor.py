@@ -157,6 +157,7 @@ class Committor(BaseCV):
             self.sigmoid = Custom_Sigmoid(**options[o])
 
     def forward_nn(self, x, cell=None):
+        x = self._apply_premodel(x)
         if self.preprocessing is not None:
             x = self._apply_module(self.preprocessing, x, cell=cell)
         if not self._override_model and self.norm_in is not None:

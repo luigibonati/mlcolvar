@@ -235,6 +235,7 @@ class SelfTICA(BaseCV):
         return x
     
     def forward_nn(self, x: torch.Tensor) -> torch.Tensor:
+        x = self._apply_premodel(x)
         if not self._override_model:
             if self.norm_in is not None:
                 x = self._apply_module(self.norm_in, x)

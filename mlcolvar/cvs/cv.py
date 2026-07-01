@@ -207,25 +207,112 @@ class BaseCV(lightning.LightningModule):
         """
         Initialize preprocessing and transform blocks from the datamodule.
 
-        When a premodel is provided, the preprocessing module acts on the
-        representation produced by premodel.forward_nn(), not on the raw input.
-        Therefore, it is not automatically fitted from the original datamodule.
+        If no premodel is used, transforms are initialized from the original
+        datamodule as before.
+
+        If a frozen premodel is used, CV blocks such as norm_in act on the output
+        of premodel.forward_nn(), not on the raw datamodule input. Therefore, they
+        must be initialized in the premodel output space.
         """
+
+        # Preprocessing is before the CV blocks but after the premodel in the current
+        # input pipeline. If it is a Transform and a premodel is present, we cannot
+        # safely initialize it from the raw datamodule.
         if isinstance(self.preprocessing, Transform):
             if self.premodel is None:
                 self.preprocessing.setup_from_datamodule(datamodule)
             else:
                 warn(
                     "A preprocessing Transform is used after a frozen premodel. "
-                    "It will not be automatically initialized from the datamodule, "
+                    "It will not be automatically initialized from the raw datamodule, "
                     "because it acts on premodel.forward_nn(x), not on the raw input. "
                     "Please make sure it has been fitted on the premodel output space."
                 )
 
+        # Initialize CV-block transforms, e.g. norm_in.
         for b in self.BLOCKS:
             block = getattr(self, b)
+
             if isinstance(block, Transform):
-                block.setup_from_datamodule(datamodule)
+                if self.premodel is None:
+                    block.setup_from_datamodule(datamodule)
+                else:
+                    self._setup_transform_after_premodel(block, datamodule)
+                    
+    @torch.no_grad()
+    def _setup_transform_after_premodel(self, transform: Transform, datamodule):
+        """
+        Initialize a Transform block that acts after a frozen premodel.
+
+        The transform is fitted on:
+
+            raw data -> premodel.forward_nn -> optional preprocessing
+
+        instead of fitting it directly on the raw datamodule input.
+        """
+
+        if not hasattr(transform, "set_custom"):
+            warn(
+                f"{transform.__class__.__name__} is after a premodel but does not "
+                "provide set_custom(). It will not be automatically initialized."
+            )
+            return
+
+        was_training = self.training
+        self.eval()
+
+        outputs = []
+        dataloader = datamodule.train_dataloader()
+
+        for batch in dataloader:
+            if not isinstance(batch, dict):
+                continue
+
+            data_keys = ["data"]
+            if "data_lag" in batch:
+                data_keys.append("data_lag")
+
+            for key in data_keys:
+                if key not in batch:
+                    continue
+
+                x = batch[key]
+
+                if key == "data_lag":
+                    cell = batch.get("cell_lag", batch.get("cell", None))
+                else:
+                    cell = batch.get("cell", None)
+
+                z = self._apply_premodel(x, cell=cell)
+
+                if self.preprocessing is not None:
+                    z = self._apply_module(self.preprocessing, z, cell=cell)
+
+                outputs.append(z.detach())
+
+        if len(outputs) == 0:
+            warn(
+                "Could not initialize transform after premodel because no valid "
+                "data were found in the datamodule."
+            )
+            self.train(was_training)
+            return
+
+        z = torch.cat(outputs, dim=0)
+
+        # Safety reshape in case concatenation still leaves extra dimensions.
+        if z.ndim == 1:
+            z = z.reshape(-1, 1)
+        elif z.ndim > 2:
+            z = z.reshape(-1, z.shape[-1])
+
+        mean = z.mean(dim=0)
+        std = z.std(dim=0, unbiased=False)
+        std = torch.clamp(std, min=1e-8)
+
+        transform.set_custom(mean=mean, range=std)
+        
+        self.train(was_training)
                 
     def _apply_premodel(self, x: Any, cell=None) -> Any:
         """
