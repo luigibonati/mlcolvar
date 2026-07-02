@@ -10,6 +10,43 @@ from mlcolvar.core.transform import Transform
 from mlcolvar.data.graph.utils import create_graph_tracing_example
 
 
+class ForwardNNWrapper(torch.nn.Module):
+    """
+    Wrap an mlcolvar model so that forward() calls forward_nn().
+    """
+
+    def __init__(self, model: torch.nn.Module):
+        super().__init__()
+
+        if not isinstance(model, torch.nn.Module):
+            raise TypeError("model must be a torch.nn.Module.")
+
+        if not hasattr(model, "forward_nn"):
+            raise AttributeError(
+                f"{model.__class__.__name__} must define `forward_nn`."
+            )
+
+        self.model = model
+
+    def forward(self, x: Any, cell=None) -> Any:
+        if cell is None:
+            return self.model.forward_nn(x)
+
+        return self.model.forward_nn(x, cell=cell)
+
+    @property
+    def in_features(self):
+        return getattr(self.model, "in_features", None)
+
+    @property
+    def atomic_numbers(self):
+        return getattr(self.model, "atomic_numbers", None)
+
+    @property
+    def long_range_cutoff(self):
+        return getattr(self.model, "long_range_cutoff", -1.0)
+
+
 class BaseCV(lightning.LightningModule):
     """
     Base collective variable class.
@@ -66,19 +103,21 @@ class BaseCV(lightning.LightningModule):
         # e.g. a SelfTICA model used only through forward_nn().
         self.featurizer = featurizer
 
+        if featurizer is not None and not isinstance(featurizer, torch.nn.Module):
+            raise TypeError("featurizer must be a torch.nn.Module.")
+
+        # mlcolvar models expose their learned representation through forward_nn().
+        # Wrap them so that BaseCV can always use the standard forward interface.
+        if featurizer is not None and hasattr(featurizer, "forward_nn"):
+            featurizer = ForwardNNWrapper(featurizer)
+
+        self.featurizer = featurizer
+
         if self.featurizer is not None:
-            if not isinstance(self.featurizer, torch.nn.Module):
-                raise TypeError("featurizer must be a torch.nn.Module.")
-
-            if not hasattr(self.featurizer, "forward_nn"):
-                raise AttributeError(
-                    f"{self.featurizer.__class__.__name__} must define `forward_nn` "
-                    "to be used as a featurizer."
-                )
-
             self.featurizer.eval()
-            for p in self.featurizer.parameters():
-                p.requires_grad_(False)
+
+            for parameter in self.featurizer.parameters():
+                parameter.requires_grad_(False)
                 
     def train(self, mode: bool = True):
         """Set training mode, keeping the pretrained featurizer in eval mode."""
@@ -96,39 +135,81 @@ class BaseCV(lightning.LightningModule):
 
     @property
     def example_input_array(self):
-        # If a featurizer is provided, the full model input is the input of the featurizer,
-        # i.e. the raw descriptor dimension before SelfTICA.forward_nn().
-        if self.featurizer is not None:
-            if hasattr(self.featurizer, "in_features") and self.featurizer.in_features is not None:
-                return torch.randn((1, self.featurizer.in_features))
+        """
+        Example input for tracing the complete model.
 
-            if hasattr(self.featurizer, "atomic_numbers"):
-                return create_graph_tracing_example(
-                    n_species=len(self.featurizer.atomic_numbers),
-                    environment=True,
-                    long_range=True
-                    if hasattr(self.featurizer, "long_range_cutoff")
-                    and self.featurizer.long_range_cutoff > 0
-                    else False,
+        If a featurizer is provided, the model input must match the raw input
+        expected by the featurizer. Otherwise, use the input metadata of the
+        preprocessing module or of the CV model itself.
+        """
+
+        # The full model input is the raw input expected by the featurizer.
+        if self.featurizer is not None:
+            in_features = getattr(
+                self.featurizer,
+                "in_features",
+                None,
+            )
+
+            if in_features is not None:
+                return torch.randn((1, in_features))
+
+            atomic_numbers = getattr(
+                self.featurizer,
+                "atomic_numbers",
+                None,
+            )
+
+            if atomic_numbers is not None:
+                long_range_cutoff = getattr(
+                    self.featurizer,
+                    "long_range_cutoff",
+                    -1.0,
                 )
 
-        # Otherwise keep the standard behavior.
+                return create_graph_tracing_example(
+                    n_species=len(atomic_numbers),
+                    environment=True,
+                    long_range=long_range_cutoff > 0,
+                )
+
+            # The raw input shape cannot be inferred from a generic featurizer.
+            # The user must provide example_inputs explicitly when tracing.
+            return None
+
+        # Standard descriptor-based behavior without a featurizer.
         if self.in_features is not None:
-            if self.preprocessing is not None and hasattr(self.preprocessing, "in_features"):
-                in_features = self.preprocessing.in_features
-            else:
-                in_features = self.in_features
+            preprocessing_in_features = getattr(
+                self.preprocessing,
+                "in_features",
+                None,
+            )
+
+            in_features = (
+                preprocessing_in_features
+                if preprocessing_in_features is not None
+                else self.in_features
+            )
 
             return torch.randn((1, in_features))
 
-        else:
-            return create_graph_tracing_example(
-                n_species=len(self.atomic_numbers),
-                environment=True,
-                long_range=True
-                if hasattr(self, "long_range_cutoff") and self.long_range_cutoff > 0
-                else False,
-            )
+        # Standard graph-based behavior without a featurizer.
+        atomic_numbers = getattr(self, "atomic_numbers", None)
+
+        if atomic_numbers is None:
+            return None
+
+        long_range_cutoff = getattr(
+            self,
+            "long_range_cutoff",
+            -1.0,
+        )
+
+        return create_graph_tracing_example(
+            n_species=len(atomic_numbers),
+            environment=True,
+            long_range=long_range_cutoff > 0,
+        )
 
     # TODO add general torch.nn.Module
     def parse_model(self, model: Union[List[int], FeedForward, BaseGNN]):
@@ -211,7 +292,7 @@ class BaseCV(lightning.LightningModule):
         datamodule as before.
 
         If a frozen featurizer is used, CV blocks such as norm_in act on the output
-        of featurizer.forward_nn(), not on the raw datamodule input. Therefore, they
+        of featurizer.forward(), not on the raw datamodule input. Therefore, they
         must be initialized in the featurizer output space.
         """
 
@@ -225,7 +306,7 @@ class BaseCV(lightning.LightningModule):
                 warn(
                     "A preprocessing Transform is used after a frozen featurizer. "
                     "It will not be automatically initialized from the raw datamodule, "
-                    "because it acts on featurizer.forward_nn(x), not on the raw input. "
+                    "because it acts on featurizer.forward(x), not on the raw input. "
                     "Please make sure it has been fitted on the featurizer output space."
                 )
 
@@ -246,7 +327,7 @@ class BaseCV(lightning.LightningModule):
 
         The transform is fitted on:
 
-            raw data -> featurizer.forward_nn -> optional preprocessing
+            raw data -> featurizer.forward() -> optional preprocessing
 
         instead of fitting it directly on the raw datamodule input.
         """
@@ -316,19 +397,13 @@ class BaseCV(lightning.LightningModule):
                 
     def _apply_featurizer(self, x: Any, cell=None) -> Any:
         """
-        Apply the frozen upstream featurizer, if present.
-
-        The featurizer is expected to expose a forward_nn method. For consistency
-        with descriptor-based or graph-based models, forward_nn should ideally
-        accept cell=None.
+        Apply the frozen upstream featurizer through its standard forward method.
         """
-        if self.featurizer is None:
-            return x
-
-        if cell is None:
-            return self.featurizer.forward_nn(x)
-
-        return self.featurizer.forward_nn(x, cell=cell)
+        return self._apply_module(
+            self.featurizer,
+            x,
+            cell=cell,
+        )
 
     def forward(self, x: Any, cell=None) -> torch.Tensor:
         """
@@ -363,7 +438,7 @@ class BaseCV(lightning.LightningModule):
         This method applies the input pipeline and then sequentially executes all
         initialized blocks in self.BLOCKS:
 
-            x -> optional featurizer.forward_nn
+            x -> optional featurizer.forward()
             -> optional preprocessing
             -> CV blocks
 
