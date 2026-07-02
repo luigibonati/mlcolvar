@@ -25,7 +25,7 @@ class BaseCV(lightning.LightningModule):
         model: Union[List[int], FeedForward, BaseGNN],
         preprocessing: torch.nn.Module = None,
         postprocessing: torch.nn.Module = None,
-        premodel: torch.nn.Module = None,
+        featurizer: torch.nn.Module = None,
         *args,
         **kwargs,
     ):
@@ -44,7 +44,7 @@ class BaseCV(lightning.LightningModule):
         # The parent class sets in_features and out_features based on their own
         # init arguments so we don't need to save them here (see #103).        
         # It is needed for compatibility with multiclass CVs
-        self.save_hyperparameters(ignore=['in_features', 'out_features', "premodel"])
+        self.save_hyperparameters(ignore=['in_features', 'out_features', "featurizer"])
 
         # MODEL
         self.parse_model(model=model)
@@ -61,31 +61,31 @@ class BaseCV(lightning.LightningModule):
         self.postprocessing = postprocessing
         self._preprocessing_training_warning_shown = False
         
-        # PREMODEL
-        # The premodel is assumed to be a pretrained upstream model,
+        # FEATURIZER
+        # The featurizer is assumed to be a pretrained upstream model,
         # e.g. a SelfTICA model used only through forward_nn().
-        self.premodel = premodel
+        self.featurizer = featurizer
 
-        if self.premodel is not None:
-            if not isinstance(self.premodel, torch.nn.Module):
-                raise TypeError("premodel must be a torch.nn.Module.")
+        if self.featurizer is not None:
+            if not isinstance(self.featurizer, torch.nn.Module):
+                raise TypeError("featurizer must be a torch.nn.Module.")
 
-            if not hasattr(self.premodel, "forward_nn"):
+            if not hasattr(self.featurizer, "forward_nn"):
                 raise AttributeError(
-                    f"{self.premodel.__class__.__name__} must define `forward_nn` "
-                    "to be used as a premodel."
+                    f"{self.featurizer.__class__.__name__} must define `forward_nn` "
+                    "to be used as a featurizer."
                 )
 
-            self.premodel.eval()
-            for p in self.premodel.parameters():
+            self.featurizer.eval()
+            for p in self.featurizer.parameters():
                 p.requires_grad_(False)
                 
     def train(self, mode: bool = True):
-        """Set training mode, keeping the pretrained premodel in eval mode."""
+        """Set training mode, keeping the pretrained featurizer in eval mode."""
         super().train(mode)
 
-        if hasattr(self, "premodel") and self.premodel is not None:
-            self.premodel.eval()
+        if hasattr(self, "featurizer") and self.featurizer is not None:
+            self.featurizer.eval()
 
         return self
 
@@ -96,19 +96,19 @@ class BaseCV(lightning.LightningModule):
 
     @property
     def example_input_array(self):
-        # If a premodel is provided, the full model input is the input of the premodel,
+        # If a featurizer is provided, the full model input is the input of the featurizer,
         # i.e. the raw descriptor dimension before SelfTICA.forward_nn().
-        if self.premodel is not None:
-            if hasattr(self.premodel, "in_features") and self.premodel.in_features is not None:
-                return torch.randn((1, self.premodel.in_features))
+        if self.featurizer is not None:
+            if hasattr(self.featurizer, "in_features") and self.featurizer.in_features is not None:
+                return torch.randn((1, self.featurizer.in_features))
 
-            if hasattr(self.premodel, "atomic_numbers"):
+            if hasattr(self.featurizer, "atomic_numbers"):
                 return create_graph_tracing_example(
-                    n_species=len(self.premodel.atomic_numbers),
+                    n_species=len(self.featurizer.atomic_numbers),
                     environment=True,
                     long_range=True
-                    if hasattr(self.premodel, "long_range_cutoff")
-                    and self.premodel.long_range_cutoff > 0
+                    if hasattr(self.featurizer, "long_range_cutoff")
+                    and self.featurizer.long_range_cutoff > 0
                     else False,
                 )
 
@@ -207,26 +207,26 @@ class BaseCV(lightning.LightningModule):
         """
         Initialize preprocessing and transform blocks from the datamodule.
 
-        If no premodel is used, transforms are initialized from the original
+        If no featurizer is used, transforms are initialized from the original
         datamodule as before.
 
-        If a frozen premodel is used, CV blocks such as norm_in act on the output
-        of premodel.forward_nn(), not on the raw datamodule input. Therefore, they
-        must be initialized in the premodel output space.
+        If a frozen featurizer is used, CV blocks such as norm_in act on the output
+        of featurizer.forward_nn(), not on the raw datamodule input. Therefore, they
+        must be initialized in the featurizer output space.
         """
 
-        # Preprocessing is before the CV blocks but after the premodel in the current
-        # input pipeline. If it is a Transform and a premodel is present, we cannot
+        # Preprocessing is before the CV blocks but after the featurizer in the current
+        # input pipeline. If it is a Transform and a featurizer is present, we cannot
         # safely initialize it from the raw datamodule.
         if isinstance(self.preprocessing, Transform):
-            if self.premodel is None:
+            if self.featurizer is None:
                 self.preprocessing.setup_from_datamodule(datamodule)
             else:
                 warn(
-                    "A preprocessing Transform is used after a frozen premodel. "
+                    "A preprocessing Transform is used after a frozen featurizer. "
                     "It will not be automatically initialized from the raw datamodule, "
-                    "because it acts on premodel.forward_nn(x), not on the raw input. "
-                    "Please make sure it has been fitted on the premodel output space."
+                    "because it acts on featurizer.forward_nn(x), not on the raw input. "
+                    "Please make sure it has been fitted on the featurizer output space."
                 )
 
         # Initialize CV-block transforms, e.g. norm_in.
@@ -234,26 +234,26 @@ class BaseCV(lightning.LightningModule):
             block = getattr(self, b)
 
             if isinstance(block, Transform):
-                if self.premodel is None:
+                if self.featurizer is None:
                     block.setup_from_datamodule(datamodule)
                 else:
-                    self._setup_transform_after_premodel(block, datamodule)
-                    
+                    self._setup_transform_after_featurizer(block, datamodule)
+
     @torch.no_grad()
-    def _setup_transform_after_premodel(self, transform: Transform, datamodule):
+    def _setup_transform_after_featurizer(self, transform: Transform, datamodule):
         """
-        Initialize a Transform block that acts after a frozen premodel.
+        Initialize a Transform block that acts after a frozen featurizer.
 
         The transform is fitted on:
 
-            raw data -> premodel.forward_nn -> optional preprocessing
+            raw data -> featurizer.forward_nn -> optional preprocessing
 
         instead of fitting it directly on the raw datamodule input.
         """
 
         if not hasattr(transform, "set_custom"):
             warn(
-                f"{transform.__class__.__name__} is after a premodel but does not "
+                f"{transform.__class__.__name__} is after a featurizer but does not "
                 "provide set_custom(). It will not be automatically initialized."
             )
             return
@@ -283,7 +283,7 @@ class BaseCV(lightning.LightningModule):
                 else:
                     cell = batch.get("cell", None)
 
-                z = self._apply_premodel(x, cell=cell)
+                z = self._apply_featurizer(x, cell=cell)
 
                 if self.preprocessing is not None:
                     z = self._apply_module(self.preprocessing, z, cell=cell)
@@ -292,7 +292,7 @@ class BaseCV(lightning.LightningModule):
 
         if len(outputs) == 0:
             warn(
-                "Could not initialize transform after premodel because no valid "
+                "Could not initialize transform after featurizer because no valid "
                 "data were found in the datamodule."
             )
             self.train(was_training)
@@ -314,21 +314,21 @@ class BaseCV(lightning.LightningModule):
         
         self.train(was_training)
                 
-    def _apply_premodel(self, x: Any, cell=None) -> Any:
+    def _apply_featurizer(self, x: Any, cell=None) -> Any:
         """
-        Apply the frozen upstream model, if present.
+        Apply the frozen upstream featurizer, if present.
 
-        The premodel is expected to expose a forward_nn method. For consistency
+        The featurizer is expected to expose a forward_nn method. For consistency
         with descriptor-based or graph-based models, forward_nn should ideally
         accept cell=None.
         """
-        if self.premodel is None:
+        if self.featurizer is None:
             return x
 
         if cell is None:
-            return self.premodel.forward_nn(x)
+            return self.featurizer.forward_nn(x)
 
-        return self.premodel.forward_nn(x, cell=cell)
+        return self.featurizer.forward_nn(x, cell=cell)
 
     def forward(self, x: Any, cell=None) -> torch.Tensor:
         """
@@ -363,7 +363,7 @@ class BaseCV(lightning.LightningModule):
         This method applies the input pipeline and then sequentially executes all
         initialized blocks in self.BLOCKS:
 
-            x -> optional premodel.forward_nn
+            x -> optional featurizer.forward_nn
             -> optional preprocessing
             -> CV blocks
 
@@ -375,9 +375,9 @@ class BaseCV(lightning.LightningModule):
         ----------
         x : Any
             Input of the model. It can be a tensor, graph data, or any input type
-            accepted by the premodel/preprocessing/CV blocks.
+            accepted by the featurizer/preprocessing/CV blocks.
         cell : optional
-            Optional simulation cell passed to the premodel and/or preprocessing
+            Optional simulation cell passed to the featurizer and/or preprocessing
             when required.
 
         Returns
@@ -386,7 +386,7 @@ class BaseCV(lightning.LightningModule):
             Output of the CV blocks before postprocessing.
         """
 
-        x = self._apply_premodel(x, cell=cell)
+        x = self._apply_featurizer(x, cell=cell)
 
         if self.preprocessing is not None:
             x = self._apply_module(self.preprocessing, x, cell=cell)
