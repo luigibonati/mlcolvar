@@ -214,6 +214,7 @@ class PytorchKolmogorovBiasGNN: public Colvar
   bool invalidate_list = true;
   bool bailout_fusion = false;
   bool use_q_for_bias = false;
+  bool numerical_derivatives = false;
   double r_max = 0.0; // In PLUMED length unit
   double buffer = 0.0; // In PLUMED length unit
   double r_max_l = -1.0; // In PLUMED length unit
@@ -424,8 +425,12 @@ PytorchKolmogorovBiasGNN::PytorchKolmogorovBiasGNN(const ActionOptions& ao):
   if (required_cuda and serial)
     plumed_merror("Can not enable CUDA with SERIAL at the same time!");
 
+  parseFlag("NUMERICAL_DERIVATIVES", numerical_derivatives);
+
   bool use_float64 = false;
   parseFlag("FLOAT64", use_float64);
+  if (numerical_derivatives)
+    use_float64 = true;
   parseFlag("BAILOUTFUSION", bailout_fusion);
   if (epsilon < 0) {
     if (use_float64)
@@ -835,7 +840,7 @@ void PytorchKolmogorovBiasGNN::calculate()
   // get the positions
   // TODO: now, the positions used by the model file is in unit of Angstrom.
   // We should warn the users about this default
-  std::vector<float> positions_vector(n_atoms * 3);
+  std::vector<double> positions_vector(n_atoms * 3);
   #pragma omp parallel for num_threads(n_threads)
   for (int i = 0; i < n_atoms; i++) {
     int index = atom_list_active[i]; 
@@ -847,7 +852,7 @@ void PytorchKolmogorovBiasGNN::calculate()
   torch::Tensor positions = torch::from_blob(  
     positions_vector.data(),
     n_atoms * 3,
-    torch::TensorOptions().dtype(torch::kFloat32)
+    torch::TensorOptions().dtype(torch::kFloat64)
   );
   positions = positions.to(device).to(torch_float_dtype);
   positions = positions.reshape({n_atoms, 3});
@@ -856,7 +861,7 @@ void PytorchKolmogorovBiasGNN::calculate()
   // TODO: now, the box data used by the model file is in unit of Angstrom.
   // We should warn the users about this default
   PLMD::Tensor box = getBox();
-  std::vector<float> cell_vector(9);
+  std::vector<double> cell_vector(9);
   for (int i = 0; i < 3; i++) {
     for (int j = 0; j < 3; j++)
       cell_vector[i * 3 + j] = box[i][j] * to_ang;
@@ -864,7 +869,7 @@ void PytorchKolmogorovBiasGNN::calculate()
   torch::Tensor cell = torch::from_blob(
     cell_vector.data(),
     9,
-    torch::TensorOptions().dtype(torch::kFloat32)
+    torch::TensorOptions().dtype(torch::kFloat64)
   );
   cell = cell.to(device).to(torch_float_dtype);
   cell = cell.reshape({3, 3});
@@ -873,7 +878,7 @@ void PytorchKolmogorovBiasGNN::calculate()
   // TODO: now, the node attributes are in MACE's format.
   // We should try to give more options, or warn the users about this default
   int n_node_feats = (int)model_atomic_numbers.size();
-  std::vector<float> node_attrs_vector(n_node_feats * n_atoms);
+  std::vector<double> node_attrs_vector(n_node_feats * n_atoms);
   #pragma omp parallel for num_threads(n_threads)
   for (int i = 0; i < n_atoms; i++) {
     int index = atom_list_active[i];
@@ -883,7 +888,7 @@ void PytorchKolmogorovBiasGNN::calculate()
   torch::Tensor node_attrs = torch::from_blob(
     node_attrs_vector.data(),
     n_node_feats * n_atoms,
-    torch::TensorOptions().dtype(torch::kFloat32)
+    torch::TensorOptions().dtype(torch::kFloat64)
   );
   node_attrs = node_attrs.to(device).to(torch_float_dtype);
   node_attrs = node_attrs.reshape({n_atoms, n_node_feats});
@@ -895,7 +900,7 @@ void PytorchKolmogorovBiasGNN::calculate()
 
   if (atom_list_b.size() > 0) {
     n_edges = n_atoms * (n_atoms - 1);
-    std::vector<float> distance_vector(n_edges);
+    std::vector<double> distance_vector(n_edges);
     std::vector<std::vector<int64_t>> edge_index_vector;
     edge_index_vector.resize(2, std::vector<int64_t>(n_edges));
 
@@ -923,7 +928,7 @@ void PytorchKolmogorovBiasGNN::calculate()
     torch::Tensor distances = torch::from_blob(
       distance_vector.data(),
       n_edges,
-      torch::TensorOptions().dtype(torch::kFloat32)
+      torch::TensorOptions().dtype(torch::kFloat64)
     );
     torch::Tensor senders = torch::from_blob(
       edge_index_vector[0].data(),
@@ -973,7 +978,7 @@ void PytorchKolmogorovBiasGNN::calculate()
     torch::Tensor edge_index_l;
     int n_atoms_l = atom_list_sub_a.size();
     n_edges_l = n_atoms_l * (n_atoms_l - 1);
-    std::vector<float> distance_vector_l(n_edges_l);
+    std::vector<double> distance_vector_l(n_edges_l);
     std::vector<std::vector<int64_t>> edge_index_vector_l;
     edge_index_vector_l.resize(2, std::vector<int64_t>(n_edges_l));
 
@@ -1006,7 +1011,7 @@ void PytorchKolmogorovBiasGNN::calculate()
     torch::Tensor distances_l = torch::from_blob(
       distance_vector_l.data(),
       n_edges_l,
-      torch::TensorOptions().dtype(torch::kFloat32)
+      torch::TensorOptions().dtype(torch::kFloat64)
     );
     const torch::Tensor mask_l = distances_l <= r_max_l;
 
