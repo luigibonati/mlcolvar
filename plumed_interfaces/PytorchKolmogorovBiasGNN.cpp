@@ -214,7 +214,6 @@ class PytorchKolmogorovBiasGNN: public Colvar
   bool invalidate_list = true;
   bool bailout_fusion = false;
   bool use_q_for_bias = false;
-  bool numerical_derivatives = false;
   double r_max = 0.0; // In PLUMED length unit
   double buffer = 0.0; // In PLUMED length unit
   double r_max_l = -1.0; // In PLUMED length unit
@@ -425,11 +424,9 @@ PytorchKolmogorovBiasGNN::PytorchKolmogorovBiasGNN(const ActionOptions& ao):
   if (required_cuda and serial)
     plumed_merror("Can not enable CUDA with SERIAL at the same time!");
 
-  parseFlag("NUMERICAL_DERIVATIVES", numerical_derivatives);
-
   bool use_float64 = false;
   parseFlag("FLOAT64", use_float64);
-  if (numerical_derivatives)
+  if (checkNumericalDerivatives())
     use_float64 = true;
   parseFlag("BAILOUTFUSION", bailout_fusion);
   if (epsilon < 0) {

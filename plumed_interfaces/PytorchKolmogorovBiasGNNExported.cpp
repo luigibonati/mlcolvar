@@ -171,7 +171,6 @@ class PytorchKolmogorovBiasGNNExported: public Colvar
   bool serial = false;
   bool firsttime = true;
   bool invalidate_list = true;
-  bool numerical_derivatives = false;
   double r_max = 0.0; // In PLUMED length unit
   double buffer = 0.0; // In PLUMED length unit
   double r_max_l = -1.0; // In PLUMED length unit
@@ -315,8 +314,6 @@ PytorchKolmogorovBiasGNNExported::PytorchKolmogorovBiasGNNExported(const ActionO
   parseFlag("NOPBC", nopbc);
   pbc = !nopbc;
 
-  parseFlag("NUMERICAL_DERIVATIVES", numerical_derivatives);
-
   checkRead();
 
   // check groups
@@ -389,7 +386,7 @@ PytorchKolmogorovBiasGNNExported::PytorchKolmogorovBiasGNNExported(const ActionO
     torch_float_dtype = torch::kFloat64;
   else
     plumed_merror("Unknown float dtype \"" + float_dtype_exported + "\" found in the exported model \"" + model_file_name + "\"!");
-  if (numerical_derivatives && (float_dtype_exported != "64"))
+  if (checkNumericalDerivatives() && (float_dtype_exported != "64"))
     plumed_merror("To use NUMERICAL_DERIVATIVES, the model should be exported under the float64 precision!");
   std::string device_exported(metadata.at("AOTI_DEVICE_KEY").c_str());
   if (device_exported == "cuda") {
