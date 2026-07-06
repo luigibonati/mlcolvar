@@ -99,15 +99,9 @@ class BaseCV(lightning.LightningModule):
         self._preprocessing_training_warning_shown = False
         
         # FEATURIZER
-        # The featurizer is assumed to be a pretrained upstream model,
-        # e.g. a SelfTICA model used only through forward_nn().
-        self.featurizer = featurizer
-
         if featurizer is not None and not isinstance(featurizer, torch.nn.Module):
             raise TypeError("featurizer must be a torch.nn.Module.")
 
-        # mlcolvar models expose their learned representation through forward_nn().
-        # Wrap them so that BaseCV can always use the standard forward interface.
         if featurizer is not None and hasattr(featurizer, "forward_nn"):
             featurizer = ForwardNNWrapper(featurizer)
 
@@ -395,83 +389,92 @@ class BaseCV(lightning.LightningModule):
         
         self.train(was_training)
                 
-    def _apply_featurizer(self, x: Any, cell=None) -> Any:
-        """
-        Apply the frozen upstream featurizer through its standard forward method.
-        """
+    def _apply_featurizer(
+        self,
+        x: Any,
+        cell=None,
+    ) -> Any:
+        """Apply the optional frozen upstream featurizer."""
+
         return self._apply_module(
             self.featurizer,
             x,
             cell=cell,
         )
 
-    def forward(self, x: Any, cell=None) -> torch.Tensor:
-        """
-        Evaluation of the CV
 
-        - Apply preprocessing if any
-        - Execute sequentially all the blocks in self.BLOCKS unless they are not initialized
-        - Apply postprocessing if any
+    def _forward_blocks(
+        self,
+        x: Any,
+    ) -> torch.Tensor:
+        """Execute the initialized CV blocks."""
 
-        Parameters
-        ----------
-        x : torch.Tensor
-            Input of the forward operation of the model
+        for block_name in self.BLOCKS:
+            block = getattr(self, block_name)
 
-        Returns
-        -------
-        torch.Tensor
-            Output of the forward operation of the model
-        """
-        
-        x = self.forward_cv(x, cell=cell)
-
-        if self.postprocessing is not None:
-            x = self._apply_module(self.postprocessing, x)
-
-        return x
-
-    def forward_cv(self, x: Any, cell=None) -> torch.Tensor:
-        """
-        Execute the CV part of the model.
-
-        This method applies the input pipeline and then sequentially executes all
-        initialized blocks in self.BLOCKS:
-
-            x -> optional featurizer.forward()
-            -> optional preprocessing
-            -> CV blocks
-
-        Postprocessing is intentionally not applied here. It is only applied in
-        forward(). This keeps training/validation calls consistent with inference
-        while leaving any final output transformation to forward().
-
-        Parameters
-        ----------
-        x : Any
-            Input of the model. It can be a tensor, graph data, or any input type
-            accepted by the featurizer/preprocessing/CV blocks.
-        cell : optional
-            Optional simulation cell passed to the featurizer and/or preprocessing
-            when required.
-
-        Returns
-        -------
-        torch.Tensor
-            Output of the CV blocks before postprocessing.
-        """
-
-        x = self._apply_featurizer(x, cell=cell)
-
-        if self.preprocessing is not None:
-            x = self._apply_module(self.preprocessing, x, cell=cell)
-            
-        for b in self.BLOCKS:
-            block = getattr(self, b)
             if block is not None:
-                x = self._apply_module(block, x)
+                x = self._apply_module(
+                    block,
+                    x,
+                )
 
         return x
+
+
+    def forward_nn(
+        self,
+        x: Any,
+        cell=None,
+    ) -> torch.Tensor:
+        """Apply the input pipeline and evaluate the CV blocks."""
+
+        x = self._apply_featurizer(
+            x,
+            cell=cell,
+        )
+
+        x = self._apply_module(
+            self.preprocessing,
+            x,
+            cell=cell,
+        )
+
+        return self._forward_blocks(x)
+
+
+    def forward(
+        self,
+        x: Any,
+        cell=None,
+    ) -> torch.Tensor:
+        """Evaluate the complete collective variable."""
+
+        if cell is None:
+            # Preserve overridden forward_cv(self, x) methods in existing CVs.
+            x = self.forward_cv(x)
+        else:
+            # Pass the cell through the new input pipeline when explicitly given.
+            x = self.forward_nn(
+                x,
+                cell=cell,
+            )
+
+        return self._apply_module(
+            self.postprocessing,
+            x,
+        )
+
+
+    def forward_cv(
+        self,
+        x: Any,
+    ) -> torch.Tensor:
+        """Evaluate the CV without postprocessing.
+
+        The original ``forward_cv(self, x)`` interface is preserved.
+        """
+
+        return self.forward_nn(x)
 
     def validation_step(self, val_batch, batch_idx):
         """
