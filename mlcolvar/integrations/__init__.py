@@ -4,7 +4,10 @@ from .atomistic import (
     AtomisticModel,
     BaseAtomisticBackbone,
 )
-from .backbones import MACEBackbone
+from .backbones import (
+    MACEBackbone,
+    PETBackbone,
+)
 
 
 __all__ = [
@@ -13,4 +16,5 @@ __all__ = [
     "AtomisticFeaturizer",
     "AtomisticModel",
     "MACEBackbone",
+    "PETBackbone",
 ]
