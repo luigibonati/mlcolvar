@@ -421,12 +421,12 @@ class BaseCV(lightning.LightningModule):
         return x
 
 
-    def forward_nn(
+    def _forward_with_featurizer(
         self,
         x: Any,
         cell=None,
     ) -> torch.Tensor:
-        """Apply the input pipeline and evaluate the CV blocks."""
+        """Apply the featurizer, preprocessing, and CV blocks."""
 
         x = self._apply_featurizer(
             x,
@@ -449,12 +449,21 @@ class BaseCV(lightning.LightningModule):
     ) -> torch.Tensor:
         """Evaluate the complete collective variable."""
 
-        if cell is None:
-            # Preserve overridden forward_cv(self, x) methods in existing CVs.
+        if self.featurizer is None:
+            # Preserve the original BaseCV behavior:
+            # preprocessing -> forward_cv -> postprocessing.
+            x = self._apply_module(
+                self.preprocessing,
+                x,
+                cell=cell,
+            )
+
             x = self.forward_cv(x)
+
         else:
-            # Pass the cell through the new input pipeline when explicitly given.
-            x = self.forward_nn(
+            # For pretrained models:
+            # featurizer -> preprocessing -> CV blocks.
+            x = self._forward_with_featurizer(
                 x,
                 cell=cell,
             )
@@ -474,7 +483,10 @@ class BaseCV(lightning.LightningModule):
         The original ``forward_cv(self, x)`` interface is preserved.
         """
 
-        return self.forward_nn(x)
+        if self.featurizer is not None:
+            return self._forward_with_featurizer(x)
+
+        return self._forward_blocks(x)
 
     def validation_step(self, val_batch, batch_idx):
         """
