@@ -1,9 +1,16 @@
-from .atomistic import AtomisticModel, BaseAtomisticFeaturizer
-from .mace_featurizer import MACEFeaturizer
+from .atomistic import (
+    align_node_attrs,
+    AtomisticFeaturizer,
+    AtomisticModel,
+    BaseAtomisticBackbone,
+)
+from .backbones import MACEBackbone
 
 
 __all__ = [
-    "BaseAtomisticFeaturizer",
+    "align_node_attrs",
+    "BaseAtomisticBackbone",
+    "AtomisticFeaturizer",
     "AtomisticModel",
-    "MACEFeaturizer",
+    "MACEBackbone",
 ]
