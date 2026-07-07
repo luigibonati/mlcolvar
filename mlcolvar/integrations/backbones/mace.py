@@ -3,66 +3,17 @@ from typing import Dict, List, Optional, Tuple
 import torch
 from torch import nn
 
-from mlcolvar.integrations.atomistic import BaseAtomisticBackbone
+from mlcolvar.integrations.atomistic import (
+    BaseAtomisticBackbone,
+)
 
+from ._utils import (
+    to_float,
+    to_int,
+    to_int_list,
+)
 
 __all__ = ["MACEBackbone"]
-
-
-def _to_int(
-    value,
-    name: str,
-) -> int:
-    """Convert a scalar tensor or Python scalar to an integer."""
-    if isinstance(value, torch.Tensor):
-        if value.numel() != 1:
-            raise ValueError(
-                f"{name} must contain exactly one value."
-            )
-
-        return int(
-            value.detach().cpu().item()
-        )
-
-    return int(value)
-
-
-def _to_float(
-    value,
-    name: str,
-) -> float:
-    """Convert a scalar tensor or Python scalar to a float."""
-    if isinstance(value, torch.Tensor):
-        if value.numel() != 1:
-            raise ValueError(
-                f"{name} must contain exactly one value."
-            )
-
-        return float(
-            value.detach().cpu().item()
-        )
-
-    return float(value)
-
-
-def _to_atomic_numbers(
-    value,
-) -> List[int]:
-    """Convert MACE atomic-number metadata to a Python list."""
-    if isinstance(value, torch.Tensor):
-        values = (
-            value.detach()
-            .cpu()
-            .reshape(-1)
-            .tolist()
-        )
-    else:
-        values = list(value)
-
-    return [
-        int(number)
-        for number in values
-    ]
 
 
 def _infer_num_layers(
@@ -76,7 +27,7 @@ def _infer_num_layers(
             "Pass `num_layers` explicitly."
         )
 
-    num_layers = _to_int(
+    num_layers = to_int(
         model.num_interactions,
         name="model.num_interactions",
     )
@@ -289,11 +240,12 @@ class MACEBackbone(BaseAtomisticBackbone):
                 "The MACE model does not expose `r_max`."
             )
 
-        atomic_numbers = _to_atomic_numbers(
-            model.atomic_numbers
+        atomic_numbers = to_int_list(
+            model.atomic_numbers,
+            name="model.atomic_numbers",
         )
 
-        cutoff = _to_float(
+        cutoff = to_float(
             model.r_max,
             name="model.r_max",
         )

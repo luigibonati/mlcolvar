@@ -7,6 +7,13 @@ from torch import nn
 
 from mlcolvar.integrations.atomistic import BaseAtomisticBackbone
 
+from ._utils import (
+    to_bool,
+    to_float,
+    to_int,
+    to_int_list,
+)
+
 
 try:
     from metatensor.torch import Labels, TensorBlock
@@ -30,83 +37,61 @@ except ImportError as exc:
 __all__ = ["PETBackbone"]
 
 
-def _to_int(
-    value,
-    name: str,
-) -> int:
-    """Convert a scalar tensor or Python scalar to an integer."""
+_PRECISION_TO_DTYPE = {
+    "float16": torch.float16,
+    "float32": torch.float32,
+    "float64": torch.float64,
+    "bfloat16": torch.bfloat16,
+}
 
-    if isinstance(value, torch.Tensor):
-        if value.numel() != 1:
-            raise ValueError(
-                f"{name} must contain exactly one value."
-            )
+_DTYPE_TO_PRECISION = {
+    torch.float16: "float16",
+    torch.float32: "float32",
+    torch.float64: "float64",
+    torch.bfloat16: "bfloat16",
+}
 
-        return int(
-            value.detach().cpu().item()
+
+def _infer_model_precision(
+    model: nn.Module,
+) -> Tuple[str, torch.dtype]:
+    """Infer and validate the floating-point precision of a PET model."""
+
+    floating_dtypes = {
+        parameter.dtype
+        for parameter in model.parameters()
+        if parameter.is_floating_point()
+    }
+
+    floating_dtypes.update(
+        buffer.dtype
+        for buffer in model.buffers()
+        if buffer.is_floating_point()
+    )
+
+    if len(floating_dtypes) == 0:
+        raise ValueError(
+            "Could not infer the floating-point precision of the PET model."
         )
 
-    return int(value)
-
-
-def _to_float(
-    value,
-    name: str,
-) -> float:
-    """Convert a scalar tensor or Python scalar to a float."""
-
-    if isinstance(value, torch.Tensor):
-        if value.numel() != 1:
-            raise ValueError(
-                f"{name} must contain exactly one value."
-            )
-
-        return float(
-            value.detach().cpu().item()
+    if len(floating_dtypes) != 1:
+        raise ValueError(
+            "The PET model contains mixed floating-point precisions: "
+            f"{sorted(str(dtype) for dtype in floating_dtypes)}."
         )
 
-    return float(value)
+    model_dtype = next(iter(floating_dtypes))
 
-
-def _to_bool(
-    value,
-    name: str,
-) -> bool:
-    """Convert a scalar tensor or Python scalar to a boolean."""
-
-    if isinstance(value, torch.Tensor):
-        if value.numel() != 1:
-            raise ValueError(
-                f"{name} must contain exactly one value."
-            )
-
-        return bool(
-            value.detach().cpu().item()
+    if model_dtype not in _DTYPE_TO_PRECISION:
+        raise ValueError(
+            "Unsupported PET floating-point dtype: "
+            f"{model_dtype}."
         )
 
-    return bool(value)
-
-
-def _to_atomic_numbers(
-    value,
-) -> List[int]:
-    """Convert PET atomic-type metadata to a Python list."""
-
-    if isinstance(value, torch.Tensor):
-        values = (
-            value.detach()
-            .cpu()
-            .reshape(-1)
-            .tolist()
-        )
-
-    else:
-        values = list(value)
-
-    return [
-        int(number)
-        for number in values
-    ]
+    return (
+        _DTYPE_TO_PRECISION[model_dtype],
+        model_dtype,
+    )
 
 
 def _is_native_pet_model(
@@ -178,17 +163,17 @@ def _infer_pet_layout(
 ) -> Tuple[int, int, int]:
     """Infer the dimension of PET's public ``feature`` output."""
 
-    d_node = _to_int(
+    d_node = to_int(
         model.d_node,
         name="model.d_node",
     )
 
-    d_pet = _to_int(
+    d_pet = to_int(
         model.d_pet,
         name="model.d_pet",
     )
 
-    num_readout_layers = _to_int(
+    num_readout_layers = to_int(
         model.num_readout_layers,
         name="model.num_readout_layers",
     )
@@ -254,6 +239,7 @@ class PETBackbone(BaseAtomisticBackbone):
         "neighbor_cutoff",
         "neighbor_full_list",
         "neighbor_strict",
+        "model_precision",
     ]
 
     def __init__(
@@ -289,8 +275,9 @@ class PETBackbone(BaseAtomisticBackbone):
             model
         )
 
-        atomic_numbers = _to_atomic_numbers(
-            model.atomic_types
+        atomic_numbers = to_int_list(
+            model.atomic_types,
+            name="model.atomic_types",
         )
 
         requested_neighbor_lists = (
@@ -308,22 +295,22 @@ class PETBackbone(BaseAtomisticBackbone):
             requested_neighbor_lists[0]
         )
 
-        neighbor_cutoff = _to_float(
+        neighbor_cutoff = to_float(
             neighbor_options.cutoff,
             name="PET neighbor-list cutoff",
         )
 
-        neighbor_full_list = _to_bool(
+        neighbor_full_list = to_bool(
             neighbor_options.full_list,
             name="PET neighbor-list full_list",
         )
 
-        neighbor_strict = _to_bool(
+        neighbor_strict = to_bool(
             neighbor_options.strict,
             name="PET neighbor-list strict",
         )
 
-        model_cutoff = _to_float(
+        model_cutoff = to_float(
             model.cutoff,
             name="model.cutoff",
         )
@@ -380,9 +367,118 @@ class PETBackbone(BaseAtomisticBackbone):
             neighbor_strict
         )
 
+        (
+            model_precision,
+            model_dtype,
+        ) = _infer_model_precision(
+            model
+        )
+
+        self.model_precision = (
+            model_precision
+        )
+
+        self.register_buffer(
+            "_model_dtype_reference",
+            torch.empty(
+                0,
+                dtype=model_dtype,
+            ),
+            persistent=False,
+        )
+
         # Register the native PET model only after nn.Module has been
         # initialized by BaseAtomisticBackbone.
         self.model = model
+
+        # Restore the checkpoint precision in case the supplied PET model
+        # was already converted before wrapping.
+        self._restore_model_precision()
+
+    def _model_dtype(
+        self,
+    ) -> torch.dtype:
+        """Return the native floating-point dtype of the PET model."""
+
+        return _PRECISION_TO_DTYPE[
+            self.model_precision
+        ]
+
+    def _restore_model_precision(
+        self,
+    ) -> None:
+        """Restore PET parameters and buffers to checkpoint precision."""
+
+        if not hasattr(
+            self,
+            "model",
+        ):
+            return
+
+        model_dtype = (
+            self._model_dtype()
+        )
+
+        self.model.to(
+            dtype=model_dtype
+        )
+
+        model_device = None
+
+        for parameter in self.model.parameters():
+            model_device = parameter.device
+            break
+
+        if model_device is None:
+            for buffer in self.model.buffers():
+                model_device = buffer.device
+                break
+
+        if model_device is not None:
+            self._model_dtype_reference = (
+                self
+                ._model_dtype_reference
+                .to(
+                    device=model_device,
+                    dtype=model_dtype,
+                )
+            )
+
+    def _apply(
+        self,
+        fn,
+    ):
+        """Apply transforms while preserving PET checkpoint precision.
+
+        Calling ``float()``, ``double()`` or ``to(dtype=...)`` on a
+        surrounding mlcolvar model recursively reaches this backbone.
+        PET is restored to its original checkpoint precision afterwards.
+        Device moves are retained.
+        """
+
+        module = super()._apply(
+            fn
+        )
+
+        if hasattr(
+            self,
+            "model",
+        ):
+            model_dtype = (
+                self._model_dtype()
+            )
+
+            self._model_dtype_reference = (
+                self
+                ._model_dtype_reference
+                .to(
+                    dtype=model_dtype,
+                )
+            )
+
+            self._restore_model_precision()
+
+        return module
 
     def forward(
         self,
@@ -416,9 +512,33 @@ class PETBackbone(BaseAtomisticBackbone):
                 cell=cell,
             )
 
-        positions = data[
+        input_positions = data[
             "positions"
         ]
+
+        output_dtype = (
+            input_positions.dtype
+        )
+
+        output_device = (
+            input_positions.device
+        )
+
+        model_dtype = (
+            self._model_dtype()
+        )
+
+        model_device = (
+            self._model_dtype_reference.device
+        )
+
+        # PET-MAD is trained and exported in a fixed precision, commonly
+        # float32. Convert graph geometry to this internal precision while
+        # preserving the autograd connection to the original positions.
+        positions = input_positions.to(
+            device=model_device,
+            dtype=model_dtype,
+        )
 
         node_attrs = data[
             "node_attrs"
@@ -449,17 +569,19 @@ class PETBackbone(BaseAtomisticBackbone):
         )
 
         atomic_numbers = self.atomic_numbers.to(
-            device=node_attrs.device,
+            device=positions.device,
         )
 
         species_indices = node_attrs.argmax(
             dim=-1
+        ).to(
+            device=positions.device,
+            dtype=torch.long,
         )
 
         atom_types = atomic_numbers[
             species_indices
         ].to(
-            device=positions.device,
             dtype=torch.int32,
         )
 
@@ -579,7 +701,12 @@ class PETBackbone(BaseAtomisticBackbone):
                     f"{features.size(1)}."
                 )
 
-        return features
+        # Restore the dtype/device expected by the surrounding mlcolvar
+        # graph and readout. The cast preserves coordinate gradients.
+        return features.to(
+            device=output_device,
+            dtype=output_dtype,
+        )
 
     def _build_neighbor_list(
         self,
@@ -762,191 +889,6 @@ class PETBackbone(BaseAtomisticBackbone):
             components=components,
             properties=properties,
         )
-
-    def _get_ptr(
-        self,
-        data: Dict[str, torch.Tensor],
-        n_atoms: int,
-        device: torch.device,
-    ) -> torch.Tensor:
-        """Return graph boundaries as a pointer tensor."""
-
-        if "ptr" in data:
-            return data[
-                "ptr"
-            ].to(
-                device=device,
-                dtype=torch.long,
-            )
-
-        if "batch" in data:
-            batch = data[
-                "batch"
-            ].to(
-                device=device,
-                dtype=torch.long,
-            )
-
-            if batch.numel() == 0:
-                return torch.zeros(
-                    1,
-                    device=device,
-                    dtype=torch.long,
-                )
-
-            n_systems = int(
-                batch.max().item()
-            ) + 1
-
-            counts = torch.bincount(
-                batch,
-                minlength=n_systems,
-            )
-
-            return torch.cat(
-                [
-                    torch.zeros(
-                        1,
-                        device=device,
-                        dtype=torch.long,
-                    ),
-                    counts.cumsum(
-                        dim=0
-                    ),
-                ],
-                dim=0,
-            )
-
-        return torch.tensor(
-            [
-                0,
-                n_atoms,
-            ],
-            device=device,
-            dtype=torch.long,
-        )
-
-    def _prepare_cells(
-        self,
-        data: Dict[str, torch.Tensor],
-        cell: Optional[torch.Tensor],
-        n_systems: int,
-        positions: torch.Tensor,
-    ) -> torch.Tensor:
-        """Normalize cells to shape ``[n_systems, 3, 3]``."""
-
-        if cell is not None:
-            cells = cell
-
-        elif "cell" in data:
-            cells = data[
-                "cell"
-            ]
-
-        else:
-            cells = positions.new_zeros(
-                (
-                    n_systems,
-                    3,
-                    3,
-                )
-            )
-
-        cells = cells.to(
-            device=positions.device,
-            dtype=positions.dtype,
-        )
-
-        if cells.dim() == 2:
-            if (
-                cells.size(0) == 3
-                and cells.size(1) == 3
-                and n_systems == 1
-            ):
-                cells = cells.unsqueeze(
-                    0
-                )
-
-            elif (
-                cells.size(0)
-                == 3 * n_systems
-                and cells.size(1) == 3
-            ):
-                cells = cells.reshape(
-                    n_systems,
-                    3,
-                    3,
-                )
-
-        if (
-            cells.dim() != 3
-            or cells.size(0) != n_systems
-            or cells.size(1) != 3
-            or cells.size(2) != 3
-        ):
-            raise ValueError(
-                "Could not interpret the graph cell tensor. Expected "
-                "shape [3, 3], [n_systems, 3, 3], or "
-                "[3 * n_systems, 3], but found "
-                f"{tuple(cells.shape)}."
-            )
-
-        return cells
-
-    def _prepare_pbc(
-        self,
-        data: Dict[str, torch.Tensor],
-        cells: torch.Tensor,
-        n_systems: int,
-    ) -> torch.Tensor:
-        """Return PBC flags with shape ``[n_systems, 3]``."""
-
-        if "pbc" not in data:
-            # mlcolvar graph objects historically do not always store PBC.
-            # In this case, infer periodic axes from non-zero cell vectors.
-            return (
-                torch.linalg.vector_norm(
-                    cells,
-                    dim=-1,
-                )
-                > 0.0
-            )
-
-        pbc = data[
-            "pbc"
-        ].to(
-            device=cells.device,
-            dtype=torch.bool,
-        )
-
-        if pbc.dim() == 1:
-            if pbc.numel() == 3:
-                pbc = pbc.reshape(
-                    1,
-                    3,
-                ).expand(
-                    n_systems,
-                    3,
-                )
-
-            elif pbc.numel() == 3 * n_systems:
-                pbc = pbc.reshape(
-                    n_systems,
-                    3,
-                )
-
-        if (
-            pbc.dim() != 2
-            or pbc.size(0) != n_systems
-            or pbc.size(1) != 3
-        ):
-            raise ValueError(
-                "Could not interpret the graph PBC tensor. Expected "
-                "shape [3] or [n_systems, 3], but found "
-                f"{tuple(pbc.shape)}."
-            )
-
-        return pbc
 
     @torch.jit.unused
     def _validate_graph_input(
