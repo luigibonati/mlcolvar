@@ -19,7 +19,7 @@ from ._utils import (
 
 try:
     from metatensor.torch import Labels, TensorBlock
-    from metatomic.torch import ModelOutput, System
+    from metatomic.torch import ModelOutput, NeighborListOptions, System
 
     _METATOMIC_AVAILABLE = True
     _METATOMIC_IMPORT_ERROR = None
@@ -30,6 +30,7 @@ except ImportError as exc:
     Labels = None
     TensorBlock = None
     ModelOutput = None
+    NeighborListOptions = None
     System = None
 
     _METATOMIC_AVAILABLE = False
@@ -412,6 +413,12 @@ class PETBackbone(BaseAtomisticBackbone):
         self.neighbor_full_list = neighbor_full_list
         self.neighbor_strict = neighbor_strict
 
+        # Cache the exact options requested by PET. Querying
+        # requested_neighbor_lists() dynamically inside forward would make
+        # the adapter depend on this Python-facing method being exported by
+        # the wrapped model.
+        self.neighbor_options = neighbor_options
+
         # This is the precision observed when PETBackbone is constructed,
         # not necessarily the original dtype of the checkpoint file.
         self.model_precision = model_precision
@@ -609,10 +616,6 @@ class PETBackbone(BaseAtomisticBackbone):
                 )
             )
 
-        neighbor_options = (
-            self.model.requested_neighbor_lists()[0]
-        )
-
         systems = torch.jit.annotate(
             List[System],
             [],
@@ -650,7 +653,7 @@ class PETBackbone(BaseAtomisticBackbone):
             )
 
             system.add_neighbor_list(
-                neighbor_options,
+                self.neighbor_options,
                 neighbors,
             )
 
@@ -827,7 +830,12 @@ class PETBackbone(BaseAtomisticBackbone):
             values=sample_values,
         )
 
-        components = [
+        components = torch.jit.annotate(
+            List[Labels],
+            [],
+        )
+
+        components.append(
             Labels(
                 names=["xyz"],
                 values=torch.arange(
@@ -836,7 +844,7 @@ class PETBackbone(BaseAtomisticBackbone):
                     dtype=torch.int32,
                 ).reshape(-1, 1),
             )
-        ]
+        )
 
         properties = Labels(
             names=["distance"],

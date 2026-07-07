@@ -167,6 +167,7 @@ class BaseAtomisticBackbone(nn.Module):
         )
 
     @property
+    @torch.jit.unused
     def in_features(self) -> Optional[int]:
         """Atomistic backbones receive graphs rather than flat tensors."""
         return None
@@ -201,7 +202,7 @@ class BaseAtomisticBackbone(nn.Module):
         n_atoms: int,
         device: torch.device,
     ) -> torch.Tensor:
-        """Return system boundaries in a batched graph."""
+        """Return graph boundaries as a pointer tensor."""
 
         if "ptr" in data:
             return data["ptr"].to(
@@ -222,12 +223,9 @@ class BaseAtomisticBackbone(nn.Module):
                     dtype=torch.long,
                 )
 
-            n_systems = (
-                int(
-                    batch.max().item()
-                )
-                + 1
-            )
+            n_systems = int(
+                batch.max().item()
+            ) + 1
 
             counts = torch.bincount(
                 batch,
@@ -241,18 +239,13 @@ class BaseAtomisticBackbone(nn.Module):
                         device=device,
                         dtype=torch.long,
                     ),
-                    counts.cumsum(
-                        dim=0,
-                    ),
+                    counts.cumsum(dim=0),
                 ],
                 dim=0,
             )
 
         return torch.tensor(
-            [
-                0,
-                n_atoms,
-            ],
+            [0, n_atoms],
             device=device,
             dtype=torch.long,
         )
@@ -268,17 +261,11 @@ class BaseAtomisticBackbone(nn.Module):
 
         if cell is not None:
             cells = cell
-
         elif "cell" in data:
             cells = data["cell"]
-
         else:
             cells = positions.new_zeros(
-                (
-                    n_systems,
-                    3,
-                    3,
-                )
+                (n_systems, 3, 3)
             )
 
         cells = cells.to(
@@ -292,13 +279,9 @@ class BaseAtomisticBackbone(nn.Module):
                 and cells.size(1) == 3
                 and n_systems == 1
             ):
-                cells = cells.unsqueeze(
-                    0
-                )
-
+                cells = cells.unsqueeze(0)
             elif (
-                cells.size(0)
-                == 3 * n_systems
+                cells.size(0) == 3 * n_systems
                 and cells.size(1) == 3
             ):
                 cells = cells.reshape(
@@ -314,10 +297,9 @@ class BaseAtomisticBackbone(nn.Module):
             or cells.size(2) != 3
         ):
             raise ValueError(
-                "Expected cell shape [3, 3], "
-                "[n_systems, 3, 3], or "
-                "[3 * n_systems, 3], but found "
-                f"{tuple(cells.shape)}."
+                "Could not interpret the graph cell tensor. Expected "
+                "shape [3, 3], [n_systems, 3, 3], or "
+                "[3 * n_systems, 3]."
             )
 
         return cells
@@ -346,17 +328,11 @@ class BaseAtomisticBackbone(nn.Module):
 
         if pbc.dim() == 1:
             if pbc.numel() == 3:
-                pbc = pbc.reshape(
-                    1,
-                    3,
-                ).expand(
+                pbc = pbc.reshape(1, 3).expand(
                     n_systems,
                     3,
                 )
-
-            elif pbc.numel() == (
-                3 * n_systems
-            ):
+            elif pbc.numel() == 3 * n_systems:
                 pbc = pbc.reshape(
                     n_systems,
                     3,
@@ -368,9 +344,8 @@ class BaseAtomisticBackbone(nn.Module):
             or pbc.size(1) != 3
         ):
             raise ValueError(
-                "Expected PBC shape [3] or "
-                "[n_systems, 3], but found "
-                f"{tuple(pbc.shape)}."
+                "Could not interpret the graph PBC tensor. Expected "
+                "shape [3] or [n_systems, 3]."
             )
 
         return pbc
@@ -491,6 +466,7 @@ class AtomisticFeaturizer(nn.Module):
         )
 
     @property
+    @torch.jit.unused
     def in_features(self) -> Optional[int]:
         """Atomistic featurizers receive graphs rather than flat tensors."""
         return None
@@ -670,8 +646,8 @@ class AtomisticFeaturizer(nn.Module):
 class AtomisticModel(BaseGNN):
     """Atomistic featurizer followed by a trainable CV readout.
 
-    This generic wrapper allows any external pretrained atomistic backbone
-    to be used by mlcolvar graph-based CV classes.
+    This generic wrapper allows an external pretrained atomistic
+    backbone to be used by mlcolvar graph-based CV classes.
 
     Parameters
     ----------
@@ -695,7 +671,10 @@ class AtomisticModel(BaseGNN):
                 f"found {n_out}."
             )
 
-        if any(size <= 0 for size in hidden_layers):
+        if any(
+            size <= 0
+            for size in hidden_layers
+        ):
             raise ValueError(
                 "`hidden_layers` must contain positive integers, "
                 f"found {hidden_layers}."
@@ -729,7 +708,8 @@ class AtomisticModel(BaseGNN):
             .item()
         )
 
-        # AtomisticFeaturizer already performs node-to-graph pooling.
+        # Inherit from BaseGNN so that mlcolvar CV classes recognize this
+        # object as a graph model.
         super().__init__(
             n_out=n_out,
             dataset_for_initialization=None,
@@ -738,6 +718,18 @@ class AtomisticModel(BaseGNN):
             buffer=buffer,
             long_range_cutoff=long_range_cutoff,
             atomic_numbers=atomic_numbers,
+        )
+
+        # BaseGNN always constructs a RadialEmbeddingBlock. It is required
+        # by native mlcolvar GNNs, but AtomisticModel delegates all feature
+        # construction to the external backbone and never calls embed_edge().
+        #
+        # Keeping this unused module breaks TorchScript serialization because
+        # the radial implementation contains Tensor arguments whose default
+        # value is None. Remove it from the registered submodules.
+        self._modules.pop(
+            "_radial_embedding",
+            None,
         )
 
         self.featurizer = featurizer
@@ -749,6 +741,30 @@ class AtomisticModel(BaseGNN):
                 n_out,
             ],
         )
+
+        readout_parameter = next(
+            self.readout.parameters()
+        )
+
+        # A scalar reference buffer records the dtype and device expected by
+        # the trainable readout. External backbones such as PET can keep their
+        # own fixed internal precision.
+        self.register_buffer(
+            "_readout_dtype_reference",
+            torch.zeros(
+                (),
+                device=readout_parameter.device,
+                dtype=readout_parameter.dtype,
+            ),
+        )
+
+    @property
+    @torch.jit.unused
+    def in_features(
+        self,
+    ) -> Optional[int]:
+        """Atomistic models receive graphs rather than flat tensors."""
+        return None
 
     def forward(
         self,
@@ -762,15 +778,9 @@ class AtomisticModel(BaseGNN):
             cell=cell,
         )
 
-        # External backbones may use a fixed internal precision.
-        # Always match the graph-level features to the trainable readout.
-        readout_parameter = next(
-            self.readout.parameters()
-        )
-
         features = features.to(
-            device=readout_parameter.device,
-            dtype=readout_parameter.dtype,
+            device=self._readout_dtype_reference.device,
+            dtype=self._readout_dtype_reference.dtype,
         )
 
         return self.readout(

@@ -233,20 +233,6 @@ def _infer_neighbor_list_precision(
     return fallback
 
 
-def _extract_descriptor_features(descriptor_output: Any) -> torch.Tensor:
-    """Extract the atom-level descriptor tensor from DeePMD output."""
-    if isinstance(descriptor_output, tuple):
-        if len(descriptor_output) == 0:
-            raise RuntimeError("The DeePMD descriptor returned an empty tuple.")
-        features = descriptor_output[0]
-    else:
-        features = descriptor_output
-
-    if not isinstance(features, torch.Tensor):
-        raise RuntimeError("The first DeePMD descriptor output must be a tensor.")
-
-    return features
-
 
 class DeepMDBackbone(BaseAtomisticBackbone):
     """Extract atom-level descriptors from a DeePMD PyTorch model.
@@ -401,22 +387,26 @@ class DeepMDBackbone(BaseAtomisticBackbone):
         self.mixed_types = mixed_types
         self.type_map: List[str] = type_map
 
-        # These non-persistent buffers track DeePMD's internal device and
-        # fixed floating-point precisions.
+        # Scalar buffers track DeePMD's internal device and fixed floating-
+        # point precisions. Scalar tensors are convenient TorchScript
+        # attributes and are serialized together with the scripted module.
         self.register_buffer(
             "_descriptor_dtype_reference",
-            torch.empty(0, dtype=descriptor_dtype),
-            persistent=False,
+            torch.zeros((), dtype=descriptor_dtype),
         )
         self.register_buffer(
             "_neighbor_list_dtype_reference",
-            torch.empty(0, dtype=neighbor_list_dtype),
-            persistent=False,
+            torch.zeros((), dtype=neighbor_list_dtype),
         )
 
-        # Register the complete DeePMD model only after nn.Module has been
-        # initialized by BaseAtomisticBackbone.
-        self.model = model
+        # Register the descriptor itself as a direct child module. Calling
+        # ``model.get_descriptor()`` inside forward would return a module
+        # through a regular Python method; TorchScript does not treat such a
+        # dynamically returned object as a callable submodule.
+        #
+        # The complete DeePMD potential is not needed for CV inference after
+        # the descriptor metadata has been collected above.
+        self.descriptor = descriptor
         self._restore_internal_precision()
 
     @staticmethod
@@ -432,10 +422,9 @@ class DeepMDBackbone(BaseAtomisticBackbone):
     @torch.jit.unused
     def _restore_internal_precision(self) -> None:
         """Restore DeePMD's fixed internal precisions after transforms."""
-        if not hasattr(self, "model"):
+        if not hasattr(self, "descriptor"):
             return
 
-        descriptor = self.model.get_descriptor()
         descriptor_dtype = _PRECISION_TO_DTYPE[self.descriptor_precision]
         neighbor_list_dtype = _PRECISION_TO_DTYPE[
             self.neighbor_list_precision
@@ -443,9 +432,9 @@ class DeepMDBackbone(BaseAtomisticBackbone):
 
         # A dtype-only conversion preserves device changes performed by a
         # surrounding ``to(device=...)`` call.
-        descriptor.to(dtype=descriptor_dtype)
+        self.descriptor.to(dtype=descriptor_dtype)
 
-        descriptor_device = self._find_module_device(descriptor)
+        descriptor_device = self._find_module_device(self.descriptor)
         if descriptor_device is None:
             descriptor_device = self._descriptor_dtype_reference.device
 
@@ -469,7 +458,7 @@ class DeepMDBackbone(BaseAtomisticBackbone):
         """
         module = super()._apply(fn, recurse=recurse)
 
-        if hasattr(self, "model"):
+        if hasattr(self, "descriptor"):
             self._restore_internal_precision()
 
         return module
@@ -540,7 +529,6 @@ class DeepMDBackbone(BaseAtomisticBackbone):
             dtype=torch.long,
         )
 
-        descriptor = self.model.get_descriptor()
         feature_blocks = torch.jit.annotate(List[torch.Tensor], [])
 
         for system_index in range(n_systems):
@@ -565,9 +553,12 @@ class DeepMDBackbone(BaseAtomisticBackbone):
             # Periodic ghost-atom construction follows DeePMD's global
             # neighbor-list precision.
             neighbor_positions = system_positions.to(dtype=neighbor_list_dtype)
-            neighbor_box = (
-                None if box is None else box.to(dtype=neighbor_list_dtype)
+            neighbor_box = torch.jit.annotate(
+                Optional[torch.Tensor],
+                None,
             )
+            if box is not None:
+                neighbor_box = box.to(dtype=neighbor_list_dtype)
 
             (
                 extended_coord,
@@ -587,13 +578,16 @@ class DeepMDBackbone(BaseAtomisticBackbone):
             # neighbor-list construction.
             extended_coord = extended_coord.to(dtype=descriptor_dtype)
 
-            descriptor_output = descriptor(
+            # ``self.descriptor`` is a registered child module, so
+            # TorchScript can compile this call. DPA descriptors return the
+            # atom-level descriptor as the first item of their output tuple.
+            descriptor_output = self.descriptor(
                 extended_coord,
                 extended_atype,
                 neighbor_list,
-                mapping=mapping,
+                mapping,
             )
-            features = _extract_descriptor_features(descriptor_output)
+            features = descriptor_output[0]
 
             if not torch.jit.is_scripting() and not torch.jit.is_tracing():
                 self._validate_descriptor_output(
