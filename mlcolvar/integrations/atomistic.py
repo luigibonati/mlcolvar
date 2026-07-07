@@ -1,5 +1,3 @@
-"""Common interfaces for pretrained atomistic models."""
-
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import torch
