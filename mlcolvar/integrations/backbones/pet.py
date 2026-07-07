@@ -1,3 +1,5 @@
+"""PET integration for pretrained atomistic representations."""
+
 from __future__ import annotations
 
 from typing import Dict, List, Optional, Tuple
@@ -23,8 +25,8 @@ try:
     _METATOMIC_IMPORT_ERROR = None
 
 except ImportError as exc:
-    # Keep mlcolvar importable when the optional PET dependencies
-    # are not installed.
+    # Keep mlcolvar importable when the optional PET dependencies are
+    # unavailable.
     Labels = None
     TensorBlock = None
     ModelOutput = None
@@ -55,32 +57,67 @@ _DTYPE_TO_PRECISION = {
 def _infer_model_precision(
     model: nn.Module,
 ) -> Tuple[str, torch.dtype]:
-    """Infer and validate the floating-point precision of a PET model."""
+    """Infer the floating-point precision used by a PET model.
 
-    floating_dtypes = {
+    Floating-point parameters are used preferentially. Floating-point
+    buffers are considered only when the model has no floating-point
+    parameters.
+
+    Parameters
+    ----------
+    model
+        PET model whose internal precision should be inferred.
+
+    Returns
+    -------
+    precision
+        String representation of the inferred precision.
+    dtype
+        Corresponding PyTorch dtype.
+
+    Raises
+    ------
+    ValueError
+        If no floating-point dtype can be inferred, multiple parameter
+        precisions are detected, or the inferred dtype is unsupported.
+    """
+    parameter_dtypes = {
         parameter.dtype
         for parameter in model.parameters()
         if parameter.is_floating_point()
     }
 
-    floating_dtypes.update(
-        buffer.dtype
-        for buffer in model.buffers()
-        if buffer.is_floating_point()
-    )
-
-    if len(floating_dtypes) == 0:
+    if len(parameter_dtypes) > 1:
         raise ValueError(
-            "Could not infer the floating-point precision of the PET model."
+            "The PET model contains parameters with mixed floating-point "
+            "precisions: "
+            f"{sorted(str(dtype) for dtype in parameter_dtypes)}."
         )
 
-    if len(floating_dtypes) != 1:
-        raise ValueError(
-            "The PET model contains mixed floating-point precisions: "
-            f"{sorted(str(dtype) for dtype in floating_dtypes)}."
-        )
+    if parameter_dtypes:
+        model_dtype = next(iter(parameter_dtypes))
 
-    model_dtype = next(iter(floating_dtypes))
+    else:
+        buffer_dtypes = {
+            buffer.dtype
+            for buffer in model.buffers()
+            if buffer.is_floating_point()
+        }
+
+        if len(buffer_dtypes) == 0:
+            raise ValueError(
+                "Could not infer the floating-point precision of the "
+                "PET model."
+            )
+
+        if len(buffer_dtypes) > 1:
+            raise ValueError(
+                "The PET model contains buffers with mixed floating-point "
+                "precisions: "
+                f"{sorted(str(dtype) for dtype in buffer_dtypes)}."
+            )
+
+        model_dtype = next(iter(buffer_dtypes))
 
     if model_dtype not in _DTYPE_TO_PRECISION:
         raise ValueError(
@@ -88,17 +125,13 @@ def _infer_model_precision(
             f"{model_dtype}."
         )
 
-    return (
-        _DTYPE_TO_PRECISION[model_dtype],
-        model_dtype,
-    )
+    return _DTYPE_TO_PRECISION[model_dtype], model_dtype
 
 
 def _is_native_pet_model(
     model: nn.Module,
 ) -> bool:
     """Check whether a module exposes the native PET public interface."""
-
     required_attributes = (
         "atomic_types",
         "cutoff",
@@ -110,8 +143,8 @@ def _is_native_pet_model(
     )
 
     if not all(
-        hasattr(model, name)
-        for name in required_attributes
+        hasattr(model, attribute)
+        for attribute in required_attributes
     ):
         return False
 
@@ -119,6 +152,8 @@ def _is_native_pet_model(
         outputs = model.supported_outputs()
 
     except Exception:
+        # This function probes potentially incompatible wrappers. Errors
+        # raised while querying an unsupported interface should not escape.
         return False
 
     return "feature" in outputs
@@ -127,13 +162,27 @@ def _is_native_pet_model(
 def _unwrap_pet_model(
     model: nn.Module,
 ) -> nn.Module:
-    """Extract the native PET model from an optional wrapper.
+    """Extract a native PET model from an optional wrapper.
 
-    PET-MAD checkpoints can be wrapped by models such as
+    PET-MAD checkpoints can be wrapped by modules such as
     ``LLPRUncertaintyModel``. In that case, the native PET model is
-    available as ``wrapper.model``.
-    """
+    available through ``wrapper.model``.
 
+    Parameters
+    ----------
+    model
+        Native PET model or supported wrapper.
+
+    Returns
+    -------
+    nn.Module
+        Native PET model.
+
+    Raises
+    ------
+    ValueError
+        If no native PET model can be found.
+    """
     if _is_native_pet_model(model):
         return model
 
@@ -161,8 +210,22 @@ def _unwrap_pet_model(
 def _infer_pet_layout(
     model: nn.Module,
 ) -> Tuple[int, int, int]:
-    """Infer the dimension of PET's public ``feature`` output."""
+    """Infer and validate the dimension of PET's public feature output.
 
+    Parameters
+    ----------
+    model
+        Native PET model.
+
+    Returns
+    -------
+    d_node
+        Dimension of each node-feature block.
+    d_pet
+        Dimension of each edge-derived PET feature block.
+    num_readout_layers
+        Number of readout layers represented in the public feature output.
+    """
     d_node = to_int(
         model.d_node,
         name="model.d_node",
@@ -196,25 +259,29 @@ def _infer_pet_layout(
             f"found {num_readout_layers}."
         )
 
-    return (
-        d_node,
-        d_pet,
-        num_readout_layers,
-    )
+    return d_node, d_pet, num_readout_layers
 
 
 class PETBackbone(BaseAtomisticBackbone):
     """Extract atom-level features from a pretrained metatrain PET model.
 
-    This adapter uses PET's public metatomic interface:
+    This adapter uses PET's public metatomic interface::
 
-    ``mlcolvar graph -> metatomic Systems -> PET "feature" output``
+        mlcolvar graph
+            -> metatomic Systems
+            -> PET "feature" output
 
-    The mlcolvar graph neighbor list is converted to the neighbor-list
+    The mlcolvar graph neighbor list is converted into the metatomic
     ``TensorBlock`` requested by PET. PET then performs its own input
     preprocessing and message passing.
 
-    Pooling, masking, and parameter freezing are handled by
+    PET is kept in the floating-point precision detected when this
+    backbone is constructed. Device transfers requested through
+    ``to(device=...)`` are retained, while surrounding calls such as
+    ``float()`` or ``double()`` do not change PET's internal precision.
+
+    Pooling, masking, parameter freezing, and graph-level output are
+    handled by
     :class:`mlcolvar.integrations.atomistic.AtomisticFeaturizer`.
 
     Parameters
@@ -222,14 +289,13 @@ class PETBackbone(BaseAtomisticBackbone):
     model
         Native ``metatrain.pet.model.PET`` model or a wrapper containing
         the native PET model in ``model.model``. PET-MAD LLPR checkpoints
-        are therefore accepted directly.
+        are accepted directly.
     buffer
         Additional environment buffer used during mlcolvar graph
         construction.
     long_range_cutoff
-        Optional mlcolvar long-range graph cutoff. Long-range graph edges
-        marked by ``edge_masks_lr`` are excluded from the PET neighbor
-        list.
+        Optional mlcolvar long-range graph cutoff. Long-range edges marked
+        by ``edge_masks_lr`` are excluded from the PET neighbor list.
     """
 
     __constants__ = [
@@ -254,26 +320,19 @@ class PETBackbone(BaseAtomisticBackbone):
                 'Install them with `pip install "metatrain[pet]"`.'
             ) from _METATOMIC_IMPORT_ERROR
 
-        if not isinstance(
-            model,
-            nn.Module,
-        ):
+        if not isinstance(model, nn.Module):
             raise TypeError(
                 "`model` must be a torch.nn.Module."
             )
 
         # PET-MAD checkpoints can be wrapped by LLPRUncertaintyModel.
-        model = _unwrap_pet_model(
-            model
-        )
+        model = _unwrap_pet_model(model)
 
         (
             d_node,
             d_pet,
             num_readout_layers,
-        ) = _infer_pet_layout(
-            model
-        )
+        ) = _infer_pet_layout(model)
 
         atomic_numbers = to_int_list(
             model.atomic_types,
@@ -291,9 +350,7 @@ class PETBackbone(BaseAtomisticBackbone):
                 f"{len(requested_neighbor_lists)}."
             )
 
-        neighbor_options = (
-            requested_neighbor_lists[0]
-        )
+        neighbor_options = requested_neighbor_lists[0]
 
         neighbor_cutoff = to_float(
             neighbor_options.cutoff,
@@ -315,10 +372,7 @@ class PETBackbone(BaseAtomisticBackbone):
             name="model.cutoff",
         )
 
-        if abs(
-            model_cutoff
-            - neighbor_cutoff
-        ) > 1e-12:
+        if abs(model_cutoff - neighbor_cutoff) > 1e-12:
             raise ValueError(
                 "PET model cutoff and requested neighbor-list cutoff "
                 "do not match: "
@@ -326,18 +380,20 @@ class PETBackbone(BaseAtomisticBackbone):
                 f"neighbor cutoff={neighbor_cutoff}."
             )
 
-        # PET concatenates:
-        #
-        # - one d_node node-feature block per readout layer;
-        # - one d_pet cutoff-weighted edge-feature block per layer.
+        (
+            model_precision,
+            model_dtype,
+        ) = _infer_model_precision(model)
+
+        # PET concatenates one d_node node-feature block and one d_pet
+        # cutoff-weighted edge-feature block for every readout layer.
         out_features = (
             num_readout_layers
-            * (
-                d_node
-                + d_pet
-            )
+            * (d_node + d_pet)
         )
 
+        # BaseAtomisticBackbone initializes nn.Module before the PET model
+        # is registered as a child module.
         super().__init__(
             out_features=out_features,
             atomic_numbers=atomic_numbers,
@@ -350,34 +406,18 @@ class PETBackbone(BaseAtomisticBackbone):
 
         self.d_node = d_node
         self.d_pet = d_pet
+        self.num_readout_layers = num_readout_layers
 
-        self.num_readout_layers = (
-            num_readout_layers
-        )
+        self.neighbor_cutoff = neighbor_cutoff
+        self.neighbor_full_list = neighbor_full_list
+        self.neighbor_strict = neighbor_strict
 
-        self.neighbor_cutoff = (
-            neighbor_cutoff
-        )
+        # This is the precision observed when PETBackbone is constructed,
+        # not necessarily the original dtype of the checkpoint file.
+        self.model_precision = model_precision
 
-        self.neighbor_full_list = (
-            neighbor_full_list
-        )
-
-        self.neighbor_strict = (
-            neighbor_strict
-        )
-
-        (
-            model_precision,
-            model_dtype,
-        ) = _infer_model_precision(
-            model
-        )
-
-        self.model_precision = (
-            model_precision
-        )
-
+        # This non-persistent buffer tracks both PET's current device and
+        # its fixed internal floating-point dtype.
         self.register_buffer(
             "_model_dtype_reference",
             torch.empty(
@@ -387,40 +427,34 @@ class PETBackbone(BaseAtomisticBackbone):
             persistent=False,
         )
 
-        # Register the native PET model only after nn.Module has been
-        # initialized by BaseAtomisticBackbone.
         self.model = model
 
-        # Restore the checkpoint precision in case the supplied PET model
-        # was already converted before wrapping.
+        # Ensure that the registered model uses the construction-time
+        # internal precision.
         self._restore_model_precision()
 
+    @torch.jit.unused
     def _model_dtype(
         self,
     ) -> torch.dtype:
-        """Return the native floating-point dtype of the PET model."""
-
+        """Return PET's fixed internal floating-point dtype."""
         return _PRECISION_TO_DTYPE[
             self.model_precision
         ]
 
+    @torch.jit.unused
     def _restore_model_precision(
         self,
     ) -> None:
-        """Restore PET parameters and buffers to checkpoint precision."""
-
-        if not hasattr(
-            self,
-            "model",
-        ):
+        """Restore PET to its construction-time floating-point precision."""
+        if not hasattr(self, "model"):
             return
 
-        model_dtype = (
-            self._model_dtype()
-        )
+        model_dtype = self._model_dtype()
 
+        # A dtype-only conversion preserves the model's current device.
         self.model.to(
-            dtype=model_dtype
+            dtype=model_dtype,
         )
 
         model_device = None
@@ -436,9 +470,7 @@ class PETBackbone(BaseAtomisticBackbone):
 
         if model_device is not None:
             self._model_dtype_reference = (
-                self
-                ._model_dtype_reference
-                .to(
+                self._model_dtype_reference.to(
                     device=model_device,
                     dtype=model_dtype,
                 )
@@ -447,35 +479,21 @@ class PETBackbone(BaseAtomisticBackbone):
     def _apply(
         self,
         fn,
+        recurse: bool = True,
     ):
-        """Apply transforms while preserving PET checkpoint precision.
+        """Apply module transforms while preserving PET's internal dtype.
 
-        Calling ``float()``, ``double()`` or ``to(dtype=...)`` on a
-        surrounding mlcolvar model recursively reaches this backbone.
-        PET is restored to its original checkpoint precision afterwards.
-        Device moves are retained.
+        Calls such as ``to(device=...)``, ``float()``, ``double()``, or
+        ``to(dtype=...)`` recursively reach the PET model. Device changes
+        are retained, but PET is restored to the precision detected when
+        this backbone was constructed.
         """
-
         module = super()._apply(
-            fn
+            fn,
+            recurse=recurse,
         )
 
-        if hasattr(
-            self,
-            "model",
-        ):
-            model_dtype = (
-                self._model_dtype()
-            )
-
-            self._model_dtype_reference = (
-                self
-                ._model_dtype_reference
-                .to(
-                    dtype=model_dtype,
-                )
-            )
-
+        if hasattr(self, "model"):
             self._restore_model_precision()
 
         return module
@@ -502,7 +520,6 @@ class PETBackbone(BaseAtomisticBackbone):
         torch.Tensor
             PET features with shape ``[n_atoms, out_features]``.
         """
-
         if (
             not torch.jit.is_scripting()
             and not torch.jit.is_tracing()
@@ -512,48 +529,30 @@ class PETBackbone(BaseAtomisticBackbone):
                 cell=cell,
             )
 
-        input_positions = data[
-            "positions"
-        ]
+        input_positions = data["positions"]
 
-        output_dtype = (
-            input_positions.dtype
-        )
+        output_dtype = input_positions.dtype
+        output_device = input_positions.device
 
-        output_device = (
-            input_positions.device
-        )
+        # Use the reference buffer directly in the scripted forward path,
+        # avoiding a Python dictionary lookup from string to torch.dtype.
+        model_dtype = self._model_dtype_reference.dtype
+        model_device = self._model_dtype_reference.device
 
-        model_dtype = (
-            self._model_dtype()
-        )
-
-        model_device = (
-            self._model_dtype_reference.device
-        )
-
-        # PET-MAD is trained and exported in a fixed precision, commonly
-        # float32. Convert graph geometry to this internal precision while
-        # preserving the autograd connection to the original positions.
+        # PET commonly operates in float32. Casting geometry preserves the
+        # autograd connection to the original input coordinates.
         positions = input_positions.to(
             device=model_device,
             dtype=model_dtype,
         )
 
-        node_attrs = data[
-            "node_attrs"
-        ]
-
         ptr = self._get_ptr(
             data=data,
             n_atoms=positions.size(0),
-            device=positions.device,
+            device=model_device,
         )
 
-        n_systems = (
-            ptr.numel()
-            - 1
-        )
+        n_systems = ptr.numel() - 1
 
         cells = self._prepare_cells(
             data=data,
@@ -568,14 +567,16 @@ class PETBackbone(BaseAtomisticBackbone):
             n_systems=n_systems,
         )
 
+        node_attrs = data["node_attrs"]
+
         atomic_numbers = self.atomic_numbers.to(
-            device=positions.device,
+            device=model_device,
         )
 
         species_indices = node_attrs.argmax(
-            dim=-1
+            dim=-1,
         ).to(
-            device=positions.device,
+            device=model_device,
             dtype=torch.long,
         )
 
@@ -585,16 +586,39 @@ class PETBackbone(BaseAtomisticBackbone):
             dtype=torch.int32,
         )
 
-        neighbor_options = (
-            self.model
-            .requested_neighbor_lists()[0]
+        # Move global edge data once rather than once per system.
+        edge_index = data["edge_index"].to(
+            device=model_device,
+            dtype=torch.long,
         )
 
-        systems: List[System] = []
+        unit_shifts = data["unit_shifts"].to(
+            device=model_device,
+            dtype=model_dtype,
+        )
 
-        for system_index in range(
-            n_systems
-        ):
+        long_range_mask: Optional[torch.Tensor] = None
+
+        if "edge_masks_lr" in data:
+            long_range_mask = (
+                data["edge_masks_lr"]
+                .reshape(-1)
+                .to(
+                    device=model_device,
+                    dtype=torch.bool,
+                )
+            )
+
+        neighbor_options = (
+            self.model.requested_neighbor_lists()[0]
+        )
+
+        systems = torch.jit.annotate(
+            List[System],
+            [],
+        )
+
+        for system_index in range(n_systems):
             start = int(
                 ptr[system_index].item()
             )
@@ -603,21 +627,10 @@ class PETBackbone(BaseAtomisticBackbone):
                 ptr[system_index + 1].item()
             )
 
-            system_positions = positions[
-                start:end
-            ]
-
-            system_types = atom_types[
-                start:end
-            ]
-
-            system_cell = cells[
-                system_index
-            ]
-
-            system_pbc = pbc[
-                system_index
-            ]
+            system_positions = positions[start:end]
+            system_types = atom_types[start:end]
+            system_cell = cells[system_index]
+            system_pbc = pbc[system_index]
 
             system = System(
                 types=system_types,
@@ -627,7 +640,9 @@ class PETBackbone(BaseAtomisticBackbone):
             )
 
             neighbors = self._build_neighbor_list(
-                data=data,
+                edge_index=edge_index,
+                unit_shifts=unit_shifts,
+                long_range_mask=long_range_mask,
                 positions=system_positions,
                 cell=system_cell,
                 start=start,
@@ -639,14 +654,9 @@ class PETBackbone(BaseAtomisticBackbone):
                 neighbors,
             )
 
-            systems.append(
-                system
-            )
+            systems.append(system)
 
-        requested_outputs: Dict[
-            str,
-            ModelOutput,
-        ] = {
+        requested_outputs: Dict[str, ModelOutput] = {
             "feature": ModelOutput(
                 sample_kind="atom",
             ),
@@ -674,35 +684,13 @@ class PETBackbone(BaseAtomisticBackbone):
             not torch.jit.is_scripting()
             and not torch.jit.is_tracing()
         ):
-            if features.dim() != 2:
-                raise RuntimeError(
-                    "Expected PET `feature` values to be rank 2, "
-                    "with shape [n_atoms, n_features]."
-                )
+            self._validate_feature_output(
+                features=features,
+                n_atoms=positions.size(0),
+            )
 
-            if (
-                features.size(0)
-                != positions.size(0)
-            ):
-                raise RuntimeError(
-                    "The number of PET feature rows does not match "
-                    "the number of graph atoms. Expected "
-                    f"{positions.size(0)}, found "
-                    f"{features.size(0)}."
-                )
-
-            if (
-                features.size(1)
-                != self.out_features
-            ):
-                raise RuntimeError(
-                    "Unexpected PET feature dimension. Expected "
-                    f"{self.out_features}, found "
-                    f"{features.size(1)}."
-                )
-
-        # Restore the dtype/device expected by the surrounding mlcolvar
-        # graph and readout. The cast preserves coordinate gradients.
+        # Restore the dtype and device expected by the surrounding
+        # mlcolvar model. This cast preserves coordinate gradients.
         return features.to(
             device=output_device,
             dtype=output_dtype,
@@ -710,34 +698,38 @@ class PETBackbone(BaseAtomisticBackbone):
 
     def _build_neighbor_list(
         self,
-        data: Dict[str, torch.Tensor],
+        edge_index: torch.Tensor,
+        unit_shifts: torch.Tensor,
+        long_range_mask: Optional[torch.Tensor],
         positions: torch.Tensor,
         cell: torch.Tensor,
         start: int,
         end: int,
     ) -> TensorBlock:
-        """Convert one mlcolvar graph into a metatomic neighbor list."""
+        """Convert one mlcolvar graph into a metatomic neighbor list.
 
-        edge_index = data[
-            "edge_index"
-        ].to(
-            device=positions.device,
-            dtype=torch.long,
-        )
-
-        unit_shifts = data[
-            "unit_shifts"
-        ].to(
-            device=positions.device,
-        )
-
-        first_global = edge_index[
-            0
-        ]
-
-        second_global = edge_index[
-            1
-        ]
+        Parameters
+        ----------
+        edge_index
+            Global graph edge indices with shape ``[2, n_edges]``.
+        unit_shifts
+            Integer-valued periodic cell offsets with shape
+            ``[n_edges, 3]``.
+        long_range_mask
+            Optional mask marking mlcolvar long-range edges that should not
+            be passed to PET.
+        positions
+            Positions belonging to the current system.
+        cell
+            Cell matrix of the current system.
+        start
+            Global index of the first atom in the current system.
+        end
+            Exclusive global index of the final atom in the current
+            system.
+        """
+        first_global = edge_index[0]
+        second_global = edge_index[1]
 
         edge_mask = (
             (first_global >= start)
@@ -746,65 +738,44 @@ class PETBackbone(BaseAtomisticBackbone):
             & (second_global < end)
         )
 
-        # mlcolvar can append a separate long-range edge list to the
-        # short-range graph. PET should only receive its own requested
-        # short-range neighbor list.
-        if "edge_masks_lr" in data:
-            long_range_mask = (
-                data["edge_masks_lr"]
-                .reshape(-1)
-                .to(
-                    device=edge_mask.device,
-                    dtype=torch.bool,
-                )
-            )
-
+        # PET receives only its requested short-range neighbor list.
+        if long_range_mask is not None:
             edge_mask = (
                 edge_mask
                 & ~long_range_mask
             )
 
         first_atom = (
-            first_global[
-                edge_mask
-            ]
+            first_global[edge_mask]
             - start
         )
 
         second_atom = (
-            second_global[
-                edge_mask
-            ]
+            second_global[edge_mask]
             - start
         )
 
         cell_shifts = torch.round(
-            unit_shifts[
-                edge_mask
-            ]
+            unit_shifts[edge_mask],
         ).to(
             dtype=torch.int32,
         )
 
         cartesian_shifts = (
             cell_shifts.to(
-                dtype=positions.dtype
+                dtype=positions.dtype,
             )
             @ cell
         )
 
         edge_vectors = (
-            positions[
-                second_atom
-            ]
-            - positions[
-                first_atom
-            ]
+            positions[second_atom]
+            - positions[first_atom]
             + cartesian_shifts
         )
 
-        # PET currently requests a strict neighbor list. Filtering here
-        # also protects against graph buffers or a larger mlcolvar cutoff.
+        # A strict PET neighbor list excludes graph-buffer edges and edges
+        # generated using a larger mlcolvar cutoff.
         if self.neighbor_strict:
             distances = torch.linalg.vector_norm(
                 edge_vectors,
@@ -835,10 +806,10 @@ class PETBackbone(BaseAtomisticBackbone):
         sample_values = torch.cat(
             [
                 first_atom.to(
-                    dtype=torch.int32
+                    dtype=torch.int32,
                 ).reshape(-1, 1),
                 second_atom.to(
-                    dtype=torch.int32
+                    dtype=torch.int32,
                 ).reshape(-1, 1),
                 cell_shifts,
             ],
@@ -870,10 +841,7 @@ class PETBackbone(BaseAtomisticBackbone):
         properties = Labels(
             names=["distance"],
             values=torch.zeros(
-                (
-                    1,
-                    1,
-                ),
+                (1, 1),
                 device=positions.device,
                 dtype=torch.int32,
             ),
@@ -891,19 +859,51 @@ class PETBackbone(BaseAtomisticBackbone):
         )
 
     @torch.jit.unused
+    def _validate_feature_output(
+        self,
+        features: torch.Tensor,
+        n_atoms: int,
+    ) -> None:
+        """Validate the public PET feature tensor in eager mode."""
+        if not isinstance(features, torch.Tensor):
+            raise RuntimeError(
+                "PET `feature` values must be a torch.Tensor."
+            )
+
+        if features.dim() != 2:
+            raise RuntimeError(
+                "Expected PET `feature` values to have shape "
+                "[n_atoms, n_features], but found "
+                f"{tuple(features.shape)}."
+            )
+
+        if features.size(0) != n_atoms:
+            raise RuntimeError(
+                "The number of PET feature rows does not match the "
+                "number of graph atoms. Expected "
+                f"{n_atoms}, found {features.size(0)}."
+            )
+
+        if features.size(1) != self.out_features:
+            raise RuntimeError(
+                "Unexpected PET feature dimension. Expected "
+                f"{self.out_features}, found "
+                f"{features.size(1)}."
+            )
+
+    @torch.jit.unused
     def _validate_graph_input(
         self,
         data: Dict[str, torch.Tensor],
         cell: Optional[torch.Tensor],
     ) -> None:
         """Validate graph fields required by the PET adapter."""
-
-        required_keys = [
+        required_keys = (
             "positions",
             "node_attrs",
             "edge_index",
             "unit_shifts",
-        ]
+        )
 
         missing_keys = [
             key
@@ -917,21 +917,10 @@ class PETBackbone(BaseAtomisticBackbone):
                 f"{missing_keys}."
             )
 
-        positions = data[
-            "positions"
-        ]
-
-        node_attrs = data[
-            "node_attrs"
-        ]
-
-        edge_index = data[
-            "edge_index"
-        ]
-
-        unit_shifts = data[
-            "unit_shifts"
-        ]
+        positions = data["positions"]
+        node_attrs = data["node_attrs"]
+        edge_index = data["edge_index"]
+        unit_shifts = data["unit_shifts"]
 
         if (
             positions.dim() != 2
@@ -942,30 +931,55 @@ class PETBackbone(BaseAtomisticBackbone):
                 f"found {tuple(positions.shape)}."
             )
 
-        if node_attrs.dim() != 2:
-            raise ValueError(
-                "`node_attrs` must be a rank-2 tensor."
+        if not positions.is_floating_point():
+            raise TypeError(
+                "`positions` must use a floating-point dtype."
             )
 
-        if (
-            node_attrs.size(0)
-            != positions.size(0)
-        ):
+        if node_attrs.dim() != 2:
+            raise ValueError(
+                "`node_attrs` must be a rank-2 tensor, "
+                f"found shape {tuple(node_attrs.shape)}."
+            )
+
+        if node_attrs.size(0) != positions.size(0):
             raise ValueError(
                 "`node_attrs` and `positions` must contain the "
                 "same number of atoms."
             )
 
-        if (
-            node_attrs.size(1)
-            != self.atomic_numbers.numel()
-        ):
+        if node_attrs.size(1) != self.atomic_numbers.numel():
             raise ValueError(
                 "The width of `node_attrs` does not match the PET "
                 "atomic-type table. Align the dataset with "
                 "`AtomisticFeaturizer.align_dataset()` before "
                 "constructing the datamodule."
             )
+
+        if node_attrs.numel() > 0:
+            binary_entries = torch.all(
+                (node_attrs == 0)
+                | (node_attrs == 1)
+            )
+
+            if not bool(binary_entries.item()):
+                raise ValueError(
+                    "`node_attrs` must contain one-hot atomic-type "
+                    "encodings with entries equal to zero or one."
+                )
+
+            row_sums = node_attrs.sum(
+                dim=1,
+            )
+
+            if not torch.equal(
+                row_sums,
+                torch.ones_like(row_sums),
+            ):
+                raise ValueError(
+                    "Each row of `node_attrs` must contain exactly "
+                    "one active atomic type."
+                )
 
         if (
             edge_index.dim() != 2
@@ -977,6 +991,15 @@ class PETBackbone(BaseAtomisticBackbone):
             )
 
         if (
+            edge_index.dtype == torch.bool
+            or edge_index.is_floating_point()
+            or edge_index.is_complex()
+        ):
+            raise TypeError(
+                "`edge_index` must use an integer dtype."
+            )
+
+        if (
             unit_shifts.dim() != 2
             or unit_shifts.size(1) != 3
         ):
@@ -985,20 +1008,19 @@ class PETBackbone(BaseAtomisticBackbone):
                 f"found {tuple(unit_shifts.shape)}."
             )
 
-        if (
-            unit_shifts.size(0)
-            != edge_index.size(1)
-        ):
+        if unit_shifts.size(0) != edge_index.size(1):
             raise ValueError(
                 "`unit_shifts` and `edge_index` contain different "
                 "numbers of edges."
             )
 
+        shifts_for_validation = unit_shifts.to(
+            dtype=torch.float64,
+        )
+
         if not torch.allclose(
-            unit_shifts,
-            torch.round(
-                unit_shifts
-            ),
+            shifts_for_validation,
+            torch.round(shifts_for_validation),
         ):
             raise ValueError(
                 "`unit_shifts` must contain integer-valued periodic "
@@ -1014,51 +1036,203 @@ class PETBackbone(BaseAtomisticBackbone):
                     "`edge_masks_lr` must contain one entry per edge."
                 )
 
+        n_atoms = positions.size(0)
+
+        if edge_index.numel() > 0:
+            edge_index_long = edge_index.to(
+                dtype=torch.long,
+            )
+
+            minimum_index = int(
+                edge_index_long.min().item()
+            )
+
+            maximum_index = int(
+                edge_index_long.max().item()
+            )
+
+            if minimum_index < 0:
+                raise ValueError(
+                    "`edge_index` contains negative atom indices."
+                )
+
+            if maximum_index >= n_atoms:
+                raise ValueError(
+                    "`edge_index` contains atom indices outside the "
+                    f"graph. The maximum valid index is {n_atoms - 1}, "
+                    f"but found {maximum_index}."
+                )
+
         ptr = self._get_ptr(
             data=data,
-            n_atoms=positions.size(0),
+            n_atoms=n_atoms,
             device=positions.device,
         )
 
+        if ptr.dim() != 1:
+            raise ValueError(
+                "Graph `ptr` must be a rank-1 tensor."
+            )
+
         if (
             ptr.numel() < 2
-            or int(
-                ptr[0].item()
-            ) != 0
-            or int(
-                ptr[-1].item()
-            ) != positions.size(0)
+            or int(ptr[0].item()) != 0
+            or int(ptr[-1].item()) != n_atoms
         ):
             raise ValueError(
                 "Invalid graph `ptr`/`batch` information."
             )
 
-        if "batch" in data:
-            batch = data[
-                "batch"
-            ].to(
-                dtype=torch.long
+        if torch.any(
+            ptr[1:] < ptr[:-1]
+        ):
+            raise ValueError(
+                "Graph `ptr` must be monotonically non-decreasing."
             )
 
-            if batch.numel() != positions.size(0):
+        n_systems = ptr.numel() - 1
+
+        atom_systems: Optional[torch.Tensor] = None
+
+        if "batch" in data:
+            batch = data["batch"]
+
+            if batch.dim() != 1:
+                raise ValueError(
+                    "`batch` must be a rank-1 tensor."
+                )
+
+            if (
+                batch.dtype == torch.bool
+                or batch.is_floating_point()
+                or batch.is_complex()
+            ):
+                raise TypeError(
+                    "`batch` must use an integer dtype."
+                )
+
+            batch = batch.to(
+                device=positions.device,
+                dtype=torch.long,
+            )
+
+            if batch.numel() != n_atoms:
                 raise ValueError(
                     "`batch` must contain one system index per atom."
                 )
 
-            if batch.numel() > 1:
+            if batch.numel() > 0:
+                if int(batch[0].item()) != 0:
+                    raise ValueError(
+                        "`batch` system indices must start from zero."
+                    )
+
                 if torch.any(
-                    batch[1:]
-                    < batch[:-1]
+                    batch[1:] < batch[:-1]
                 ):
                     raise ValueError(
                         "PETBackbone requires atoms to be grouped by "
                         "system in the batched graph."
                     )
 
-        # Validate the optional/runtime cell shape early.
-        self._prepare_cells(
+                unique_batch = torch.unique_consecutive(
+                    batch,
+                )
+
+                expected_batch = torch.arange(
+                    unique_batch.numel(),
+                    device=batch.device,
+                    dtype=batch.dtype,
+                )
+
+                if not torch.equal(
+                    unique_batch,
+                    expected_batch,
+                ):
+                    raise ValueError(
+                        "`batch` system indices must be consecutive."
+                    )
+
+                if unique_batch.numel() != n_systems:
+                    raise ValueError(
+                        "`batch` and `ptr` describe different numbers "
+                        "of systems."
+                    )
+
+                observed_counts = torch.bincount(
+                    batch,
+                    minlength=n_systems,
+                )
+
+                expected_counts = (
+                    ptr[1:]
+                    - ptr[:-1]
+                ).to(
+                    device=batch.device,
+                    dtype=torch.long,
+                )
+
+                if not torch.equal(
+                    observed_counts,
+                    expected_counts,
+                ):
+                    raise ValueError(
+                        "`batch` and `ptr` contain inconsistent atom "
+                        "assignments."
+                    )
+
+            atom_systems = batch
+
+        else:
+            counts = (
+                ptr[1:]
+                - ptr[:-1]
+            ).to(
+                dtype=torch.long,
+            )
+
+            atom_systems = torch.repeat_interleave(
+                torch.arange(
+                    n_systems,
+                    device=positions.device,
+                    dtype=torch.long,
+                ),
+                counts,
+            )
+
+        # Cross-system graph edges cannot be represented in an individual
+        # metatomic System.
+        if edge_index.numel() > 0:
+            edge_index_local = edge_index.to(
+                device=positions.device,
+                dtype=torch.long,
+            )
+
+            first_system = atom_systems[
+                edge_index_local[0]
+            ]
+
+            second_system = atom_systems[
+                edge_index_local[1]
+            ]
+
+            if torch.any(
+                first_system != second_system
+            ):
+                raise ValueError(
+                    "`edge_index` contains edges connecting atoms from "
+                    "different systems."
+                )
+
+        cells = self._prepare_cells(
             data=data,
             cell=cell,
-            n_systems=ptr.numel() - 1,
+            n_systems=n_systems,
             positions=positions,
+        )
+
+        self._prepare_pbc(
+            data=data,
+            cells=cells,
+            n_systems=n_systems,
         )

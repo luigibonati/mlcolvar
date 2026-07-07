@@ -1,3 +1,5 @@
+"""Tests for the PET integration."""
+
 from __future__ import annotations
 
 from typing import Dict, List, Optional
@@ -286,7 +288,9 @@ def test_pet_neighbor_list_conversion() -> None:
     )
 
     neighbors = backbone._build_neighbor_list(
-        data=data,
+        edge_index=data["edge_index"],
+        unit_shifts=data["unit_shifts"],
+        long_range_mask=None,
         positions=data["positions"][:2],
         cell=data["cell"][0],
         start=0,
