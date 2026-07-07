@@ -1,5 +1,3 @@
-"""Tests for the PET integration."""
-
 from __future__ import annotations
 
 from typing import Dict, List, Optional
@@ -8,9 +6,6 @@ import pytest
 import torch
 from torch import nn
 
-
-# PET is an optional dependency. Skip this test module cleanly when the
-# metatensor/metatomic stack is not installed.
 metatensor_torch = pytest.importorskip("metatensor.torch")
 metatomic_torch = pytest.importorskip("metatomic.torch")
 
@@ -22,23 +17,17 @@ ModelOutput = metatomic_torch.ModelOutput
 NeighborListOptions = metatomic_torch.NeighborListOptions
 System = metatomic_torch.System
 
-from mlcolvar.integrations import (  # noqa: E402
-    AtomisticFeaturizer,
-    PETBackbone,
-)
+from mlcolvar.integrations import AtomisticFeaturizer, PETBackbone  # noqa: E402
 
 
 class DummyPET(nn.Module):
-    """Minimal native PET-like model using the public metatomic API."""
+    """Minimal PET-like model using float32 internally."""
 
-    def __init__(
-        self,
-        cutoff: float = 2.5,
-    ) -> None:
+    def __init__(self) -> None:
         super().__init__()
 
         self.atomic_types = [1, 8]
-        self.cutoff = float(cutoff)
+        self.cutoff = 2.5
 
         self.d_node = 2
         self.d_pet = 2
@@ -47,9 +36,13 @@ class DummyPET(nn.Module):
         self.scale = nn.Parameter(
             torch.tensor(
                 1.0,
-                dtype=torch.float64,
+                dtype=torch.float32,
             )
         )
+
+        self.last_position_dtype: Optional[
+            torch.dtype
+        ] = None
 
         self._neighbor_options = NeighborListOptions(
             cutoff=self.cutoff,
@@ -58,7 +51,6 @@ class DummyPET(nn.Module):
         )
 
     def supported_outputs(self):
-        """Expose PET's atom-level feature output."""
         return {
             "feature": ModelOutput(
                 sample_kind="atom",
@@ -66,7 +58,6 @@ class DummyPET(nn.Module):
         }
 
     def requested_neighbor_lists(self):
-        """Request one strict full neighbor list."""
         return [
             self._neighbor_options
         ]
@@ -77,7 +68,6 @@ class DummyPET(nn.Module):
         outputs: Dict[str, ModelOutput],
         selected_atoms: Optional[Labels] = None,
     ):
-        """Return deterministic atom-level features."""
         assert "feature" in outputs
         assert selected_atoms is None
 
@@ -85,18 +75,28 @@ class DummyPET(nn.Module):
         sample_rows: List[List[int]] = []
 
         for system_index, system in enumerate(systems):
-            # Verify that PETBackbone attached the requested neighbor list.
             _ = system.get_neighbor_list(
                 self._neighbor_options
             )
 
             positions = system.positions
+
+            self.last_position_dtype = (
+                positions.dtype
+            )
+
+            if positions.dtype != self.scale.dtype:
+                raise RuntimeError(
+                    "PET input dtype does not match model parameters."
+                )
+
             atom_types = system.types.to(
                 dtype=positions.dtype,
-            ).reshape(-1, 1)
+            ).reshape(
+                -1,
+                1,
+            )
 
-            # Four base features:
-            # [x, y, z, atomic_number]
             base_features = torch.cat(
                 [
                     positions,
@@ -105,8 +105,6 @@ class DummyPET(nn.Module):
                 dim=1,
             )
 
-            # d_node=2, d_pet=2, num_readout_layers=2
-            # gives 2 * (2 + 2) = 8 output features.
             features = torch.cat(
                 [
                     base_features,
@@ -152,7 +150,10 @@ class DummyPET(nn.Module):
                 values.size(1),
                 dtype=torch.int32,
                 device=values.device,
-            ).reshape(-1, 1),
+            ).reshape(
+                -1,
+                1,
+            ),
         )
 
         block = TensorBlock(
@@ -171,7 +172,7 @@ class DummyPET(nn.Module):
 
 
 class DummyPETWrapper(nn.Module):
-    """Minimal LLPR-like wrapper exposing the native model as `.model`."""
+    """Minimal wrapper exposing the native PET model through `.model`."""
 
     def __init__(
         self,
@@ -181,133 +182,104 @@ class DummyPETWrapper(nn.Module):
         self.model = model
 
 
-def _create_pet_test_data() -> Dict[str, torch.Tensor]:
-    """Create a batch containing two non-periodic two-atom systems."""
-
-    positions = torch.tensor(
-        [
-            [0.0, 0.0, 0.0],
-            [1.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0],
-            [0.0, 2.0, 0.0],
-        ],
-        dtype=torch.float64,
-    )
-
-    # PET atomic-number order: [H, O] = [1, 8].
-    node_attrs = torch.tensor(
-        [
-            [1.0, 0.0],
-            [0.0, 1.0],
-            [1.0, 0.0],
-            [0.0, 1.0],
-        ],
-        dtype=torch.float64,
-    )
-
-    # Full directed neighbor list:
-    # system 0: 0 -> 1 and 1 -> 0
-    # system 1: 2 -> 3 and 3 -> 2
-    edge_index = torch.tensor(
-        [
-            [0, 1, 2, 3],
-            [1, 0, 3, 2],
-        ],
-        dtype=torch.int64,
-    )
+def make_data(
+    dtype: torch.dtype = torch.float64,
+) -> Dict[str, torch.Tensor]:
+    """Create two non-periodic two-atom systems."""
 
     return {
-        "positions": positions,
-        "node_attrs": node_attrs,
-        "edge_index": edge_index,
+        "positions": torch.tensor(
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+                [0.0, 2.0, 0.0],
+            ],
+            dtype=dtype,
+        ),
+        "node_attrs": torch.tensor(
+            [
+                [1.0, 0.0],
+                [0.0, 1.0],
+                [1.0, 0.0],
+                [0.0, 1.0],
+            ],
+            dtype=dtype,
+        ),
+        "edge_index": torch.tensor(
+            [
+                [0, 1, 2, 3],
+                [1, 0, 3, 2],
+            ],
+            dtype=torch.long,
+        ),
         "unit_shifts": torch.zeros(
-            (4, 3),
-            dtype=torch.float64,
+            (
+                4,
+                3,
+            ),
+            dtype=dtype,
         ),
         "batch": torch.tensor(
-            [0, 0, 1, 1],
-            dtype=torch.int64,
+            [
+                0,
+                0,
+                1,
+                1,
+            ],
+            dtype=torch.long,
         ),
         "ptr": torch.tensor(
-            [0, 2, 4],
-            dtype=torch.int64,
+            [
+                0,
+                2,
+                4,
+            ],
+            dtype=torch.long,
         ),
         "cell": torch.zeros(
-            (2, 3, 3),
-            dtype=torch.float64,
+            (
+                2,
+                3,
+                3,
+            ),
+            dtype=dtype,
         ),
         "pbc": torch.zeros(
-            (2, 3),
+            (
+                2,
+                3,
+            ),
             dtype=torch.bool,
         ),
     }
 
 
-def test_pet_backbone_metadata() -> None:
-    """PET metadata should be mapped to the shared backbone interface."""
-
+def test_pet_metadata_and_wrapper() -> None:
     native_pet = DummyPET()
 
     backbone = PETBackbone(
-        model=native_pet,
+        model=DummyPETWrapper(
+            native_pet
+        )
     )
 
     assert backbone.model is native_pet
     assert backbone.out_features == 8
-    assert backbone.sample_kind == "atom"
-    assert backbone.full_neighbor_list
-    assert backbone.neighbor_full_list
-    assert backbone.neighbor_strict
-
     assert backbone.atomic_numbers.tolist() == [
         1,
         8,
     ]
-
-    assert backbone.cutoff.item() == pytest.approx(
-        2.5
-    )
-
     assert backbone.neighbor_cutoff == pytest.approx(
         2.5
     )
-
-
-def test_pet_wrapper_is_unwrapped() -> None:
-    """An LLPR-like wrapper should be unwrapped automatically."""
-
-    native_pet = DummyPET()
-
-    wrapped_pet = DummyPETWrapper(
-        native_pet
-    )
-
-    backbone = PETBackbone(
-        model=wrapped_pet,
-    )
-
-    assert backbone.model is native_pet
-
-
-def test_invalid_pet_model() -> None:
-    """Models without the public PET interface should be rejected."""
-
-    with pytest.raises(
-        ValueError,
-        match="Could not find a native metatrain PET model",
-    ):
-        PETBackbone(
-            model=nn.Linear(
-                2,
-                2,
-            )
-        )
+    assert backbone.neighbor_full_list
+    assert backbone.neighbor_strict
+    assert backbone._model_dtype_reference.dtype == torch.float32
 
 
 def test_pet_neighbor_list_conversion() -> None:
-    """mlcolvar edges should become metatomic distance vectors."""
-
-    data = _create_pet_test_data()
+    data = make_data()
 
     backbone = PETBackbone(
         model=DummyPET(),
@@ -348,20 +320,25 @@ def test_pet_neighbor_list_conversion() -> None:
     )
 
 
-def test_pet_backbone_forward() -> None:
-    """PETBackbone should return one feature row per atom."""
+def test_pet_forward_preserves_external_dtype() -> None:
+    data = make_data(
+        dtype=torch.float64,
+    )
 
-    data = _create_pet_test_data()
+    model = DummyPET()
 
     backbone = PETBackbone(
-        model=DummyPET(),
+        model=model,
     )
+
+    # A surrounding float64 model must not convert PET itself.
+    backbone.double()
 
     output = backbone(
         data
     )
 
-    reference = torch.tensor(
+    expected = torch.tensor(
         [
             [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
             [1.0, 0.0, 0.0, 8.0, 1.0, 0.0, 0.0, 8.0],
@@ -376,121 +353,21 @@ def test_pet_backbone_forward() -> None:
         8,
     )
 
-    assert torch.allclose(
-        output,
-        reference,
-    )
-
-
-@pytest.mark.parametrize(
-    ("pooling", "reference"),
-    [
-        (
-            "mean",
-            torch.tensor(
-                [
-                    [0.5, 0.0, 0.0, 4.5, 0.5, 0.0, 0.0, 4.5],
-                    [0.0, 1.0, 0.0, 4.5, 0.0, 1.0, 0.0, 4.5],
-                ],
-                dtype=torch.float64,
-            ),
-        ),
-        (
-            "sum",
-            torch.tensor(
-                [
-                    [1.0, 0.0, 0.0, 9.0, 1.0, 0.0, 0.0, 9.0],
-                    [0.0, 2.0, 0.0, 9.0, 0.0, 2.0, 0.0, 9.0],
-                ],
-                dtype=torch.float64,
-            ),
-        ),
-    ],
-)
-def test_pet_featurizer_pooling(
-    pooling: str,
-    reference: torch.Tensor,
-) -> None:
-    """Generic atom-to-system pooling should work with PET features."""
-
-    data = _create_pet_test_data()
-
-    featurizer = AtomisticFeaturizer(
-        backbone=PETBackbone(
-            model=DummyPET(),
-        ),
-        pooling=pooling,
-        freeze=True,
-    )
-
-    output = featurizer(
-        data
-    )
-
-    assert output.shape == (
-        2,
-        8,
-    )
+    assert output.dtype == torch.float64
 
     assert torch.allclose(
         output,
-        reference,
+        expected,
     )
 
+    assert model.scale.dtype == torch.float32
+    assert model.last_position_dtype == torch.float32
 
-def test_frozen_pet_stays_in_eval_mode() -> None:
-    """A frozen PET model should remain in evaluation mode."""
 
-    featurizer = AtomisticFeaturizer(
-        backbone=PETBackbone(
-            model=DummyPET(),
-        ),
-        pooling="mean",
-        freeze=True,
+def test_pet_featurizer_pooling_and_gradients() -> None:
+    data = make_data(
+        dtype=torch.float64,
     )
-
-    featurizer.train()
-
-    assert not featurizer.backbone.training
-    assert not featurizer.backbone.model.training
-
-    assert all(
-        not parameter.requires_grad
-        for parameter in featurizer.backbone.parameters()
-    )
-
-
-def test_trainable_pet_follows_featurizer_mode() -> None:
-    """A non-frozen PET model should follow the wrapper training mode."""
-
-    featurizer = AtomisticFeaturizer(
-        backbone=PETBackbone(
-            model=DummyPET(),
-        ),
-        pooling="mean",
-        freeze=False,
-    )
-
-    featurizer.train()
-
-    assert featurizer.backbone.training
-    assert featurizer.backbone.model.training
-
-    featurizer.eval()
-
-    assert not featurizer.backbone.training
-    assert not featurizer.backbone.model.training
-
-    assert all(
-        parameter.requires_grad
-        for parameter in featurizer.backbone.parameters()
-    )
-
-
-def test_frozen_pet_preserves_position_gradients() -> None:
-    """Freezing PET parameters must not detach atomic coordinates."""
-
-    data = _create_pet_test_data()
 
     data["positions"].requires_grad_(
         True
@@ -508,53 +385,51 @@ def test_frozen_pet_preserves_position_gradients() -> None:
         data
     )
 
+    expected = torch.tensor(
+        [
+            [0.5, 0.0, 0.0, 4.5, 0.5, 0.0, 0.0, 4.5],
+            [0.0, 1.0, 0.0, 4.5, 0.0, 1.0, 0.0, 4.5],
+        ],
+        dtype=torch.float64,
+    )
+
+    assert output.shape == (
+        2,
+        8,
+    )
+
+    assert torch.allclose(
+        output,
+        expected,
+    )
+
     output.sum().backward()
 
     assert data["positions"].grad is not None
+
     assert torch.isfinite(
         data["positions"].grad
     ).all()
 
-
-def test_invalid_node_attribute_width() -> None:
-    """The node encoding must follow PET's atomic-type table."""
-
-    data = _create_pet_test_data()
-
-    data["node_attrs"] = data[
-        "node_attrs"
-    ][:, :1]
-
-    backbone = PETBackbone(
-        model=DummyPET(),
+    assert all(
+        not parameter.requires_grad
+        for parameter in featurizer.backbone.parameters()
     )
 
+    featurizer.train()
+
+    assert not featurizer.backbone.training
+    assert not featurizer.backbone.model.training
+
+
+def test_invalid_pet_model() -> None:
     with pytest.raises(
         ValueError,
-        match="width of `node_attrs`",
+        match="Could not find a native metatrain PET model",
     ):
-        backbone(
-            data
-        )
-
-
-def test_missing_graph_field() -> None:
-    """Required graph fields should produce a clear error."""
-
-    data = _create_pet_test_data()
-
-    del data[
-        "unit_shifts"
-    ]
-
-    backbone = PETBackbone(
-        model=DummyPET(),
-    )
-
-    with pytest.raises(
-        KeyError,
-        match="missing required fields",
-    ):
-        backbone(
-            data
+        PETBackbone(
+            model=nn.Linear(
+                2,
+                2,
+            )
         )

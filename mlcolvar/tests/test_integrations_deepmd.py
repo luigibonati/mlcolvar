@@ -1,5 +1,3 @@
-"""Tests for the DeePMD-kit integration."""
-
 from __future__ import annotations
 
 from typing import Dict, List, Optional
