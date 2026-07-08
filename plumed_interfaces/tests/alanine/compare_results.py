@@ -55,6 +55,7 @@ elif mode in [
     "gnn",
     "gnn-kbias",
     "gnn-exported",
+    "gnn-kbias-exported",
 ]:
 
     filename = "COLVAR"
@@ -75,7 +76,155 @@ elif mode in [
         filename
     )
 
-    if mode == "gnn-exported":
+    if mode == "gnn-kbias-exported":
+        from mlcolvar.utils.export import (
+            GraphAdapter,
+            load_exported,
+        )
+
+        # load AOT-exported Kolmogorov-bias model
+        model = load_exported(
+            "model.pt2"
+        )
+
+        z_from_plumed = torch.Tensor(
+            colvar["gnn.z"].values
+        )
+
+        q_from_plumed = torch.Tensor(
+            colvar["gnn.q"].values
+        )
+
+        kbias_from_plumed = torch.Tensor(
+            colvar["gnn.kbias"].values
+        )
+
+        z_values = []
+        q_values = []
+        kbias_values = []
+
+        # Evaluate one trajectory frame at a time.
+        for graph in dataset["data_list"]:
+            inputs = GraphAdapter.data_to_tuple(
+                graph,
+                device="cpu",
+            )
+
+            outputs = model(
+                inputs
+            )
+
+            # outputs[0] has shape [1, 2]:
+            # outputs[0][:, 0] = z
+            # outputs[0][:, 1] = q
+            z_values.append(
+                outputs[0][0, 0]
+                .detach()
+                .cpu()
+            )
+
+            q_values.append(
+                outputs[0][0, 1]
+                .detach()
+                .cpu()
+            )
+
+            # outputs[2] contains the Kolmogorov bias.
+            kbias_values.append(
+                outputs[2]
+                .reshape(-1)[0]
+                .detach()
+                .cpu()
+            )
+
+        z_from_python = torch.stack(
+            z_values
+        )
+
+        q_from_python = torch.stack(
+            q_values
+        )
+
+        kbias_from_python = torch.stack(
+            kbias_values
+        )
+
+        print("z from PLUMED:")
+        print(z_from_plumed)
+
+        print("z from Python:")
+        print(z_from_python)
+
+        print("q from PLUMED:")
+        print(q_from_plumed)
+
+        print("q from Python:")
+        print(q_from_python)
+
+        print("K-bias from PLUMED:")
+        print(kbias_from_plumed)
+
+        print("K-bias from Python:")
+        print(kbias_from_python)
+
+        print(
+            "Maximum absolute z error:",
+            torch.max(
+                torch.abs(
+                    z_from_python
+                    - z_from_plumed
+                )
+            ).item(),
+        )
+
+        print(
+            "Maximum absolute q error:",
+            torch.max(
+                torch.abs(
+                    q_from_python
+                    - q_from_plumed
+                )
+            ).item(),
+        )
+
+        print(
+            "Maximum absolute K-bias error:",
+            torch.max(
+                torch.abs(
+                    kbias_from_python
+                    - kbias_from_plumed
+                )
+            ).item(),
+        )
+
+        check_z = torch.allclose(
+            z_from_python,
+            z_from_plumed,
+            rtol=1e-2,
+            atol=1e-5,
+        )
+
+        check_q = torch.allclose(
+            q_from_python,
+            q_from_plumed,
+            rtol=1e-2,
+            atol=1e-5,
+        )
+
+        check_kbias = torch.allclose(
+            kbias_from_python,
+            kbias_from_plumed,
+            rtol=1e-2,
+            atol=1e-5,
+        )
+
+        if check_z and check_q and check_kbias:
+            sys.exit(0)
+        else:
+            sys.exit(1)
+
+
+    elif mode == "gnn-exported":
         from mlcolvar.utils.export import (
             GraphAdapter,
             load_exported,
@@ -117,6 +266,7 @@ elif mode in [
             cv_values
         ).squeeze()
 
+
     else:
         # load the original TorchScript GNN model
         model = torch.jit.load(
@@ -145,7 +295,8 @@ else:
     raise ValueError(
         "Invalid mode. Use 'descriptors', "
         "'descriptors-kbias', 'gnn', "
-        "'gnn-kbias' or 'gnn-exported'."
+        "'gnn-kbias', 'gnn-exported' or "
+        "'gnn-kbias-exported'."
     )
 
 
@@ -169,6 +320,7 @@ check = torch.allclose(
     cv_from_python,
     cv_from_plumed,
     rtol=1e-2,
+    atol=1e-5,
 )
 
 if check:

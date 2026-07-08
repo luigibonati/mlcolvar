@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # retrieve mode:
-# descriptors, descriptors-kbias, gnn, gnn-kbias, gnn-exported
+# descriptors, descriptors-kbias, gnn, gnn-kbias,
+# gnn-exported, gnn-kbias-exported
 mode=$1
 
 # =====================================================================================
@@ -25,16 +26,15 @@ PYTHON_PATH="/path/to/python/with/mdtraj"
 # =====================================================================================
 
 # try to source gromacs and plumed, if not found print error message and exit
-if ! source $GROMACS_SOURCE 2>/dev/null; then
+if ! source "$GROMACS_SOURCE" 2>/dev/null; then
     echo "GROMACS sourceme.sh file could not be found. Please edit the script to source GROMACS before running it."
     exit 1
 fi
 
-if ! source $PLUMED_SOURCE 2>/dev/null; then
+if ! source "$PLUMED_SOURCE" 2>/dev/null; then
     echo "PLUMED sourceme.sh file could not be found. Please edit the script to source PLUMED before running it."
     exit 1
 fi
-
 
 # check that gromacs and plumed are sourced
 if ! command -v gmx &> /dev/null; then
@@ -50,17 +50,39 @@ fi
 # check python and mdtraj for GNN-based modes
 if [ "$mode" = "gnn" ] \
     || [ "$mode" = "gnn-kbias" ] \
-    || [ "$mode" = "gnn-exported" ]; then
+    || [ "$mode" = "gnn-exported" ] \
+    || [ "$mode" = "gnn-kbias-exported" ]; then
 
-    if ! command -v $PYTHON_PATH &> /dev/null; then
-        echo "Python could not be found. Please edit the script to set the PYTHON_PATH variable to a python executable with mdtraj installed."
+    if [ ! -x "$PYTHON_PATH" ]; then
+        echo "Python could not be found. Please edit the script to set the PYTHON_PATH variable to a Python executable with mdtraj installed."
         exit 1
     fi
 
-    if ! $PYTHON_PATH -c "import mdtraj" 2>/dev/null; then
+    if ! "$PYTHON_PATH" -c "import mdtraj" 2>/dev/null; then
         echo "mdtraj is not installed in the Python environment."
         exit 1
     fi
+fi
+
+# add PyTorch shared libraries to the runtime search path
+# required when loading AOTInductor packages such as model.pt2
+if [[ "$mode" == *-exported ]]; then
+
+    TORCH_LIB_DIR=$(
+        "$PYTHON_PATH" -c \
+        "from pathlib import Path; import torch; print(Path(torch.__file__).resolve().parent / 'lib')"
+    )
+
+    if [ ! -f "$TORCH_LIB_DIR/libtorch.so" ]; then
+        echo "libtorch.so could not be found in: $TORCH_LIB_DIR"
+        exit 1
+    fi
+
+    export LD_LIBRARY_PATH="$TORCH_LIB_DIR:${LD_LIBRARY_PATH:-}"
+    export LIBRARY_PATH="$TORCH_LIB_DIR:${LIBRARY_PATH:-}"
+
+    echo "PyTorch library directory: $TORCH_LIB_DIR"
+    echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
 fi
 
 # =====================================================================================
@@ -69,8 +91,8 @@ fi
 
 # create run folder
 FOLDER_NAME="test_run_alanine"
-rm -r $FOLDER_NAME
-echo folder $FOLDER_NAME
+rm -rf "$FOLDER_NAME"
+echo "folder $FOLDER_NAME"
 
 # copy template folder and move inside
 if [ "$mode" = "descriptors" ] \
@@ -78,23 +100,23 @@ if [ "$mode" = "descriptors" ] \
 
     cp -r \
         ../plumed_interfaces/tests/alanine/descriptor_based_inputs \
-        $FOLDER_NAME
+        "$FOLDER_NAME"
 
 elif [ "$mode" = "gnn" ] \
     || [ "$mode" = "gnn-kbias" ] \
-    || [ "$mode" = "gnn-exported" ]; then
+    || [ "$mode" = "gnn-exported" ] \
+    || [ "$mode" = "gnn-kbias-exported" ]; then
 
     cp -r \
         ../plumed_interfaces/tests/alanine/gnn_based_inputs \
-        $FOLDER_NAME
+        "$FOLDER_NAME"
 
 else
-    echo "Invalid mode. Use 'descriptors', 'descriptors-kbias', 'gnn', 'gnn-kbias' or 'gnn-exported'."
+    echo "Invalid mode. Use 'descriptors', 'descriptors-kbias', 'gnn', 'gnn-kbias', 'gnn-exported' or 'gnn-kbias-exported'."
     exit 1
 fi
 
-cd $FOLDER_NAME
-
+cd "$FOLDER_NAME" || exit 1
 
 if [ "$mode" = "descriptors" ]; then
 
@@ -126,10 +148,19 @@ elif [ "$mode" = "gnn-exported" ]; then
     cp ../../plumed_interfaces/PytorchModelGNNExported.cpp .
     mv plumed_PytorchModelGNNExported.dat plumed.dat
 
+elif [ "$mode" = "gnn-kbias-exported" ]; then
+
+    # use AOT-exported GNN Kolmogorov-bias interface and input file
+    cp ../../plumed_interfaces/PytorchKolmogorovBiasGNNExported.cpp .
+    mv plumed_PytorchKolmogorovBiasGNNExported.dat plumed.dat
+
 fi
 
 # remove useless input files
-rm plumed_*
+rm -f plumed_*
+
+# remove models possibly copied from the template directory
+rm -f model.pt model.pt2
 
 # update python path
 sed -i \
@@ -140,15 +171,15 @@ sed -i \
 # ======================================== RUN ========================================
 # =====================================================================================
 
-# train model
-python \
+# train and export model
+"$PYTHON_PATH" \
     ../../plumed_interfaces/tests/alanine/train_cv.py \
-    $mode
+    "$mode"
 
 # run simulation
 gmx mdrun \
     -s stateA.tpr \
-    -nsteps $NSTEPS \
+    -nsteps "$NSTEPS" \
     -cpi state.cpt \
     -plumed plumed.dat \
     -gpu_id 0 \

@@ -9,7 +9,31 @@ from mlcolvar.io import (
     create_dataset_from_trajectories,
 )
 from mlcolvar.core.nn.graph.schnet import SchNetModel
+from mlcolvar.core.nn.utils import Custom_Sigmoid
 from mlcolvar.cvs import DeepTDA
+
+
+class DeepTDAForKBiasExport(DeepTDA):
+    """DeepTDA adapter for exported Kolmogorov-bias models."""
+
+    def __init__(
+        self,
+        *args,
+        sigmoid_p: float = 3.0,
+        **kwargs,
+    ):
+        super().__init__(
+            *args,
+            **kwargs,
+        )
+
+        self.sigmoid = Custom_Sigmoid(
+            p=sigmoid_p,
+        )
+
+    def forward_nn(self, x):
+        """Return the raw latent coordinate z."""
+        return self.forward(x)
 
 
 # get arguments
@@ -56,7 +80,7 @@ if mode in [
         file_names=filenames,
         filter_args={
             "regex": "x",
-        },  # select distances between heavy atoms
+        },
         create_labels=True,
     )
 
@@ -72,6 +96,7 @@ elif mode in [
     "gnn",
     "gnn-kbias",
     "gnn-exported",
+    "gnn-kbias-exported",
 ]:
 
     # we get the files from github
@@ -136,7 +161,8 @@ else:
     raise ValueError(
         "Invalid mode. Use 'descriptors', "
         "'descriptors-kbias', 'gnn', "
-        "'gnn-kbias' or 'gnn-exported'."
+        "'gnn-kbias', 'gnn-exported' or "
+        "'gnn-kbias-exported'."
     )
 
 
@@ -147,20 +173,31 @@ datamodule = DictModule(
 )
 
 
-# initialize model
-model = DeepTDA(
-    n_states=2,
-    n_cvs=1,
-    target_centers=[
+model_options = {
+    "n_states": 2,
+    "n_cvs": 1,
+    "target_centers": [
         -7,
         7,
     ],
-    target_sigmas=[
+    "target_sigmas": [
         0.2,
         0.2,
     ],
-    model=model_arch,
-)
+    "model": model_arch,
+}
+
+
+# initialize model
+if mode == "gnn-kbias-exported":
+    model = DeepTDAForKBiasExport(
+        **model_options,
+        sigmoid_p=3.0,
+    )
+else:
+    model = DeepTDA(
+        **model_options,
+    )
 
 
 # get trainer
@@ -170,8 +207,8 @@ trainer = Trainer(
     enable_checkpointing=False,
     max_epochs=5,
     enable_model_summary=False,
-    limit_val_batches=0,     # this to skip validation
-    num_sanity_val_steps=0,  # this to skip validation
+    limit_val_batches=0,
+    num_sanity_val_steps=0,
 )
 
 
@@ -183,7 +220,10 @@ trainer.fit(
 
 
 # export model
-if mode == "gnn-exported":
+if mode in [
+    "gnn-exported",
+    "gnn-kbias-exported",
+]:
     from mlcolvar.utils.export import export
 
     model.eval()
@@ -193,11 +233,20 @@ if mode == "gnn-exported":
         "data_list"
     ][0]
 
+    if mode == "gnn-kbias-exported":
+        k_bias_options = {
+            "beta": 0.5,
+            "lambd": 1.0,
+        }
+    else:
+        k_bias_options = None
+
     export(
         model=model,
         example_inputs=example_graph,
         file_name="model.pt2",
         calculate_gradients=True,
+        k_bias_options=k_bias_options,
         run_check=False,
     )
 

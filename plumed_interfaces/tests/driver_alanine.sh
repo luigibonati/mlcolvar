@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # retrieve mode:
-# descriptors, descriptors-kbias, gnn, gnn-kbias, gnn-exported
+# descriptors, descriptors-kbias, gnn, gnn-kbias,
+# gnn-exported, gnn-kbias-exported
 mode=$1
 
 # =====================================================================================
@@ -34,7 +35,8 @@ fi
 # check python and mdtraj for GNN-based modes
 if [ "$mode" = "gnn" ] \
     || [ "$mode" = "gnn-kbias" ] \
-    || [ "$mode" = "gnn-exported" ]; then
+    || [ "$mode" = "gnn-exported" ] \
+    || [ "$mode" = "gnn-kbias-exported" ]; then
 
     if [ ! -x "$PYTHON_PATH" ]; then
         echo "Python could not be found. Please edit the script to set the PYTHON_PATH variable to a Python executable with mdtraj installed."
@@ -49,7 +51,7 @@ fi
 
 # add PyTorch shared libraries to the runtime search path
 # required when loading AOTInductor packages such as model.pt2
-if [ "$mode" = "gnn-exported" ]; then
+if [[ "$mode" == *-exported ]]; then
 
     TORCH_LIB_DIR=$(
         "$PYTHON_PATH" -c \
@@ -87,14 +89,15 @@ if [ "$mode" = "descriptors" ] \
 
 elif [ "$mode" = "gnn" ] \
     || [ "$mode" = "gnn-kbias" ] \
-    || [ "$mode" = "gnn-exported" ]; then
+    || [ "$mode" = "gnn-exported" ] \
+    || [ "$mode" = "gnn-kbias-exported" ]; then
 
     cp -r \
         ../plumed_interfaces/tests/alanine/gnn_based_inputs \
         "$FOLDER_NAME"
 
 else
-    echo "Invalid mode. Use 'descriptors', 'descriptors-kbias', 'gnn', 'gnn-kbias' or 'gnn-exported'."
+    echo "Invalid mode. Use 'descriptors', 'descriptors-kbias', 'gnn', 'gnn-kbias', 'gnn-exported' or 'gnn-kbias-exported'."
     exit 1
 fi
 
@@ -127,6 +130,11 @@ elif [ "$mode" = "gnn-exported" ]; then
 
     cp ../../plumed_interfaces/PytorchModelGNNExported.cpp .
     mv plumed_PytorchModelGNNExported.dat plumed.dat
+
+elif [ "$mode" = "gnn-kbias-exported" ]; then
+
+    cp ../../plumed_interfaces/PytorchKolmogorovBiasGNNExported.cpp .
+    mv plumed_PytorchKolmogorovBiasGNNExported.dat plumed.dat
 
 fi
 

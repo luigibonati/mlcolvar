@@ -199,6 +199,11 @@ jobs:
           cd plumed_test
           bash ../plumed_interfaces/tests/driver_alanine.sh gnn-exported
 
+      - name: Test alanine gnn-kbias-exported
+        run: |
+          cd plumed_test
+          bash ../plumed_interfaces/tests/driver_alanine.sh gnn-kbias-exported
+
       - name: Test alanine gnn-kbias
         run: |
           cd plumed_test
