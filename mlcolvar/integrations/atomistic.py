@@ -4,48 +4,40 @@ import torch
 from torch import nn
 
 from mlcolvar.core import BaseGNN, FeedForward
-from mlcolvar.integrations.utils import align_node_attrs
+from mlcolvar.integrations.utils import (
+    align_node_attrs,
+    infer_num_graphs,
+)
 
 __all__ = [
-    "align_node_attrs",
     "BaseAtomisticBackbone",
     "AtomisticFeaturizer",
     "AtomisticModel",
 ]
 
 
+_METADATA_BUFFERS = (
+    "feature_dim",
+    "atomic_numbers",
+    "cutoff",
+    "buffer",
+    "long_range_cutoff",
+)
+
+
+def _copy_backbone_metadata(
+    module: nn.Module,
+    backbone: nn.Module,
+) -> None:
+    for name in _METADATA_BUFFERS:
+        module.register_buffer(
+            name,
+            getattr(backbone, name).detach().clone(),
+        )
+
+
 class BaseAtomisticBackbone(nn.Module):
-    """Base class for pretrained atomistic-model backbones.
-
-    A model-specific backbone converts the native output of an external
-    atomistic model into one canonical representation.
-
-    Implementations must return either:
-
-    - atom-level features with shape ``[n_atoms, out_features]``;
-    - system-level features with shape ``[n_graphs, out_features]``.
-
-    The output kind is specified by ``sample_kind``.
-
-    Parameters
-    ----------
-    out_features
-        Number of features returned for each atom or system.
-    atomic_numbers
-        Atomic numbers supported by the external model. Their order must
-        match the species encoding used to construct ``node_attrs``.
-    cutoff
-        Short-range cutoff required by the external model.
-    sample_kind
-        Whether the backbone returns ``"atom"`` or ``"system"`` features.
-    buffer
-        Additional environment buffer used when constructing graphs.
-    long_range_cutoff
-        Optional cutoff for long-range edges. A negative value disables
-        long-range edges.
-    full_neighbor_list
-        Whether the external model requires a full directed neighbor list.
-    """
+    """Base class for pretrained atomistic-model backbones."""
 
     __constants__ = [
         "out_features",
@@ -65,99 +57,59 @@ class BaseAtomisticBackbone(nn.Module):
     ) -> None:
         super().__init__()
 
-        atomic_numbers = [
-            int(number)
-            for number in atomic_numbers
-        ]
+        atomic_numbers = [int(number) for number in atomic_numbers]
 
         if out_features <= 0:
-            raise ValueError(
-                "`out_features` must be positive, "
-                f"found {out_features}."
-            )
+            raise ValueError("`out_features` must be positive.")
 
         if len(atomic_numbers) == 0:
-            raise ValueError(
-                "`atomic_numbers` cannot be empty."
-            )
+            raise ValueError("`atomic_numbers` cannot be empty.")
 
         if len(set(atomic_numbers)) != len(atomic_numbers):
-            raise ValueError(
-                "`atomic_numbers` must not contain duplicates: "
-                f"{atomic_numbers}."
-            )
+            raise ValueError("`atomic_numbers` must not contain duplicates.")
 
         if any(number <= 0 for number in atomic_numbers):
             raise ValueError(
-                "`atomic_numbers` must contain positive integers: "
-                f"{atomic_numbers}."
+                "`atomic_numbers` must contain positive integers."
             )
 
         if cutoff <= 0.0:
-            raise ValueError(
-                "`cutoff` must be positive, "
-                f"found {cutoff}."
-            )
+            raise ValueError("`cutoff` must be positive.")
 
         if buffer < 0.0:
-            raise ValueError(
-                "`buffer` must be non-negative, "
-                f"found {buffer}."
-            )
+            raise ValueError("`buffer` must be non-negative.")
 
-        if (
-            long_range_cutoff >= 0.0
-            and long_range_cutoff <= cutoff
-        ):
+        if long_range_cutoff >= 0.0 and long_range_cutoff <= cutoff:
             raise ValueError(
                 "`long_range_cutoff` must be negative or larger than "
-                f"`cutoff`. Found cutoff={cutoff} and "
-                f"long_range_cutoff={long_range_cutoff}."
+                "`cutoff`."
             )
 
         if sample_kind not in ("atom", "system"):
             raise ValueError(
-                "`sample_kind` must be either 'atom' or 'system', "
-                f"found {sample_kind!r}."
+                "`sample_kind` must be either 'atom' or 'system'."
             )
 
         self.out_features = int(out_features)
         self.sample_kind = sample_kind
         self.full_neighbor_list = bool(full_neighbor_list)
 
-        # Serialized metadata required by graph construction and export.
         self.register_buffer(
             "feature_dim",
-            torch.tensor(
-                out_features,
-                dtype=torch.int64,
-            ),
+            torch.tensor(out_features, dtype=torch.int64),
         )
-
         self.register_buffer(
             "atomic_numbers",
-            torch.tensor(
-                atomic_numbers,
-                dtype=torch.int64,
-            ),
+            torch.tensor(atomic_numbers, dtype=torch.int64),
         )
-
         self.register_buffer(
             "cutoff",
-            torch.tensor(
-                cutoff,
-                dtype=torch.get_default_dtype(),
-            ),
+            torch.tensor(cutoff, dtype=torch.get_default_dtype()),
         )
-
         self.register_buffer(
             "buffer",
-            torch.tensor(
-                buffer,
-                dtype=torch.get_default_dtype(),
-            ),
+            torch.tensor(buffer, dtype=torch.get_default_dtype()),
         )
-
         self.register_buffer(
             "long_range_cutoff",
             torch.tensor(
@@ -166,214 +118,16 @@ class BaseAtomisticBackbone(nn.Module):
             ),
         )
 
-    @property
-    @torch.jit.unused
-    def in_features(self) -> Optional[int]:
-        """Atomistic backbones receive graphs rather than flat tensors."""
-        return None
-
     def forward(
         self,
         data: Dict[str, torch.Tensor],
         cell: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        """Compute atom-level or system-level features.
-
-        Subclasses must implement this method.
-
-        Parameters
-        ----------
-        data
-            mlcolvar graph dictionary.
-        cell
-            Optional simulation cell passed separately by the mlcolvar
-            CV interface.
-
-        Returns
-        -------
-        torch.Tensor
-            Features with shape ``[n_samples, out_features]``.
-        """
         raise NotImplementedError
-    
-    def _get_ptr(
-        self,
-        data: Dict[str, torch.Tensor],
-        n_atoms: int,
-        device: torch.device,
-    ) -> torch.Tensor:
-        """Return graph boundaries as a pointer tensor."""
-
-        if "ptr" in data:
-            return data["ptr"].to(
-                device=device,
-                dtype=torch.long,
-            )
-
-        if "batch" in data:
-            batch = data["batch"].to(
-                device=device,
-                dtype=torch.long,
-            )
-
-            if batch.numel() == 0:
-                return torch.zeros(
-                    1,
-                    device=device,
-                    dtype=torch.long,
-                )
-
-            n_systems = int(
-                batch.max().item()
-            ) + 1
-
-            counts = torch.bincount(
-                batch,
-                minlength=n_systems,
-            )
-
-            return torch.cat(
-                [
-                    torch.zeros(
-                        1,
-                        device=device,
-                        dtype=torch.long,
-                    ),
-                    counts.cumsum(dim=0),
-                ],
-                dim=0,
-            )
-
-        return torch.tensor(
-            [0, n_atoms],
-            device=device,
-            dtype=torch.long,
-        )
-
-    def _prepare_cells(
-        self,
-        data: Dict[str, torch.Tensor],
-        cell: Optional[torch.Tensor],
-        n_systems: int,
-        positions: torch.Tensor,
-    ) -> torch.Tensor:
-        """Normalize cells to shape ``[n_systems, 3, 3]``."""
-
-        if cell is not None:
-            cells = cell
-        elif "cell" in data:
-            cells = data["cell"]
-        else:
-            cells = positions.new_zeros(
-                (n_systems, 3, 3)
-            )
-
-        cells = cells.to(
-            device=positions.device,
-            dtype=positions.dtype,
-        )
-
-        if cells.dim() == 2:
-            if (
-                cells.size(0) == 3
-                and cells.size(1) == 3
-                and n_systems == 1
-            ):
-                cells = cells.unsqueeze(0)
-            elif (
-                cells.size(0) == 3 * n_systems
-                and cells.size(1) == 3
-            ):
-                cells = cells.reshape(
-                    n_systems,
-                    3,
-                    3,
-                )
-
-        if (
-            cells.dim() != 3
-            or cells.size(0) != n_systems
-            or cells.size(1) != 3
-            or cells.size(2) != 3
-        ):
-            raise ValueError(
-                "Could not interpret the graph cell tensor. Expected "
-                "shape [3, 3], [n_systems, 3, 3], or "
-                "[3 * n_systems, 3]."
-            )
-
-        return cells
-
-    def _prepare_pbc(
-        self,
-        data: Dict[str, torch.Tensor],
-        cells: torch.Tensor,
-        n_systems: int,
-    ) -> torch.Tensor:
-        """Return PBC flags with shape ``[n_systems, 3]``."""
-
-        if "pbc" not in data:
-            return (
-                torch.linalg.vector_norm(
-                    cells,
-                    dim=-1,
-                )
-                > 0.0
-            )
-
-        pbc = data["pbc"].to(
-            device=cells.device,
-            dtype=torch.bool,
-        )
-
-        if pbc.dim() == 1:
-            if pbc.numel() == 3:
-                pbc = pbc.reshape(1, 3).expand(
-                    n_systems,
-                    3,
-                )
-            elif pbc.numel() == 3 * n_systems:
-                pbc = pbc.reshape(
-                    n_systems,
-                    3,
-                )
-
-        if (
-            pbc.dim() != 2
-            or pbc.size(0) != n_systems
-            or pbc.size(1) != 3
-        ):
-            raise ValueError(
-                "Could not interpret the graph PBC tensor. Expected "
-                "shape [3] or [n_systems, 3]."
-            )
-
-        return pbc
 
 
 class AtomisticFeaturizer(nn.Module):
-    """Convert a pretrained atomistic backbone into graph-level features.
-
-    This class provides the common functionality shared by all external
-    atomistic integrations:
-
-    - parameter freezing;
-    - output validation;
-    - atom-to-system pooling;
-    - support for ``system_masks``;
-    - standardized graph-level output.
-
-    Parameters
-    ----------
-    backbone
-        Model-specific atomistic backbone.
-    pooling
-        Operation used to convert atom-level features into graph-level
-        features. Available options are ``"mean"`` and ``"sum"``.
-        This option is ignored for system-level backbones.
-    freeze
-        Whether to freeze the pretrained backbone parameters.
-    """
+    """Convert an atomistic backbone into graph-level features."""
 
     __constants__ = [
         "out_features",
@@ -392,90 +146,37 @@ class AtomisticFeaturizer(nn.Module):
         super().__init__()
 
         if pooling not in ("mean", "sum"):
-            raise ValueError(
-                "`pooling` must be either 'mean' or 'sum', "
-                f"found {pooling!r}."
-            )
+            raise ValueError("`pooling` must be either 'mean' or 'sum'.")
 
         self.backbone = backbone
-
         self.out_features = backbone.out_features
         self.sample_kind = backbone.sample_kind
         self.pooling = pooling
         self.freeze = bool(freeze)
         self.full_neighbor_list = backbone.full_neighbor_list
 
-        # Expose the same serialized metadata as the wrapped backbone.
-        self.register_buffer(
-            "feature_dim",
-            backbone.feature_dim.detach().clone(),
-        )
-
-        self.register_buffer(
-            "atomic_numbers",
-            backbone.atomic_numbers.detach().clone(),
-        )
-
-        self.register_buffer(
-            "cutoff",
-            backbone.cutoff.detach().clone(),
-        )
-
-        self.register_buffer(
-            "buffer",
-            backbone.buffer.detach().clone(),
-        )
-
-        self.register_buffer(
-            "long_range_cutoff",
-            backbone.long_range_cutoff.detach().clone(),
-        )
+        _copy_backbone_metadata(self, backbone)
 
         if self.freeze:
             for parameter in self.backbone.parameters():
                 parameter.requires_grad_(False)
 
             self.backbone.eval()
-        else:
-            self.backbone.train(self.training)
-            
+
     @torch.jit.unused
     def align_dataset(
         self,
         dataset,
     ):
-        """Align a graph dataset with the backbone element table.
-
-        The dataset node attributes are rebuilt using the atomic-number
-        ordering required by the wrapped pretrained backbone.
-
-        Parameters
-        ----------
-        dataset
-            mlcolvar graph dataset containing ``data_list`` and
-            ``metadata["atomic_numbers"]``.
-
-        Returns
-        -------
-        dataset
-            Dataset with aligned ``node_attrs``.
-        """
         return align_node_attrs(
             dataset=dataset,
             target_atomic_numbers=self.atomic_numbers,
         )
 
-    @property
-    @torch.jit.unused
-    def in_features(self) -> Optional[int]:
-        """Atomistic featurizers receive graphs rather than flat tensors."""
-        return None
-
     def train(
         self,
         mode: bool = True,
     ):
-        """Set training mode while keeping a frozen backbone in eval mode."""
         super().train(mode)
 
         if self.freeze:
@@ -488,21 +189,10 @@ class AtomisticFeaturizer(nn.Module):
         data: Dict[str, torch.Tensor],
         cell: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        """Compute graph-level features."""
-
         features = self.backbone(
             data,
             cell=cell,
         )
-
-        if (
-            not torch.jit.is_scripting()
-            and not torch.jit.is_tracing()
-        ):
-            self._validate_features(
-                features=features,
-                data=data,
-            )
 
         if self.sample_kind == "system":
             return features
@@ -512,74 +202,17 @@ class AtomisticFeaturizer(nn.Module):
             data=data,
         )
 
-    @torch.jit.unused
-    def _validate_features(
-        self,
-        features: torch.Tensor,
-        data: Dict[str, torch.Tensor],
-    ) -> None:
-        """Validate the standardized backbone output."""
-
-        if not isinstance(features, torch.Tensor):
-            raise RuntimeError(
-                "The atomistic backbone must return a torch.Tensor."
-            )
-
-        if features.dim() != 2:
-            raise RuntimeError(
-                "The atomistic backbone must return a rank-2 tensor "
-                "with shape [n_samples, out_features]."
-            )
-
-        if features.size(1) != self.out_features:
-            raise RuntimeError(
-                "Unexpected atomistic feature dimension: expected "
-                f"{self.out_features}, found {features.size(1)}."
-            )
-
-        if self.sample_kind == "atom":
-            if "batch" not in data:
-                raise KeyError(
-                    "Graph data must contain `batch` for atom-level "
-                    "features."
-                )
-
-            if features.size(0) != data["batch"].size(0):
-                raise RuntimeError(
-                    "The number of atom-level features does not match "
-                    "the number of graph nodes."
-                )
-
-        else:
-            n_graphs = self._get_num_graphs(data)
-
-            if features.size(0) != n_graphs:
-                raise RuntimeError(
-                    "The number of system-level features does not match "
-                    f"the graph batch size. Expected {n_graphs}, found "
-                    f"{features.size(0)}."
-                )
-
     def _pool_node_features(
         self,
         node_features: torch.Tensor,
         data: Dict[str, torch.Tensor],
     ) -> torch.Tensor:
-        """Pool node-level features into graph-level features."""
-
-        if "batch" not in data:
-            raise KeyError(
-                "Graph data must contain `batch` for atom-level pooling."
-            )
-
         batch = data["batch"].to(
             device=node_features.device,
             dtype=torch.long,
         )
 
-        n_graphs = self._get_num_graphs(
-            data
-        )
+        n_graphs = infer_num_graphs(data)
 
         if "system_masks" in data:
             mask = data["system_masks"].reshape(-1, 1).to(
@@ -588,17 +221,11 @@ class AtomisticFeaturizer(nn.Module):
             )
         else:
             mask = node_features.new_ones(
-                (
-                    node_features.size(0),
-                    1,
-                )
+                (node_features.size(0), 1)
             )
 
         output = node_features.new_zeros(
-            (
-                n_graphs,
-                node_features.size(-1),
-            )
+            (n_graphs, node_features.size(-1))
         )
 
         output.index_add_(
@@ -610,12 +237,7 @@ class AtomisticFeaturizer(nn.Module):
         if self.pooling == "sum":
             return output
 
-        counts = node_features.new_zeros(
-            (
-                n_graphs,
-                1,
-            )
-        )
+        counts = node_features.new_zeros((n_graphs, 1))
 
         counts.index_add_(
             0,
@@ -625,47 +247,9 @@ class AtomisticFeaturizer(nn.Module):
 
         return output / counts.clamp_min(1.0)
 
-    def _get_num_graphs(
-        self,
-        data: Dict[str, torch.Tensor],
-    ) -> int:
-        """Infer the number of graphs in a batch."""
-
-        if "ptr" in data:
-            return data["ptr"].size(0) - 1
-
-        if "n_system" in data:
-            return data["n_system"].size(0)
-
-        if "batch" in data:
-            batch = data["batch"]
-
-            if batch.numel() == 0:
-                return 0
-
-            return int(batch.max().item()) + 1
-
-        raise RuntimeError(
-            "Cannot infer the number of graphs. Graph data must "
-            "contain `ptr`, `n_system`, or `batch`."
-        )
-
 
 class AtomisticModel(BaseGNN):
-    """Atomistic featurizer followed by a trainable CV readout.
-
-    This generic wrapper allows an external pretrained atomistic
-    backbone to be used by mlcolvar graph-based CV classes.
-
-    Parameters
-    ----------
-    featurizer
-        Atomistic featurizer returning graph-level features.
-    n_out
-        Number of output collective variables.
-    hidden_layers
-        Hidden dimensions of the trainable feed-forward readout.
-    """
+    """Atomistic featurizer followed by a trainable CV readout."""
 
     def __init__(
         self,
@@ -674,74 +258,29 @@ class AtomisticModel(BaseGNN):
         hidden_layers: Tuple[int, ...] = (30, 30),
     ) -> None:
         if n_out <= 0:
+            raise ValueError("`n_out` must be positive.")
+
+        if any(size <= 0 for size in hidden_layers):
             raise ValueError(
-                "`n_out` must be positive, "
-                f"found {n_out}."
+                "`hidden_layers` must contain positive integers."
             )
 
-        if any(
-            size <= 0
-            for size in hidden_layers
-        ):
-            raise ValueError(
-                "`hidden_layers` must contain positive integers, "
-                f"found {hidden_layers}."
-            )
-
-        atomic_numbers = (
-            featurizer.atomic_numbers
-            .detach()
-            .cpu()
-            .tolist()
-        )
-
-        cutoff = float(
-            featurizer.cutoff
-            .detach()
-            .cpu()
-            .item()
-        )
-
-        buffer = float(
-            featurizer.buffer
-            .detach()
-            .cpu()
-            .item()
-        )
-
-        long_range_cutoff = float(
-            featurizer.long_range_cutoff
-            .detach()
-            .cpu()
-            .item()
-        )
-
-        # Inherit from BaseGNN so that mlcolvar CV classes recognize this
-        # object as a graph model.
         super().__init__(
             n_out=n_out,
             dataset_for_initialization=None,
             pooling_operation=None,
-            cutoff=cutoff,
-            buffer=buffer,
-            long_range_cutoff=long_range_cutoff,
-            atomic_numbers=atomic_numbers,
+            cutoff=float(featurizer.cutoff.detach().cpu().item()),
+            buffer=float(featurizer.buffer.detach().cpu().item()),
+            long_range_cutoff=float(
+                featurizer.long_range_cutoff.detach().cpu().item()
+            ),
+            atomic_numbers=featurizer.atomic_numbers.detach().cpu().tolist(),
         )
 
-        # BaseGNN always constructs a RadialEmbeddingBlock. It is required
-        # by native mlcolvar GNNs, but AtomisticModel delegates all feature
-        # construction to the external backbone and never calls embed_edge().
-        #
-        # Keeping this unused module breaks TorchScript serialization because
-        # the radial implementation contains Tensor arguments whose default
-        # value is None. Remove it from the registered submodules.
-        self._modules.pop(
-            "_radial_embedding",
-            None,
-        )
+        # Unused for external atomistic backbones.
+        self._modules.pop("_radial_embedding", None)
 
         self.featurizer = featurizer
-
         self.readout = FeedForward(
             layers=[
                 featurizer.out_features,
@@ -750,13 +289,8 @@ class AtomisticModel(BaseGNN):
             ],
         )
 
-        readout_parameter = next(
-            self.readout.parameters()
-        )
+        readout_parameter = next(self.readout.parameters())
 
-        # A scalar reference buffer records the dtype and device expected by
-        # the trainable readout. External backbones such as PET can keep their
-        # own fixed internal precision.
         self.register_buffer(
             "_readout_dtype_reference",
             torch.zeros(
@@ -766,21 +300,11 @@ class AtomisticModel(BaseGNN):
             ),
         )
 
-    @property
-    @torch.jit.unused
-    def in_features(
-        self,
-    ) -> Optional[int]:
-        """Atomistic models receive graphs rather than flat tensors."""
-        return None
-
     def forward(
         self,
         data: Dict[str, torch.Tensor],
         cell: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        """Compute collective variables from an atomic graph."""
-
         features = self.featurizer(
             data,
             cell=cell,
@@ -791,6 +315,4 @@ class AtomisticModel(BaseGNN):
             dtype=self._readout_dtype_reference.dtype,
         )
 
-        return self.readout(
-            features
-        )
+        return self.readout(features)
