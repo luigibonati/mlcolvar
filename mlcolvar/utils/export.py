@@ -597,6 +597,7 @@ class ModelExporter:
         return ExportWrapper(
             self.model,
             calculate_gradients=self.config.calculate_gradients,
+            calculate_k_bias=self.calculate_k_bias,
             **self.k_bias_options,
         )
 
@@ -712,11 +713,6 @@ def export(
 
         - ``beta`` : float
             Inverse-temperature-like scaling parameter.
-
-        - ``calculate_k_bias`` : bool
-            Whether to enable the Kolmogorov-bias outputs. This is normally
-            inferred from whether ``k_bias_options`` is provided, but can be set
-            explicitly.
 
     model_summary_level : int, optional
         Depth of the model summary stored in the exported metadata.
