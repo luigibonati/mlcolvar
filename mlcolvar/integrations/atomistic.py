@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, Optional, Sequence, Tuple
 
 import torch
 from torch import nn
@@ -637,9 +637,17 @@ class AtomisticFeaturizer(nn.Module):
         if "n_system" in data:
             return data["n_system"].size(0)
 
+        if "batch" in data:
+            batch = data["batch"]
+
+            if batch.numel() == 0:
+                return 0
+
+            return int(batch.max().item()) + 1
+
         raise RuntimeError(
             "Cannot infer the number of graphs. Graph data must "
-            "contain `ptr` or `n_system`."
+            "contain `ptr`, `n_system`, or `batch`."
         )
 
 
