@@ -47,6 +47,27 @@ if [ "$mode" = "gnn" ] \
     fi
 fi
 
+# add PyTorch shared libraries to the runtime search path
+# required when loading AOTInductor packages such as model.pt2
+if [ "$mode" = "gnn-exported" ]; then
+
+    TORCH_LIB_DIR=$(
+        "$PYTHON_PATH" -c \
+        "from pathlib import Path; import torch; print(Path(torch.__file__).resolve().parent / 'lib')"
+    )
+
+    if [ ! -f "$TORCH_LIB_DIR/libtorch.so" ]; then
+        echo "libtorch.so could not be found in: $TORCH_LIB_DIR"
+        exit 1
+    fi
+
+    export LD_LIBRARY_PATH="$TORCH_LIB_DIR:${LD_LIBRARY_PATH:-}"
+    export LIBRARY_PATH="$TORCH_LIB_DIR:${LIBRARY_PATH:-}"
+
+    echo "PyTorch library directory: $TORCH_LIB_DIR"
+    echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+fi
+
 # =====================================================================================
 # ====================================== PREPARE ======================================
 # =====================================================================================
