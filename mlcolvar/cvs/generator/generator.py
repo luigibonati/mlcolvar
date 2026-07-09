@@ -7,10 +7,10 @@ from mlcolvar.core.loss.generator_loss import GeneratorLoss
 from mlcolvar.cvs.generator.utils import SoftmaxPostProcessing,compute_eigenfunctions
 from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
 from mlcolvar.data import DictDataset
+from mlcolvar.core.operator_learning import Generator
+__all__ = ["DeepGenerator"]
 
-__all__ = ["Generator"]
-
-class Generator(BaseCV):
+class DeepGenerator(BaseCV):
     """
     Baseclass for learning a representation for the eigenfunctions of the infinitesimal generator.
     The representation is expressed as a concatenation of the output of r neural networks.
@@ -122,7 +122,7 @@ class Generator(BaseCV):
         
         if self.softmax_postproc:
             self.postprocessing=SoftmaxPostProcessing(r)
-
+        self.generator = Generator(in_features=r, out_features=r, feature_method=self.forward_nn)
 
     def compute_eigenfunctions(self,
                                dataset : DictDataset,        
@@ -179,47 +179,48 @@ class Generator(BaseCV):
         # check if using GNN
         is_graph = isinstance(self.nn, BaseGNN)
         
-        if (recompute or self.evecs is None): 
-            # get eigenfunctions
-            eigenfunctions, evals, evecs, output = compute_eigenfunctions(dataset=dataset,
-                                                                          model=self,
-                                                                          r=self.r,
-                                                                          eta=eta,
-                                                                          friction=friction,
-                                                                          tikhonov_reg=tikhonov_reg,
-                                                                          descriptors_derivatives=descriptors_derivatives,
-                                                                          n_dim=self.n_dim,
-                                                                          batch_size=batch_size,
-                                                                          soft_max_postproc=self.softmax_postproc,
-                                                                          is_graph=is_graph
-                                                                         )
+        if is_graph:
+            cell=None
+        else:
+            cell= self._get_batch_cell(dataset)
+        eigenfunctions, evals, evecs, output = self.generator.compute(dataset=dataset,
+                                                                      eta=eta,
+                                                                      friction=friction,
+                                                                      tikhonov_reg=tikhonov_reg,
+                                                                      descriptors_derivatives=descriptors_derivatives,
+                                                                      n_dim=self.n_dim,
+                                                                      batch_size=batch_size,
+                                                                      softmax_postproc=self.softmax_postproc,
+                                                                      is_graph=is_graph,
+                                                                      cell=cell
+                                                )
             
             # register evals and evecs to the model
-            self.evals = evals
-            self.evecs = evecs
+        self.evals = evals
+        self.evecs = evecs
 
-            return eigenfunctions, evals, evecs
+        return eigenfunctions, evals, evecs
 
-        else:
-            # prepare data 
-            if isinstance(self.nn, FeedForward):
-                x = dataset["data"]
-                x = x.reshape((x.shape[0], -1))
-                cell_preprocessing = self._get_batch_cell(dataset)
-            elif isinstance(self.nn, BaseGNN):
-                x = dataset.get_graph_inputs()
-                cell_preprocessing = None
-
-            # get out    
-            output = self.forward_nn(x, cell=cell_preprocessing)
-            eigenfunctions = output @ self.evecs
-            return eigenfunctions, self.evals, self.evecs
-    
+        
     def forward_nn(self, x, cell=None):
         if self.preprocessing is not None:
             x = self._apply_module(self.preprocessing, x, cell=cell)
         z = self.nn(x)
         return z
+    def forward(self, x, cell=None):
+        if self.preprocessing is not None:
+                x = self._apply_module(self.preprocessing, x, cell=cell)
+        if self.evecs is not None:
+            
+            output = self.forward_nn(x, cell=cell)
+            if self.softmax_postproc:
+                output = torch.nn.functional.softmax(output)
+                one_column = torch.ones((output.shape[0],1))
+                output = torch.cat((output,one_column),dim=1)
+            eigenfunctions = output @ self.evecs.to(output.device)
+            return eigenfunctions
+        else: #This should only be called upon initialization
+            return self.forward_nn(x) 
 
     def training_step(self, 
                       train_batch, 
@@ -543,7 +544,7 @@ def test_generator_runtime_cell_training():
     )
 
     options = {"nn": {"activation": "tanh"}}
-    model = Generator(
+    model = DeepGenerator(
         r=2,
         model=[1, 8, 2],
         eta=0.01,
@@ -575,7 +576,7 @@ def test_generator_runtime_cell_training():
     # -------- negative case: missing runtime cell should fail --------
     dataset_missing_cell = DictDataset({"data": x, "weights": w})
     datamodule_missing_cell = DictModule(dataset_missing_cell, lengths=[1.0], batch_size=6)
-    model_missing_cell = Generator(
+    model_missing_cell = DeepGenerator(
         r=2,
         model=[1, 8, 2],
         eta=0.01,

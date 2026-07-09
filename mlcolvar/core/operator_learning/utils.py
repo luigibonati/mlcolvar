@@ -2,7 +2,6 @@ import torch
 import lightning
 import torch_geometric
 from typing import Union, Tuple
-from mlcolvar.cvs import BaseCV
 from mlcolvar.core import FeedForward
 from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
 from mlcolvar.data import DictDataset
@@ -177,7 +176,7 @@ def compute_covariances(input,output,weights,r,friction,n_dim=3,descriptors_deri
 
 
 def compute_eigenfunctions(dataset : DictDataset,
-                           model,
+                           feature_method,
                            r : int,
                            eta : float,
                            friction : torch.Tensor,
@@ -187,6 +186,7 @@ def compute_eigenfunctions(dataset : DictDataset,
                            batch_size=None,
                            soft_max_postproc=True,
                            is_graph=False,
+                           cell=None
                            ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Compute generator eigenfunctions from a learned representation.
 
@@ -207,10 +207,8 @@ def compute_eigenfunctions(dataset : DictDataset,
     dataset : DictDataset
         Dataset containing ``"data"`` and ``"weights"``. For graph models,
         the dataset must provide graph inputs through ``get_graph_inputs``.
-    model : torch.nn.Module
-        Trained model exposing ``forward_nn``. If preprocessing requires a
-        runtime cell, the model must also be able to retrieve it from the
-        dataset.
+    feature_method : 
+        Method to compute the features, usually the forward_nn of a DeepGenerator class
     r : int
         Number of learned representation components.
     eta : float
@@ -284,7 +282,6 @@ def compute_eigenfunctions(dataset : DictDataset,
             ref_idx = None
             cell = None
         else:
-            cell= model._get_batch_cell(dataset)
             batch_input = batch["data"]
             batch_weights = batch["weights"]
             batch_input.requires_grad = True
@@ -296,8 +293,10 @@ def compute_eigenfunctions(dataset : DictDataset,
             #    descriptors_derivatives=batch["derivatives"]
             else:
                 ref_idx=None
-
-        batch_output = model.forward_nn(batch_input, cell=cell)
+        if cell is not None:
+            batch_output = feature_method(batch_input, cell=cell)
+        else:
+            batch_output = feature_method(batch_input) 
         if soft_max_postproc:
             batch_output = torch.nn.functional.softmax(batch_output,dim=-1)
 
@@ -326,7 +325,7 @@ def compute_eigenfunctions(dataset : DictDataset,
     #x = input["positions"].reshape(weights.shape[0],input["positions"].shape[0]//weights.shape[0]*3)
     covariance /= len(weights)
     dcov /=  len(weights)
-    W = covariance + dcov/eta + tikhonov_reg * torch.eye(covariance.shape[0])
+    W = covariance + dcov/eta + tikhonov_reg * torch.eye(covariance.shape[0], device = covariance.device)
     W_sq_inv = torch.linalg.pinv(sqrtmh(W))
     M = W_sq_inv @ covariance @ W_sq_inv
     evals, evecs = torch.linalg.eigh(M)
@@ -346,8 +345,8 @@ def compute_eigenfunctions(dataset : DictDataset,
     energy_scaling = evecs_norm[stable_norms_idxs][:rank]
     evecs = evecs[:, stable_norms_idxs][:, :rank]
     evals = evals[stable_norms_idxs][:rank]
-
-    eigenfunctions = (output @ evecs / energy_scaling)
+    evecs /= energy_scaling
+    eigenfunctions = (output @ evecs )
 
     return eigenfunctions, evals.detach(), evecs, output
 
