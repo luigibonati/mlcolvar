@@ -157,8 +157,9 @@ class MACEBackbone(BaseAtomisticBackbone):
         "num_features",
         "l_max",
         "layer_size",
+        "required_input_features",
     ]
-
+    
     def __init__(
         self,
         model: nn.Module,
@@ -209,6 +210,11 @@ class MACEBackbone(BaseAtomisticBackbone):
         self.num_features = num_features
         self.l_max = l_max
         self.layer_size = (l_max + 1) ** 2 * num_features
+
+        self.required_input_features = (
+            (num_layers - 1) * self.layer_size + num_features
+        )
+
         self.model = model
 
     def forward(

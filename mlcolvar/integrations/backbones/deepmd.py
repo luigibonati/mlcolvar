@@ -364,6 +364,10 @@ class DeepMDBackbone(BaseAtomisticBackbone):
             full_neighbor_list=False,
         )
 
+        # Keep a reference to the original native DeePMD model for metadata and
+        # testing, without registering the full potential as a PyTorch submodule.
+        object.__setattr__(self, "model", model)
+
         self.descriptor_cutoff = descriptor_cutoff
         self.descriptor_dim = descriptor_dim
         self.descriptor_precision = descriptor_precision
