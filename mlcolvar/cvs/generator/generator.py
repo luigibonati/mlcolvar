@@ -208,8 +208,6 @@ class DeepGenerator(BaseCV):
         z = self.nn(x)
         return z
     def forward(self, x, cell=None):
-        if self.preprocessing is not None:
-                x = self._apply_module(self.preprocessing, x, cell=cell)
         if self.evecs is not None:
             
             output = self.forward_nn(x, cell=cell)
