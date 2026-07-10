@@ -1,9 +1,9 @@
 import torch
 
-__all__ = ["Stats"]
+__all__ = ["Estimator"]
 
 
-class Stats(torch.nn.Module):
+class Estimator(torch.nn.Module):
     """
     Base stats class.
     To implement a new stats override the compute and forward methods.

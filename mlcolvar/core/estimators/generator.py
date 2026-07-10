@@ -3,19 +3,16 @@
 __all__ = ["Generator"]
 
 import torch
-from mlcolvar.core.stats import Stats
-import torch
-import lightning
-from typing import Union, Tuple,List
-from mlcolvar.core import FeedForward, BaseGNN
+from mlcolvar.core.estimators import Estimator
+
+from typing import Union, Tuple
 from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
 from mlcolvar.data import DictDataset
-from mlcolvar.core.operator_learning.utils import compute_eigenfunctions
-
-import warnings
+from mlcolvar.core.estimators.utils_generator import compute_eigenfunctions
 
 
-class Generator(Stats):
+
+class Generator(Estimator):
     """
     Time-lagged independent component analysis base class.
     """

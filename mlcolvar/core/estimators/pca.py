@@ -2,12 +2,12 @@
 
 import torch
 
-from mlcolvar.core.stats import Stats
+from mlcolvar.core.estimators import Estimator
 
 __all__ = ["PCA"]
 
 
-class PCA(Stats):
+class PCA(Estimator):
     """
     Principal Component Analysis class.
 

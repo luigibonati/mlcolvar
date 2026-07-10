@@ -4,10 +4,10 @@ from typing import Union, Tuple,List
 from mlcolvar.cvs import BaseCV
 from mlcolvar.core import FeedForward, BaseGNN
 from mlcolvar.core.loss.generator_loss import GeneratorLoss
-from mlcolvar.cvs.generator.utils import SoftmaxPostProcessing,compute_eigenfunctions
+from mlcolvar.cvs.generator.utils import SoftmaxPostProcessing
 from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
 from mlcolvar.data import DictDataset
-from mlcolvar.core.operator_learning import Generator
+from mlcolvar.core.estimators import Generator
 __all__ = ["DeepGenerator"]
 
 class DeepGenerator(BaseCV):

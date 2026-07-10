@@ -19,7 +19,7 @@ from typing import Optional
 
 import torch
 
-from mlcolvar.core.stats import LDA
+from mlcolvar.core.estimators import LDA
 from mlcolvar.core.loss import reduce_eigenvalues_loss
 
 

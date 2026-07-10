@@ -2,7 +2,7 @@ import torch
 import lightning
 from mlcolvar.cvs import BaseCV
 from mlcolvar.core import FeedForward, BaseGNN, Normalization
-from mlcolvar.core.stats import TICA
+from mlcolvar.core.estimators import TICA
 from mlcolvar.core.loss import ReduceEigenvaluesLoss
 from typing import Union, List
 
