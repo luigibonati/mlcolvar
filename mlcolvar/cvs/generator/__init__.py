@@ -1,4 +1,4 @@
-__all__ = ["DeepGenerator", "forecast_state_occupation"]
+__all__ = ["DeepGenerator"]
 
 from .generator import *
 from .utils import *
