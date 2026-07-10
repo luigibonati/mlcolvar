@@ -220,7 +220,7 @@ class DeepGenerator(BaseCV):
             eigenfunctions = output @ self.evecs.to(output.device)
             return eigenfunctions
         else: #This should only be called upon initialization
-            return self.forward_nn(x) 
+            return self.forward_nn(x, cell=cell) 
 
     def training_step(self, 
                       train_batch, 
@@ -274,7 +274,7 @@ class DeepGenerator(BaseCV):
 # ---------------------------------------------------------------------------------------------------------------
 
 def test_generator():
-    from mlcolvar.cvs.generator import Generator
+    from mlcolvar.cvs.generator import DeepGenerator
     from mlcolvar.data import DictModule, DictDataset
     from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives,compute_descriptors_derivatives
     from mlcolvar.core.transform import PairwiseDistances
@@ -332,7 +332,7 @@ def test_generator():
     
     # seed for reproducibility
     torch.manual_seed(42)
-    model = Generator(
+    model = DeepGenerator(
         r=3,
         model=[45, 20, 20, 3],
         eta=0.005,
@@ -414,7 +414,7 @@ def test_generator():
   
     # seed for reproducibility
     torch.manual_seed(42)
-    model = Generator(
+    model = DeepGenerator(
         r=3,
         model=[45, 20, 20, 3],
         eta=0.005,
@@ -467,7 +467,7 @@ def test_generator():
 
     # seed for reproducibility
     torch.manual_seed(42)
-    model = Generator(
+    model = DeepGenerator(
         r=3,
         model=[45, 20, 20, 3],
         eta=0.005,
