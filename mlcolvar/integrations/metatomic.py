@@ -1,15 +1,3 @@
-"""Metatomic export utilities for mlcolvar collective-variable models.
-
-This module exports the inference model stored in ``BaseCV.nn`` through the
-Metatomic interface. The original LightningModule is not retained, so
-training-only state such as the Trainer, loss functions, optimizers, metrics,
-and training hooks is excluded from the exported model.
-
-The mlcolvar atomistic model expects a ``Dict[str, Tensor]`` graph batch,
-whereas Metatomic provides ``List[System]``. ``CVInferenceModel`` converts
-between these two interfaces before evaluating the trained model.
-"""
-
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Union
 
