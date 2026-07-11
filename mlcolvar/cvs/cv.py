@@ -10,43 +10,6 @@ from mlcolvar.core.transform import Transform
 from mlcolvar.data.graph.utils import create_graph_tracing_example
 
 
-class ForwardNNWrapper(torch.nn.Module):
-    """
-    Wrap an mlcolvar model so that forward() calls forward_nn().
-    """
-
-    def __init__(self, model: torch.nn.Module):
-        super().__init__()
-
-        if not isinstance(model, torch.nn.Module):
-            raise TypeError("model must be a torch.nn.Module.")
-
-        if not hasattr(model, "forward_nn"):
-            raise AttributeError(
-                f"{model.__class__.__name__} must define `forward_nn`."
-            )
-
-        self.model = model
-
-    def forward(self, x: Any, cell=None) -> Any:
-        if cell is None:
-            return self.model.forward_nn(x)
-
-        return self.model.forward_nn(x, cell=cell)
-
-    @property
-    def in_features(self):
-        return getattr(self.model, "in_features", None)
-
-    @property
-    def atomic_numbers(self):
-        return getattr(self.model, "atomic_numbers", None)
-
-    @property
-    def long_range_cutoff(self):
-        return getattr(self.model, "long_range_cutoff", -1.0)
-
-
 class BaseCV(lightning.LightningModule):
     """
     Base collective variable class.
@@ -62,7 +25,6 @@ class BaseCV(lightning.LightningModule):
         model: Union[List[int], FeedForward, BaseGNN],
         preprocessing: torch.nn.Module = None,
         postprocessing: torch.nn.Module = None,
-        featurizer: torch.nn.Module = None,
         *args,
         **kwargs,
     ):
@@ -81,7 +43,7 @@ class BaseCV(lightning.LightningModule):
         # The parent class sets in_features and out_features based on their own
         # init arguments so we don't need to save them here (see #103).        
         # It is needed for compatibility with multiclass CVs
-        self.save_hyperparameters(ignore=['in_features', 'out_features', "featurizer"])
+        self.save_hyperparameters(ignore=['in_features', 'out_features'])
 
         # MODEL
         self.parse_model(model=model)
@@ -97,30 +59,6 @@ class BaseCV(lightning.LightningModule):
         self.preprocessing = preprocessing
         self.postprocessing = postprocessing
         self._preprocessing_training_warning_shown = False
-        
-        # FEATURIZER
-        if featurizer is not None and not isinstance(featurizer, torch.nn.Module):
-            raise TypeError("featurizer must be a torch.nn.Module.")
-
-        if featurizer is not None and hasattr(featurizer, "forward_nn"):
-            featurizer = ForwardNNWrapper(featurizer)
-
-        self.featurizer = featurizer
-
-        if self.featurizer is not None:
-            self.featurizer.eval()
-
-            for parameter in self.featurizer.parameters():
-                parameter.requires_grad_(False)
-                
-    def train(self, mode: bool = True):
-        """Set training mode, keeping the pretrained featurizer in eval mode."""
-        super().train(mode)
-
-        if hasattr(self, "featurizer") and self.featurizer is not None:
-            self.featurizer.eval()
-
-        return self
 
     @property
     def n_cvs(self):
@@ -129,105 +67,55 @@ class BaseCV(lightning.LightningModule):
 
     @property
     def example_input_array(self):
-        """
-        Example input for tracing the complete model.
-
-        If a featurizer is provided, the model input must match the raw input
-        expected by the featurizer. Otherwise, use the input metadata of the
-        preprocessing module or of the CV model itself.
-        """
-
-        # The full model input is the raw input expected by the featurizer.
-        if self.featurizer is not None:
-            in_features = getattr(
-                self.featurizer,
-                "in_features",
-                None,
-            )
-
-            if in_features is not None:
-                return torch.randn((1, in_features))
-
-            atomic_numbers = getattr(
-                self.featurizer,
-                "atomic_numbers",
-                None,
-            )
-
-            if atomic_numbers is not None:
-                long_range_cutoff = getattr(
-                    self.featurizer,
-                    "long_range_cutoff",
-                    -1.0,
-                )
-
-                return create_graph_tracing_example(
-                    n_species=len(atomic_numbers),
-                    environment=True,
-                    long_range=long_range_cutoff > 0,
-                )
-
-            # The raw input shape cannot be inferred from a generic featurizer.
-            # The user must provide example_inputs explicitly when tracing.
-            return None
-
-        # Standard descriptor-based behavior without a featurizer.
         if self.in_features is not None:
-            preprocessing_in_features = getattr(
-                self.preprocessing,
-                "in_features",
-                None,
+            return torch.randn(
+                (1,self.in_features)
+                if self.preprocessing is None
+                or not hasattr(self.preprocessing, "in_features")
+                else self.preprocessing.in_features
             )
+        else:
+            return create_graph_tracing_example(n_species=len(self.atomic_numbers), 
+                                                environment=True,
+                                                long_range=True if hasattr(self, 'long_range_cutoff') and self.long_range_cutoff > 0 else False)
 
-            in_features = (
-                preprocessing_in_features
-                if preprocessing_in_features is not None
-                else self.in_features
-            )
-
-            return torch.randn((1, in_features))
-
-        # Standard graph-based behavior without a featurizer.
-        atomic_numbers = getattr(self, "atomic_numbers", None)
-
-        if atomic_numbers is None:
-            return None
-
-        long_range_cutoff = getattr(
-            self,
-            "long_range_cutoff",
-            -1.0,
-        )
-
-        return create_graph_tracing_example(
-            n_species=len(atomic_numbers),
-            environment=True,
-            long_range=long_range_cutoff > 0,
-        )
 
     # TODO add general torch.nn.Module
-    def parse_model(self, model: Union[List[int], FeedForward, BaseGNN]):
+    def parse_model(
+        self,
+        model: Union[List[int], torch.nn.Module],
+    ):
         if isinstance(model, list):
             self.layers = model
             self.BLOCKS = self.DEFAULT_BLOCKS
             self._override_model = False
             self.in_features = self.layers[0]
             self.out_features = self.layers[-1]
-        elif isinstance(model, FeedForward) or isinstance(model, BaseGNN):
+
+        elif isinstance(model, torch.nn.Module):
             self.BLOCKS = self.MODEL_BLOCKS
             self._override_model = True
             self.in_features = model.in_features
             self.out_features = model.out_features
-            # save buffers for the interface for PLUMED
+
+            # PLUMED metadata handling for BaseGNN.
             if isinstance(model, BaseGNN):
-                self.register_buffer('n_out', model.n_out)    
-                self.register_buffer('cutoff', model.cutoff)
-                self.register_buffer('buffer', model.buffer)
-                self.register_buffer('long_range_cutoff', model.long_range_cutoff)
-                self.register_buffer('atomic_numbers', model.atomic_numbers)
+                self.register_buffer("n_out", model.n_out)
+                self.register_buffer("cutoff", model.cutoff)
+                self.register_buffer("buffer", model.buffer)
+                self.register_buffer(
+                    "long_range_cutoff",
+                    model.long_range_cutoff,
+                )
+                self.register_buffer(
+                    "atomic_numbers",
+                    model.atomic_numbers,
+                )
+
         else:
             raise ValueError(
-                f"Keyword model can either accept type list, FeedForward or BaseGNN. Found {type(model)}"
+                "Keyword model must be either a list of layer sizes "
+                f"or a torch.nn.Module. Found {type(model)}."
             )
 
     def parse_options(self, options: dict = None):
@@ -279,214 +167,62 @@ class BaseCV(lightning.LightningModule):
             self.initialize_transforms(self.trainer.datamodule)
 
     def initialize_transforms(self, datamodule):
-        """
-        Initialize preprocessing and transform blocks from the datamodule.
-
-        If no featurizer is used, transforms are initialized from the original
-        datamodule as before.
-
-        If a frozen featurizer is used, CV blocks such as norm_in act on the output
-        of featurizer.forward(), not on the raw datamodule input. Therefore, they
-        must be initialized in the featurizer output space.
-        """
-
-        # Preprocessing is before the CV blocks but after the featurizer in the current
-        # input pipeline. If it is a Transform and a featurizer is present, we cannot
-        # safely initialize it from the raw datamodule.
-        if isinstance(self.preprocessing, Transform):
-            if self.featurizer is None:
-                self.preprocessing.setup_from_datamodule(datamodule)
-            else:
-                warn(
-                    "A preprocessing Transform is used after a frozen featurizer. "
-                    "It will not be automatically initialized from the raw datamodule, "
-                    "because it acts on featurizer.forward(x), not on the raw input. "
-                    "Please make sure it has been fitted on the featurizer output space."
-                )
-
-        # Initialize CV-block transforms, e.g. norm_in.
         for b in self.BLOCKS:
-            block = getattr(self, b)
+            if isinstance(getattr(self, b), Transform):
+                getattr(self, b).setup_from_datamodule(datamodule)
 
-            if isinstance(block, Transform):
-                if self.featurizer is None:
-                    block.setup_from_datamodule(datamodule)
-                else:
-                    self._setup_transform_after_featurizer(block, datamodule)
-
-    @torch.no_grad()
-    def _setup_transform_after_featurizer(self, transform: Transform, datamodule):
+    def forward(self, x: torch.Tensor, cell=None) -> torch.Tensor:
         """
-        Initialize a Transform block that acts after a frozen featurizer.
+        Evaluation of the CV
 
-        The transform is fitted on:
+        - Apply preprocessing if any
+        - Execute sequentially all the blocks in self.BLOCKS unless they are not initialized
+        - Apply postprocessing if any
 
-            raw data -> featurizer.forward() -> optional preprocessing
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input of the forward operation of the model
 
-        instead of fitting it directly on the raw datamodule input.
+        Returns
+        -------
+        torch.Tensor
+            Output of the forward operation of the model
         """
 
-        if not hasattr(transform, "set_custom"):
-            warn(
-                f"{transform.__class__.__name__} is after a featurizer but does not "
-                "provide set_custom(). It will not be automatically initialized."
-            )
-            return
+        if self.preprocessing is not None:
+            x = self._apply_module(self.preprocessing, x, cell=cell)
 
-        was_training = self.training
-        self.eval()
+        x = self.forward_cv(x)
 
-        outputs = []
-        dataloader = datamodule.train_dataloader()
-
-        for batch in dataloader:
-            if not isinstance(batch, dict):
-                continue
-
-            data_keys = ["data"]
-            if "data_lag" in batch:
-                data_keys.append("data_lag")
-
-            for key in data_keys:
-                if key not in batch:
-                    continue
-
-                x = batch[key]
-
-                if key == "data_lag":
-                    cell = batch.get("cell_lag", batch.get("cell", None))
-                else:
-                    cell = batch.get("cell", None)
-
-                z = self._apply_featurizer(x, cell=cell)
-
-                if self.preprocessing is not None:
-                    z = self._apply_module(self.preprocessing, z, cell=cell)
-
-                outputs.append(z.detach())
-
-        if len(outputs) == 0:
-            warn(
-                "Could not initialize transform after featurizer because no valid "
-                "data were found in the datamodule."
-            )
-            self.train(was_training)
-            return
-
-        z = torch.cat(outputs, dim=0)
-
-        # Safety reshape in case concatenation still leaves extra dimensions.
-        if z.ndim == 1:
-            z = z.reshape(-1, 1)
-        elif z.ndim > 2:
-            z = z.reshape(-1, z.shape[-1])
-
-        mean = z.mean(dim=0)
-        std = z.std(dim=0, unbiased=False)
-        std = torch.clamp(std, min=1e-8)
-
-        transform.set_custom(mean=mean, range=std)
-        
-        self.train(was_training)
-                
-    def _apply_featurizer(
-        self,
-        x: Any,
-        cell=None,
-    ) -> Any:
-        """Apply the optional frozen upstream featurizer."""
-
-        return self._apply_module(
-            self.featurizer,
-            x,
-            cell=cell,
-        )
-
-
-    def _forward_blocks(
-        self,
-        x: Any,
-    ) -> torch.Tensor:
-        """Execute the initialized CV blocks."""
-
-        for block_name in self.BLOCKS:
-            block = getattr(self, block_name)
-
-            if block is not None:
-                x = self._apply_module(
-                    block,
-                    x,
-                )
+        if self.postprocessing is not None:
+            x = self._apply_module(self.postprocessing, x)
 
         return x
 
+    def forward_cv(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Execute sequentially all the blocks in self.BLOCKS unless they are not initialized.
 
-    def _forward_with_featurizer(
-        self,
-        x: Any,
-        cell=None,
-    ) -> torch.Tensor:
-        """Apply the featurizer, preprocessing, and CV blocks."""
+        No pre/post processing will be executed here. This is supposed to be called during training/validation and to be overloaded if necessary.
 
-        x = self._apply_featurizer(
-            x,
-            cell=cell,
-        )
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input of the forward operation of the model
 
-        x = self._apply_module(
-            self.preprocessing,
-            x,
-            cell=cell,
-        )
-
-        return self._forward_blocks(x)
-
-
-    def forward(
-        self,
-        x: Any,
-        cell=None,
-    ) -> torch.Tensor:
-        """Evaluate the complete collective variable."""
-
-        if self.featurizer is None:
-            # Preserve the original BaseCV behavior:
-            # preprocessing -> forward_cv -> postprocessing.
-            x = self._apply_module(
-                self.preprocessing,
-                x,
-                cell=cell,
-            )
-
-            x = self.forward_cv(x)
-
-        else:
-            # For pretrained models:
-            # featurizer -> preprocessing -> CV blocks.
-            x = self._forward_with_featurizer(
-                x,
-                cell=cell,
-            )
-
-        return self._apply_module(
-            self.postprocessing,
-            x,
-        )
-
-
-    def forward_cv(
-        self,
-        x: Any,
-    ) -> torch.Tensor:
-        """Evaluate the CV without postprocessing.
-
-        The original ``forward_cv(self, x)`` interface is preserved.
+        Returns
+        -------
+        torch.Tensor
+            Output of the forward operation of the model
         """
 
-        if self.featurizer is not None:
-            return self._forward_with_featurizer(x)
+        for b in self.BLOCKS:
+            block = getattr(self, b)
+            if block is not None:
+                x = self._apply_module(block, x)
 
-        return self._forward_blocks(x)
+        return x
 
     def validation_step(self, val_batch, batch_idx):
         """
@@ -508,27 +244,21 @@ class BaseCV(lightning.LightningModule):
             return
 
         class_name = self.__class__.__name__
-        is_position_dependent_cv = (
-            "Committor" in class_name or "Generator" in class_name
-        )
+        is_position_dependent_cv = ("Committor" in class_name) or ("Generator" in class_name)
 
         if is_position_dependent_cv:
-            warn(
-                "Found a preprocessing module during training. This is valid for "
-                "position-dependent losses such as Committor/Generator, because the "
-                "loss may require derivatives with respect to the original input "
-                "coordinates. However, for expensive descriptor preprocessing, using "
-                "`descriptors_derivatives` such as `SmartDerivatives` can be much more "
-                "efficient."
-            )
+                warn(
+                    "Found a preprocessing module during training. For position-dependent losses "
+                    "(Committor/Generator), this is valid, but it is recommended to use "
+                    "`descriptors_derivatives` (e.g., `SmartDerivatives`) for efficiency and potentially "
+                    "large computational savings."
+                )
         else:
-            warn(
-                "Found a preprocessing module during training. This preprocessing "
-                "will be applied inside forward_cv(), so training and inference use "
-                "the same input pipeline. For expensive descriptor preprocessing, it "
-                "may be more efficient to precompute descriptors and store them in a "
-                "DictDataset instead of re-applying the preprocessing at each training "
-                "step."
+            raise ValueError(
+                "Found a preprocessing module during training. For this CV class, it is generally "
+                "recommended to compute descriptors and store them in a DictDataset instead of  "
+                "re-applying the preprocessing at each training step. This choice typically provides" 
+                "large computational savings."
             )
 
         self._preprocessing_training_warning_shown = True
@@ -563,13 +293,8 @@ class BaseCV(lightning.LightningModule):
         """
 
         # Create the optimizer from the optimizer name and kwargs
-        trainable_parameters = [p for p in self.parameters() if p.requires_grad]
-
-        if len(trainable_parameters) == 0:
-            raise ValueError("No trainable parameters found in the model.")
-
         optimizer = getattr(torch.optim, self._optimizer_name)(
-            trainable_parameters, **self.optimizer_kwargs
+            self.parameters(), **self.optimizer_kwargs
         )
         
         # Return just the optimizer if no scheduler is defined

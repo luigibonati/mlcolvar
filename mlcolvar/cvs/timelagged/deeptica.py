@@ -105,7 +105,6 @@ class DeepTICA(BaseCV):
         self.tica = TICA(self.nn.out_features, n_cvs, **options[o])
 
     def forward_nn(self, x: torch.Tensor) -> torch.Tensor:
-        x = self._apply_featurizer(x)
         if not self._override_model:
             if self.norm_in is not None:
                 x = self._apply_module(self.norm_in, x)

@@ -101,7 +101,6 @@ class DeepLDA(BaseCV):
         self.set_regularization(sw_reg=0.05)
 
     def forward_nn(self, x: torch.Tensor) -> torch.Tensor:
-        x = self._apply_featurizer(x)
         if not self._override_model:
             if self.norm_in is not None:
                 x = self._apply_module(self.norm_in, x)
@@ -278,4 +277,3 @@ def test_deeplda(n_states=2):
     with torch.no_grad():
         s = model(example_input_graph_test).numpy()
     print(s)
-
