@@ -3,6 +3,29 @@ from typing import Dict, List, Optional, Sequence, Union
 
 import torch
 
+
+def _restore_native_torch_indexing() -> None:
+    """Undo the global PyG HashTensor indexing monkey-patch."""
+    try:
+        import torch_geometric.hash_tensor as hash_tensor
+    except ImportError:
+        return
+
+    torch.index_select = getattr(
+        hash_tensor,
+        "_old_index_select",
+        torch.index_select,
+    )
+    torch.select = getattr(
+        hash_tensor,
+        "_old_select",
+        torch.select,
+    )
+
+
+# This must run before importing metatensor/metatomic.
+_restore_native_torch_indexing()
+
 try:
     from metatensor.torch import Labels, TensorBlock, TensorMap
     from metatomic.torch import (
@@ -95,6 +118,10 @@ class CVInferenceModel(torch.nn.Module):
             List[torch.Tensor],
             [],
         )
+        shifts_list = torch.jit.annotate(
+            List[torch.Tensor],
+            [],
+        )
         batch_list = torch.jit.annotate(
             List[torch.Tensor],
             [],
@@ -116,12 +143,20 @@ class CVInferenceModel(torch.nn.Module):
 
         for system_index, system in enumerate(systems):
             positions = system.positions
-            types = system.types.to(dtype=torch.long)
+            types = system.types.to(
+                dtype=torch.long,
+                device=positions.device,
+            )
+            cell = system.cell.to(
+                dtype=positions.dtype,
+                device=positions.device,
+            )
+            pbc = system.pbc.to(device=positions.device)
             n_atoms = positions.shape[0]
 
             positions_list.append(positions)
-            cell_list.append(system.cell)
-            pbc_list.append(system.pbc)
+            cell_list.append(cell)
+            pbc_list.append(pbc)
 
             node_attrs = (
                 types.reshape(-1, 1)
@@ -165,11 +200,16 @@ class CVInferenceModel(torch.nn.Module):
                 )
             )
 
-            unit_shifts_list.append(
-                samples[:, 2:5].to(
-                    dtype=positions.dtype,
-                    device=positions.device,
-                )
+            unit_shifts = samples[:, 2:5].to(
+                dtype=positions.dtype,
+                device=positions.device,
+            )
+            unit_shifts_list.append(unit_shifts)
+
+            # MACE requires Cartesian periodic-image shifts in addition to
+            # the integer cell offsets supplied by Metatomic.
+            shifts_list.append(
+                torch.matmul(unit_shifts, cell)
             )
 
             atom_offset += n_atoms
@@ -194,6 +234,10 @@ class CVInferenceModel(torch.nn.Module):
         )
         data["unit_shifts"] = torch.cat(
             unit_shifts_list,
+            dim=0,
+        )
+        data["shifts"] = torch.cat(
+            shifts_list,
             dim=0,
         )
         data["batch"] = torch.cat(
@@ -224,6 +268,7 @@ class CVInferenceModel(torch.nn.Module):
         data = self._systems_to_graph(systems)
         features = self.network(data)
         return self.postprocessing(features)
+
 
 
 def _as_float(value) -> float:
@@ -370,11 +415,13 @@ def _prepare_network(
             "and do not call torch.jit.script(model.nn) beforehand."
         ) from exc
 
+
 def _make_inference_model(
     model: torch.nn.Module,
     interaction_range: float,
 ) -> CVInferenceModel:
-    """Extract and adapt the inference path stored in ``BaseCV.nn``."""
+    """Extract the inference pipeline stored in ``BaseCV.nn``."""
+    model = model.eval()
     network = getattr(model, "nn", None)
 
     if network is None:
@@ -416,20 +463,19 @@ def _make_inference_model(
             "'atomic_numbers'."
         )
 
+    atomic_numbers = atomic_numbers.detach().to(dtype=torch.long)
+
     neighbor_options = _get_neighbor_options(
         network=network,
         interaction_range=interaction_range,
     )
 
-    # MACE/e3nn modules must be prepared with e3nn's recursive JIT utility
-    # before Metatomic scripts the outer wrapper. PET/DeepMD and other plain
-    # TorchScript-compatible models are left unchanged.
     network = _prepare_network(network)
 
     postprocessing = getattr(model, "postprocessing", None)
-
     if postprocessing is None:
         postprocessing = torch.nn.Identity()
+    postprocessing = postprocessing.eval()
 
     inference_model = CVInferenceModel(
         network=network,
@@ -766,7 +812,6 @@ def export_metatomic_model(
     else:
         extension_path = Path(collect_extensions)
         extension_path.mkdir(parents=True, exist_ok=True)
-
         metatomic_model.save(
             str(output_path),
             collect_extensions=str(extension_path),
