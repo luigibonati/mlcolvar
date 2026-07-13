@@ -1,3 +1,4 @@
+from . import pet_jit_fix as _pet_jit_fix 
 from .atomistic import (
     AtomisticFeaturizer,
     AtomisticModel,
