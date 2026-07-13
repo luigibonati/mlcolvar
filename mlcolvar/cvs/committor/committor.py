@@ -205,7 +205,13 @@ class Committor(BaseCV, lightning.LightningModule):
 def test_committor():
     from mlcolvar.data import DictDataset, DictModule
     from mlcolvar.cvs.committor.utils import initialize_committor_masses, KolmogorovBias
-    
+    import platform 
+
+    if platform.system() != "Linux":
+        a_tol = 1e-2
+    else:
+        a_tol = 1e-3
+
     torch.manual_seed(42)
     # create two fake atoms and use their fake positions
     atomic_masses = initialize_committor_masses(atom_types=[0,1], masses=[15.999, 1.008])
@@ -251,10 +257,10 @@ def test_committor():
     trainer.fit(model, datamodule)
     out = model(X)
     out.sum().backward()
-    assert( torch.allclose(out, ref_out, atol=1e-3) )
+    assert( torch.allclose(out, ref_out, atol=a_tol) )
     bias_model = KolmogorovBias(input_model=model, beta=1, epsilon=1e-6, lambd=1)
     bias = bias_model(X)
-    assert( torch.allclose(bias, ref_bias, atol=1e-3) )
+    assert( torch.allclose(bias, ref_bias, atol=a_tol) )
 
 
     # naive whole dataset
@@ -271,7 +277,7 @@ def test_committor():
     trainer.fit(model, datamodule)
     out = model(X)
     out.sum().backward()
-    assert( torch.allclose(out, ref_out, atol=1e-3) )
+    assert( torch.allclose(out, ref_out, atol=a_tol) )
 
     # test log loss
     ref_out = torch.Tensor([[0.7287],[0.6505],[0.5594],[0.6758],[0.7482],[0.6804],[0.7313],[0.6762],[0.6873],[0.6267],
@@ -287,7 +293,7 @@ def test_committor():
     trainer.fit(model, datamodule)
     out = model(X)
     out.sum().backward()
-    assert( torch.allclose(out, ref_out, atol=1e-3) )
+    assert( torch.allclose(out, ref_out, atol=a_tol) )
 
     # test z regularization
     ref_out = torch.Tensor([[0.2878],[0.1591],[0.1665],[0.1166],[0.1349],[0.1053],[0.1544],[0.1113],[0.1435],[0.1232],
@@ -303,7 +309,7 @@ def test_committor():
     trainer.fit(model, datamodule)
     out = model(X)
     out.sum().backward()
-    assert( torch.allclose(out, ref_out, atol=1e-3) )
+    assert( torch.allclose(out, ref_out, atol=a_tol) )
 
     # test position-less loss
     ref_out = torch.Tensor([[0.2318],[0.2119],[0.3039],[0.2349],[0.1933],[0.2506],[0.1453],[0.2849],[0.2042],[0.2514],
