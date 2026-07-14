@@ -282,7 +282,7 @@ def test_committor_1():
                              -6.7020, -7.6421, -7.9529, -7.0869, -5.1529, -7.8873, -5.8033, -7.0834,
                              -7.0064, -7.2989, -6.5627, -7.6897, -7.3463, -7.7043, -7.9186, -7.7664,
                              -6.6557, -6.3900, -7.2810, -7.7624, -6.6961, -7.2745, -7.8269, -5.6305])
-    model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1)
+    model = Committor(model=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1)
     trainer.fit(model, datamodule)
     out = model(X)
     out.sum().backward()
