@@ -209,7 +209,7 @@ class DeepGenerator(BaseCV):
         z = self.nn(x)
         return z
     def forward(self, x, cell=None):
-        if self.evecs is not None:
+        if self.generator.evecs is not None:
             
             output = self.forward_nn(x, cell=cell)
             if self.softmax_postproc:

@@ -37,7 +37,7 @@ class Generator(Estimator):
         self.evals = None
 
         # Regularization
-        self.reg_C_0 = 1e-6
+        self.evecs = None
         if feature_method is None:
             self.feature_method = self._forward_dummy # if there is no feature, we just apply identity
         else:
