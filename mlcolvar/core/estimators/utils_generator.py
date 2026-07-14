@@ -16,7 +16,7 @@ def sqrtmh(A: torch.Tensor):
     L = L.where(L > threshold.unsqueeze(-1), zero)  # zero out small components
     return (Q * L.sqrt().unsqueeze(-2)) @ Q.mH
 
-def compute_covariances(input,output,weights,r,friction,n_dim=3,descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None, ref_idx=None):
+def compute_covariances(input,output,weights,r,friction,n_dim=3,descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None, ref_idx=None, softmax_postproc=True):
     """Compute covariance of features and covariance of gradient matrices.
 
     The function evaluates two weighted matrices:
@@ -78,14 +78,15 @@ def compute_covariances(input,output,weights,r,friction,n_dim=3,descriptors_deri
         raise ValueError ( 
             f"The number of eigenfunctions to compute (r) must match the number of outputs from the model! Found r:{r} and output.shape:{output.shape}"
             )
-        
-    one_column = torch.ones((output.shape[0],1),device=device)
-    output = torch.cat((output,one_column),dim=1)
+    if softmax_postproc:
+        one_column = torch.ones((output.shape[0],1),device=device)
+        output = torch.cat((output,one_column),dim=1)
+        r = r + 1
     # expand friction tensor
     if _is_graph_data:
         friction = friction[node_types].unsqueeze(1).unsqueeze(2)
     else:
-        friction = friction = friction.unsqueeze(-1).repeat((1, n_dim)).ravel()
+        friction = friction.unsqueeze(-1).repeat((1, n_dim)).ravel()
     # ------------------------ GRADIENTS ------------------------    
     # compute gradients of output wrt to the input iterating on the outputs
     grad_outputs = torch.ones(len(output), device=device)
@@ -93,13 +94,13 @@ def compute_covariances(input,output,weights,r,friction,n_dim=3,descriptors_deri
                                                 inputs=input,
                                                 grad_outputs=grad_outputs, 
                                                 retain_graph=True, 
-                                                create_graph=True)[0] for idx in range(r+1)
+                                                create_graph=True)[0] for idx in range(r)
                             ], dim=2)
     
     # in case the input is not positions but descriptors, we need to correct the gradients up to the positions
     # --> If we pass a SmartDerivative object that takes the nonzero elements of the matrix d_desc/d_pos
     if isinstance(descriptors_derivatives, SmartDerivatives):
-        gradient_positions = descriptors_derivatives(gradient, ref_idx).reshape(input.shape[0], -1, r+1)
+        gradient_positions = descriptors_derivatives(gradient, ref_idx).reshape(input.shape[0], -1, r)
     
     # --> If we directly pass the matrix d_desc/d_pos
     elif isinstance(descriptors_derivatives, torch.Tensor): 
@@ -151,7 +152,7 @@ def compute_eigenfunctions(dataset : DictDataset,
                            descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None,
                            n_dim : int = 3,
                            batch_size=None,
-                           soft_max_postproc=True,
+                           softmax_postproc=True,
                            is_graph=False,
                            cell=None
                            ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -233,10 +234,11 @@ def compute_eigenfunctions(dataset : DictDataset,
                                                    batch_size=batch_size, 
                                                    shuffle=False )
         weights = dataset["weights"]
-    
-    covariance = torch.zeros((r+1,r+1),device=weights.device)
-    dcov = torch.zeros((r+1,r+1),device=weights.device)
-    output = torch.zeros((len(weights),r+1),device=weights.device)
+    if softmax_postproc:
+        r = r + 1
+    covariance = torch.zeros((r,r),device=weights.device)
+    dcov = torch.zeros((r,r),device=weights.device)
+    output = torch.zeros((len(weights),r),device=weights.device)
 
     for i,batch in enumerate(loader):
         print(f"Processing batch {i}/{len(loader)}", end='\r')
@@ -264,7 +266,7 @@ def compute_eigenfunctions(dataset : DictDataset,
             batch_output = feature_method(batch_input, cell=cell)
         else:
             batch_output = feature_method(batch_input) 
-        if soft_max_postproc:
+        if softmax_postproc:
             batch_output = torch.nn.functional.softmax(batch_output,dim=-1)
 
         cov_batch, dcov_batch = compute_covariances(input=batch_input,
@@ -274,11 +276,13 @@ def compute_eigenfunctions(dataset : DictDataset,
                                                     friction=friction,
                                                     descriptors_derivatives=descriptors_derivatives,
                                                     ref_idx=ref_idx,
-                                                    n_dim=n_dim
+                                                    n_dim=n_dim,
+                                                    softmax_postproc=softmax_postproc
 
         )
-        one_column = torch.ones((batch_output.shape[0],1),device=batch_output.device)
-        batch_output = torch.cat((batch_output,one_column),dim=1)
+        if softmax_postproc:
+            one_column = torch.ones((batch_output.shape[0],1),device=batch_output.device)
+            batch_output = torch.cat((batch_output,one_column),dim=1)
         output[batch_start:batch_stop] = batch_output
         covariance += cov_batch.detach()
         dcov += dcov_batch.detach()

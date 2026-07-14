@@ -6,6 +6,8 @@ import torch
 from mlcolvar.core.estimators import Estimator
 
 from typing import Union, Tuple
+from mlcolvar.core.estimators.tica import TICA
+from mlcolvar.core.estimators.utils import cholesky_eigh
 from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
 from mlcolvar.data import DictDataset
 from mlcolvar.core.estimators.utils_generator import compute_eigenfunctions
@@ -110,7 +112,7 @@ class Generator(Estimator):
             descriptors_derivatives=descriptors_derivatives,
             n_dim=n_dim,
             batch_size=batch_size,
-            soft_max_postproc=softmax_postproc,
+            softmax_postproc=softmax_postproc,
             is_graph=is_graph,
             cell=cell,
             )
@@ -134,3 +136,19 @@ class Generator(Estimator):
         """
 
         return torch.matmul(x, self.evecs)
+def test_generator():
+    from mlcolvar.data import DictDataset
+
+    in_features = 2
+    X = torch.rand(100, in_features) * 100
+
+    w = torch.rand(len(X))
+
+    # Compute generator
+    generator = Generator(in_features, out_features=2)
+    dataset = DictDataset({"data": X, "weights": w})
+    generator.compute(dataset, eta=0.1, friction=torch.Tensor([1.0, 1.0]), tikhonov_reg=1e-4,n_dim=1, softmax_postproc=False)
+    s = generator(X)
+    print(X.shape, "-->", s.shape)
+    print("eigvals", generator.evals)
+
