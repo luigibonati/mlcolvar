@@ -1,7 +1,10 @@
-from . import pet_jit_fix as _pet_jit_fix 
+from . import pet_jit_fix as _pet_jit_fix  # noqa: F401
+
 from .atomistic import (
+    AtomisticConcatModel,
     AtomisticFeaturizer,
-    AtomisticModel,
+    AtomisticNodewiseModel,
+    AtomisticPooledModel,
     BaseAtomisticBackbone,
 )
 
@@ -18,7 +21,9 @@ __all__ = [
     "align_node_attrs",
     "BaseAtomisticBackbone",
     "AtomisticFeaturizer",
-    "AtomisticModel",
+    "AtomisticPooledModel",
+    "AtomisticNodewiseModel",
+    "AtomisticConcatModel",
     "MACEBackbone",
     "PETBackbone",
     "DeepMDBackbone",

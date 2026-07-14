@@ -411,8 +411,7 @@ def _prepare_network(
     except Exception as exc:
         raise RuntimeError(
             "Failed to prepare the MACE/e3nn network with "
-            "e3nn.util.jit.script. Run the export in a fresh Python process "
-            "and do not call torch.jit.script(model.nn) beforehand."
+            "e3nn.util.jit.script."
         ) from exc
 
 
