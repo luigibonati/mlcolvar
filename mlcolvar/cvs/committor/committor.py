@@ -302,7 +302,7 @@ def test_committor_1():
                             [0.1805],[0.1178],[0.1714],[0.1742],[0.1477],[0.1189],[0.1830],[0.1078],[0.1209],[0.1026],
                             [0.1246],[0.0979],[0.1717],[0.1264],[0.1243],[0.1344],[0.1695],[0.1127],[0.1788],[0.0962]])
     trainer = lightning.Trainer(max_epochs=1, logger=None, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0)
-    model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, separate_boundary_dataset=False)
+    model = Committor(model=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, separate_boundary_dataset=False)
     trainer.fit(model, datamodule)
     out = model(X)
     out.sum().backward()
@@ -318,7 +318,7 @@ def test_committor_1():
                             [0.8348],[0.8418],[0.7769],[0.7816],[0.8040],[0.9240],[0.7593],[0.8493],[0.7864],[0.9133],
                             [0.9077],[0.8956],[0.7555],[0.8968],[0.9050],[0.8908],[0.8005],[0.8778],[0.9044],[0.7629]])
     trainer = lightning.Trainer(max_epochs=1, logger=None, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0)
-    model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, log_var=True)
+    model = Committor(model=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, log_var=True)
     trainer.fit(model, datamodule)
     out = model(X)
     out.sum().backward()
@@ -334,7 +334,7 @@ def test_committor_1():
                             [0.1890],[0.2424],[0.2307],[0.2370],[0.2628],[0.2556],[0.2359],[0.2791],[0.2622],[0.2382],
                             [0.2744],[0.2395],[0.2316],[0.2339],[0.2130],[0.2487],[0.2345],[0.2574],[0.2035],[0.2916]])
     trainer = lightning.Trainer(max_epochs=1, logger=None, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0)
-    model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, z_regularization=100, z_threshold=0.000001)
+    model = Committor(model=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, z_regularization=100, z_threshold=0.000001)
     trainer.fit(model, datamodule)
     out = model(X)
     out.sum().backward()
@@ -350,7 +350,7 @@ def test_committor_1():
                             [0.2485],[0.3314],[0.3198],[0.3667],[0.3681],[0.3358],[0.2999],[0.4109],[0.3302],[0.3188],
                             [0.3858],[0.3065],[0.3372],[0.3317],[0.2931],[0.3442],[0.2822],[0.3965],[0.2688],[0.4545]])
     trainer = lightning.Trainer(max_epochs=1, logger=None, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0)
-    model = Committor(layers=[6, 4, 2, 1], atomic_masses=None, alpha=1e-1, use_gradients_wrt_positions=False)
+    model = Committor(model=[6, 4, 2, 1], atomic_masses=None, alpha=1e-1, use_gradients_wrt_positions=False)
     trainer.fit(model, datamodule)
     out = model(X)
     print(out)
@@ -370,7 +370,7 @@ def test_committor_1():
     # test dimension error
     try:
         trainer = lightning.Trainer(max_epochs=1, logger=None, enable_checkpointing=False, limit_val_batches=0, num_sanity_val_steps=0)
-        model = Committor(layers=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, z_regularization=10, z_threshold=1, n_dim=2)
+        model = Committor(model=[6, 4, 2, 1], atomic_masses=atomic_masses, alpha=1e-1, z_regularization=10, z_threshold=1, n_dim=2)
         trainer.fit(model, datamodule)
     except RuntimeError as e:
         print("[TEST LOG] Checked this error: ", e)
