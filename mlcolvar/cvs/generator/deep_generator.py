@@ -122,13 +122,15 @@ class DeepGenerator(BaseCV):
         
         if self.softmax_postproc:
             self.postprocessing=SoftmaxPostProcessing(r)
+        # For inference, we provide only the softmaxs, because the Generator.compute learns a linear combimation of the representation,
+        # Therefore, there is no need for two linear layers, one in the representation and one in the Generator.compute.
         self.generator = Generator(in_features=r, out_features=r, feature_method=self.forward_nn)
 
     def compute_eigenfunctions(self,
                                dataset : DictDataset,        
                                eta : float = None, 
                                friction : float = None,         
-                               tikhonov_reg : float = 1e-4, # TODO is it needed?     
+                               tikhonov_reg : float = 1e-4, 
                                recompute : bool = False,        
                                descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None,
                                batch_size=None,
@@ -150,7 +152,7 @@ class DeepGenerator(BaseCV):
         friction : torch.Tensor, optional
             Friction prefactor used for this computation. Defaults to the value used
             at initialization.
-        tikhonov_reg : float, default=1e-4 # TODO is it needed?
+        tikhonov_reg : float, default=1e-4 
             Tikhonov regularization parameter used when solving the linear problem.
         recompute : bool, default=False
             If ``True``, recompute eigenvectors/eigenvalues even when cached values

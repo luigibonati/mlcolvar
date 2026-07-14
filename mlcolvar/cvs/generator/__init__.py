@@ -1,4 +1,4 @@
 __all__ = ["DeepGenerator"]
 
-from .generator import *
+from .deep_generator import *
 from .utils import *
