@@ -315,77 +315,6 @@ def compute_eigenfunctions(dataloader : Union[DictLoader, torch_geometric.loader
 
 
 # For the future, it might be worth having a more general function
-def forecast_state_occupation(eigenfunctions: torch.Tensor,
-                              eigenvalues: torch.Tensor,
-                              times: torch.Tensor,
-                              classification: torch.Tensor,
-                              weights: torch.Tensor,
-                              n_states: int,
-                              reg_first_mode: bool = True,
-                              ) -> torch.Tensor:
-    """
-    Computes the time evolution of state occupation probabilities in a dynamical system from the learned eigenfunctions.
-
-    This function estimates the probability of being in a state, starting in another state
-    over time using eigenfunctions and eigenvalues of the system's generator.
-
-    Parameters:
-    -----------
-    eigenfunctions : torch.Tensor, shape (N, r)
-        The eigenfunctions evaluated at each sample point, where N is the number of samples
-        and r is the number of eigenfunctions.
-    eigenvalues : torch.Tensor, shape (r,)
-        The eigenvalues associated with the eigenfunctions.
-    times : torch.Tensor, shape (n_times,)
-        A 1D tensor containing the time points at which to evaluate the occupation probabilities.
-    classification : torch.Tensor, shape (N,)
-        A tensor assigning each sample point to a discrete state, with integer values in {0, ..., n_states-1}.
-    weights : torch.Tensor, shape (N,)
-        Biasing weights
-    n_states : int
-        The total number of discrete states in the system.
-    reg_first_mode : bool
-        Whether to regularize the first mode to have eigenfunction equal to 1 and eigenvalue equal to 0 to stabilize the calculation, by default True. 
-
-    Returns:
-    --------
-    occupations : torch.Tensor, shape (n_states, n_states, n_times)
-        A tensor where `occupations[i, j, t]` represents the probability of transitioning
-        from state `i` to state `j` at time `times[t]`.
-
-    """
-    if reg_first_mode:
-        eigenfunctions[:, 0] = 1
-        eigenvalues[0] = 0
-
-    # Number of samples
-    n_samples = classification.shape[0]
-
-    # Create masks for each state
-    state_masks = torch.arange(n_states, device=classification.device).view(-1, 1) == classification.unsqueeze(0)  # (n_states, N)
-
-    # Compute initial state occupations u
-    inv_u_0 = (state_masks * weights).mean(dim=1, keepdim=True)  # (n_states, 1)
-    u_0 = state_masks / inv_u_0
-
-    # Project onto eigenfunctions
-    initial_state_on_basis = ((u_0 * weights) @ eigenfunctions) / n_samples  # (n_states, n_eigen)
-    final_state_on_basis = ((state_masks * weights) @ eigenfunctions) / n_samples  # Ensure proper mean normalization
-
-    # Ensure eigenvalues are correctly shaped
-    eigenvalues = eigenvalues.view(1, -1)  # (1, n_eigen)
-
-    # Compute time evolution
-    time_evolution = torch.exp(times.view(-1, 1) * eigenvalues)  # (n_times, n_eigen)
-
-    # Compute occupation over time
-    occupation_over_time = (
-        (initial_state_on_basis[:, None, :] * final_state_on_basis[None, :, :])  # (n_states, n_states, n_eigen)
-        @ time_evolution.T.real  # Matrix multiplication over n_eigen -> (n_states, n_states, n_times)
-    )
-
-    return occupation_over_time  # Shape: (n_states, n_states, n_times)
-
 def forecast_observable_evolution(eigenfunctions: torch.Tensor,
                               eigenvalues: torch.Tensor,
                               times: torch.Tensor,
@@ -408,14 +337,13 @@ def forecast_observable_evolution(eigenfunctions: torch.Tensor,
         The eigenvalues associated with the eigenfunctions.
     times : torch.Tensor, shape (n_times,)
         A 1D tensor containing the time points at which to evaluate the occupation probabilities.
-    observable : torch.Tensor, shape (N,)
+    observable : torch.Tensor, shape (N,d)
         The observable you want to compute the time evolution of
     initial_state : torch.Tensor, shape (N,)
         A tensor assigning each sample point a value for the initial state (0 this frame does not correspond to the initial state, 1 this frame does).
     weights : torch.Tensor, shape (N,)
         Biasing weights
-    n_states : int
-        The total number of discrete states in the system.
+.
     reg_first_mode : bool
         Whether to regularize the first mode to have eigenfunction equal to 1 and eigenvalue equal to 0 to stabilize the calculation, by default True. 
 
@@ -436,24 +364,17 @@ def forecast_observable_evolution(eigenfunctions: torch.Tensor,
     # Create masks for each state
 
     # Compute initial state occupations u
-    inv_u_0 = (initial_state * weights).mean(dim=1, keepdim=True)  # (n_states, 1)
+    inv_u_0 = (initial_state * weights).mean() # (n_states, 1)
     u_0 = initial_state / inv_u_0
 
     # Project onto eigenfunctions
-    initial_state_on_basis = ((u_0 * weights) @ eigenfunctions) / n_samples  # (n_states, n_eigen)
-    final_state_on_basis = ((observable * weights) @ eigenfunctions) / n_samples  # Ensure proper mean normalization
-
-    # Ensure eigenvalues are correctly shaped
-    eigenvalues = eigenvalues.view(1, -1)  # (1, n_eigen)
+    initial_state_on_basis = torch.einsum("i,i,ij->j",u_0,weights, eigenfunctions) / n_samples
+    observable_on_basis = torch.einsum("id, i, ij->jd", observable, weights, eigenfunctions) / n_samples
 
     # Compute time evolution
-    time_evolution = torch.exp(times.view(-1, 1) * eigenvalues)  # (n_times, n_eigen)
-
-    # Compute occupation over time
-    observable_time = (
-        (initial_state_on_basis[:, None, :] * final_state_on_basis[None, :, :])  # (n_states, n_states, n_eigen)
-        @ time_evolution.T.real  # Matrix multiplication over n_eigen -> (n_states, n_states, n_times)
-    )
+    time_evolution = torch.exp(times[:,None] * eigenvalues) 
+    
+    observable_time = torch.einsum("i, id,ti->td", initial_state_on_basis, observable_on_basis, time_evolution.real)  
 
     return observable_time  # Shape: (n_states, n_states, n_times)
 
