@@ -182,7 +182,104 @@ def test_delta_g():
     assert grid2.shape == (10,)
     assert delta_g2.shape == (10,)
     assert np.allclose(delta_g2[-1], 0.0, atol=0.8)
+    
+def test_funnel_delta_g():
+    rng = np.random.default_rng(123)
+
+    # Case 1: 1D funnel deltaG with plotting enabled and explicit time axis.
+    x_bound = rng.normal(loc=0.6, scale=0.05, size=200)
+    x_unbound = rng.normal(loc=1.6, scale=0.05, size=200)
+    x = np.concatenate((x_bound, x_unbound))
+    rng.shuffle(x)
+
+    time = np.arange(len(x))
+    weights = rng.random(len(x)) + 0.1
+
+    rfunnel = 0.2
+    c0 = 1.0
+    bat = 0.8
+    uat = 1.4
+    bounds = (0.4, 1.8)
+
+    bound_region = [bounds[0], bat]
+    unbound_region = [uat, bounds[1]]
+
+    fig1, ax1 = plt.subplots()
+    grid, delta_g = compute_deltaG(
+        X=x,
+        stateA_bounds=bound_region,
+        stateB_bounds=unbound_region,
+        rfunnel=rfunnel,
+        c0=c0,
+        kbt=1.0,
+        intervals=5,
+        weights=weights,
+        reverse=True,
+        time=time,
+        plot=True,
+        plot_color="C0",
+        ax=ax1,
+    )
+
+    assert grid.shape == (5,)
+    assert delta_g.shape == (5,)
+    assert np.all(np.isfinite(delta_g))
+    assert ax1.get_xlabel() == "Time"
+    assert "$\\Delta G_{funnel}$" in ax1.get_ylabel()
+    plt.close(fig1)
+
+    # Case 1b: bias-derived weights should match explicitly supplied weights.
+    positive_weights = weights + 0.1
+
+    grid_w, delta_g_w = compute_deltaG(
+        X=x,
+        stateA_bounds=bound_region,
+        stateB_bounds=unbound_region,
+        rfunnel=rfunnel,
+        c0=c0,
+        kbt=1.0,
+        intervals=5,
+        weights=positive_weights,
+        plot=False,
+    )
+
+    grid_b, delta_g_b = compute_deltaG(
+        X=x,
+        stateA_bounds=bound_region,
+        stateB_bounds=unbound_region,
+        rfunnel=rfunnel,
+        c0=c0,
+        kbt=1.0,
+        intervals=5,
+        bias=np.log(positive_weights),
+        plot=False,
+    )
+
+    np.testing.assert_allclose(grid_b, grid_w)
+    np.testing.assert_allclose(delta_g_b, delta_g_w)
+
+    # Case 1c: final value should match the direct population-based formula.
+    mask_bound = np.logical_and(x > bound_region[0], x < bound_region[1])
+    mask_unbound = np.logical_and(x > unbound_region[0], x < unbound_region[1])
+
+    # Reproduce the same interval construction used internally by compute_deltaG.
+    interval_len = len(x) / 5
+    interval_bounds = np.arange(0, len(x), interval_len)
+    interval_bounds = np.ceil(interval_bounds).astype("int")
+    interval_bounds = np.concatenate((interval_bounds, np.array([len(x) - 1])))
+
+    # compute_deltaG uses Python slicing [start:end], so the final index is excluded.
+    end = interval_bounds[-1]
+
+    p_bound = 1e-8 + np.sum(positive_weights[:end][mask_bound[:end]])
+    p_unbound = 1e-8 + np.sum(positive_weights[:end][mask_unbound[:end]])
+
+    volume_correction = np.pi * rfunnel**2 * c0 / 1.66
+    expected_delta_g = -np.log((p_bound / p_unbound) * volume_correction)
+
+    np.testing.assert_allclose(delta_g_w[-1], expected_delta_g)
 
 if __name__ == "__main__":
-    test_compute_fes()
-    test_compute_deltaG()
+    test_fes()
+    test_delta_g()
+    test_funnel_delta_g()
