@@ -3,13 +3,14 @@
 __all__ = ["Generator"]
 
 import torch
+import torch_geometric
 from mlcolvar.core.estimators import Estimator
 
 from typing import Union, Tuple
 from mlcolvar.core.estimators.tica import TICA
 from mlcolvar.core.estimators.utils import cholesky_eigh
 from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
-from mlcolvar.data import DictDataset
+from mlcolvar.data import DictDataset, DictLoader
 from mlcolvar.core.estimators.utils_generator import compute_eigenfunctions
 
 
@@ -50,13 +51,12 @@ class Generator(Estimator):
         return repr
 
     def compute(self,
-                dataset : DictDataset,        
+                dataloader : Union[DictLoader, torch_geometric.loader.DataLoader],        
                 eta : float = None, 
                 friction : float = None,         
                 tikhonov_reg : float = 1e-4,    
                 is_graph=False,
                 descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None,
-                batch_size=100,
                 n_dim=3,
                 softmax_postproc=True,
                 cell=None,
@@ -103,7 +103,7 @@ class Generator(Estimator):
         
 
         eigenfunctions, evals, evecs, output = compute_eigenfunctions(
-            dataset=dataset,
+            dataloader=dataloader,
             feature_method=self.feature_method,
             r=self.out_features,
             eta=eta,
@@ -111,7 +111,6 @@ class Generator(Estimator):
             tikhonov_reg=tikhonov_reg,
             descriptors_derivatives=descriptors_derivatives,
             n_dim=n_dim,
-            batch_size=batch_size,
             softmax_postproc=softmax_postproc,
             is_graph=is_graph,
             cell=cell,

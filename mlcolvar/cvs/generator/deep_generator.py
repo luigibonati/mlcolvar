@@ -6,7 +6,7 @@ from mlcolvar.core import FeedForward, BaseGNN
 from mlcolvar.core.loss.generator_loss import GeneratorLoss
 from mlcolvar.cvs.generator.utils import SoftmaxPostProcessing
 from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
-from mlcolvar.data import DictDataset
+from mlcolvar.data import DictDataset, DictModule
 from mlcolvar.core.estimators import Generator
 __all__ = ["DeepGenerator"]
 
@@ -99,10 +99,7 @@ class DeepGenerator(BaseCV):
                                      split=split,
                                      softmax_postproc=self.softmax_postproc
                                      )        
-        
-        # these are initialized by compute_eigenfunctions method
-        self.evecs = None
-        self.evals = None
+
 
         # ======= OPTIONS =======
         # parse and sanitize
@@ -127,13 +124,11 @@ class DeepGenerator(BaseCV):
         self.generator = Generator(in_features=r, out_features=r, feature_method=self.forward_nn)
 
     def compute_eigenfunctions(self,
-                               dataset : DictDataset,        
+                               datamodule : DictModule,        
                                eta : float = None, 
                                friction : float = None,         
                                tikhonov_reg : float = 1e-4, 
-                               recompute : bool = False,        
                                descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None,
-                               batch_size=None,
                                ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Compute generator eigenfunctions from the learned representation.
 
@@ -143,8 +138,8 @@ class DeepGenerator(BaseCV):
 
         Parameters
         ----------
-        dataset : DictDataset
-            Dataset containing at least ``"data"`` and ``"weights"``. If the model
+        datamodule : DictModule
+            Datamodule containing at least ``"data"`` and ``"weights"``. If the model
             uses runtime-cell preprocessing, the dataset must also contain ``"cell"``.
         eta : float, optional
             Resolvent shift used for this computation. Defaults to the value used at
@@ -154,13 +149,8 @@ class DeepGenerator(BaseCV):
             at initialization.
         tikhonov_reg : float, default=1e-4 
             Tikhonov regularization parameter used when solving the linear problem.
-        recompute : bool, default=False
-            If ``True``, recompute eigenvectors/eigenvalues even when cached values
-            are available.
         descriptors_derivatives : SmartDerivatives or torch.Tensor, optional
             Descriptor derivatives used to compute gradients efficiently.
-        batch_size : int, default=100
-            Batch size used during eigenfunction computation.
 
         Returns
         -------
@@ -184,14 +174,13 @@ class DeepGenerator(BaseCV):
         if is_graph:
             cell=None
         else:
-            cell= self._get_batch_cell(dataset)
-        eigenfunctions, evals, evecs, output = self.generator.compute(dataset=dataset,
+            cell= self._get_batch_cell(datamodule.dataset)
+        eigenfunctions, evals, evecs, output = self.generator.compute(dataloader=datamodule.train_dataloader(),
                                                                       eta=eta,
                                                                       friction=friction,
                                                                       tikhonov_reg=tikhonov_reg,
                                                                       descriptors_derivatives=descriptors_derivatives,
                                                                       n_dim=self.n_dim,
-                                                                      batch_size=batch_size,
                                                                       softmax_postproc=self.softmax_postproc,
                                                                       is_graph=is_graph,
                                                                       cell=cell
@@ -213,7 +202,7 @@ class DeepGenerator(BaseCV):
             
             output = self.forward_nn(x, cell=cell)
             if self.softmax_postproc:
-                output = torch.nn.functional.softmax(output)
+                output = torch.nn.functional.softmax(output,dim=-1)
                 one_column = torch.ones((output.shape[0],1))
                 output = torch.cat((output,one_column),dim=1)
             eigenfunctions = output @ self.generator.evecs.to(output.device)

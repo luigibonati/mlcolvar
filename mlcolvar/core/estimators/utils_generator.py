@@ -2,7 +2,7 @@ import torch
 import torch_geometric
 from typing import Union, Tuple
 from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
-from mlcolvar.data import DictDataset
+from mlcolvar.data import DictDataset, DictLoader
 from mlcolvar.utils._code import scatter_sum
 import numpy as np
 
@@ -143,7 +143,7 @@ def compute_covariances(input,output,weights,r,friction,n_dim=3,descriptors_deri
     return cov_X.detach(), dcov_X.detach() 
 
 
-def compute_eigenfunctions(dataset : DictDataset,
+def compute_eigenfunctions(dataloader : Union[DictLoader, torch_geometric.loader.DataLoader],
                            feature_method,
                            r : int,
                            eta : float,
@@ -151,7 +151,6 @@ def compute_eigenfunctions(dataset : DictDataset,
                            tikhonov_reg : float = 1e-4,
                            descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None,
                            n_dim : int = 3,
-                           batch_size=None,
                            softmax_postproc=True,
                            is_graph=False,
                            cell=None
@@ -221,38 +220,30 @@ def compute_eigenfunctions(dataset : DictDataset,
     # get device
     
 
-    if batch_size is None:
-        batch_size = dataset["weights"].shape[0]
-    if is_graph:
-        loader = torch_geometric.loader.DataLoader(dataset, 
-                                                   batch_size=batch_size, 
-                                                   shuffle=False )
-        input = dataset.get_graph_inputs()
-        weights = input['weight']
-    else:
-        loader = torch.utils.data.DataLoader(dataset, 
-                                                   batch_size=batch_size, 
-                                                   shuffle=False )
-        weights = dataset["weights"]
     if softmax_postproc:
         r = r + 1
-    covariance = torch.zeros((r,r),device=weights.device)
-    dcov = torch.zeros((r,r),device=weights.device)
-    output = torch.zeros((len(weights),r),device=weights.device)
+    n_points = len(dataloader.dataset)
+    batch_size = dataloader.batch_size
+    if batch_size==0:
+        batch_size = n_points
+    device = friction.device
+    covariance = torch.zeros((r,r),device=device)
+    dcov = torch.zeros((r,r),device=device)
+    output = torch.zeros((n_points,r),device=device)
 
-    for i,batch in enumerate(loader):
-        print(f"Processing batch {i}/{len(loader)}", end='\r')
+    for i,batch in enumerate(dataloader):
+        print(f"Processing batch {i}/{len(dataloader)}", end='\r')
         batch_start, batch_stop = i*batch_size, (i+1) * batch_size
         if is_graph:
-            batch_input = batch["data_list"]
+            batch_input = batch["data_list"].to(device)
             batch_input["positions"].requires_grad=True
             batch_input['node_attrs'].requires_grad=True
-            batch_weights = batch_input["weight"]
+            batch_weights = batch_input["weight"].to(device)
             ref_idx = None
             cell = None
         else:
-            batch_input = batch["data"]
-            batch_weights = batch["weights"]
+            batch_input = batch["data"].to(device)
+            batch_weights = batch["weights"].to(device)
             batch_input.requires_grad = True
             if isinstance(descriptors_derivatives, SmartDerivatives):
                 ref_idx = batch["ref_idx"]
@@ -267,7 +258,7 @@ def compute_eigenfunctions(dataset : DictDataset,
         else:
             batch_output = feature_method(batch_input) 
         if softmax_postproc:
-            batch_output = torch.nn.functional.softmax(batch_output,dim=-1)
+            batch_output = torch.nn.functional.softmax(batch_output, dim=-1)
 
         cov_batch, dcov_batch = compute_covariances(input=batch_input,
                                                     output=batch_output,
@@ -292,10 +283,10 @@ def compute_eigenfunctions(dataset : DictDataset,
         del batch_output
         gc.collect()
 
-    npts = len(weights)
+    
     #x = input["positions"].reshape(weights.shape[0],input["positions"].shape[0]//weights.shape[0]*3)
-    covariance /= len(weights)
-    dcov /=  len(weights)
+    covariance /= n_points
+    dcov /=  n_points
     W = covariance + dcov/eta + tikhonov_reg * torch.eye(covariance.shape[0], device = covariance.device)
     W_sq_inv = torch.linalg.pinv(sqrtmh(W))
     M = W_sq_inv @ covariance @ W_sq_inv
