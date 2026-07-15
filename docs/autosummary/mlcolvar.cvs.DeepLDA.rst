@@ -42,6 +42,7 @@
       ~DeepLDA.call_super_init
       ~DeepLDA.current_epoch
       ~DeepLDA.device
+      ~DeepLDA.device_mesh
       ~DeepLDA.dtype
       ~DeepLDA.dump_patches
       ~DeepLDA.example_input_array
@@ -56,6 +57,7 @@
       ~DeepLDA.n_cvs
       ~DeepLDA.on_gpu
       ~DeepLDA.optimizer_name
+      ~DeepLDA.strict_loading
       ~DeepLDA.trainer
       ~DeepLDA.training
    

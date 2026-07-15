@@ -39,6 +39,7 @@
       ~DeepTDA.call_super_init
       ~DeepTDA.current_epoch
       ~DeepTDA.device
+      ~DeepTDA.device_mesh
       ~DeepTDA.dtype
       ~DeepTDA.dump_patches
       ~DeepTDA.example_input_array
@@ -53,6 +54,7 @@
       ~DeepTDA.n_cvs
       ~DeepTDA.on_gpu
       ~DeepTDA.optimizer_name
+      ~DeepTDA.strict_loading
       ~DeepTDA.trainer
       ~DeepTDA.training
    

@@ -29,6 +29,7 @@
    .. autosummary::
    
       ~Configuration.environment
+      ~Configuration.subsystem
       ~Configuration.system
       ~Configuration.weight
       ~Configuration.atomic_numbers

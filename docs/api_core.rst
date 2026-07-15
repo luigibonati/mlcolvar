@@ -8,7 +8,7 @@ NN
 This module implements the architectures with learnable weights that can be used to build CV models.
 
 Descriptors-based
-^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^
 .. currentmodule:: mlcolvar.core.nn
 
 .. autosummary::
@@ -60,22 +60,25 @@ This module implements the loss functions that can be used to optimize CV models
    SmartDerivatives
 
 
-Estimators 
------
-This module implements statistical methods with learnable weights that can be used in CV models.
+Estimators
+----------
+
+This module implements statistical estimators used in CV models.
 
 Base class
 ^^^^^^^^^^
+
 .. currentmodule:: mlcolvar.core.estimators
 
 .. autosummary::
    :toctree: autosummary
    :template: custom-class-template.rst
 
-   Estimators
+   Estimator
 
 Linear methods
 ^^^^^^^^^^^^^^
+
 .. currentmodule:: mlcolvar.core.estimators
 
 .. autosummary::
@@ -83,8 +86,9 @@ Linear methods
    :template: custom-class-template.rst
 
    PCA
-   LDA 
+   LDA
    TICA
+   Generator
 
 
 Transform

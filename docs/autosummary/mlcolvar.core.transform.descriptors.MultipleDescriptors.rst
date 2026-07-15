@@ -31,6 +31,7 @@
    
       ~MultipleDescriptors.T_destination
       ~MultipleDescriptors.call_super_init
+      ~MultipleDescriptors.device
       ~MultipleDescriptors.dump_patches
       ~MultipleDescriptors.training
    

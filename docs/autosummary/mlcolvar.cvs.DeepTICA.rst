@@ -41,6 +41,7 @@
       ~DeepTICA.call_super_init
       ~DeepTICA.current_epoch
       ~DeepTICA.device
+      ~DeepTICA.device_mesh
       ~DeepTICA.dtype
       ~DeepTICA.dump_patches
       ~DeepTICA.example_input_array
@@ -55,6 +56,7 @@
       ~DeepTICA.n_cvs
       ~DeepTICA.on_gpu
       ~DeepTICA.optimizer_name
+      ~DeepTICA.strict_loading
       ~DeepTICA.trainer
       ~DeepTICA.training
    
