@@ -1208,7 +1208,7 @@ def test_train_with_smart_derivatives():
     q = model(X)
 
     # compute eigenfunctions
-    eigfuncs, eigvals, eigvecs = model.compute_eigenfunctions(dataset=smart_dataset, descriptors_derivatives=smart_derivatives)
+    eigfuncs, eigvals, eigvecs = model.compute_eigenfunctions(datamodule=datamodule, descriptors_derivatives=smart_derivatives)
 
     print(eigfuncs.shape)
     print(eigvals.shape)

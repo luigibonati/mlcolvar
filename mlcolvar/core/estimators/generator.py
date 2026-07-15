@@ -136,7 +136,7 @@ class Generator(Estimator):
 
         return torch.matmul(x, self.evecs)
 def test_generator():
-    from mlcolvar.data import DictDataset
+    from mlcolvar.data import DictDataset, DictModule
 
     in_features = 2
     X = torch.rand(100, in_features) * 100
@@ -146,7 +146,10 @@ def test_generator():
     # Compute generator
     generator = Generator(in_features, out_features=2)
     dataset = DictDataset({"data": X, "weights": w})
-    generator.compute(dataset, eta=0.1, friction=torch.Tensor([1.0, 1.0]), tikhonov_reg=1e-4,n_dim=1, softmax_postproc=False)
+    datamodule = DictModule(dataset, lengths=[0.8,0.2])
+    datamodule.setup()
+
+    generator.compute(datamodule.train_dataloader(), eta=0.1, friction=torch.Tensor([1.0, 1.0]), tikhonov_reg=1e-4,n_dim=1, softmax_postproc=False)
     s = generator(X)
     print(X.shape, "-->", s.shape)
     print("eigvals", generator.evals)

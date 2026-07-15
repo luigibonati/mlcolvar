@@ -369,7 +369,7 @@ def test_generator():
     # assert( torch.allclose(ref_output, check_ref_output, atol=1e-3))
 
     # compute eigenfunctions
-    ref_eigfuncs, ref_eigvals, ref_eigvecs = model.compute_eigenfunctions(dataset=dataset, descriptors_derivatives=None, tikhonov_reg=1e-4)
+    ref_eigfuncs, ref_eigvals, ref_eigvecs = model.compute_eigenfunctions(datamodule=datamodule, descriptors_derivatives=None, tikhonov_reg=1e-4)
 
     check_ref_eigfuncs = torch.Tensor([[-1.5085,  0.2636,  0.0109],
                                        [-1.5085,  1.5487,  0.1069],
@@ -438,7 +438,7 @@ def test_generator():
     assert( torch.allclose(ref_output, q))
 
     # compute eigenfunctions
-    eigfuncs, eigvals, eigvecs = model.compute_eigenfunctions(dataset=dataset_desc, descriptors_derivatives=d_desc_d_pos)
+    eigfuncs, eigvals, eigvecs = model.compute_eigenfunctions(datamodule=datamodule, descriptors_derivatives=d_desc_d_pos)
 
     print(eigfuncs)
     print(eigvals)
@@ -491,7 +491,7 @@ def test_generator():
     assert( torch.allclose(ref_output, q))
 
     # compute eigenfunctions
-    eigfuncs, eigvals, eigvecs = model.compute_eigenfunctions(dataset=dataset_desc, descriptors_derivatives=smart_derivatives)
+    eigfuncs, eigvals, eigvecs = model.compute_eigenfunctions(datamodule=datamodule, descriptors_derivatives=smart_derivatives)
 
     print(eigfuncs)
     print(eigvals)
