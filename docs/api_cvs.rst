@@ -1,7 +1,7 @@
 Collective variables
 --------------------
 
-In this section we report the neural network-based collective variables implemented in the library. Note that the linear statistical methods are implemented in ``mlcolvar.core.stats`` instead. 
+In this section we report the neural network-based collective variables implemented in the library. Note that the linear statistical methods are implemented in ``mlcolvar.core.estimators`` instead. 
 
 .. rubric:: Base class
 
@@ -56,6 +56,7 @@ Note that also the autoencoder-related CVs can fall in this category when the ta
    :template: custom-class-template.rst
 
    DeepTICA
+   SelfTICA
 
 .. rubric:: MultiTask learning
 
@@ -80,3 +81,17 @@ Framework for the numerical determination of the committor function based on its
    :template: custom-class-template.rst
 
    Committor
+
+.. rubric:: Infinitesimal-generator learning
+
+CVs designed to learn eigenfunctions of the infinitesimal generator from
+weighted configurations and spatial derivatives, without requiring
+explicit time-lagged configuration pairs.
+
+.. currentmodule:: mlcolvar.cvs
+
+.. autosummary::
+   :toctree: autosummary
+   :template: custom-class-template.rst
+
+   DeepGenerator

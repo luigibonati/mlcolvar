@@ -60,23 +60,23 @@ This module implements the loss functions that can be used to optimize CV models
    SmartDerivatives
 
 
-Stats 
+Estimators 
 -----
 This module implements statistical methods with learnable weights that can be used in CV models.
 
 Base class
 ^^^^^^^^^^
-.. currentmodule:: mlcolvar.core.stats
+.. currentmodule:: mlcolvar.core.estimators
 
 .. autosummary::
    :toctree: autosummary
    :template: custom-class-template.rst
 
-   Stats
+   Estimators
 
 Linear methods
 ^^^^^^^^^^^^^^
-.. currentmodule:: mlcolvar.core.stats
+.. currentmodule:: mlcolvar.core.estimators
 
 .. autosummary::
    :toctree: autosummary
