@@ -19,7 +19,7 @@ from typing import Optional
 
 import torch
 
-from mlcolvar.core.stats.tica import TICA
+from mlcolvar.core.estimators.tica import TICA
 from mlcolvar.core.loss.eigvals import reduce_eigenvalues_loss
 
 
