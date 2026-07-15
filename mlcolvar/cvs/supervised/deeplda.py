@@ -29,7 +29,7 @@ class DeepLDA(BaseCV):
 
     See also
     --------
-    mlcolvar.core.stats.LDA
+    mlcolvar.core.estimators.LDA
         Linear Discriminant Analysis method
     mlcolvar.core.loss.ReduceEigenvalueLoss
         Eigenvalue reduction to a scalar quantity
