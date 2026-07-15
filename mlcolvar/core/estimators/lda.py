@@ -3,12 +3,12 @@
 import torch
 from .utils import cholesky_eigh
 
-from mlcolvar.core.stats import Stats
+from mlcolvar.core.estimators import Estimator
 
 __all__ = ["LDA"]
 
 
-class LDA(Stats):
+class LDA(Estimator):
     """
     Fisher's discriminant class.
 

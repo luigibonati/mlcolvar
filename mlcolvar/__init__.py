@@ -1,6 +1,6 @@
 """Machine learning collective variables"""
 
-__all__ = ["loss", "nn", "transform", "stats"]
+__all__ = ["loss", "nn", "transform", "estimators"]
 
 # Add imports here
 from .core import *
