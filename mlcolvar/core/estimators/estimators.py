@@ -1,13 +1,13 @@
 import torch
 
-__all__ = ["Stats"]
+__all__ = ["Estimator"]
 
 
-class Stats(torch.nn.Module):
+class Estimator(torch.nn.Module):
     """
-    Base stats class.
-    To implement a new stats override the compute and forward methods.
-    The parameters of the stats should be set either in the initialization or via the setup_from_datamodule function.
+    Base Estimator class.
+    To implement a new estimator override the compute and forward methods.
+    The parameters of the estimator should be set either in the initialization or via the setup_from_datamodule function.
     """
 
     def compute(self, X: torch.Tensor):

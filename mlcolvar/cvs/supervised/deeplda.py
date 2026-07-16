@@ -3,7 +3,7 @@ import lightning
 from mlcolvar.cvs import BaseCV
 from mlcolvar.core import FeedForward, BaseGNN, Normalization
 from mlcolvar.data import DictModule
-from mlcolvar.core.stats import LDA
+from mlcolvar.core.estimators import LDA
 from mlcolvar.core.loss import ReduceEigenvaluesLoss
 from typing import Union, List
 
@@ -29,7 +29,7 @@ class DeepLDA(BaseCV):
 
     See also
     --------
-    mlcolvar.core.stats.LDA
+    mlcolvar.core.estimators.LDA
         Linear Discriminant Analysis method
     mlcolvar.core.loss.ReduceEigenvalueLoss
         Eigenvalue reduction to a scalar quantity

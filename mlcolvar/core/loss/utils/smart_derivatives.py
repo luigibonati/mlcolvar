@@ -1093,7 +1093,7 @@ def test_compute_descriptors_and_derivatives_varying_cell():
 def test_train_with_smart_derivatives():
     from mlcolvar.core.transform import PairwiseDistances
     from mlcolvar.data import DictModule, DictDataset
-    from mlcolvar.cvs import Committor, Generator
+    from mlcolvar.cvs import Committor, DeepGenerator
     from mlcolvar.cvs.committor.utils import initialize_committor_masses
     from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
     from mlcolvar.explain.sensitivity import sensitivity_analysis
@@ -1175,9 +1175,9 @@ def test_train_with_smart_derivatives():
     options = {"nn": {"activation": "tanh"},
             "optimizer": {"lr": 1e-3, "weight_decay": 1e-5}
             }
-    model = Generator(
+    model = DeepGenerator(
         r=3,
-        layers=[45, 20, 20, 1],
+        model=[45, 20, 20, 3],
         eta=0.005,
         alpha=0.01,
         friction=friction,
@@ -1208,7 +1208,7 @@ def test_train_with_smart_derivatives():
     q = model(X)
 
     # compute eigenfunctions
-    eigfuncs, eigvals, eigvecs = model.compute_eigenfunctions(dataset=smart_dataset, descriptors_derivatives=smart_derivatives)
+    eigfuncs, eigvals, eigvecs = model.compute_eigenfunctions(datamodule=datamodule, descriptors_derivatives=smart_derivatives)
 
     print(eigfuncs.shape)
     print(eigvals.shape)

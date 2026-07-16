@@ -2,7 +2,7 @@ import torch
 import lightning
 from mlcolvar.cvs import BaseCV
 from mlcolvar.core import FeedForward, BaseGNN, Normalization
-from mlcolvar.core.stats import TICA
+from mlcolvar.core.estimators import TICA
 from mlcolvar.core.loss import ReduceEigenvaluesLoss
 from typing import Union, List
 
@@ -35,7 +35,7 @@ class DeepTICA(BaseCV):
 
     See also
     --------
-    mlcolvar.core.stats.TICA
+    mlcolvar.core.estimators.TICA
         Time Lagged Indipendent Component Analysis
     mlcolvar.core.loss.ReduceEigenvalueLoss
         Eigenvalue reduction to a scalar quantity

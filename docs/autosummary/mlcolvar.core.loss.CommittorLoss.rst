@@ -1,9 +1,9 @@
-﻿mlcolvar.data.DictDataset
-=========================
+﻿mlcolvar.core.loss.CommittorLoss
+================================
 
-.. currentmodule:: mlcolvar.data
+.. currentmodule:: mlcolvar.core.loss
 
-.. autoclass:: DictDataset
+.. autoclass:: CommittorLoss
    :members:                                   
    :show-inheritance:                           
    :inherited-members: Module,LightningModule                       
@@ -16,9 +16,8 @@
 
    .. autosummary::
    
-      ~DictDataset.__init__
-      ~DictDataset.get_graph_inputs
-      ~DictDataset.get_stats
+      ~CommittorLoss.__init__
+      ~CommittorLoss.forward
    
    
 
@@ -30,8 +29,10 @@
 
    .. autosummary::
    
-      ~DictDataset.feature_names
-      ~DictDataset.keys
+      ~CommittorLoss.T_destination
+      ~CommittorLoss.call_super_init
+      ~CommittorLoss.dump_patches
+      ~CommittorLoss.training
    
    
 

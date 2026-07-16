@@ -2,12 +2,13 @@ __all__ = [
     "BaseCV",
     "DeepLDA",
     "DeepTICA",
+    "SelfTICA",
     "DeepTDA",
     "AutoEncoderCV",
     "RegressionCV",
     "MultiTaskCV",
     'Committor',
-    "Generator",
+    "DeepGenerator",
 ]
 
 from .cv import BaseCV

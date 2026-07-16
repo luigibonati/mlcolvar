@@ -3,8 +3,8 @@
 __all__ = ["TICA"]
 
 import torch
-from mlcolvar.core.stats import Stats
-from mlcolvar.core.stats.utils import (
+from mlcolvar.core.estimators import Estimator
+from mlcolvar.core.estimators.utils import (
     correlation_matrix,
     cholesky_eigh,
     compute_average,
@@ -14,7 +14,7 @@ from mlcolvar.core.transform.tools.utils import batch_reshape
 import warnings
 
 
-class TICA(Stats):
+class TICA(Estimator):
     """
     Time-lagged independent component analysis base class.
     """

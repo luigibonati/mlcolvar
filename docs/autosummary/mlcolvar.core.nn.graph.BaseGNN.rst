@@ -18,6 +18,7 @@
    
       ~BaseGNN.__init__
       ~BaseGNN.embed_edge
+      ~BaseGNN.pooling
    
    
 
