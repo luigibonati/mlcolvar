@@ -247,12 +247,12 @@ def create_dataset_from_trajectories(trajectories: Union[List[str], str],
                     print(f"downloaded file ({url_top}) saved as ({topologies[i]}).")
     #endfor i in range(len(trajectories)):
 
-    graph_labels, node_labels = _normalize_graph_target_inputs(trajectories=trajectories_in_memory,
-                                                               load_args=load_args,
-                                                               trajectory_labels=trajectory_labels,
-                                                               graph_labels=graph_labels,
-                                                               node_labels=node_labels,
-                                                               )
+    graph_labels, node_labels = _normalize_graph_target_inputs(
+        trajectories=trajectories_in_memory,
+        trajectory_labels=trajectory_labels,
+        graph_labels=graph_labels,
+        node_labels=node_labels,
+    )
     if backend == 'mdtraj':
         dataset = dataset_from_mdtraj_trajectories(trajectories=trajectories_in_memory,
                                                    graph_labels=graph_labels,
