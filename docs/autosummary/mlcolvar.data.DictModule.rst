@@ -17,6 +17,7 @@
    .. autosummary::
    
       ~DictModule.__init__
+      ~DictModule.get_graph_inputs
       ~DictModule.predict_dataloader
       ~DictModule.setup
       ~DictModule.teardown

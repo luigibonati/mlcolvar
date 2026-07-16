@@ -35,7 +35,7 @@ class DeepTICA(BaseCV):
 
     See also
     --------
-    mlcolvar.core.stats.TICA
+    mlcolvar.core.estimators.TICA
         Time Lagged Indipendent Component Analysis
     mlcolvar.core.loss.ReduceEigenvalueLoss
         Eigenvalue reduction to a scalar quantity

@@ -39,6 +39,7 @@
       ~RegressionCV.call_super_init
       ~RegressionCV.current_epoch
       ~RegressionCV.device
+      ~RegressionCV.device_mesh
       ~RegressionCV.dtype
       ~RegressionCV.dump_patches
       ~RegressionCV.example_input_array
@@ -53,6 +54,7 @@
       ~RegressionCV.n_cvs
       ~RegressionCV.on_gpu
       ~RegressionCV.optimizer_name
+      ~RegressionCV.strict_loading
       ~RegressionCV.trainer
       ~RegressionCV.training
    

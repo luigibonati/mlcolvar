@@ -42,6 +42,7 @@
       ~VariationalAutoEncoderCV.call_super_init
       ~VariationalAutoEncoderCV.current_epoch
       ~VariationalAutoEncoderCV.device
+      ~VariationalAutoEncoderCV.device_mesh
       ~VariationalAutoEncoderCV.dtype
       ~VariationalAutoEncoderCV.dump_patches
       ~VariationalAutoEncoderCV.example_input_array
@@ -56,6 +57,7 @@
       ~VariationalAutoEncoderCV.n_cvs
       ~VariationalAutoEncoderCV.on_gpu
       ~VariationalAutoEncoderCV.optimizer_name
+      ~VariationalAutoEncoderCV.strict_loading
       ~VariationalAutoEncoderCV.trainer
       ~VariationalAutoEncoderCV.training
    

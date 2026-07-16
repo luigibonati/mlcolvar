@@ -7,8 +7,6 @@ import torch_geometric
 from mlcolvar.core.estimators import Estimator
 
 from typing import Union, Tuple
-from mlcolvar.core.estimators.tica import TICA
-from mlcolvar.core.estimators.utils import cholesky_eigh
 from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
 from mlcolvar.data import DictDataset, DictLoader
 from mlcolvar.core.estimators.utils_generator import compute_eigenfunctions
@@ -17,12 +15,12 @@ from mlcolvar.core.estimators.utils_generator import compute_eigenfunctions
 
 class Generator(Estimator):
     """
-    Time-lagged independent component analysis base class.
+    Estimator for eigenfunctions of the infinitesimal generator.
     """
 
     def __init__(self, in_features, out_features=None, feature_method=None):
         """
-        Initialize a TICA object.
+        Initialize a generator object.
         """
         super().__init__()
 
@@ -31,7 +29,7 @@ class Generator(Estimator):
         self.out_features = out_features if out_features is not None else in_features
 
         # buffers
-        # tica eigenvectors
+        # generator eigenvectors
         self.register_buffer("evecs", torch.eye(in_features, self.out_features))
         # mean to obtain mean free inputs
         # init other attributes

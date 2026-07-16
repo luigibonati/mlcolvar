@@ -42,6 +42,7 @@
       ~AutoEncoderCV.call_super_init
       ~AutoEncoderCV.current_epoch
       ~AutoEncoderCV.device
+      ~AutoEncoderCV.device_mesh
       ~AutoEncoderCV.dtype
       ~AutoEncoderCV.dump_patches
       ~AutoEncoderCV.example_input_array
@@ -56,6 +57,7 @@
       ~AutoEncoderCV.n_cvs
       ~AutoEncoderCV.on_gpu
       ~AutoEncoderCV.optimizer_name
+      ~AutoEncoderCV.strict_loading
       ~AutoEncoderCV.trainer
       ~AutoEncoderCV.training
    

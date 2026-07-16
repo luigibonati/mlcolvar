@@ -1,9 +1,9 @@
-﻿mlcolvar.core.stats.Stats
-=========================
+﻿mlcolvar.core.loss.GeneratorLoss
+================================
 
-.. currentmodule:: mlcolvar.core.stats
+.. currentmodule:: mlcolvar.core.loss
 
-.. autoclass:: Stats
+.. autoclass:: GeneratorLoss
    :members:                                   
    :show-inheritance:                           
    :inherited-members: Module,LightningModule                       
@@ -16,9 +16,8 @@
 
    .. autosummary::
    
-      ~Stats.compute
-      ~Stats.forward
-      ~Stats.teardown
+      ~GeneratorLoss.__init__
+      ~GeneratorLoss.forward
    
    
 
@@ -30,10 +29,10 @@
 
    .. autosummary::
    
-      ~Stats.T_destination
-      ~Stats.call_super_init
-      ~Stats.dump_patches
-      ~Stats.training
+      ~GeneratorLoss.T_destination
+      ~GeneratorLoss.call_super_init
+      ~GeneratorLoss.dump_patches
+      ~GeneratorLoss.training
    
    
 

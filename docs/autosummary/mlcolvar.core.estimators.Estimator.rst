@@ -1,9 +1,9 @@
-﻿mlcolvar.core.stats.LDA
-=======================
+﻿mlcolvar.core.estimators.Estimator
+==================================
 
-.. currentmodule:: mlcolvar.core.stats
+.. currentmodule:: mlcolvar.core.estimators
 
-.. autoclass:: LDA
+.. autoclass:: Estimator
    :members:                                   
    :show-inheritance:                           
    :inherited-members: Module,LightningModule                       
@@ -16,11 +16,9 @@
 
    .. autosummary::
    
-      ~LDA.__init__
-      ~LDA.compute
-      ~LDA.compute_scatter_matrices
-      ~LDA.extra_repr
-      ~LDA.forward
+      ~Estimator.compute
+      ~Estimator.forward
+      ~Estimator.teardown
    
    
 
@@ -32,10 +30,10 @@
 
    .. autosummary::
    
-      ~LDA.T_destination
-      ~LDA.call_super_init
-      ~LDA.dump_patches
-      ~LDA.training
+      ~Estimator.T_destination
+      ~Estimator.call_super_init
+      ~Estimator.dump_patches
+      ~Estimator.training
    
    
 

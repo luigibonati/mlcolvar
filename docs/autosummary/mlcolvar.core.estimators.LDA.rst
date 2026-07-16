@@ -1,9 +1,9 @@
-﻿mlcolvar.core.stats.TICA
-========================
+﻿mlcolvar.core.estimators.LDA
+============================
 
-.. currentmodule:: mlcolvar.core.stats
+.. currentmodule:: mlcolvar.core.estimators
 
-.. autoclass:: TICA
+.. autoclass:: LDA
    :members:                                   
    :show-inheritance:                           
    :inherited-members: Module,LightningModule                       
@@ -16,11 +16,11 @@
 
    .. autosummary::
    
-      ~TICA.__init__
-      ~TICA.compute
-      ~TICA.extra_repr
-      ~TICA.forward
-      ~TICA.timescales
+      ~LDA.__init__
+      ~LDA.compute
+      ~LDA.compute_scatter_matrices
+      ~LDA.extra_repr
+      ~LDA.forward
    
    
 
@@ -32,10 +32,10 @@
 
    .. autosummary::
    
-      ~TICA.T_destination
-      ~TICA.call_super_init
-      ~TICA.dump_patches
-      ~TICA.training
+      ~LDA.T_destination
+      ~LDA.call_super_init
+      ~LDA.dump_patches
+      ~LDA.training
    
    
 
