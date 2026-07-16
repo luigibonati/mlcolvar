@@ -1,7 +1,7 @@
-﻿mlcolvar.core.stats.PCA
-=======================
+﻿mlcolvar.core.estimators.PCA
+============================
 
-.. currentmodule:: mlcolvar.core.stats
+.. currentmodule:: mlcolvar.core.estimators
 
 .. autoclass:: PCA
    :members:                                   

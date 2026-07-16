@@ -1,9 +1,9 @@
-﻿mlcolvar.data.DictDataset
-=========================
+﻿mlcolvar.core.estimators.TICA
+=============================
 
-.. currentmodule:: mlcolvar.data
+.. currentmodule:: mlcolvar.core.estimators
 
-.. autoclass:: DictDataset
+.. autoclass:: TICA
    :members:                                   
    :show-inheritance:                           
    :inherited-members: Module,LightningModule                       
@@ -16,9 +16,11 @@
 
    .. autosummary::
    
-      ~DictDataset.__init__
-      ~DictDataset.get_graph_inputs
-      ~DictDataset.get_stats
+      ~TICA.__init__
+      ~TICA.compute
+      ~TICA.extra_repr
+      ~TICA.forward
+      ~TICA.timescales
    
    
 
@@ -30,8 +32,10 @@
 
    .. autosummary::
    
-      ~DictDataset.feature_names
-      ~DictDataset.keys
+      ~TICA.T_destination
+      ~TICA.call_super_init
+      ~TICA.dump_patches
+      ~TICA.training
    
    
 

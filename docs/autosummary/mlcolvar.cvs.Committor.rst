@@ -40,6 +40,7 @@
       ~Committor.call_super_init
       ~Committor.current_epoch
       ~Committor.device
+      ~Committor.device_mesh
       ~Committor.dtype
       ~Committor.dump_patches
       ~Committor.example_input_array
@@ -54,6 +55,7 @@
       ~Committor.n_cvs
       ~Committor.on_gpu
       ~Committor.optimizer_name
+      ~Committor.strict_loading
       ~Committor.trainer
       ~Committor.training
    

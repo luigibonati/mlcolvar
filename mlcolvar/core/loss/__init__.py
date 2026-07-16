@@ -16,6 +16,8 @@ __all__ = [
     "SmartDerivatives",
     "compute_descriptors_derivatives",
     "GeneratorLoss",
+    "ContrastiveLoss",
+    "contrastive_loss",
 ]
 
 from .mse import MSELoss, mse_loss
@@ -27,3 +29,4 @@ from .fisher import FisherDiscriminantLoss, fisher_discriminant_loss
 from .committor_loss import CommittorLoss, committor_loss
 from .generator_loss import GeneratorLoss
 from .utils.smart_derivatives import SmartDerivatives, compute_descriptors_derivatives
+from .constrastive_loss import ContrastiveLoss, contrastive_loss
