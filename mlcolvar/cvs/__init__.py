@@ -8,7 +8,7 @@ __all__ = [
     "RegressionCV",
     "MultiTaskCV",
     'Committor',
-    "Generator",
+    "DeepGenerator",
 ]
 
 from .cv import BaseCV

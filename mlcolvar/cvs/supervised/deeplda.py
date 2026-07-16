@@ -3,7 +3,7 @@ import lightning
 from mlcolvar.cvs import BaseCV
 from mlcolvar.core import FeedForward, BaseGNN, Normalization
 from mlcolvar.data import DictModule
-from mlcolvar.core.stats import LDA
+from mlcolvar.core.estimators import LDA
 from mlcolvar.core.loss import ReduceEigenvaluesLoss
 from typing import Union, List
 

@@ -167,25 +167,22 @@ def _normalize_frame_level_labels(labels, frame_counts: List[int], name: str):
 
 def _normalize_graph_target_inputs(
     trajectories: List,
-    load_args: list,
     trajectory_labels=None,
     graph_labels=None,
     node_labels=None,
 ):
     n_traj = len(trajectories)
-    frame_counts = [
-        len(_get_selected_frame_indices(
-            n_frames=len(traj),
-            load_arg=load_args[i] if load_args is not None else None,
-        ))
-        for i, traj in enumerate(trajectories)
-    ]
+
+    # trajectories are already filtered using load_args
+    frame_counts = [len(traj) for traj in trajectories]
 
     if trajectory_labels is not None and graph_labels is not None:
-        raise ValueError("Only one of `trajectory_labels` or `graph_labels` can be provided.")
+        raise ValueError(
+            "Only one of `trajectory_labels` or `graph_labels` can be provided."
+        )
 
     if trajectory_labels is None and graph_labels is None:
-        trajectory_labels = [i for i in range(n_traj)]
+        trajectory_labels = list(range(n_traj))
 
     if graph_labels is None:
         graph_labels = _broadcast_trajectory_to_graph_labels(
@@ -193,9 +190,17 @@ def _normalize_graph_target_inputs(
             frame_counts=frame_counts,
         )
     else:
-        graph_labels = _normalize_frame_level_labels(graph_labels, frame_counts, name='graph_labels')
+        graph_labels = _normalize_frame_level_labels(
+            graph_labels,
+            frame_counts,
+            name="graph_labels",
+        )
 
-    node_labels = _normalize_frame_level_labels(node_labels, frame_counts, name='node_labels')
+    node_labels = _normalize_frame_level_labels(
+        node_labels,
+        frame_counts,
+        name="node_labels",
+    )
 
     return graph_labels, node_labels
 
