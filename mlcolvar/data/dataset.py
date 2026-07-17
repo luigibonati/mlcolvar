@@ -102,16 +102,46 @@ class DictDataset(Dataset):
         
 
     def __getitem__(self, index):
+        """Return a field, one sample, or a sliced DictDataset."""
+
         if isinstance(index, str):
             return self._dictionary[index]
-        else: 
-            slice_dict = {}
-            for key, val in self._dictionary.items():
-                try:
-                    slice_dict[key] = val[index]
-                except Exception:
-                    slice_dict[key] = list(itemgetter(*index)(val))
+
+        slice_dict = {}
+
+        for key, val in self._dictionary.items():
+            try:
+                slice_dict[key] = val[index]
+            except Exception:
+                slice_dict[key] = list(itemgetter(*index)(val))
+
+        # Integer indexing is used by PyTorch DataLoader and must
+        # continue returning a single sample dictionary.
+        is_scalar_index = (
+            isinstance(index, (int, np.integer))
+            or (
+                isinstance(index, torch.Tensor)
+                and index.ndim == 0
+            )
+            or (
+                isinstance(index, np.ndarray)
+                and index.ndim == 0
+            )
+        )
+
+        if is_scalar_index:
             return slice_dict
+
+        # Slice, list, array, or tensor indexing returns a new dataset.
+        return DictDataset(
+            dictionary=slice_dict,
+            feature_names=self.feature_names,
+            metadata=self.metadata.copy(),
+            data_type=self.metadata.get(
+                "data_type",
+                "descriptors",
+            ),
+        )
 
     def __setitem__(self, index, value):
         if isinstance(index, str):
