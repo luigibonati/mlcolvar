@@ -212,7 +212,7 @@ def test_dataset_factory_methods(monkeypatch):
         mock_from_files,
     )
     monkeypatch.setattr(
-        "mlcolvar.data.graph.create_dataset_from_configurations",
+        "mlcolvar.data.graph.utils.create_dataset_from_configurations",
         mock_from_configurations,
     )
     monkeypatch.setattr(
@@ -224,9 +224,9 @@ def test_dataset_factory_methods(monkeypatch):
     assert result is descriptor_dataset
 
     result = DictDataset.graph_from_configurations(
-        configurations=[],
-        atomic_numbers=None,
-        cutoff=5.0,
+        [],
+        None,
+        5.0,
     )
     assert result is graph_dataset
 
