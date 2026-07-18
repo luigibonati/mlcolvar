@@ -180,3 +180,59 @@ def test_graph_dataset_single_element_advanced_indexing():
         assert subset.metadata["data_type"] == "graphs"
         assert subset.metadata["cutoff"] == 5.0
         
+        
+def test_dataset_factory_methods(monkeypatch):
+    descriptor_dataset = DictDataset(
+        dictionary={
+            "data": torch.tensor([[1.0], [2.0]]),
+        }
+    )
+
+    graph_dataset = DictDataset(
+        dictionary={
+            "data_list": [
+                {"graph_id": 0},
+                {"graph_id": 1},
+            ]
+        },
+        data_type="graphs",
+    )
+
+    def mock_from_files(*args, **kwargs):
+        return descriptor_dataset
+
+    def mock_from_configurations(*args, **kwargs):
+        return graph_dataset
+
+    def mock_from_trajectories(*args, **kwargs):
+        return graph_dataset
+
+    monkeypatch.setattr(
+        "mlcolvar.io.create_dataset_from_files",
+        mock_from_files,
+    )
+    monkeypatch.setattr(
+        "mlcolvar.data.graph.create_dataset_from_configurations",
+        mock_from_configurations,
+    )
+    monkeypatch.setattr(
+        "mlcolvar.io.create_dataset_from_trajectories",
+        mock_from_trajectories,
+    )
+
+    result = DictDataset.from_colvars("COLVAR")
+    assert result is descriptor_dataset
+
+    result = DictDataset.graph_from_configurations(
+        configurations=[],
+        atomic_numbers=None,
+        cutoff=5.0,
+    )
+    assert result is graph_dataset
+
+    result = DictDataset.graph_from_trajectories(
+        trajectories="trajectory.xyz",
+        topologies=None,
+        cutoff=5.0,
+    )
+    assert result is graph_dataset

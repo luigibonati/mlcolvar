@@ -98,6 +98,44 @@ class DictDataset(Dataset):
         # add indexing of entries for shuffling and slicing reference
         if create_ref_idx and "ref_idx" not in self._dictionary.keys():
             dictionary['ref_idx'] = torch.arange(len(self), dtype=torch.int)
+            
+
+    @classmethod
+    def from_colvars(cls, *args, **kwargs):
+        """Create a descriptor-based dataset from COLVAR or tabular files.
+
+        This is the class-method equivalent of
+        ``mlcolvar.io.create_dataset_from_files``.
+        """
+        from mlcolvar.io import create_dataset_from_files
+
+        return create_dataset_from_files(*args, **kwargs)
+
+
+    @classmethod
+    def graph_from_configurations(cls, *args, **kwargs):
+        """Create a graph dataset from Configuration objects.
+
+        This is the class-method equivalent of
+        ``mlcolvar.data.graph.utils.create_dataset_from_configurations``.
+        """
+        from mlcolvar.data.graph.utils import (
+            create_dataset_from_configurations,
+        )
+
+        return create_dataset_from_configurations(*args, **kwargs)
+
+
+    @classmethod
+    def graph_from_trajectories(cls, *args, **kwargs):
+        """Create a graph dataset from trajectory files.
+
+        This is the class-method equivalent of
+        ``mlcolvar.io.create_dataset_from_trajectories``.
+        """
+        from mlcolvar.io import create_dataset_from_trajectories
+
+        return create_dataset_from_trajectories(*args, **kwargs)
         
 
     def __getitem__(self, index):
