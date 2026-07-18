@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 import torch
 
-from mlcolvar.data.dataset import DictDataset, test_DictDataset
+from mlcolvar.data.dataset import DictDataset
 
 
 def test_dataset_print_and_repr(capsys):
@@ -42,10 +42,6 @@ def test_dataset_errors():
 
     with pytest.raises(NotImplementedError):
         dataset[0] = {"data": torch.tensor([1.0])}
-
-
-def test_module_dataset_helper():
-    test_DictDataset()
     
 
 def test_dataset_slicing_returns_dictdataset():
