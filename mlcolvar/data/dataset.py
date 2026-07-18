@@ -3,7 +3,6 @@ import torch_geometric
 import numpy as np
 from mlcolvar.core.transform.utils import Statistics
 from torch.utils.data import Dataset
-from operator import itemgetter
 
 __all__ = ["DictDataset"]
 
@@ -104,43 +103,79 @@ class DictDataset(Dataset):
     def __getitem__(self, index):
         """Return a field, one sample, or a sliced DictDataset."""
 
+        # Access one complete field.
         if isinstance(index, str):
             return self._dictionary[index]
 
-        slice_dict = {}
-
-        for key, val in self._dictionary.items():
-            try:
-                slice_dict[key] = val[index]
-            except Exception:
-                slice_dict[key] = list(itemgetter(*index)(val))
-
-        # Integer indexing is used by PyTorch DataLoader and must
-        # continue returning a single sample dictionary.
-        is_scalar_index = (
+        # Scalar indexing returns one sample as a dictionary.
+        is_scalar = (
             isinstance(index, (int, np.integer))
             or (
-                isinstance(index, torch.Tensor)
-                and index.ndim == 0
-            )
-            or (
-                isinstance(index, np.ndarray)
+                isinstance(index, (torch.Tensor, np.ndarray))
                 and index.ndim == 0
             )
         )
 
-        if is_scalar_index:
-            return slice_dict
+        if is_scalar:
+            if isinstance(index, (torch.Tensor, np.ndarray)):
+                index = index.item()
 
-        # Slice, list, array, or tensor indexing returns a new dataset.
+            return {
+                key: value[index]
+                for key, value in self._dictionary.items()
+            }
+
+        # Slicing can be applied directly to all supported containers.
+        if isinstance(index, slice):
+            sliced = {
+                key: value[index]
+                for key, value in self._dictionary.items()
+            }
+
+        else:
+            # Convert advanced indexing to a Python list of integer indices.
+            if isinstance(index, torch.Tensor):
+                indices = (
+                    torch.where(index)[0].tolist()
+                    if index.dtype == torch.bool
+                    else index.flatten().tolist()
+                )
+
+            elif isinstance(index, np.ndarray):
+                indices = (
+                    np.flatnonzero(index).tolist()
+                    if index.dtype == bool
+                    else index.flatten().tolist()
+                )
+
+            else:
+                indices = list(index)
+
+                # Python boolean mask.
+                if indices and all(
+                    isinstance(item, (bool, np.bool_))
+                    for item in indices
+                ):
+                    indices = [
+                        i
+                        for i, selected in enumerate(indices)
+                        if selected
+                    ]
+
+            sliced = {
+                key: (
+                    value[indices]
+                    if isinstance(value, (torch.Tensor, np.ndarray))
+                    else [value[i] for i in indices]
+                )
+                for key, value in self._dictionary.items()
+            }
+
         return DictDataset(
-            dictionary=slice_dict,
+            dictionary=sliced,
             feature_names=self.feature_names,
             metadata=self.metadata.copy(),
-            data_type=self.metadata.get(
-                "data_type",
-                "descriptors",
-            ),
+            data_type=self.metadata.get("data_type", "descriptors"),
         )
 
     def __setitem__(self, index, value):
@@ -333,13 +368,13 @@ def test_DictDataset():
 
     # torch.Tensor
     out = dataset[torch.tensor([1], dtype=torch.long)]
-    assert( torch.allclose(out['data'], data[1]) ) 
+    assert torch.allclose(out["data"], data[[1]])
+
     out = graph_dataset[torch.tensor([1], dtype=torch.long)]
-    assert( torch.allclose(out['data_list']['positions'], torch.Tensor(positions+0.1))) 
+    assert torch.allclose(out["data_list"][0]["positions"],torch.Tensor(positions + 0.1))
 
     out = dataset[torch.tensor([0,1,2], dtype=torch.long)]
     assert( torch.allclose(out['data'], data[[0,1,2]]) ) 
     out = graph_dataset[torch.tensor([0,1,2], dtype=torch.long)]
     for i in [0,1,2]:
         assert( torch.allclose(out['data_list'][i]['positions'], torch.Tensor(positions+0.1*i))) 
-

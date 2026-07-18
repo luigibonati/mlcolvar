@@ -140,3 +140,47 @@ def test_graph_dataset_slicing_preserves_metadata():
         subset["labels"],
         torch.tensor([1.0, 2.0]),
     )
+    
+    
+def test_graph_dataset_single_element_advanced_indexing():
+    graph_list = [
+        {"graph_id": 0},
+        {"graph_id": 1},
+        {"graph_id": 2},
+    ]
+
+    dataset = DictDataset(
+        dictionary={
+            "data_list": graph_list,
+            "labels": torch.tensor([0.0, 1.0, 2.0]),
+        },
+        metadata={
+            "cutoff": 5.0,
+            "atomic_types": [1, 6, 8],
+        },
+        data_type="graphs",
+    )
+
+    indices = [
+        [1],
+        np.array([1]),
+        torch.tensor([1], dtype=torch.long),
+    ]
+
+    for index in indices:
+        subset = dataset[index]
+
+        assert isinstance(subset, DictDataset)
+        assert len(subset) == 1
+
+        assert isinstance(subset["data_list"], list)
+        assert subset["data_list"] == [graph_list[1]]
+
+        torch.testing.assert_close(
+            subset["labels"],
+            torch.tensor([1.0]),
+        )
+
+        assert subset.metadata["data_type"] == "graphs"
+        assert subset.metadata["cutoff"] == 5.0
+        
