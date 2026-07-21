@@ -5,14 +5,14 @@ from typing import Any, Dict, List, Optional, Tuple
 import torch
 from torch import nn
 
-from mlcolvar.integrations.atomistic import BaseAtomisticBackbone
-from mlcolvar.integrations.utils import (
+from .base import BaseAtomisticBackbone
+from ..graph import (
     get_graph_ptr,
     prepare_cells,
     prepare_pbc,
 )
 
-from ._utils import to_bool, to_float, to_int, to_int_list
+from .utils import to_bool, to_float, to_int, to_int_list
 
 
 try:

@@ -3,9 +3,9 @@ from typing import Dict, Optional, Tuple
 import torch
 from torch import nn
 
-from mlcolvar.integrations.atomistic import BaseAtomisticBackbone
+from .base import BaseAtomisticBackbone
 
-from ._utils import to_float, to_int, to_int_list
+from .utils import to_float, to_int, to_int_list
 
 
 __all__ = ["MACEBackbone"]
@@ -255,4 +255,4 @@ class MACEBackbone(BaseAtomisticBackbone):
                 for layer_index in range(self.num_layers)
             ],
             dim=-1,
-        )   
+        )

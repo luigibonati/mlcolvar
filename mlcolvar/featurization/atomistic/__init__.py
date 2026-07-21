@@ -1,34 +1,19 @@
-from .atomistic import (
-    AtomisticConcatModel,
-    AtomisticFeaturizer,
-    AtomisticNodewiseModel,
-    AtomisticPooledModel,
+from .alignment import align_node_attrs
+from .backbones import (
     BaseAtomisticBackbone,
     DeepMDBackbone,
     MACEBackbone,
     PETBackbone,
-    align_node_attrs,
 )
-from .transfer import (
-    CVForwardFeaturizer,
-    CVGraphLatentFeaturizer,
-    CVGraphReadoutModel,
-    CVLatentFeaturizer,
-    CVOutputFeaturizer,
-    CVReadoutModel,
+from .featurizer import AtomisticFeaturizer
+from .models import (
+    AtomisticConcatModel,
+    AtomisticNodewiseModel,
+    AtomisticPooledModel,
 )
 
 
 __all__ = [
-    # Internal mlcolvar transfer integration
-    "CVOutputFeaturizer",
-    "CVForwardFeaturizer",
-    "CVLatentFeaturizer",
-    "CVGraphLatentFeaturizer",
-    "CVReadoutModel",
-    "CVGraphReadoutModel",
-
-    # Atomistic integration
     "align_node_attrs",
     "BaseAtomisticBackbone",
     "AtomisticFeaturizer",
@@ -41,9 +26,9 @@ __all__ = [
 ]
 
 
-# Optional atomistic Metatomic export.
+# Optional, atomistic-only Metatomic export.
 try:
-    from .atomistic.metatomic import (
+    from .metatomic import (
         CVInferenceModel,
         MetatomicCVWrapper,
         create_metatomic_model,
