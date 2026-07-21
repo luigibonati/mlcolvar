@@ -6,7 +6,10 @@ import pytest
 import torch
 from torch import nn
 
-from mlcolvar.integrations import AtomisticFeaturizer, MACEBackbone
+from mlcolvar.featurization.atomistic import (
+    AtomisticFeaturizer,
+    MACEBackbone,
+)
 
 
 class DummyMACE(nn.Module):
@@ -52,8 +55,7 @@ class DummyMACE(nn.Module):
         training: bool = False,
         compute_force: bool = False,
     ) -> Dict[str, torch.Tensor]:
-        _ = training
-        _ = compute_force
+        del training, compute_force
 
         return {
             "node_feats": (
@@ -68,13 +70,11 @@ def mace_test_data() -> Dict[str, torch.Tensor]:
     """Create two two-atom graphs with two MACE interaction layers."""
 
     node_features = torch.zeros(
-        (
-            4,
-            10,
-        ),
+        (4, 10),
         dtype=torch.float64,
     )
 
+    # Scalar features from interaction layer 1.
     node_features[:, 0:2] = torch.tensor(
         [
             [1.0, 2.0],
@@ -85,6 +85,10 @@ def mace_test_data() -> Dict[str, torch.Tensor]:
         dtype=torch.float64,
     )
 
+    # Scalar features from interaction layer 2.
+    #
+    # For num_features=2 and l_max=1:
+    # layer_size = (l_max + 1)**2 * num_features = 8.
     node_features[:, 8:10] = torch.tensor(
         [
             [5.0, 6.0],
@@ -98,20 +102,11 @@ def mace_test_data() -> Dict[str, torch.Tensor]:
     return {
         "node_feats": node_features,
         "batch": torch.tensor(
-            [
-                0,
-                0,
-                1,
-                1,
-            ],
+            [0, 0, 1, 1],
             dtype=torch.long,
         ),
         "ptr": torch.tensor(
-            [
-                0,
-                2,
-                4,
-            ],
+            [0, 2, 4],
             dtype=torch.long,
         ),
     }
@@ -128,16 +123,13 @@ def make_backbone() -> MACEBackbone:
     )
 
 
-def test_mace_backbone(
+def test_mace_backbone_metadata_and_features(
     mace_test_data: Dict[str, torch.Tensor],
 ) -> None:
     """Extract invariant features and expose shared metadata."""
 
     backbone = make_backbone()
-
-    output = backbone(
-        mace_test_data
-    )
+    output = backbone(mace_test_data)
 
     expected = torch.tensor(
         [
@@ -149,31 +141,31 @@ def test_mace_backbone(
         dtype=torch.float64,
     )
 
-    assert output.shape == (
-        4,
-        4,
-    )
+    assert output.shape == (4, 4)
+    assert output.dtype == torch.float64
 
-    assert torch.allclose(
+    torch.testing.assert_close(
         output,
         expected,
     )
 
     assert backbone.out_features == 4
     assert backbone.sample_kind == "atom"
+    assert backbone.full_neighbor_list
+
+    assert backbone.num_layers == 2
+    assert backbone.num_features == 2
+    assert backbone.l_max == 1
     assert backbone.layer_size == 8
     assert backbone.required_input_features == 10
-    assert backbone.atomic_numbers.tolist() == [
-        1,
-        8,
-    ]
 
-    assert backbone.cutoff.item() == pytest.approx(
-        5.0
-    )
+    assert backbone.atomic_numbers.tolist() == [1, 8]
+    assert backbone.cutoff.item() == pytest.approx(5.0)
+    assert backbone.buffer.item() == pytest.approx(0.0)
+    assert backbone.long_range_cutoff.item() == pytest.approx(-1.0)
 
 
-def test_mace_featurizer_pooling_freeze_and_gradients(
+def test_mace_featurizer_mean_pooling_freeze_and_gradients(
     mace_test_data: Dict[str, torch.Tensor],
 ) -> None:
     """Pool MACE features while preserving input gradients."""
@@ -198,9 +190,7 @@ def test_mace_featurizer_pooling_freeze_and_gradients(
         freeze=True,
     )
 
-    output = featurizer(
-        data
-    )
+    output = featurizer(data)
 
     expected = torch.tensor(
         [
@@ -210,29 +200,32 @@ def test_mace_featurizer_pooling_freeze_and_gradients(
         dtype=torch.float64,
     )
 
-    assert output.shape == (
-        2,
-        4,
-    )
+    assert output.shape == (2, 4)
 
-    assert torch.allclose(
+    torch.testing.assert_close(
         output,
         expected,
     )
 
     output.sum().backward()
 
-    assert node_features.grad is not None
+    gradient = node_features.grad
 
-    assert torch.count_nonzero(
-        node_features.grad
-    ) > 0
+    assert gradient is not None
+    assert gradient.shape == node_features.shape
+    assert torch.isfinite(gradient).all()
+    assert torch.count_nonzero(gradient) > 0
 
+    # Freezing the pretrained model must disable parameter updates.
     assert all(
         not parameter.requires_grad
         for parameter in backbone.parameters()
     )
 
+    # It must not disable gradients with respect to model inputs.
+    assert backbone.model.weight.grad is None
+
+    # Calling train() on the wrapper must keep a frozen backbone in eval mode.
     featurizer.train()
 
     assert featurizer.training
@@ -251,9 +244,7 @@ def test_mace_featurizer_sum_pooling(
         freeze=True,
     )
 
-    output = featurizer(
-        mace_test_data
-    )
+    output = featurizer(mace_test_data)
 
     expected = torch.tensor(
         [
@@ -263,16 +254,31 @@ def test_mace_featurizer_sum_pooling(
         dtype=torch.float64,
     )
 
-    assert torch.allclose(
+    assert output.shape == (2, 4)
+
+    torch.testing.assert_close(
         output,
         expected,
     )
 
 
+def test_mace_featurizer_rejects_invalid_pooling() -> None:
+    """Reject unsupported pooling operations."""
+
+    with pytest.raises(
+        ValueError,
+        match="`pooling` must be either 'mean' or 'sum'",
+    ):
+        AtomisticFeaturizer(
+            backbone=make_backbone(),
+            pooling="max",
+        )
+
+
 def test_mace_featurizer_trace(
     mace_test_data: Dict[str, torch.Tensor],
 ) -> None:
-    """Trace the backbone and shared pooling together."""
+    """Trace the frozen MACE backbone and shared pooling together."""
 
     featurizer = AtomisticFeaturizer(
         backbone=make_backbone(),
@@ -282,23 +288,21 @@ def test_mace_featurizer_trace(
 
     featurizer.eval()
 
+    expected = featurizer(mace_test_data)
+
     traced = torch.jit.trace(
         featurizer,
-        example_inputs=(
-            mace_test_data,
-        ),
+        example_inputs=(mace_test_data,),
         strict=False,
+        check_trace=True,
     )
 
-    expected = featurizer(
-        mace_test_data
-    )
+    output = traced(mace_test_data)
 
-    output = traced(
-        mace_test_data
-    )
+    assert output.shape == expected.shape
+    assert output.dtype == expected.dtype
 
-    assert torch.allclose(
+    torch.testing.assert_close(
         output,
         expected,
     )
