@@ -942,10 +942,8 @@ void PytorchGNN::calculate()
         torch::index_select(positions_s, 1, edge_index[0])
         - torch::index_select(positions_s, 1, edge_index[1])
       );
-      unit_shifts = torch::round(deltas);
-      shifts = torch::matmul(
-        cell.transpose(1, 0), unit_shifts
-      ).transpose(1, 0);
+      unit_shifts = torch::round(deltas).transpose(1, 0);
+      shifts = torch::matmul(unit_shifts, cell);
     }
   } else {
     shifts = torch::zeros({n_edges, 3}, torch_float_dtype);
