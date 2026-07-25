@@ -29,6 +29,16 @@ How to customize the CVs, either using the multitask framework or by creating ne
 
    tutorials_advanced
 
+.. rubric:: Graph-based CVs
+
+These tutorials describe how to construct collective variables using graph
+neural networks and atomic graph representations.
+
+.. toctree::
+   :maxdepth: 2
+
+   tutorials_gnn
+
 .. rubric:: Interpreting CVs
 
 Some examples of how to interpret the CVs, using sensitivity analysis or sparse linear models. 
