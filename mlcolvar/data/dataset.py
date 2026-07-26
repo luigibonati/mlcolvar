@@ -4,6 +4,7 @@ import numpy as np
 from mlcolvar.core.transform.utils import Statistics
 from torch.utils.data import Dataset
 
+    
 __all__ = ["DictDataset"]
 
 
@@ -99,45 +100,34 @@ class DictDataset(Dataset):
         if create_ref_idx and "ref_idx" not in self._dictionary.keys():
             dictionary['ref_idx'] = torch.arange(len(self), dtype=torch.int)
             
-
     @classmethod
-    def from_colvars(cls, *args, **kwargs):
-        """Create a descriptor-based dataset from COLVAR or tabular files.
-
-        This is the class-method equivalent of
-        ``mlcolvar.io.create_dataset_from_files``.
-        """
-        from mlcolvar.io import create_dataset_from_files
-
-        return create_dataset_from_files(*args, **kwargs)
-
-
-    @classmethod
-    def graph_from_configurations(cls, *args, **kwargs):
-        """Create a graph dataset from Configuration objects.
-
-        This is the class-method equivalent of
-        ``mlcolvar.data.graph.utils.create_dataset_from_configurations``.
-        """
+    def from_configurations(
+        cls,
+        config,
+        atomic_numbers,
+        cutoff: float,
+        buffer: float = 0.0,
+        long_range_cutoff: float = -1.0,
+        atom_names: list = None,
+        remove_isolated_nodes: bool = False,
+        show_progress: bool = True,
+    ) -> "DictDataset":
+        """Create a graph dataset from processed Configuration objects."""
         from mlcolvar.data.graph.utils import (
             create_dataset_from_configurations,
         )
 
-        return create_dataset_from_configurations(*args, **kwargs)
-
-
-    @classmethod
-    def graph_from_trajectories(cls, *args, **kwargs):
-        """Create a graph dataset from trajectory files.
-
-        This is the class-method equivalent of
-        ``mlcolvar.io.create_dataset_from_trajectories``.
-        """
-        from mlcolvar.io import create_dataset_from_trajectories
-
-        return create_dataset_from_trajectories(*args, **kwargs)
+        return create_dataset_from_configurations(
+            config=config,
+            atomic_numbers=atomic_numbers,
+            cutoff=cutoff,
+            buffer=buffer,
+            long_range_cutoff=long_range_cutoff,
+            atom_names=atom_names,
+            remove_isolated_nodes=remove_isolated_nodes,
+            show_progress=show_progress,
+        )
         
-
     def __getitem__(self, index):
         """Return a field, one sample, or a sliced DictDataset."""
 

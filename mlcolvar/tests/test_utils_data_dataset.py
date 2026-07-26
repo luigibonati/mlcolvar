@@ -1,9 +1,10 @@
+import inspect
+
 import numpy as np
 import pytest
 import torch
 
 from mlcolvar.data.dataset import DictDataset
-
 
 def test_dataset_print_and_repr(capsys):
     dataset = DictDataset(
@@ -181,13 +182,7 @@ def test_graph_dataset_single_element_advanced_indexing():
         assert subset.metadata["cutoff"] == 5.0
         
         
-def test_dataset_factory_methods(monkeypatch):
-    descriptor_dataset = DictDataset(
-        dictionary={
-            "data": torch.tensor([[1.0], [2.0]]),
-        }
-    )
-
+def test_dataset_from_configurations(monkeypatch):
     graph_dataset = DictDataset(
         dictionary={
             "data_list": [
@@ -198,41 +193,75 @@ def test_dataset_factory_methods(monkeypatch):
         data_type="graphs",
     )
 
-    def mock_from_files(*args, **kwargs):
-        return descriptor_dataset
+    received_arguments = {}
 
-    def mock_from_configurations(*args, **kwargs):
+    def mock_from_configurations(**kwargs):
+        received_arguments.update(kwargs)
         return graph_dataset
 
-    def mock_from_trajectories(*args, **kwargs):
-        return graph_dataset
-
-    monkeypatch.setattr(
-        "mlcolvar.io.create_dataset_from_files",
-        mock_from_files,
-    )
     monkeypatch.setattr(
         "mlcolvar.data.graph.utils.create_dataset_from_configurations",
         mock_from_configurations,
     )
-    monkeypatch.setattr(
-        "mlcolvar.io.create_dataset_from_trajectories",
-        mock_from_trajectories,
-    )
 
-    result = DictDataset.from_colvars("COLVAR")
-    assert result is descriptor_dataset
+    configurations = []
+    atomic_numbers = object()
 
-    result = DictDataset.graph_from_configurations(
-        [],
-        None,
-        5.0,
-    )
-    assert result is graph_dataset
-
-    result = DictDataset.graph_from_trajectories(
-        trajectories="trajectory.xyz",
-        topologies=None,
+    result = DictDataset.from_configurations(
+        config=configurations,
+        atomic_numbers=atomic_numbers,
         cutoff=5.0,
+        buffer=1.0,
+        long_range_cutoff=8.0,
+        atom_names=["H", "C"],
+        remove_isolated_nodes=True,
+        show_progress=False,
     )
+
     assert result is graph_dataset
+
+    assert received_arguments == {
+        "config": configurations,
+        "atomic_numbers": atomic_numbers,
+        "cutoff": 5.0,
+        "buffer": 1.0,
+        "long_range_cutoff": 8.0,
+        "atom_names": ["H", "C"],
+        "remove_isolated_nodes": True,
+        "show_progress": False,
+    }
+
+
+def test_from_configurations_has_explicit_signature():
+    signature = inspect.signature(
+        DictDataset.from_configurations
+    )
+
+    expected_parameters = {
+        "config",
+        "atomic_numbers",
+        "cutoff",
+        "buffer",
+        "long_range_cutoff",
+        "atom_names",
+        "remove_isolated_nodes",
+        "show_progress",
+    }
+
+    assert expected_parameters.issubset(
+        signature.parameters
+    )
+
+    parameter_kinds = {
+        parameter.kind
+        for parameter in signature.parameters.values()
+    }
+
+    assert (
+        inspect.Parameter.VAR_POSITIONAL
+        not in parameter_kinds
+    )
+    assert (
+        inspect.Parameter.VAR_KEYWORD
+        not in parameter_kinds
+    )
