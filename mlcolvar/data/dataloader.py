@@ -325,19 +325,17 @@ class DictLoader:
 
     def _get_batch(self, dataset_idx=None):
         """Return the current batch from the dataset."""
-        # Determine dataset and batch size.
-        if dataset_idx is None:  # Only one dataset.
+
+        if dataset_idx is None:
             dataset = self.dataset
             batch_size = self.batch_size
         else:
             dataset = self.dataset[dataset_idx]
             batch_size = self.batch_size[dataset_idx]
 
-        # Determine start and end sample indices.
         start = self.current_batch_idx * batch_size
         end = start + batch_size
 
-        # Handle shuffling.
         if self.indices is None:
             batch = dataset[start:end]
         else:
@@ -345,7 +343,16 @@ class DictLoader:
                 indices = self.indices
             else:
                 indices = self.indices[dataset_idx]
+
             batch = dataset[indices[start:end]]
+
+        # Dataset slicing now returns DictDataset, while DictLoader
+        # should continue returning dictionary batches.
+        if isinstance(batch, DictDataset):
+            batch = {
+                key: batch[key]
+                for key in batch.keys
+            }
 
         return batch
 
@@ -356,19 +363,19 @@ class DictLoader:
 
 
 def _to_dict_dataset(d):
-    """Convert Dict[Tensor] and Subset[DictDataset] to DictDataset.
+    """Convert Dict[Tensor] and Subset[DictDataset] to DictDataset."""
 
-    An error is raised if ``d`` cannot is of any other type.
-    """
-    # Convert to DictDataset if a dict is given.
     if isinstance(d, dict):
         d = DictDataset(d)
+
     elif isinstance(d, Subset) and isinstance(d.dataset, DictDataset):
-        # TODO: This might not not safe for classes that inherit from Subset or DictionaryDatset.
-        # Retrieve selection if it a subset.
-        d = d.dataset.__class__(d.dataset[d.indices])
+        # DictDataset slicing already returns a DictDataset.
+        d = d.dataset[d.indices]
+
     elif not isinstance(d, DictDataset):
         raise ValueError(
-            "The data must be of type dict, DictDataset or Subset[DictDataset]."
+            "The data must be of type dict, DictDataset "
+            "or Subset[DictDataset]."
         )
+
     return d
