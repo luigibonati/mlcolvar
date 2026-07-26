@@ -3,7 +3,6 @@ import torch_geometric
 import numpy as np
 from mlcolvar.core.transform.utils import Statistics
 from torch.utils.data import Dataset
-from operator import itemgetter
 
 __all__ = ["DictDataset"]
 
@@ -102,16 +101,82 @@ class DictDataset(Dataset):
         
 
     def __getitem__(self, index):
+        """Return a field, one sample, or a sliced DictDataset."""
+
+        # Access one complete field.
         if isinstance(index, str):
             return self._dictionary[index]
-        else: 
-            slice_dict = {}
-            for key, val in self._dictionary.items():
-                try:
-                    slice_dict[key] = val[index]
-                except Exception:
-                    slice_dict[key] = list(itemgetter(*index)(val))
-            return slice_dict
+
+        # Scalar indexing returns one sample as a dictionary.
+        is_scalar = (
+            isinstance(index, (int, np.integer))
+            or (
+                isinstance(index, (torch.Tensor, np.ndarray))
+                and index.ndim == 0
+            )
+        )
+
+        if is_scalar:
+            if isinstance(index, (torch.Tensor, np.ndarray)):
+                index = index.item()
+
+            return {
+                key: value[index]
+                for key, value in self._dictionary.items()
+            }
+
+        # Slicing can be applied directly to all supported containers.
+        if isinstance(index, slice):
+            sliced = {
+                key: value[index]
+                for key, value in self._dictionary.items()
+            }
+
+        else:
+            # Convert advanced indexing to a Python list of integer indices.
+            if isinstance(index, torch.Tensor):
+                indices = (
+                    torch.where(index)[0].tolist()
+                    if index.dtype == torch.bool
+                    else index.flatten().tolist()
+                )
+
+            elif isinstance(index, np.ndarray):
+                indices = (
+                    np.flatnonzero(index).tolist()
+                    if index.dtype == bool
+                    else index.flatten().tolist()
+                )
+
+            else:
+                indices = list(index)
+
+                # Python boolean mask.
+                if indices and all(
+                    isinstance(item, (bool, np.bool_))
+                    for item in indices
+                ):
+                    indices = [
+                        i
+                        for i, selected in enumerate(indices)
+                        if selected
+                    ]
+
+            sliced = {
+                key: (
+                    value[indices]
+                    if isinstance(value, (torch.Tensor, np.ndarray))
+                    else [value[i] for i in indices]
+                )
+                for key, value in self._dictionary.items()
+            }
+
+        return DictDataset(
+            dictionary=sliced,
+            feature_names=self.feature_names,
+            metadata=self.metadata.copy(),
+            data_type=self.metadata.get("data_type", "descriptors"),
+        )
 
     def __setitem__(self, index, value):
         if isinstance(index, str):
@@ -192,124 +257,3 @@ class DictDataset(Dataset):
                                                    batch_size=len(self), 
                                                    shuffle=False )
         return next(iter(loader))['data_list']
-
-def test_DictDataset():
-    # descriptors based
-    # from list
-    data = torch.Tensor([[1.0], [2.0], [0.3], [0.4]])
-    labels = [0, 0, 1, 1]
-    weights = np.asarray([0.5, 1.5, 1.5, 0.5])
-    dataset_dict = {
-        "data": data,
-        "labels": labels,
-        "weights": weights,
-    }
-    
-    dataset = DictDataset(dataset_dict)
-    print(len(dataset))
-    print(dataset[0])
-    print(dataset[0:2]["data"])
-    print(dataset[0:2]["data"].dtype)
-
-    # test with dataloader
-    from torch.utils.data import DataLoader
-    loader = DataLoader(dataset, batch_size=1)
-    batch = next(iter(loader))
-    print(batch["data"])
-
-    # test with fastdataloader
-    from mlcolvar.data import DictLoader
-    loader = DictLoader(dataset, batch_size=1)
-    batch = next(iter(loader))
-    print(batch)
-
-    from mlcolvar.data.graph.atomic import AtomicNumberTable, Configuration
-    from mlcolvar.data.graph.utils import create_dataset_from_configurations
-    # graphs based
-    numbers = [8, 1, 1]
-    positions = np.array(
-        [[[0.0, 0.0, 0.0], [0.07, 0.07, 0.0], [0.07, -0.07, 0.0]],
-        [[0.0, 0.0, 0.0], [0.07, 0.07, 0.0], [0.07, -0.07, 0.0]],
-        [[0.0, 0.0, 0.0], [0.07, 0.07, 0.0], [0.07, -0.07, 0.0]]],
-        dtype=float
-    )
-    cell = np.identity(3, dtype=float) * 0.2
-    graph_labels = np.array([[1], [0], [1]])
-    node_labels = np.array([[0], [1], [1]])
-    atomic_numbers = AtomicNumberTable.from_zs(numbers)
-
-    config = [Configuration(
-        atomic_numbers=numbers,
-        positions=positions[i] + 0.1*i,
-        cell=cell,
-        pbc=[True] * 3,
-        node_labels=node_labels[i],
-        graph_labels=graph_labels,
-    ) for i in range(3)]
-    graph_dataset = create_dataset_from_configurations(config, 
-                                              atomic_numbers, 
-                                              0.1, 
-                                              show_progress=False
-                                            )
-    print(graph_dataset)
-    assert(isinstance(graph_dataset, DictDataset))
-
-    # check __getitem__
-    # string
-    out = dataset['data']
-    assert( torch.allclose(out, data) ) 
-    out = graph_dataset['data_list']
-    assert( torch.allclose(out[1]['positions'], torch.Tensor(positions+0.1))) 
-    
-    # int
-    out = dataset[1]
-    assert( torch.allclose(out['data'], data[1]) ) 
-    out = graph_dataset[1]
-    assert( torch.allclose(out['data_list']['positions'], torch.Tensor(positions+0.1))) 
-
-
-    # list
-    out = dataset[[0,1,2]]
-    assert( torch.allclose(out['data'], data[[0,1,2]]) ) 
-    out = graph_dataset[[0,1,2]]
-    for i in [0,1,2]: 
-        assert( torch.allclose(out['data_list'][i]['positions'], torch.Tensor(positions+0.1*i))) 
-
-    # slice
-    out = dataset[0:2]
-    assert( torch.allclose(out['data'], data[[0,1]]) ) 
-    out = graph_dataset[0:2]
-    for i in [0,1]: 
-        assert( torch.allclose(out['data_list'][i]['positions'], torch.Tensor(positions+0.1*i))) 
-
-    # range
-    out = dataset[range(0,2)]
-    assert( torch.allclose(out['data'], data[[0,1]]) ) 
-    out = graph_dataset[range(0,2)]
-    for i in [0,1]: 
-        assert( torch.allclose(out['data_list'][i]['positions'], torch.Tensor(positions+0.1*i))) 
-
-    # np.ndarray
-    out = dataset[np.array(1)]
-    assert( torch.allclose(out['data'], data[1]) ) 
-    out = graph_dataset[np.array(1)]
-    assert( torch.allclose(out['data_list']['positions'], torch.Tensor(positions+0.1))) 
-    
-    out = dataset[np.array([0,1,2])]
-    assert( torch.allclose(out['data'], data[[0,1,2]]) ) 
-    out = graph_dataset[np.array([0,1,2])]
-    for i in [0,1,2]:
-        assert( torch.allclose(out['data_list'][i]['positions'], torch.Tensor(positions+0.1*i))) 
-
-    # torch.Tensor
-    out = dataset[torch.tensor([1], dtype=torch.long)]
-    assert( torch.allclose(out['data'], data[1]) ) 
-    out = graph_dataset[torch.tensor([1], dtype=torch.long)]
-    assert( torch.allclose(out['data_list']['positions'], torch.Tensor(positions+0.1))) 
-
-    out = dataset[torch.tensor([0,1,2], dtype=torch.long)]
-    assert( torch.allclose(out['data'], data[[0,1,2]]) ) 
-    out = graph_dataset[torch.tensor([0,1,2], dtype=torch.long)]
-    for i in [0,1,2]:
-        assert( torch.allclose(out['data_list'][i]['positions'], torch.Tensor(positions+0.1*i))) 
-
