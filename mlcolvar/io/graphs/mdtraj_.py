@@ -31,6 +31,7 @@ def dataset_from_mdtraj_trajectories(trajectories: Union[List[mdtraj.Trajectory]
                                      atom_names: List = None,
                                      remove_isolated_nodes: bool = True,
                                      show_progress: bool = False,
+                                     _dataset_cls=DictDataset,
                                      ) -> DictDataset:
     """    
     Create a graph dataset from MDtraj trajectories.
@@ -118,7 +119,8 @@ def dataset_from_mdtraj_trajectories(trajectories: Union[List[mdtraj.Trajectory]
                                                  long_range_cutoff=long_range_cutoff,
                                                  atom_names=atom_names,
                                                  remove_isolated_nodes=remove_isolated_nodes,
-                                                 show_progress=show_progress
+                                                 show_progress=show_progress,
+                                                 _dataset_cls=_dataset_cls,
                                                )
     
     return dataset

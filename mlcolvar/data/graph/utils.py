@@ -139,7 +139,8 @@ def create_dataset_from_configurations(config: atomic.Configurations,
                                        long_range_cutoff: float = -1.0,
                                        atom_names: List = None,
                                        remove_isolated_nodes: bool = False,
-                                       show_progress: bool = True
+                                       show_progress: bool = True,
+                                       _dataset_cls=DictDataset,
                                       ) -> DictDataset:
     """Build DictDataset object containing torch_geometric graph data objects from configurations.
 
@@ -164,7 +165,13 @@ def create_dataset_from_configurations(config: atomic.Configurations,
         If to remove isolated nodes from the dataset
     show_progress: bool
         If to show the progress bar
+    dataset_cls: type
+        DictDataset class used to construct the result. This is primarily used
+        by DictDataset factory classmethods and defaults to DictDataset.
     """
+    if not isinstance(_dataset_cls, type) or not issubclass(_dataset_cls, DictDataset):
+        raise TypeError("_dataset_cls must be DictDataset or a DictDataset subclass")
+
     if show_progress:
         items = pbar(config, frequency=0.0001, prefix='Making graphs')
     else:
@@ -232,10 +239,9 @@ def create_dataset_from_configurations(config: atomic.Configurations,
     
     # we also save the names of the atoms that have been actually used, ensuring correct dimensions
 
-    unique_names = np.array(atom_names)[unique_idx] if len(unique_idx) > 1 else np.array(np.array(atom_names)[unique_idx])
-    unique_names = unique_names.tolist()
+    unique_names = np.asarray(atom_names)[unique_idx.detach().cpu().numpy()].tolist()
 
-    dataset = DictDataset(dictionary={'data_list': data_list},
+    dataset = _dataset_cls(dictionary={'data_list': data_list},
                           metadata={'atomic_numbers': atomic_numbers.zs,
                                     'cutoff': cutoff,
                                     'buffer': buffer,
