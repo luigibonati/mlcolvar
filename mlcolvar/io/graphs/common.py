@@ -35,7 +35,6 @@ def create_dataset_from_trajectories(trajectories: Union[List[str], str],
                                      lengths_conversion : float = None,
                                      delete_download: bool = True,
                                      backend : str = 'mdtraj',
-                                     _dataset_cls=DictDataset,
                                     ) -> Union[DictDataset, 
                                                Tuple[DictDataset, Union[List[List[mdtraj.Trajectory]], List[mdtraj.Trajectory]]
     ]
@@ -267,8 +266,7 @@ def create_dataset_from_trajectories(trajectories: Union[List[str], str],
                                                    long_range_cutoff=long_range_cutoff,
                                                    atom_names=atom_names,
                                                    remove_isolated_nodes=remove_isolated_nodes,
-                                                   show_progress=show_progress,
-                                                   _dataset_cls=_dataset_cls)
+                                                   show_progress=show_progress)
     elif backend == 'ase':
         dataset = dataset_from_ase_trajectories(trajectories=trajectories_in_memory,
                                                 graph_labels=graph_labels,
@@ -282,8 +280,7 @@ def create_dataset_from_trajectories(trajectories: Union[List[str], str],
                                                 long_range_cutoff=long_range_cutoff,
                                                 atom_names=atom_names,
                                                 remove_isolated_nodes=remove_isolated_nodes,
-                                                show_progress=show_progress,
-                                                _dataset_cls=_dataset_cls)
+                                                show_progress=show_progress)
 
     if return_trajectories:
         return dataset, trajectories_in_memory

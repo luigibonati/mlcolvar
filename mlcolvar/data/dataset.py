@@ -101,6 +101,29 @@ class DictDataset(Dataset):
             dictionary['ref_idx'] = torch.arange(len(self), dtype=torch.int)
             
     @classmethod
+    def _from_existing_dataset(
+        cls,
+        dataset: "DictDataset",
+    ) -> "DictDataset":
+        """Construct ``cls`` from an existing DictDataset."""
+        if isinstance(dataset, cls):
+            return dataset
+
+        return cls(
+            dictionary={
+                key: dataset[key]
+                for key in dataset.keys
+            },
+            feature_names=dataset.feature_names,
+            metadata=dataset.metadata.copy(),
+            data_type=dataset.metadata.get(
+                "data_type",
+                "descriptors",
+            ),
+        )
+
+
+    @classmethod
     def from_configurations(
         cls,
         config,
@@ -117,7 +140,7 @@ class DictDataset(Dataset):
             create_dataset_from_configurations,
         )
 
-        return create_dataset_from_configurations(
+        dataset = create_dataset_from_configurations(
             config=config,
             atomic_numbers=atomic_numbers,
             cutoff=cutoff,
@@ -126,8 +149,14 @@ class DictDataset(Dataset):
             atom_names=atom_names,
             remove_isolated_nodes=remove_isolated_nodes,
             show_progress=show_progress,
-            _dataset_cls=cls,
         )
+
+        return cls._from_existing_dataset(dataset)
+
+
+    # Optional alias matching the original issue wording.
+    graph_from_configurations = from_configurations
+
 
     @classmethod
     def from_colvars(
@@ -159,7 +188,7 @@ class DictDataset(Dataset):
                 stride=stride,
             )
 
-        return create_dataset_from_files(
+        result = create_dataset_from_files(
             file_names=file_names,
             folder=folder,
             create_labels=create_labels,
@@ -168,9 +197,18 @@ class DictDataset(Dataset):
             modifier_function=modifier_function,
             return_dataframe=return_dataframe,
             verbose=verbose,
-            _dataset_cls=cls,
             **load_kwargs,
         )
+
+        if return_dataframe:
+            dataset, dataframe = result
+            return (
+                cls._from_existing_dataset(dataset),
+                dataframe,
+            )
+
+        return cls._from_existing_dataset(result)
+
 
     @classmethod
     def graph_from_files(
@@ -201,7 +239,7 @@ class DictDataset(Dataset):
             create_dataset_from_trajectories,
         )
 
-        return create_dataset_from_trajectories(
+        result = create_dataset_from_trajectories(
             trajectories=trajectories,
             cutoff=cutoff,
             topologies=topologies,
@@ -222,8 +260,16 @@ class DictDataset(Dataset):
             lengths_conversion=lengths_conversion,
             delete_download=delete_download,
             backend=backend,
-            _dataset_cls=cls,
         )
+
+        if return_trajectories:
+            dataset, loaded_trajectories = result
+            return (
+                cls._from_existing_dataset(dataset),
+                loaded_trajectories,
+            )
+
+        return cls._from_existing_dataset(result)
         
     def __getitem__(self, index):
         """Return a field, one sample, or a sliced DictDataset."""

@@ -196,7 +196,6 @@ def create_dataset_from_files(
     modifier_function=None,
     return_dataframe: bool = False,
     verbose: bool = True,
-    _dataset_cls=DictDataset,
     **kwargs,
 ):
     """
@@ -291,7 +290,7 @@ def create_dataset_from_files(
     dictionary = {"data": torch.Tensor(df_data.values)}
     if create_labels:
         dictionary["labels"] = torch.Tensor(df["labels"].values)
-    dataset = _dataset_cls(dictionary, feature_names=df_data.columns.values, data_type='descriptors')
+    dataset = DictDataset(dictionary, feature_names=df_data.columns.values, data_type='descriptors')
 
     if return_dataframe:
         return dataset, df

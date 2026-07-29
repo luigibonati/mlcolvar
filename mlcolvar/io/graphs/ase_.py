@@ -31,7 +31,6 @@ def dataset_from_ase_trajectories(trajectories: Union[List[ase.Atoms], List[List
                                   atom_names: List = None,
                                   remove_isolated_nodes: bool = True,
                                   show_progress: bool = False,
-                                  _dataset_cls=DictDataset,
                                   ) -> DictDataset :
     """
     Create a graph dataset from ASE trajectories.
@@ -133,7 +132,6 @@ def dataset_from_ase_trajectories(trajectories: Union[List[ase.Atoms], List[List
                                                  atom_names=atom_names,
                                                  remove_isolated_nodes=remove_isolated_nodes,
                                                  show_progress=show_progress,
-                                                 _dataset_cls=_dataset_cls,
                                                 )
     
     return dataset

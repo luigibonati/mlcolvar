@@ -140,7 +140,6 @@ def create_dataset_from_configurations(config: atomic.Configurations,
                                        atom_names: List = None,
                                        remove_isolated_nodes: bool = False,
                                        show_progress: bool = True,
-                                       _dataset_cls=DictDataset,
                                       ) -> DictDataset:
     """Build DictDataset object containing torch_geometric graph data objects from configurations.
 
@@ -165,13 +164,7 @@ def create_dataset_from_configurations(config: atomic.Configurations,
         If to remove isolated nodes from the dataset
     show_progress: bool
         If to show the progress bar
-    dataset_cls: type
-        DictDataset class used to construct the result. This is primarily used
-        by DictDataset factory classmethods and defaults to DictDataset.
     """
-    if not isinstance(_dataset_cls, type) or not issubclass(_dataset_cls, DictDataset):
-        raise TypeError("_dataset_cls must be DictDataset or a DictDataset subclass")
-
     if show_progress:
         items = pbar(config, frequency=0.0001, prefix='Making graphs')
     else:
@@ -241,15 +234,19 @@ def create_dataset_from_configurations(config: atomic.Configurations,
 
     unique_names = np.asarray(atom_names)[unique_idx.detach().cpu().numpy()].tolist()
 
-    dataset = _dataset_cls(dictionary={'data_list': data_list},
-                          metadata={'atomic_numbers': atomic_numbers.zs,
-                                    'cutoff': cutoff,
-                                    'buffer': buffer,
-                                    'long_range_cutoff': long_range_cutoff,
-                                    'system_idx': unique_idx,
-                                    'system_atoms_names': unique_names,
-                                    'is_truncated_graph': truncated},
-                          data_type='graphs')
+    dataset = DictDataset(
+        dictionary={"data_list": data_list},
+        metadata={
+            "atomic_numbers": atomic_numbers.zs,
+            "cutoff": cutoff,
+            "buffer": buffer,
+            "long_range_cutoff": long_range_cutoff,
+            "system_idx": unique_idx,
+            "system_atoms_names": unique_names,
+            "is_truncated_graph": truncated,
+        },
+        data_type="graphs",
+    )
 
     return dataset
 
