@@ -18,7 +18,7 @@ __all__ = [
 
 
 class CVReadoutModel(FeedForward):
-    """FFNN transfer model: pretrained tensor featurizer + trainable readout."""
+    """Tensor featurizer followed by a trainable readout."""
 
     def __init__(
         self,
@@ -26,22 +26,20 @@ class CVReadoutModel(FeedForward):
         n_out: int = 1,
         hidden_layers: Sequence[int] = (32, 32),
         options: Optional[Dict[str, Any]] = None,
+        cached_input: bool = False,
     ) -> None:
         if not isinstance(featurizer, _BaseTensorCVFeaturizer):
             raise TypeError(
-                "`CVReadoutModel` requires a tensor-based CV featurizer. "
-                "For GNN models use `CVGraphReadoutModel`."
+                "`CVReadoutModel` requires a tensor featurizer."
             )
 
         n_out = _as_positive_int(n_out, "n_out")
-        hidden_layers = tuple(int(size) for size in hidden_layers)
+        hidden_layers = tuple(int(x) for x in hidden_layers)
 
-        if any(size <= 0 for size in hidden_layers):
+        if any(x <= 0 for x in hidden_layers):
             raise ValueError(
-                "`hidden_layers` must contain only positive integers."
+                "`hidden_layers` must contain positive integers."
             )
-
-        readout_options = {} if options is None else dict(options)
 
         super().__init__(
             layers=[
@@ -49,14 +47,23 @@ class CVReadoutModel(FeedForward):
                 *hidden_layers,
                 n_out,
             ],
-            **readout_options,
+            **({} if options is None else dict(options)),
         )
 
         self.featurizer = featurizer
+        self.cached_input = bool(cached_input)
 
-        # BaseCV should see the original descriptor dimension.
-        self.in_features = featurizer.in_features
+        # Explicit dimensions.
+        self.raw_in_features = featurizer.in_features
+        self.latent_features = featurizer.out_features
         self.out_features = n_out
+
+        # Dimension expected by forward() and by downstream CV models.
+        self.in_features = (
+            self.latent_features
+            if self.cached_input
+            else self.raw_in_features
+        )
 
         self.register_buffer(
             "_readout_reference",
@@ -64,25 +71,73 @@ class CVReadoutModel(FeedForward):
             persistent=False,
         )
 
+    def forward_features(
+        self,
+        features: torch.Tensor,
+    ) -> torch.Tensor:
+        """Run only the readout on latent features."""
+
+        if features.ndim < 2:
+            raise ValueError(
+                "`features` must include a batch dimension."
+            )
+
+        if features.shape[-1] != self.latent_features:
+            raise ValueError(
+                f"Expected {self.latent_features} latent features, "
+                f"found {features.shape[-1]}."
+            )
+
+        features = features.to(
+            dtype=self._readout_reference.dtype,
+            device=self._readout_reference.device,
+        )
+
+        return self.nn(features)
+
+    def forward_raw(
+        self,
+        x: torch.Tensor,
+        cell: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """Run the frozen featurizer followed by the readout."""
+
+        if x.ndim < 2:
+            raise ValueError(
+                "`x` must include a batch dimension."
+            )
+
+        if x.shape[-1] != self.raw_in_features:
+            raise ValueError(
+                f"Expected {self.raw_in_features} raw features, "
+                f"found {x.shape[-1]}."
+            )
+
+        latent = self.featurizer(
+            x,
+            cell=cell,
+        )
+
+        return self.forward_features(latent)
+
     def forward(
         self,
         x: torch.Tensor,
         cell: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        features = self.featurizer(x, cell=cell)
-        features = features.to(
-            dtype=self._readout_reference.dtype,
-            device=self._readout_reference.device,
+        """Run cached head-only or complete raw-input inference."""
+
+        if self.cached_input:
+            return self.forward_features(x)
+
+        return self.forward_raw(
+            x,
+            cell=cell,
         )
-        return self.nn(features)
 
 
 class CVGraphReadoutModel(BaseGNN):
-    """GNN transfer model: pretrained graph featurizer + trainable readout.
-
-    Inheriting from BaseGNN is necessary because mlcolvar CV training steps
-    use ``isinstance(model, BaseGNN)`` to select graph batches.
-    """
+    """Graph featurizer followed by a trainable readout."""
 
     def __init__(
         self,
@@ -93,44 +148,61 @@ class CVGraphReadoutModel(BaseGNN):
     ) -> None:
         if not isinstance(featurizer, _BaseGraphCVFeaturizer):
             raise TypeError(
-                "`CVGraphReadoutModel` requires a graph-based CV featurizer."
+                "`CVGraphReadoutModel` requires a graph featurizer."
             )
 
         n_out = _as_positive_int(n_out, "n_out")
-        hidden_layers = tuple(int(size) for size in hidden_layers)
+        hidden_layers = tuple(int(x) for x in hidden_layers)
 
-        if any(size <= 0 for size in hidden_layers):
+        if any(x <= 0 for x in hidden_layers):
             raise ValueError(
-                "`hidden_layers` must contain only positive integers."
+                "`hidden_layers` must contain positive integers."
             )
 
         super().__init__(
             n_out=n_out,
             dataset_for_initialization=None,
             pooling_operation=None,
-            cutoff=float(featurizer.cutoff.detach().cpu().item()),
-            buffer=float(featurizer.buffer.detach().cpu().item()),
+            cutoff=float(
+                featurizer.cutoff.detach().cpu()
+            ),
+            buffer=float(
+                featurizer.buffer.detach().cpu()
+            ),
             long_range_cutoff=float(
-                featurizer.long_range_cutoff.detach().cpu().item()
+                featurizer.long_range_cutoff.detach().cpu()
             ),
             atomic_numbers=(
-                featurizer.atomic_numbers.detach().cpu().tolist()
+                featurizer.atomic_numbers
+                .detach()
+                .cpu()
+                .tolist()
             ),
         )
 
-        # The pretrained GNN creates its own graph representation; this
-        # wrapper does not use BaseGNN's radial embedding.
-        self._modules.pop("_radial_embedding", None)
+        # The frozen graph featurizer constructs its own radial representation.
+        self._modules.pop(
+            "_radial_embedding",
+            None,
+        )
 
         self.featurizer = featurizer
-        readout_options = {} if options is None else dict(options)
+
+        # Do not overwrite BaseGNN.in_features or BaseGNN.out_features:
+        # they are read-only properties.
+        self.raw_in_features = None
+        self.latent_features = int(
+            featurizer.out_features
+        )
+        self.transfer_out_features = int(n_out)
+
         self.readout = FeedForward(
             layers=[
-                featurizer.out_features,
+                self.latent_features,
                 *hidden_layers,
-                n_out,
+                self.transfer_out_features,
             ],
-            **readout_options,
+            **({} if options is None else dict(options)),
         )
 
         self.register_buffer(
@@ -139,14 +211,52 @@ class CVGraphReadoutModel(BaseGNN):
             persistent=False,
         )
 
+    def forward_features(
+        self,
+        features: torch.Tensor,
+    ) -> torch.Tensor:
+        """Run only the readout on graph-level latent features."""
+
+        if features.ndim < 2:
+            raise ValueError(
+                "`features` must include a batch dimension."
+            )
+
+        if features.shape[-1] != self.latent_features:
+            raise ValueError(
+                f"Expected {self.latent_features} graph features, "
+                f"found {features.shape[-1]}."
+            )
+
+        features = features.to(
+            dtype=self._readout_reference.dtype,
+            device=self._readout_reference.device,
+        )
+
+        return self.readout(features)
+
+    def forward_raw(
+        self,
+        data: Dict[str, torch.Tensor],
+        cell: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """Run the frozen graph featurizer followed by the readout."""
+
+        latent = self.featurizer(
+            data,
+            cell=cell,
+        )
+
+        return self.forward_features(latent)
+
     def forward(
         self,
         data: Dict[str, torch.Tensor],
         cell: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        features = self.featurizer(data, cell=cell)
-        features = features.to(
-            dtype=self._readout_reference.dtype,
-            device=self._readout_reference.device,
+        """Run complete graph-input inference."""
+
+        return self.forward_raw(
+            data,
+            cell=cell,
         )
-        return self.readout(features)

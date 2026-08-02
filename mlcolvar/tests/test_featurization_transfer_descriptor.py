@@ -6,11 +6,15 @@ import pytest
 import torch
 from torch import nn
 
+from mlcolvar.data import DictDataset
 from mlcolvar.featurization.transfer import (
+    CachedLatentDerivatives,
     CVForwardFeaturizer,
     CVLatentFeaturizer,
     CVOutputFeaturizer,
     CVReadoutModel,
+    export_transfer_torchscript,
+    precompute_committor_cache,
 )
 
 
@@ -458,7 +462,7 @@ def test_descriptor_readout_rejects_invalid_hidden_layers(
 
     with pytest.raises(
         ValueError,
-        match="must contain only positive integers",
+        match="positive integers",
     ):
         CVReadoutModel(
             featurizer=featurizer,
@@ -529,3 +533,211 @@ def test_descriptor_featurizers_validate_required_interfaces() -> None:
         CVLatentFeaturizer(
             MissingEncoder()
         )
+
+
+class IdentityDescriptorDerivatives(nn.Module):
+    """Interpret descriptor gradients as one-atom coordinate gradients."""
+
+    def forward(
+        self,
+        gradient_descriptor: torch.Tensor,
+        ref_idx: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        del ref_idx
+        return gradient_descriptor.unsqueeze(1)
+
+
+def test_descriptor_readout_raw_and_cached_paths_agree() -> None:
+    """Raw descriptors and cached latent features must use the same head."""
+
+    featurizer = CVLatentFeaturizer(
+        model=DummyDescriptorCV(),
+        freeze=True,
+    )
+
+    model = CVReadoutModel(
+        featurizer=featurizer,
+        n_out=1,
+        hidden_layers=(),
+        cached_input=True,
+    ).eval()
+
+    x = make_descriptor_input(
+        dtype=torch.float32,
+    )
+
+    with torch.no_grad():
+        latent = featurizer(x)
+        output_raw = model.forward_raw(x)
+        output_cached = model.forward_features(latent)
+
+    assert model.raw_in_features == 3
+    assert model.latent_features == 2
+    assert model.in_features == 2
+
+    torch.testing.assert_close(
+        output_raw,
+        output_cached,
+    )
+
+
+def test_descriptor_cache_matches_direct_features_and_chain_rule() -> None:
+    """Cache latent values and dh/dR without iterating DictDataset by index."""
+
+    x = make_descriptor_input(
+        dtype=torch.float32,
+    )
+
+    dataset = DictDataset(
+        {
+            "data": x,
+            "labels": torch.full(
+                (len(x),),
+                2.0,
+            ),
+            "weights": torch.ones(len(x)),
+            "ref_idx": torch.arange(
+                len(x),
+                dtype=torch.long,
+            ),
+        }
+    )
+
+    featurizer = CVLatentFeaturizer(
+        model=DummyDescriptorCV(),
+        freeze=True,
+    )
+
+    cached_dataset, cached_derivatives = (
+        precompute_committor_cache(
+            featurizer=featurizer,
+            dataset=dataset,
+            descriptor_derivatives=(
+                IdentityDescriptorDerivatives()
+            ),
+            batch_size=1,
+            device="cpu",
+            output_device="cpu",
+            separate_boundary_dataset=False,
+        )
+    )
+
+    with torch.no_grad():
+        expected_latent = featurizer(x)
+
+    torch.testing.assert_close(
+        cached_dataset["data"],
+        expected_latent,
+    )
+
+    expected_jacobian_single = torch.tensor(
+        [
+            [
+                [2.0, 0.0],
+                [0.0, 2.0],
+                [0.0, 2.0],
+            ]
+        ],
+        dtype=torch.float32,
+    )
+
+    expected_jacobian = (
+        expected_jacobian_single
+        .unsqueeze(0)
+        .repeat(len(x), 1, 1, 1)
+    )
+
+    torch.testing.assert_close(
+        cached_derivatives.jacobian,
+        expected_jacobian,
+    )
+
+    gradient_latent = torch.tensor(
+        [
+            [1.0, 2.0],
+            [3.0, 4.0],
+        ],
+        dtype=torch.float32,
+    )
+
+    result = cached_derivatives(
+        gradient_latent,
+        torch.arange(len(x)),
+    )
+
+    expected = torch.einsum(
+        "bl,baxl->bax",
+        gradient_latent,
+        expected_jacobian,
+    )
+
+    torch.testing.assert_close(
+        result,
+        expected,
+    )
+
+
+def test_cached_latent_derivatives_requires_ref_idx() -> None:
+    """Cached coordinate Jacobians require sample-reference indices."""
+
+    derivatives = CachedLatentDerivatives(
+        torch.zeros(2, 1, 3, 2)
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="ref_idx",
+    ):
+        derivatives(
+            torch.zeros(2, 2)
+        )
+
+
+def test_descriptor_transfer_torchscript_roundtrip(
+    tmp_path,
+) -> None:
+    """Export a cached-trained readout with a raw-descriptor interface."""
+
+    readout = CVReadoutModel(
+        featurizer=CVLatentFeaturizer(
+            model=DummyDescriptorCV(),
+            freeze=True,
+        ),
+        n_out=1,
+        hidden_layers=(),
+        cached_input=True,
+    ).eval()
+
+    postprocessing = nn.Sigmoid()
+    path = tmp_path / "descriptor_transfer.ptc"
+
+    export_transfer_torchscript(
+        readout=readout,
+        postprocessing=postprocessing,
+        path=path,
+    )
+
+    loaded = torch.jit.load(
+        str(path),
+        map_location="cpu",
+    ).eval()
+
+    x = make_descriptor_input(
+        dtype=torch.float32,
+    )
+
+    with torch.no_grad():
+        expected = postprocessing(
+            readout.forward_raw(x)
+        )
+        output = loaded(x)
+
+    assert path.exists()
+
+    torch.testing.assert_close(
+        output,
+        expected,
+        rtol=1e-5,
+        atol=1e-6,
+    )
+

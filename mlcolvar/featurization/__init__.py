@@ -1,62 +1,10 @@
-from .atomistic import (
-    AtomisticConcatModel,
-    AtomisticFeaturizer,
-    AtomisticNodewiseModel,
-    AtomisticPooledModel,
-    BaseAtomisticBackbone,
-    DeepMDBackbone,
-    MACEBackbone,
-    PETBackbone,
-    align_node_attrs,
-)
-from .transfer import (
-    CVForwardFeaturizer,
-    CVGraphLatentFeaturizer,
-    CVGraphReadoutModel,
-    CVLatentFeaturizer,
-    CVOutputFeaturizer,
-    CVReadoutModel,
-)
+"""Featurization and transfer-learning utilities."""
+
+from . import atomistic
+from . import transfer
 
 
 __all__ = [
-    # Internal mlcolvar transfer integration
-    "CVOutputFeaturizer",
-    "CVForwardFeaturizer",
-    "CVLatentFeaturizer",
-    "CVGraphLatentFeaturizer",
-    "CVReadoutModel",
-    "CVGraphReadoutModel",
-
-    # Atomistic integration
-    "align_node_attrs",
-    "BaseAtomisticBackbone",
-    "AtomisticFeaturizer",
-    "AtomisticPooledModel",
-    "AtomisticNodewiseModel",
-    "AtomisticConcatModel",
-    "MACEBackbone",
-    "PETBackbone",
-    "DeepMDBackbone",
+    "atomistic",
+    "transfer",
 ]
-
-
-# Optional atomistic Metatomic export.
-try:
-    from .atomistic.metatomic import (
-        CVInferenceModel,
-        MetatomicCVWrapper,
-        create_metatomic_model,
-        export_metatomic_model,
-    )
-
-    __all__.extend(
-        [
-            "CVInferenceModel",
-            "MetatomicCVWrapper",
-            "create_metatomic_model",
-            "export_metatomic_model",
-        ]
-    )
-except ImportError:
-    pass

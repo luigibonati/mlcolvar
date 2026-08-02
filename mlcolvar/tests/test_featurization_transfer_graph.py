@@ -7,12 +7,16 @@ import torch
 from torch import nn
 
 from mlcolvar.core import BaseGNN
+from mlcolvar.data import DictDataset
 from mlcolvar.featurization.transfer import (
     CVGraphLatentFeaturizer,
     CVGraphReadoutModel,
     CVLatentFeaturizer,
     CVReadoutModel,
+    export_transfer_torchscript,
+    precompute_graph_committor_cache,
 )
+from torch_geometric.data import Data
 
 
 class GraphShiftPreprocessing(nn.Module):
@@ -520,7 +524,7 @@ def test_tensor_and_graph_transfer_types_cannot_be_mixed() -> None:
 
     with pytest.raises(
         TypeError,
-        match="requires a tensor-based CV featurizer",
+        match="tensor featurizer",
     ):
         CVReadoutModel(
             featurizer=graph_featurizer,
@@ -528,7 +532,7 @@ def test_tensor_and_graph_transfer_types_cannot_be_mixed() -> None:
 
     with pytest.raises(
         TypeError,
-        match="requires a graph-based CV featurizer",
+        match="graph featurizer",
     ):
         CVGraphReadoutModel(
             featurizer=tensor_featurizer,
@@ -552,9 +556,214 @@ def test_graph_readout_rejects_invalid_hidden_layers(
 
     with pytest.raises(
         ValueError,
-        match="must contain only positive integers",
+        match="positive integers",
     ):
         CVGraphReadoutModel(
             featurizer=featurizer,
             hidden_layers=hidden_layers,
         )
+
+
+def make_graph_sample(
+    offset: float,
+    label: float = 2.0,
+) -> Data:
+    """Create one fixed-composition graph for cache tests."""
+
+    positions = torch.tensor(
+        [
+            [0.0, 0.0, 0.0],
+            [2.0, 1.0, 0.0],
+            [1.0, 2.0, 0.0],
+        ],
+        dtype=torch.float32,
+    ) + offset
+
+    return Data(
+        positions=positions,
+
+        # Explicitly preserve the isolated third atom. Without this, PyG may
+        # infer only two nodes from edge_index and create a too-short batch.
+        num_nodes=positions.shape[0],
+
+        edge_index=torch.tensor(
+            [
+                [0, 1],
+                [1, 0],
+            ],
+            dtype=torch.long,
+        ),
+        unit_shifts=torch.zeros(
+            (2, 3),
+            dtype=torch.float32,
+        ),
+        graph_labels=torch.tensor(
+            [label],
+            dtype=torch.float32,
+        ),
+        weight=torch.ones(
+            1,
+            dtype=torch.float32,
+        ),
+    )
+
+
+def test_graph_readout_raw_and_cached_paths_agree() -> None:
+    """Graph inference and cached latent inference must share one head."""
+
+    featurizer = CVGraphLatentFeaturizer(
+        model=DummyGraphCV(),
+        freeze=True,
+    )
+
+    model = CVGraphReadoutModel(
+        featurizer=featurizer,
+        n_out=1,
+        hidden_layers=(),
+    ).eval()
+
+    data = make_graph()
+
+    with torch.no_grad():
+        latent = featurizer(data)
+        output_raw = model.forward_raw(data)
+        output_cached = model.forward_features(latent)
+
+    assert model.raw_in_features is None
+    assert model.latent_features == 2
+    assert model.transfer_out_features == 1
+
+    torch.testing.assert_close(
+        output_raw,
+        output_cached,
+    )
+
+
+def test_graph_cache_matches_direct_features() -> None:
+    """Cache graph-level latent values and dense coordinate Jacobians."""
+
+    dataset = DictDataset(
+        {
+            "data_list": [
+                make_graph_sample(0.0),
+                make_graph_sample(0.5),
+            ]
+        },
+        metadata={
+            "atomic_numbers": [1, 6, 8],
+        },
+        data_type="graphs",
+    )
+
+    featurizer = CVGraphLatentFeaturizer(
+        model=DummyGraphCV(
+            use_preprocessing=False,
+        ),
+        freeze=True,
+    )
+
+    cached_dataset, cached_derivatives = (
+        precompute_graph_committor_cache(
+            featurizer=featurizer,
+            dataset=dataset,
+            batch_size=1,
+            device="cpu",
+            output_device="cpu",
+            separate_boundary_dataset=False,
+        )
+    )
+
+    graph_batch = dataset.get_graph_inputs()
+
+    with torch.no_grad():
+        expected_latent = featurizer(
+            graph_batch
+        )
+
+    torch.testing.assert_close(
+        cached_dataset["data"],
+        expected_latent,
+    )
+
+    assert cached_dataset["data"].shape == (2, 2)
+    assert cached_derivatives.jacobian.shape == (
+        2,
+        3,
+        3,
+        2,
+    )
+
+    expected_jacobian = torch.zeros(
+        2,
+        3,
+        3,
+        2,
+    )
+
+    # Mean pooling over three atoms:
+    # h_0 = mean(2*x), h_1 = mean(2*y).
+    expected_jacobian[:, :, 0, 0] = 2.0 / 3.0
+    expected_jacobian[:, :, 1, 1] = 2.0 / 3.0
+
+    torch.testing.assert_close(
+        cached_derivatives.jacobian,
+        expected_jacobian,
+    )
+
+
+def test_graph_transfer_torchscript_roundtrip(
+    tmp_path,
+) -> None:
+    """Export and reload a complete graph-input transfer model."""
+
+    readout = CVGraphReadoutModel(
+        featurizer=CVGraphLatentFeaturizer(
+            model=DummyGraphCV(),
+            freeze=True,
+        ),
+        n_out=1,
+        hidden_layers=(),
+    ).eval()
+
+    postprocessing = nn.Sigmoid()
+    path = tmp_path / "graph_transfer.ptc"
+
+    graph = make_graph()
+
+    # The current graph exporter validates these deployment fields.
+    graph["node_attrs"] = torch.ones(
+        graph["positions"].shape[0],
+        1,
+        dtype=graph["positions"].dtype,
+    )
+    graph["shifts"] = graph[
+        "unit_shifts"
+    ].clone()
+
+    export_transfer_torchscript(
+        readout=readout,
+        postprocessing=postprocessing,
+        path=path,
+        example_input=graph,
+    )
+
+    loaded = torch.jit.load(
+        str(path),
+        map_location="cpu",
+    ).eval()
+
+    with torch.no_grad():
+        expected = postprocessing(
+            readout.forward_raw(graph)
+        )
+        output = loaded(graph)
+
+    assert path.exists()
+
+    torch.testing.assert_close(
+        output,
+        expected,
+        rtol=1e-5,
+        atol=1e-6,
+    )
+
