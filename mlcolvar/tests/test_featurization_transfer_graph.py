@@ -9,12 +9,10 @@ from torch import nn
 from mlcolvar.core import BaseGNN
 from mlcolvar.data import DictDataset
 from mlcolvar.featurization.transfer import (
-    CVGraphLatentFeaturizer,
-    CVGraphReadoutModel,
-    CVLatentFeaturizer,
-    CVReadoutModel,
+    TransferFeaturizer,
+    TransferModel,
     export_transfer_torchscript,
-    precompute_graph_committor_cache,
+    precompute_committor_cache,
 )
 from torch_geometric.data import Data
 
@@ -211,12 +209,12 @@ def make_graph(
     }
 
 
-def test_graph_latent_featurizer_features_metadata_and_dtype() -> None:
+def test_graph_transfer_featurizer_features_metadata_and_dtype() -> None:
     """Extract graph features and copy the pretrained GNN metadata."""
 
     pretrained_model = DummyGraphCV()
 
-    featurizer = CVGraphLatentFeaturizer(
+    featurizer = TransferFeaturizer(
         model=pretrained_model,
         freeze=True,
     )
@@ -278,7 +276,7 @@ def test_frozen_graph_featurizer_preserves_position_gradients() -> None:
 
     pretrained_model = DummyGraphCV()
 
-    featurizer = CVGraphLatentFeaturizer(
+    featurizer = TransferFeaturizer(
         model=pretrained_model,
         freeze=True,
     )
@@ -316,7 +314,7 @@ def test_frozen_graph_featurizer_preserves_position_gradients() -> None:
 def test_graph_featurizer_state_dict_contains_model_and_metadata() -> None:
     """Persist the graph encoder and copied deployment metadata."""
 
-    featurizer = CVGraphLatentFeaturizer(
+    featurizer = TransferFeaturizer(
         model=DummyGraphCV(),
         freeze=True,
     )
@@ -331,17 +329,17 @@ def test_graph_featurizer_state_dict_contains_model_and_metadata() -> None:
     assert "_model_reference" not in state
 
 
-def test_graph_readout_model_is_basegnn_and_trains_only_readout() -> None:
+def test_graph_transfer_model_is_basegnn_and_trains_only_readout() -> None:
     """Wrap frozen graph features in a trainable graph-compatible readout."""
 
     pretrained_model = DummyGraphCV()
 
-    featurizer = CVGraphLatentFeaturizer(
+    featurizer = TransferFeaturizer(
         model=pretrained_model,
         freeze=True,
     )
 
-    model = CVGraphReadoutModel(
+    model = TransferModel(
         featurizer=featurizer,
         n_out=1,
         hidden_layers=(),
@@ -432,11 +430,11 @@ def test_graph_readout_model_is_basegnn_and_trains_only_readout() -> None:
     assert not pretrained_model.nn.training
 
 
-def test_graph_readout_can_be_traced() -> None:
+def test_graph_transfer_model_can_be_traced() -> None:
     """Trace the graph transfer encoder and readout as one module."""
 
-    model = CVGraphReadoutModel(
-        featurizer=CVGraphLatentFeaturizer(
+    model = TransferModel(
+        featurizer=TransferFeaturizer(
             model=DummyGraphCV(),
             freeze=True,
         ),
@@ -470,7 +468,7 @@ def test_graph_featurizer_requires_graph_level_pooling() -> None:
         ValueError,
         match="must use graph-level pooling",
     ):
-        CVGraphLatentFeaturizer(
+        TransferFeaturizer(
             model=DummyGraphCV(
                 pooling_operation=None,
             )
@@ -480,7 +478,7 @@ def test_graph_featurizer_requires_graph_level_pooling() -> None:
 def test_graph_featurizer_rejects_tensor_norm_in() -> None:
     """Reject tensor normalization applied directly to graph dictionaries."""
 
-    featurizer = CVGraphLatentFeaturizer(
+    featurizer = TransferFeaturizer(
         model=DummyGraphCV(
             use_norm_in=True,
         )
@@ -488,54 +486,51 @@ def test_graph_featurizer_rejects_tensor_norm_in() -> None:
 
     with pytest.raises(
         ValueError,
-        match="Input Normalization is tensor-based",
+        match="Input normalization is tensor-based",
     ):
         featurizer(
             make_graph()
         )
 
 
-def test_tensor_and_graph_transfer_types_cannot_be_mixed() -> None:
-    """Give clear errors when tensor and graph wrappers are interchanged."""
+def test_transfer_api_dispatches_tensor_and_graph_models() -> None:
+    """The public factories select tensor or graph implementations automatically."""
 
-    tensor_featurizer = CVLatentFeaturizer(
+    tensor_featurizer = TransferFeaturizer(
         model=DummyTensorCV(),
+        mode="latent",
     )
 
-    graph_featurizer = CVGraphLatentFeaturizer(
+    graph_featurizer = TransferFeaturizer(
         model=DummyGraphCV(),
+        mode="latent",
     )
 
+    tensor_model = TransferModel(
+        featurizer=tensor_featurizer,
+        n_out=1,
+        hidden_layers=(),
+    )
+
+    graph_model = TransferModel(
+        featurizer=graph_featurizer,
+        n_out=1,
+        hidden_layers=(),
+    )
+
+    assert tensor_featurizer.in_features == 3
+    assert graph_featurizer.in_features is None
+
+    assert not isinstance(tensor_model, BaseGNN)
+    assert isinstance(graph_model, BaseGNN)
+
     with pytest.raises(
-        TypeError,
-        match="graph-based",
+        ValueError,
+        match="support only.*latent",
     ):
-        CVLatentFeaturizer(
+        TransferFeaturizer(
             model=DummyGraphCV(),
-        )
-
-    with pytest.raises(
-        TypeError,
-        match="must be a BaseGNN",
-    ):
-        CVGraphLatentFeaturizer(
-            model=DummyTensorCV(),
-        )
-
-    with pytest.raises(
-        TypeError,
-        match="tensor featurizer",
-    ):
-        CVReadoutModel(
-            featurizer=graph_featurizer,
-        )
-
-    with pytest.raises(
-        TypeError,
-        match="graph featurizer",
-    ):
-        CVGraphReadoutModel(
-            featurizer=tensor_featurizer,
+            mode="output",
         )
 
 
@@ -547,10 +542,10 @@ def test_tensor_and_graph_transfer_types_cannot_be_mixed() -> None:
         (8, 0),
     ],
 )
-def test_graph_readout_rejects_invalid_hidden_layers(
+def test_graph_transfer_model_rejects_invalid_hidden_layers(
     hidden_layers,
 ) -> None:
-    featurizer = CVGraphLatentFeaturizer(
+    featurizer = TransferFeaturizer(
         model=DummyGraphCV(),
     )
 
@@ -558,7 +553,7 @@ def test_graph_readout_rejects_invalid_hidden_layers(
         ValueError,
         match="positive integers",
     ):
-        CVGraphReadoutModel(
+        TransferModel(
             featurizer=featurizer,
             hidden_layers=hidden_layers,
         )
@@ -608,15 +603,15 @@ def make_graph_sample(
     )
 
 
-def test_graph_readout_raw_and_cached_paths_agree() -> None:
+def test_graph_transfer_raw_and_cached_paths_agree() -> None:
     """Graph inference and cached latent inference must share one head."""
 
-    featurizer = CVGraphLatentFeaturizer(
+    featurizer = TransferFeaturizer(
         model=DummyGraphCV(),
         freeze=True,
     )
 
-    model = CVGraphReadoutModel(
+    model = TransferModel(
         featurizer=featurizer,
         n_out=1,
         hidden_layers=(),
@@ -655,7 +650,7 @@ def test_graph_cache_matches_direct_features() -> None:
         data_type="graphs",
     )
 
-    featurizer = CVGraphLatentFeaturizer(
+    featurizer = TransferFeaturizer(
         model=DummyGraphCV(
             use_preprocessing=False,
         ),
@@ -663,7 +658,7 @@ def test_graph_cache_matches_direct_features() -> None:
     )
 
     cached_dataset, cached_derivatives = (
-        precompute_graph_committor_cache(
+        precompute_committor_cache(
             featurizer=featurizer,
             dataset=dataset,
             batch_size=1,
@@ -716,8 +711,8 @@ def test_graph_transfer_torchscript_roundtrip(
 ) -> None:
     """Export and reload a complete graph-input transfer model."""
 
-    readout = CVGraphReadoutModel(
-        featurizer=CVGraphLatentFeaturizer(
+    model = TransferModel(
+        featurizer=TransferFeaturizer(
             model=DummyGraphCV(),
             freeze=True,
         ),
@@ -741,7 +736,7 @@ def test_graph_transfer_torchscript_roundtrip(
     ].clone()
 
     export_transfer_torchscript(
-        readout=readout,
+        model=model,
         postprocessing=postprocessing,
         path=path,
         example_input=graph,
@@ -754,7 +749,7 @@ def test_graph_transfer_torchscript_roundtrip(
 
     with torch.no_grad():
         expected = postprocessing(
-            readout.forward_raw(graph)
+            model.forward_raw(graph)
         )
         output = loaded(graph)
 

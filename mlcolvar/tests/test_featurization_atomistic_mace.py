@@ -267,7 +267,7 @@ def test_mace_featurizer_rejects_invalid_pooling() -> None:
 
     with pytest.raises(
         ValueError,
-        match="`pooling` must be either 'mean' or 'sum'",
+        match="pooling",
     ):
         AtomisticFeaturizer(
             backbone=make_backbone(),

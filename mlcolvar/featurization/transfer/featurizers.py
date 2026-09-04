@@ -9,6 +9,7 @@ from ._utils import (
     _as_positive_int,
     _get_graph_encoder,
     _infer_model_output_dimension,
+    _is_graph_model,
     _module_reference_tensor,
 )
 
@@ -371,13 +372,6 @@ class _GraphLatentFeaturizer(_BaseGraphFeaturizer):
             )
 
         return output
-
-
-def _is_graph_model(model: nn.Module) -> bool:
-    return (
-        getattr(model, "in_features", None) is None
-        or isinstance(getattr(model, "nn", None), BaseGNN)
-    )
 
 
 def TransferFeaturizer(

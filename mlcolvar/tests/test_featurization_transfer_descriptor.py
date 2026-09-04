@@ -9,10 +9,8 @@ from torch import nn
 from mlcolvar.data import DictDataset
 from mlcolvar.featurization.transfer import (
     CachedLatentDerivatives,
-    CVForwardFeaturizer,
-    CVLatentFeaturizer,
-    CVOutputFeaturizer,
-    CVReadoutModel,
+    TransferFeaturizer,
+    TransferModel,
     export_transfer_torchscript,
     precompute_committor_cache,
 )
@@ -179,8 +177,8 @@ def expected_cv_output(
     )
 
 
-def test_descriptor_featurizers_use_expected_model_stage() -> None:
-    """Output, forward-CV, and latent wrappers expose the intended stage."""
+def test_transfer_featurizer_modes_use_expected_model_stage() -> None:
+    """The public featurizer modes expose the intended pretrained-model stage."""
 
     x = make_descriptor_input()
 
@@ -193,18 +191,21 @@ def test_descriptor_featurizers_use_expected_model_stage() -> None:
     forward_model = DummyDescriptorCV()
     latent_model = DummyDescriptorCV()
 
-    output_featurizer = CVOutputFeaturizer(
+    output_featurizer = TransferFeaturizer(
         model=output_model,
+        mode="output",
         freeze=True,
     )
 
-    forward_featurizer = CVForwardFeaturizer(
+    forward_featurizer = TransferFeaturizer(
         model=forward_model,
+        mode="forward",
         freeze=True,
     )
 
-    latent_featurizer = CVLatentFeaturizer(
+    latent_featurizer = TransferFeaturizer(
         model=latent_model,
+        mode="latent",
         freeze=True,
     )
 
@@ -266,7 +267,7 @@ def test_frozen_descriptor_featurizer_preserves_input_gradients() -> None:
 
     model = DummyDescriptorCV()
 
-    featurizer = CVLatentFeaturizer(
+    featurizer = TransferFeaturizer(
         model=model,
         freeze=True,
     )
@@ -307,7 +308,7 @@ def test_unfrozen_descriptor_featurizer_keeps_model_trainable() -> None:
 
     model = DummyDescriptorCV()
 
-    featurizer = CVLatentFeaturizer(
+    featurizer = TransferFeaturizer(
         model=model,
         freeze=False,
     )
@@ -326,7 +327,7 @@ def test_unfrozen_descriptor_featurizer_keeps_model_trainable() -> None:
 def test_descriptor_featurizer_state_dict_contains_model_not_reference() -> None:
     """Save the pretrained model while excluding the dtype/device sentinel."""
 
-    featurizer = CVLatentFeaturizer(
+    featurizer = TransferFeaturizer(
         model=DummyDescriptorCV(),
         freeze=True,
     )
@@ -338,17 +339,17 @@ def test_descriptor_featurizer_state_dict_contains_model_not_reference() -> None
     assert "_model_reference" not in state
 
 
-def test_cv_readout_model_trains_only_new_head() -> None:
+def test_transfer_model_trains_only_new_head() -> None:
     """Compose a frozen descriptor encoder with a trainable linear probe."""
 
     pretrained_model = DummyDescriptorCV()
 
-    featurizer = CVLatentFeaturizer(
+    featurizer = TransferFeaturizer(
         model=pretrained_model,
         freeze=True,
     )
 
-    model = CVReadoutModel(
+    model = TransferModel(
         featurizer=featurizer,
         n_out=1,
         hidden_layers=(),
@@ -413,11 +414,11 @@ def test_cv_readout_model_trains_only_new_head() -> None:
     assert not pretrained_model.training
 
 
-def test_descriptor_readout_can_be_traced() -> None:
+def test_tensor_transfer_model_can_be_traced() -> None:
     """Trace the frozen descriptor encoder and readout together."""
 
-    model = CVReadoutModel(
-        featurizer=CVLatentFeaturizer(
+    model = TransferModel(
+        featurizer=TransferFeaturizer(
             model=DummyDescriptorCV(),
             freeze=True,
         ),
@@ -451,12 +452,12 @@ def test_descriptor_readout_can_be_traced() -> None:
         (4, 0),
     ],
 )
-def test_descriptor_readout_rejects_invalid_hidden_layers(
+def test_transfer_model_rejects_invalid_hidden_layers(
     hidden_layers,
 ) -> None:
     """Reject hidden layers with non-positive dimensions."""
 
-    featurizer = CVLatentFeaturizer(
+    featurizer = TransferFeaturizer(
         model=DummyDescriptorCV(),
     )
 
@@ -464,13 +465,13 @@ def test_descriptor_readout_rejects_invalid_hidden_layers(
         ValueError,
         match="positive integers",
     ):
-        CVReadoutModel(
+        TransferModel(
             featurizer=featurizer,
             hidden_layers=hidden_layers,
         )
 
 
-def test_descriptor_featurizers_validate_required_interfaces() -> None:
+def test_transfer_featurizer_validates_required_interfaces() -> None:
     """Reject models that do not provide the requested CV interface."""
 
     class MissingInputDimension(nn.Module):
@@ -514,23 +515,25 @@ def test_descriptor_featurizers_validate_required_interfaces() -> None:
         AttributeError,
         match="does not define `in_features`",
     ):
-        CVOutputFeaturizer(
-            MissingInputDimension()
+        TransferFeaturizer(
+            MissingInputDimension(),
+            mode="output",
         )
 
     with pytest.raises(
         TypeError,
         match="does not implement",
     ):
-        CVForwardFeaturizer(
-            MissingForwardCV()
+        TransferFeaturizer(
+            MissingForwardCV(),
+            mode="forward",
         )
 
     with pytest.raises(
         TypeError,
         match="does not define an `nn` block",
     ):
-        CVLatentFeaturizer(
+        TransferFeaturizer(
             MissingEncoder()
         )
 
@@ -547,15 +550,15 @@ class IdentityDescriptorDerivatives(nn.Module):
         return gradient_descriptor.unsqueeze(1)
 
 
-def test_descriptor_readout_raw_and_cached_paths_agree() -> None:
+def test_tensor_transfer_raw_and_cached_paths_agree() -> None:
     """Raw descriptors and cached latent features must use the same head."""
 
-    featurizer = CVLatentFeaturizer(
+    featurizer = TransferFeaturizer(
         model=DummyDescriptorCV(),
         freeze=True,
     )
 
-    model = CVReadoutModel(
+    model = TransferModel(
         featurizer=featurizer,
         n_out=1,
         hidden_layers=(),
@@ -603,7 +606,7 @@ def test_descriptor_cache_matches_direct_features_and_chain_rule() -> None:
         }
     )
 
-    featurizer = CVLatentFeaturizer(
+    featurizer = TransferFeaturizer(
         model=DummyDescriptorCV(),
         freeze=True,
     )
@@ -698,8 +701,8 @@ def test_descriptor_transfer_torchscript_roundtrip(
 ) -> None:
     """Export a cached-trained readout with a raw-descriptor interface."""
 
-    readout = CVReadoutModel(
-        featurizer=CVLatentFeaturizer(
+    model = TransferModel(
+        featurizer=TransferFeaturizer(
             model=DummyDescriptorCV(),
             freeze=True,
         ),
@@ -712,7 +715,7 @@ def test_descriptor_transfer_torchscript_roundtrip(
     path = tmp_path / "descriptor_transfer.ptc"
 
     export_transfer_torchscript(
-        readout=readout,
+        model=model,
         postprocessing=postprocessing,
         path=path,
     )
@@ -728,7 +731,7 @@ def test_descriptor_transfer_torchscript_roundtrip(
 
     with torch.no_grad():
         expected = postprocessing(
-            readout.forward_raw(x)
+            model.forward_raw(x)
         )
         output = loaded(x)
 

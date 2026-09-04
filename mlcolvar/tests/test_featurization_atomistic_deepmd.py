@@ -9,9 +9,12 @@ from torch import nn
 pytest.importorskip("ase")
 pytest.importorskip("deepmd.pt.utils.nlist")
 
-import mlcolvar.integrations.backbones.deepmd as deepmd_module  # noqa: E402
-from mlcolvar.integrations import AtomisticFeaturizer, DeepMDBackbone  # noqa: E402
+import mlcolvar.featurization.atomistic.backbones.deepmd as deepmd_module
 
+from mlcolvar.featurization.atomistic import (
+    AtomisticFeaturizer,
+    DeepMDBackbone,
+)
 
 class DummyDeepMDDescriptor(nn.Module):
     """Minimal DeePMD-like descriptor using float32 internally."""
