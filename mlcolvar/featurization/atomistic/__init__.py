@@ -1,32 +1,27 @@
 from .alignment import align_node_attrs
+
 from .backbones import (
     BaseAtomisticBackbone,
     DeepMDBackbone,
     MACEBackbone,
     PETBackbone,
 )
+
 from .featurizer import AtomisticFeaturizer
-from .models import (
-    AtomisticConcatModel,
-    AtomisticNodewiseModel,
-    AtomisticPooledModel,
-)
+from .models import AtomisticModel
 
 
 __all__ = [
     "align_node_attrs",
     "BaseAtomisticBackbone",
     "AtomisticFeaturizer",
-    "AtomisticPooledModel",
-    "AtomisticNodewiseModel",
-    "AtomisticConcatModel",
+    "AtomisticModel",
     "MACEBackbone",
     "PETBackbone",
     "DeepMDBackbone",
 ]
 
 
-# Optional, atomistic-only Metatomic export.
 try:
     from .metatomic import (
         CVInferenceModel,
