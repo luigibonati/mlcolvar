@@ -7,68 +7,43 @@ import torch
 from torch import nn
 
 from .readouts import (
-    CVGraphReadoutModel,
-    CVReadoutModel,
+    _GraphTransferModel,
+    _TensorTransferModel,
 )
 
 
 __all__ = [
-    "CVTransferInferenceModel",
-    "CVGraphTransferInferenceModel",
+    "TransferInferenceModel",
     "export_transfer_torchscript",
 ]
 
 
-class CVTransferInferenceModel(nn.Module):
-    """Complete raw-tensor-input transfer model.
-
-    Pipeline
-    --------
-    raw tensor -> frozen featurizer -> trained readout -> postprocessing
-    """
+class _TensorTransferInferenceModel(nn.Module):
+    """Raw-tensor-input transfer model for inference."""
 
     def __init__(
         self,
-        readout: CVReadoutModel,
+        model: _TensorTransferModel,
         postprocessing: Optional[nn.Module] = None,
     ) -> None:
         super().__init__()
 
-        if not isinstance(readout, CVReadoutModel):
-            raise TypeError(
-                "`readout` must be a CVReadoutModel. "
-                f"Found {type(readout)}."
-            )
-
-        self.featurizer = readout.featurizer
-        self.head = readout.nn
+        self.featurizer = model.featurizer
+        self.head = model.nn
         self.postprocessing = (
             postprocessing
             if postprocessing is not None
             else nn.Identity()
         )
 
-        self.in_features = int(
-            getattr(
-                readout,
-                "raw_in_features",
-                readout.featurizer.in_features,
-            )
-        )
-        self.latent_features = int(
-            getattr(
-                readout,
-                "latent_features",
-                readout.featurizer.out_features,
-            )
-        )
-        self.out_features = int(readout.out_features)
+        self.in_features = int(model.raw_in_features)
+        self.latent_features = int(model.latent_features)
+        self.out_features = int(model.out_features)
 
     def forward_features(
         self,
         features: torch.Tensor,
     ) -> torch.Tensor:
-        """Evaluate the trained head from latent features."""
         output = self.head(features)
         return self.postprocessing(output)
 
@@ -76,55 +51,35 @@ class CVTransferInferenceModel(nn.Module):
         self,
         x: torch.Tensor,
     ) -> torch.Tensor:
-        """Evaluate the complete model from raw tensor input."""
         features = self.featurizer(x)
         return self.forward_features(features)
 
 
-class CVGraphTransferInferenceModel(nn.Module):
-    """Complete raw-graph-input transfer model.
-
-    Pipeline
-    --------
-    graph dictionary -> frozen graph featurizer
-    -> trained readout -> postprocessing
-    """
+class _GraphTransferInferenceModel(nn.Module):
+    """Raw-graph-input transfer model for inference."""
 
     def __init__(
         self,
-        readout: CVGraphReadoutModel,
+        model: _GraphTransferModel,
         postprocessing: Optional[nn.Module] = None,
     ) -> None:
         super().__init__()
 
-        if not isinstance(readout, CVGraphReadoutModel):
-            raise TypeError(
-                "`readout` must be a CVGraphReadoutModel. "
-                f"Found {type(readout)}."
-            )
-
-        self.featurizer = readout.featurizer
-        self.head = readout.readout
+        self.featurizer = model.featurizer
+        self.head = model.readout
         self.postprocessing = (
             postprocessing
             if postprocessing is not None
             else nn.Identity()
         )
 
-        self.latent_features = int(
-            getattr(
-                readout,
-                "latent_features",
-                readout.featurizer.out_features,
-            )
-        )
-        self.out_features = int(readout.out_features)
+        self.latent_features = int(model.latent_features)
+        self.out_features = int(model.transfer_out_features)
 
     def forward_features(
         self,
         features: torch.Tensor,
     ) -> torch.Tensor:
-        """Evaluate the trained head from graph latent features."""
         output = self.head(features)
         return self.postprocessing(output)
 
@@ -132,9 +87,32 @@ class CVGraphTransferInferenceModel(nn.Module):
         self,
         data: Dict[str, torch.Tensor],
     ) -> torch.Tensor:
-        """Evaluate the complete model from a graph tensor dictionary."""
         features = self.featurizer(data)
         return self.forward_features(features)
+
+
+def TransferInferenceModel(
+    model: nn.Module,
+    postprocessing: Optional[nn.Module] = None,
+) -> nn.Module:
+    """Create an inference wrapper for a transfer model."""
+
+    if isinstance(model, _TensorTransferModel):
+        return _TensorTransferInferenceModel(
+            model=model,
+            postprocessing=postprocessing,
+        )
+
+    if isinstance(model, _GraphTransferModel):
+        return _GraphTransferInferenceModel(
+            model=model,
+            postprocessing=postprocessing,
+        )
+
+    raise TypeError(
+        "`model` must be created with `TransferModel`. "
+        f"Found {type(model)}."
+    )
 
 
 def _enable_lightning_jit(
@@ -148,31 +126,26 @@ def _enable_lightning_jit(
 
 
 def _prepare_tensor_example(
-    readout: CVReadoutModel,
+    model: _TensorTransferModel,
     example_input: Optional[torch.Tensor],
     dtype: torch.dtype,
 ) -> torch.Tensor:
-    """Prepare the tracing input for a tensor readout."""
+    """Prepare an example input for tensor tracing."""
 
-    raw_input_dim = int(
-        getattr(
-            readout,
-            "raw_in_features",
-            readout.featurizer.in_features,
-        )
-    )
+    input_dim = int(model.raw_in_features)
 
     if example_input is None:
         return torch.zeros(
             1,
-            raw_input_dim,
+            input_dim,
             dtype=dtype,
             device="cpu",
         )
 
     if not torch.is_tensor(example_input):
         raise TypeError(
-            "Tensor readouts require `example_input` to be a tensor."
+            "Tensor transfer models require `example_input` "
+            "to be a tensor."
         )
 
     example_input = example_input.detach().to(
@@ -185,9 +158,9 @@ def _prepare_tensor_example(
             "`example_input` must include a batch dimension."
         )
 
-    if example_input.shape[-1] != raw_input_dim:
+    if example_input.shape[-1] != input_dim:
         raise ValueError(
-            f"Expected raw input dimension {raw_input_dim}, "
+            f"Expected input dimension {input_dim}, "
             f"found {example_input.shape[-1]}."
         )
 
@@ -198,7 +171,7 @@ def _prepare_graph_example(
     example_input,
     dtype: torch.dtype,
 ) -> Dict[str, torch.Tensor]:
-    """Convert a PyG graph or tensor dictionary into a tracing input."""
+    """Prepare an example graph for tracing."""
 
     if example_input is None:
         raise ValueError(
@@ -210,8 +183,8 @@ def _prepare_graph_example(
 
     if not isinstance(example_input, Mapping):
         raise TypeError(
-            "Graph `example_input` must be a tensor dictionary or "
-            "an object implementing `to_dict()`."
+            "Graph `example_input` must be a tensor dictionary "
+            "or an object implementing `to_dict()`."
         )
 
     graph: Dict[str, torch.Tensor] = {}
@@ -235,24 +208,21 @@ def _prepare_graph_example(
         "batch",
     }
 
-    missing_keys = sorted(
+    missing = sorted(
         required_keys.difference(graph)
     )
 
-    if missing_keys:
+    if missing:
         raise KeyError(
             "Graph example is missing required tensor keys: "
-            f"{missing_keys}."
+            f"{missing}."
         )
 
     return graph
 
 
 def export_transfer_torchscript(
-    readout: Union[
-        CVReadoutModel,
-        CVGraphReadoutModel,
-    ],
+    model: nn.Module,
     path: Union[str, Path],
     postprocessing: Optional[nn.Module] = None,
     example_input=None,
@@ -260,37 +230,33 @@ def export_transfer_torchscript(
     freeze: bool = True,
     check_trace: bool = True,
 ) -> torch.jit.ScriptModule:
-    """Export a complete raw-input transfer model as TorchScript.
+    """Export a complete transfer model as TorchScript.
 
     Tensor models accept raw descriptor tensors. Graph models accept
-    ``Dict[str, Tensor]`` and require an explicit graph example input.
+    ``Dict[str, Tensor]`` and require an explicit example graph.
     """
 
-    readout_copy = deepcopy(readout)
+    model_copy = deepcopy(model)
+
     postprocessing_copy = (
         deepcopy(postprocessing)
         if postprocessing is not None
         else None
     )
 
-    if isinstance(readout, CVReadoutModel):
-        inference_model: nn.Module = CVTransferInferenceModel(
-            readout=readout_copy,
-            postprocessing=postprocessing_copy,
-        )
+    inference_model = TransferInferenceModel(
+        model=model_copy,
+        postprocessing=postprocessing_copy,
+    )
 
+    if isinstance(model, _TensorTransferModel):
         prepared_input = _prepare_tensor_example(
-            readout=readout,
+            model=model,
             example_input=example_input,
             dtype=dtype,
         )
 
-    elif isinstance(readout, CVGraphReadoutModel):
-        inference_model = CVGraphTransferInferenceModel(
-            readout=readout_copy,
-            postprocessing=postprocessing_copy,
-        )
-
+    elif isinstance(model, _GraphTransferModel):
         prepared_input = _prepare_graph_example(
             example_input=example_input,
             dtype=dtype,
@@ -298,9 +264,8 @@ def export_transfer_torchscript(
 
     else:
         raise TypeError(
-            "`readout` must be a CVReadoutModel or "
-            "CVGraphReadoutModel. "
-            f"Found {type(readout)}."
+            "`model` must be created with `TransferModel`. "
+            f"Found {type(model)}."
         )
 
     inference_model = inference_model.to(
@@ -309,6 +274,7 @@ def export_transfer_torchscript(
     ).eval()
 
     inference_model.requires_grad_(False)
+
     _enable_lightning_jit(inference_model)
 
     with torch.no_grad():
@@ -325,6 +291,7 @@ def export_transfer_torchscript(
             )
 
     path = Path(path)
+
     path.parent.mkdir(
         parents=True,
         exist_ok=True,

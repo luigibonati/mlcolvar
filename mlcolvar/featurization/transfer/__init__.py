@@ -1,43 +1,25 @@
 from .cache import (
     CachedLatentDerivatives,
     precompute_committor_cache,
-    precompute_graph_committor_cache,
 )
-from .featurizers import (
-    CVForwardFeaturizer,
-    CVGraphLatentFeaturizer,
-    CVLatentFeaturizer,
-    CVOutputFeaturizer,
-)
+from .featurizers import TransferFeaturizer
 from .inference import (
-    CVGraphTransferInferenceModel,
-    CVTransferInferenceModel,
+    TransferInferenceModel,
     export_transfer_torchscript,
 )
-from .readouts import (
-    CVGraphReadoutModel,
-    CVReadoutModel,
-)
+from .readouts import TransferModel
 
 
 __all__ = [
-    # Featurizers
-    "CVOutputFeaturizer",
-    "CVForwardFeaturizer",
-    "CVLatentFeaturizer",
-    "CVGraphLatentFeaturizer",
+    # Representation transfer
+    "TransferFeaturizer",
+    "TransferModel",
 
-    # Readouts
-    "CVReadoutModel",
-    "CVGraphReadoutModel",
-
-    # Cached training
+    # Cached committor training
     "CachedLatentDerivatives",
     "precompute_committor_cache",
-    "precompute_graph_committor_cache",
 
     # Inference and export
-    "CVTransferInferenceModel",
-    "CVGraphTransferInferenceModel",
+    "TransferInferenceModel",
     "export_transfer_torchscript",
 ]

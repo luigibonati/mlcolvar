@@ -1,45 +1,55 @@
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Dict, Optional, Sequence, Tuple
 
 import torch
+from torch import nn
 
 from mlcolvar.core import BaseGNN, FeedForward
 
-from ._utils import _as_positive_int, _module_reference_tensor
+from ._utils import (
+    _as_positive_int,
+    _module_reference_tensor,
+)
 from .featurizers import (
-    _BaseGraphCVFeaturizer,
-    _BaseTensorCVFeaturizer,
+    _BaseGraphFeaturizer,
+    _BaseTensorFeaturizer,
 )
 
 
-__all__ = [
-    "CVReadoutModel",
-    "CVGraphReadoutModel",
-]
+__all__ = ["TransferModel"]
 
 
-class CVReadoutModel(FeedForward):
-    """Tensor featurizer followed by a trainable readout."""
+def _validate_readout(
+    n_out: int,
+    hidden_layers: Sequence[int],
+) -> Tuple[int, Tuple[int, ...]]:
+    """Validate common readout options."""
+
+    n_out = _as_positive_int(n_out, "n_out")
+    hidden_layers = tuple(int(x) for x in hidden_layers)
+
+    if any(x <= 0 for x in hidden_layers):
+        raise ValueError(
+            "`hidden_layers` must contain positive integers."
+        )
+
+    return n_out, hidden_layers
+
+
+class _TensorTransferModel(FeedForward):
+    """Frozen tensor featurizer followed by a trainable readout."""
 
     def __init__(
         self,
-        featurizer: _BaseTensorCVFeaturizer,
+        featurizer: _BaseTensorFeaturizer,
         n_out: int = 1,
         hidden_layers: Sequence[int] = (32, 32),
         options: Optional[Dict[str, Any]] = None,
         cached_input: bool = False,
     ) -> None:
-        if not isinstance(featurizer, _BaseTensorCVFeaturizer):
-            raise TypeError(
-                "`CVReadoutModel` requires a tensor featurizer."
-            )
-
-        n_out = _as_positive_int(n_out, "n_out")
-        hidden_layers = tuple(int(x) for x in hidden_layers)
-
-        if any(x <= 0 for x in hidden_layers):
-            raise ValueError(
-                "`hidden_layers` must contain positive integers."
-            )
+        n_out, hidden_layers = _validate_readout(
+            n_out,
+            hidden_layers,
+        )
 
         super().__init__(
             layers=[
@@ -53,17 +63,22 @@ class CVReadoutModel(FeedForward):
         self.featurizer = featurizer
         self.cached_input = bool(cached_input)
 
-        # Explicit dimensions.
-        self.raw_in_features = featurizer.in_features
-        self.latent_features = featurizer.out_features
-        self.out_features = n_out
+        self.raw_in_features = _as_positive_int(
+            featurizer.in_features,
+            "featurizer.in_features",
+        )
+        self.latent_features = _as_positive_int(
+            featurizer.out_features,
+            "featurizer.out_features",
+        )
 
-        # Dimension expected by forward() and by downstream CV models.
+        # Input dimension visible to downstream CV models.
         self.in_features = (
             self.latent_features
             if self.cached_input
             else self.raw_in_features
         )
+        self.out_features = n_out
 
         self.register_buffer(
             "_readout_reference",
@@ -75,7 +90,7 @@ class CVReadoutModel(FeedForward):
         self,
         features: torch.Tensor,
     ) -> torch.Tensor:
-        """Run only the readout on latent features."""
+        """Apply only the trainable readout."""
 
         if features.ndim < 2:
             raise ValueError(
@@ -100,7 +115,7 @@ class CVReadoutModel(FeedForward):
         x: torch.Tensor,
         cell: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        """Run the frozen featurizer followed by the readout."""
+        """Apply the frozen featurizer followed by the readout."""
 
         if x.ndim < 2:
             raise ValueError(
@@ -125,8 +140,6 @@ class CVReadoutModel(FeedForward):
         x: torch.Tensor,
         cell: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        """Run cached head-only or complete raw-input inference."""
-
         if self.cached_input:
             return self.forward_features(x)
 
@@ -136,41 +149,32 @@ class CVReadoutModel(FeedForward):
         )
 
 
-class CVGraphReadoutModel(BaseGNN):
-    """Graph featurizer followed by a trainable readout."""
+class _GraphTransferModel(BaseGNN):
+    """Frozen graph featurizer followed by a trainable readout."""
 
     def __init__(
         self,
-        featurizer: _BaseGraphCVFeaturizer,
+        featurizer: _BaseGraphFeaturizer,
         n_out: int = 1,
         hidden_layers: Sequence[int] = (32, 32),
         options: Optional[Dict[str, Any]] = None,
     ) -> None:
-        if not isinstance(featurizer, _BaseGraphCVFeaturizer):
-            raise TypeError(
-                "`CVGraphReadoutModel` requires a graph featurizer."
-            )
-
-        n_out = _as_positive_int(n_out, "n_out")
-        hidden_layers = tuple(int(x) for x in hidden_layers)
-
-        if any(x <= 0 for x in hidden_layers):
-            raise ValueError(
-                "`hidden_layers` must contain positive integers."
-            )
+        n_out, hidden_layers = _validate_readout(
+            n_out,
+            hidden_layers,
+        )
 
         super().__init__(
             n_out=n_out,
             dataset_for_initialization=None,
             pooling_operation=None,
-            cutoff=float(
-                featurizer.cutoff.detach().cpu()
-            ),
-            buffer=float(
-                featurizer.buffer.detach().cpu()
-            ),
+            cutoff=float(featurizer.cutoff.detach().cpu().item()),
+            buffer=float(featurizer.buffer.detach().cpu().item()),
             long_range_cutoff=float(
-                featurizer.long_range_cutoff.detach().cpu()
+                featurizer.long_range_cutoff
+                .detach()
+                .cpu()
+                .item()
             ),
             atomic_numbers=(
                 featurizer.atomic_numbers
@@ -180,7 +184,7 @@ class CVGraphReadoutModel(BaseGNN):
             ),
         )
 
-        # The frozen graph featurizer constructs its own radial representation.
+        # Neighborhood construction is handled by the frozen GNN.
         self._modules.pop(
             "_radial_embedding",
             None,
@@ -188,19 +192,18 @@ class CVGraphReadoutModel(BaseGNN):
 
         self.featurizer = featurizer
 
-        # Do not overwrite BaseGNN.in_features or BaseGNN.out_features:
-        # they are read-only properties.
         self.raw_in_features = None
-        self.latent_features = int(
-            featurizer.out_features
+        self.latent_features = _as_positive_int(
+            featurizer.out_features,
+            "featurizer.out_features",
         )
-        self.transfer_out_features = int(n_out)
+        self.transfer_out_features = n_out
 
         self.readout = FeedForward(
             layers=[
                 self.latent_features,
                 *hidden_layers,
-                self.transfer_out_features,
+                n_out,
             ],
             **({} if options is None else dict(options)),
         )
@@ -215,7 +218,7 @@ class CVGraphReadoutModel(BaseGNN):
         self,
         features: torch.Tensor,
     ) -> torch.Tensor:
-        """Run only the readout on graph-level latent features."""
+        """Apply only the trainable readout."""
 
         if features.ndim < 2:
             raise ValueError(
@@ -240,7 +243,7 @@ class CVGraphReadoutModel(BaseGNN):
         data: Dict[str, torch.Tensor],
         cell: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        """Run the frozen graph featurizer followed by the readout."""
+        """Apply the frozen graph featurizer followed by the readout."""
 
         latent = self.featurizer(
             data,
@@ -254,9 +257,62 @@ class CVGraphReadoutModel(BaseGNN):
         data: Dict[str, torch.Tensor],
         cell: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        """Run complete graph-input inference."""
-
         return self.forward_raw(
             data,
             cell=cell,
         )
+
+
+def TransferModel(
+    featurizer: nn.Module,
+    n_out: int = 1,
+    hidden_layers: Sequence[int] = (32, 32),
+    options: Optional[Dict[str, Any]] = None,
+    cached_input: bool = False,
+) -> nn.Module:
+    """Create a transfer-learning model.
+
+    The implementation is selected automatically from the featurizer type.
+
+    Parameters
+    ----------
+    featurizer
+        Featurizer created with :func:`TransferFeaturizer`.
+    n_out
+        Number of downstream outputs.
+    hidden_layers
+        Hidden dimensions of the trainable readout.
+    options
+        Optional ``FeedForward`` configuration.
+    cached_input
+        If ``True``, tensor models expect precomputed latent features
+        instead of raw inputs.
+    """
+
+    if isinstance(featurizer, _BaseTensorFeaturizer):
+        return _TensorTransferModel(
+            featurizer=featurizer,
+            n_out=n_out,
+            hidden_layers=hidden_layers,
+            options=options,
+            cached_input=cached_input,
+        )
+
+    if isinstance(featurizer, _BaseGraphFeaturizer):
+        if cached_input:
+            raise ValueError(
+                "`cached_input=True` is currently supported only "
+                "for tensor transfer models."
+            )
+
+        return _GraphTransferModel(
+            featurizer=featurizer,
+            n_out=n_out,
+            hidden_layers=hidden_layers,
+            options=options,
+        )
+
+    raise TypeError(
+        "`featurizer` must be created with `TransferFeaturizer`. "
+        f"Found {type(featurizer)}."
+    )
