@@ -1,3 +1,6 @@
+import platform
+import warnings
+
 import torch
 from mlcolvar.core.transform import Transform
 
@@ -66,6 +69,17 @@ class BaseCV:
             or not hasattr(self.preprocessing, "in_features")
             else self.preprocessing.in_features
         )
+        
+    def to_torchscript(self, file_path=None, *args, **kwargs):
+        if file_path is not None and platform.system() == "Darwin":
+            warnings.warn(
+                "Saving TorchScript models on macOS may be affected by "
+                "a temporary PyTorch MPS/Metal issue.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+
+        return super().to_torchscript(file_path, *args, **kwargs)
 
     def parse_options(self, options: dict = None):
         """
