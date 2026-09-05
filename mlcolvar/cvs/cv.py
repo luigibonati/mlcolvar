@@ -82,7 +82,6 @@ class BaseCV(lightning.LightningModule):
                                                 long_range=True if hasattr(self, 'long_range_cutoff') and self.long_range_cutoff > 0 else False)
 
 
-    # TODO add general torch.nn.Module
     def parse_model(
         self,
         model: Union[List[int], torch.nn.Module],
@@ -381,7 +380,6 @@ class BaseCV(lightning.LightningModule):
             This LightningModule as a torchscript, regardless of whether `file_path` is
             defined or not.
         """
-        
         if file_path is not None and platform.system() == "Darwin":
             warn(
                 "Saving TorchScript models on macOS may be affected by "
