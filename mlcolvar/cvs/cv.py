@@ -1,3 +1,5 @@
+import platform
+
 from pathlib import Path
 import torch
 import lightning
@@ -105,6 +107,7 @@ class BaseCV(lightning.LightningModule):
             raise ValueError(
                 f"Keyword model can either accept type list, FeedForward or BaseGNN. Found {type(model)}"
             )
+        
 
     def parse_options(self, options: dict = None):
         """
@@ -323,7 +326,6 @@ class BaseCV(lightning.LightningModule):
             if (key == "loss_fn") and ("cannot assign" in str(e)):
                 del self.loss_fn
                 super().__setattr__(key, value)
-
     def _setup_graph_data(self, train_batch, key : str='data_list'):
             data = train_batch[key]
             if not self._exporting:
@@ -368,6 +370,14 @@ class BaseCV(lightning.LightningModule):
             This LightningModule as a torchscript, regardless of whether `file_path` is
             defined or not.
         """
+        if file_path is not None and platform.system() == "Darwin":
+            warn(
+                "Saving TorchScript models on macOS may be affected by "
+                "a temporary PyTorch MPS/Metal issue.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+        
         # check if preprocessing has varible cells
         if self.preprocessing is not None:
             if hasattr(self.preprocessing, "default_cell"):
