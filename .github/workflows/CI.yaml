@@ -43,7 +43,7 @@ jobs:
       # this may be removed in the future when MPS issues will be solved in all torch versions
       # check https://github.com/pytorch/pytorch/issues/77764
       - name: Add MPS fallback [macOS only]
-        if: contains( matrix.os, 'macOS' )
+        if: contains( matrix.os, 'macos' )
         shell: bash
         run: |
           echo "PYTORCH_ENABLE_MPS_FALLBACK=1" >> $GITHUB_ENV     
@@ -52,22 +52,29 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+
+      - name: Check Python
+        shell: bash
+        run: |
+          which python
+          python --version
+          python -c "import sys; print(sys.executable)"
       
       - name: Upgrade pip
         run: python -m pip install -U pip
 
       - name: Install package
         # conda setup requires this special shell
-        shell: bash -l {0}
+        shell: bash
         run: |
           python -m pip install -e .[test]
-          pip list
+          python -m pip list
 
       - name: Run tests
         # conda setup requires this special shell
-        shell: bash -l {0}
+        shell: bash
         run: |
-          pytest -v --pyargs mlcolvar.tests --cov=mlcolvar --cov-report=xml --color=yes
+          python -m pytest -v --pyargs mlcolvar.tests --cov=mlcolvar --cov-report=xml --color=yes
 
       - name: Run notebook tests
         # conda setup requires this special shell
