@@ -21,15 +21,11 @@ jobs:
   test:
     name: Test on ${{ matrix.os }}, Python ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
+    # macOS CI temporarily disabled due to a PyTorch MPS/Metal issue.
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]      
         python-version: ["3.11", "3.12", "3.13"]
-        include:
-          - python-version: "3.11"
-            os: macos-latest
-          - python-version: "3.12"
-            os: macos-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -40,13 +36,6 @@ jobs:
           uname -a
           df -h
           ulimit -a
-      # this may be removed in the future when MPS issues will be solved in all torch versions
-      # check https://github.com/pytorch/pytorch/issues/77764
-      - name: Add MPS fallback [macOS only]
-        if: contains( matrix.os, 'macOS' )
-        shell: bash
-        run: |
-          echo "PYTORCH_ENABLE_MPS_FALLBACK=1" >> $GITHUB_ENV     
 
       - name: Set up Python
         uses: actions/setup-python@v5
