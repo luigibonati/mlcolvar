@@ -210,10 +210,14 @@ class _GraphTransferModel(BaseGNN):
 
         self.featurizer = featurizer
         self.raw_in_features = None
+
         self.latent_features = _as_positive_int(
             featurizer.out_features,
             "featurizer.out_features",
         )
+
+        # Required by transfer inference/export.
+        self.transfer_out_features = n_out
 
         self.readout = FeedForward(
             layers=[
@@ -226,7 +230,9 @@ class _GraphTransferModel(BaseGNN):
 
         self.register_buffer(
             "_readout_reference",
-            _module_reference_tensor(self.readout),
+            _module_reference_tensor(
+                self.readout
+            ),
             persistent=False,
         )
 
@@ -244,16 +250,28 @@ class _GraphTransferModel(BaseGNN):
 
         return self.readout(features)
 
-    def forward(
+    def forward_raw(
         self,
         data: Dict[str, torch.Tensor],
         cell: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
+        """Apply the frozen graph featurizer followed by the readout."""
+
         return self.forward_features(
             self.featurizer(
                 data,
                 cell=cell,
             )
+        )
+
+    def forward(
+        self,
+        data: Dict[str, torch.Tensor],
+        cell: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        return self.forward_raw(
+            data,
+            cell=cell,
         )
 
 
