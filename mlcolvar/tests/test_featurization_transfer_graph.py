@@ -762,3 +762,40 @@ def test_graph_transfer_torchscript_roundtrip(
         atol=1e-6,
     )
 
+
+def test_graph_cache_restores_featurizer_state() -> None:
+    dataset = DictDataset(
+        {
+            "data_list": [
+                make_graph_sample(0.0),
+                make_graph_sample(0.5),
+            ]
+        },
+        metadata={
+            "atomic_numbers": [1, 6, 8],
+        },
+        data_type="graphs",
+    )
+
+    featurizer = TransferFeaturizer(
+        model=DummyGraphCV(
+            use_preprocessing=False,
+        ),
+        freeze=True,
+    )
+
+    featurizer.train()
+    original_device = featurizer._model_reference.device
+
+    precompute_committor_cache(
+        featurizer=featurizer,
+        dataset=dataset,
+        batch_size=1,
+        device="cpu",
+        output_device="cpu",
+        separate_boundary_dataset=False,
+    )
+
+    assert featurizer.training
+    assert featurizer._model_reference.device == original_device
+    assert not featurizer.model.training

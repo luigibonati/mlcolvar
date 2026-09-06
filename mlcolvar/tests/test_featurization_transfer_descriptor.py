@@ -743,4 +743,29 @@ def test_descriptor_transfer_torchscript_roundtrip(
         rtol=1e-5,
         atol=1e-6,
     )
+    
+    
+def test_descriptor_precompute_restores_state() -> None:
+    featurizer = TransferFeaturizer(
+        model=DummyDescriptorCV(),
+        freeze=True,
+    )
 
+    featurizer.train()
+    original_device = featurizer._model_reference.device
+
+    x = make_descriptor_input(dtype=torch.float32)
+
+    expected = featurizer(x)
+
+    cached = featurizer.precompute(
+        x,
+        batch_size=1,
+        output_device="cpu",
+    )
+
+    torch.testing.assert_close(cached, expected)
+
+    assert featurizer.training
+    assert featurizer._model_reference.device == original_device
+    assert not featurizer.model.training

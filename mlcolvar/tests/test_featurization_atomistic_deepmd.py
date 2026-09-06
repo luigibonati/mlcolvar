@@ -1,13 +1,11 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Dict, List, Optional
 
 import pytest
 import torch
 from torch import nn
-
-pytest.importorskip("ase")
-pytest.importorskip("deepmd.pt.utils.nlist")
 
 import mlcolvar.featurization.atomistic.backbones.deepmd as deepmd_module
 
@@ -15,6 +13,7 @@ from mlcolvar.featurization.atomistic import (
     AtomisticFeaturizer,
     DeepMDBackbone,
 )
+
 
 class DummyDeepMDDescriptor(nn.Module):
     """Minimal DeePMD-like descriptor using float32 internally."""
@@ -51,10 +50,13 @@ class DummyDeepMDDescriptor(nn.Module):
         self.last_coord_dtype = extended_coord.dtype
 
         if extended_coord.dtype != self.scale.dtype:
-            raise RuntimeError("Descriptor input dtype does not match its parameters.")
+            raise RuntimeError(
+                "Descriptor input dtype does not match its parameters."
+            )
 
         type_feature = extended_atype.to(extended_coord.dtype).unsqueeze(-1)
         features = torch.cat([extended_coord, type_feature], dim=-1)
+
         return (features * self.scale, None, None, None, None)
 
 
@@ -70,6 +72,36 @@ class DummyDeepMDModel(nn.Module):
 
     def get_type_map(self) -> List[str]:
         return ["H", "O"]
+
+
+@pytest.fixture(autouse=True)
+def fake_deepmd_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Provide the minimal DeePMD runtime required by unit tests."""
+
+    monkeypatch.setattr(
+        deepmd_module,
+        "_DEEPMD_AVAILABLE",
+        True,
+    )
+    monkeypatch.setattr(
+        deepmd_module,
+        "_DEEPMD_IMPORT_ERROR",
+        None,
+    )
+    monkeypatch.setattr(
+        deepmd_module,
+        "ase_atomic_numbers",
+        {"H": 1, "O": 8},
+    )
+    monkeypatch.setattr(
+        deepmd_module,
+        "deepmd_env",
+        SimpleNamespace(
+            GLOBAL_PT_FLOAT_PRECISION=torch.float32,
+        ),
+    )
 
 
 @pytest.fixture
@@ -264,6 +296,7 @@ def test_deepmd_featurizer_pooling_and_gradients(
 
     assert data["positions"].grad is not None
     assert torch.isfinite(data["positions"].grad).all()
+
     assert all(
         not parameter.requires_grad
         for parameter in featurizer.backbone.parameters()
@@ -278,4 +311,29 @@ def test_deepmd_rejects_long_range_cutoff() -> None:
         DeepMDBackbone(
             model=DummyDeepMDModel(),
             long_range_cutoff=5.0,
+        )
+
+
+def test_deepmd_requires_optional_dependency(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Raise a clear error when DeePMD-kit is unavailable."""
+
+    monkeypatch.setattr(
+        deepmd_module,
+        "_DEEPMD_AVAILABLE",
+        False,
+    )
+    monkeypatch.setattr(
+        deepmd_module,
+        "_DEEPMD_IMPORT_ERROR",
+        ImportError("deepmd"),
+    )
+
+    with pytest.raises(
+        ImportError,
+        match="requires DeePMD-kit",
+    ):
+        DeepMDBackbone(
+            model=DummyDeepMDModel(),
         )
