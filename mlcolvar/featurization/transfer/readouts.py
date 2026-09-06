@@ -35,6 +35,30 @@ def _validate_readout(
     return n_out, hidden_layers
 
 
+def _prepare_features(
+    features: torch.Tensor,
+    expected_features: int,
+    reference: torch.Tensor,
+) -> torch.Tensor:
+    """Validate and cast latent features for the readout."""
+
+    if features.ndim < 2:
+        raise ValueError(
+            "`features` must include a batch dimension."
+        )
+
+    if features.shape[-1] != expected_features:
+        raise ValueError(
+            f"Expected {expected_features} latent features, "
+            f"found {features.shape[-1]}."
+        )
+
+    return features.to(
+        dtype=reference.dtype,
+        device=reference.device,
+    )
+
+
 class _TensorTransferModel(FeedForward):
     """Frozen tensor featurizer followed by a trainable readout."""
 
@@ -72,7 +96,6 @@ class _TensorTransferModel(FeedForward):
             "featurizer.out_features",
         )
 
-        # Input dimension visible to downstream CV models.
         self.in_features = (
             self.latent_features
             if self.cached_input
@@ -92,20 +115,10 @@ class _TensorTransferModel(FeedForward):
     ) -> torch.Tensor:
         """Apply only the trainable readout."""
 
-        if features.ndim < 2:
-            raise ValueError(
-                "`features` must include a batch dimension."
-            )
-
-        if features.shape[-1] != self.latent_features:
-            raise ValueError(
-                f"Expected {self.latent_features} latent features, "
-                f"found {features.shape[-1]}."
-            )
-
-        features = features.to(
-            dtype=self._readout_reference.dtype,
-            device=self._readout_reference.device,
+        features = _prepare_features(
+            features,
+            self.latent_features,
+            self._readout_reference,
         )
 
         return self.nn(features)
@@ -128,12 +141,12 @@ class _TensorTransferModel(FeedForward):
                 f"found {x.shape[-1]}."
             )
 
-        latent = self.featurizer(
-            x,
-            cell=cell,
+        return self.forward_features(
+            self.featurizer(
+                x,
+                cell=cell,
+            )
         )
-
-        return self.forward_features(latent)
 
     def forward(
         self,
@@ -168,8 +181,12 @@ class _GraphTransferModel(BaseGNN):
             n_out=n_out,
             dataset_for_initialization=None,
             pooling_operation=None,
-            cutoff=float(featurizer.cutoff.detach().cpu().item()),
-            buffer=float(featurizer.buffer.detach().cpu().item()),
+            cutoff=float(
+                featurizer.cutoff.detach().cpu().item()
+            ),
+            buffer=float(
+                featurizer.buffer.detach().cpu().item()
+            ),
             long_range_cutoff=float(
                 featurizer.long_range_cutoff
                 .detach()
@@ -184,6 +201,7 @@ class _GraphTransferModel(BaseGNN):
             ),
         )
 
+        # Keep BaseGNN compatibility for graph metadata and deployment.
         # Neighborhood construction is handled by the frozen GNN.
         self._modules.pop(
             "_radial_embedding",
@@ -191,13 +209,11 @@ class _GraphTransferModel(BaseGNN):
         )
 
         self.featurizer = featurizer
-
         self.raw_in_features = None
         self.latent_features = _as_positive_int(
             featurizer.out_features,
             "featurizer.out_features",
         )
-        self.transfer_out_features = n_out
 
         self.readout = FeedForward(
             layers=[
@@ -220,46 +236,24 @@ class _GraphTransferModel(BaseGNN):
     ) -> torch.Tensor:
         """Apply only the trainable readout."""
 
-        if features.ndim < 2:
-            raise ValueError(
-                "`features` must include a batch dimension."
-            )
-
-        if features.shape[-1] != self.latent_features:
-            raise ValueError(
-                f"Expected {self.latent_features} graph features, "
-                f"found {features.shape[-1]}."
-            )
-
-        features = features.to(
-            dtype=self._readout_reference.dtype,
-            device=self._readout_reference.device,
+        features = _prepare_features(
+            features,
+            self.latent_features,
+            self._readout_reference,
         )
 
         return self.readout(features)
-
-    def forward_raw(
-        self,
-        data: Dict[str, torch.Tensor],
-        cell: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
-        """Apply the frozen graph featurizer followed by the readout."""
-
-        latent = self.featurizer(
-            data,
-            cell=cell,
-        )
-
-        return self.forward_features(latent)
 
     def forward(
         self,
         data: Dict[str, torch.Tensor],
         cell: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        return self.forward_raw(
-            data,
-            cell=cell,
+        return self.forward_features(
+            self.featurizer(
+                data,
+                cell=cell,
+            )
         )
 
 
