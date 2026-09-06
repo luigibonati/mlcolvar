@@ -155,9 +155,9 @@ class _NodewiseAtomisticModel(_BaseAtomisticModel):
 
         outputs = self.readout(features)
 
-        return self.featurizer.pool_node_features(
-            node_features=outputs,
-            data=data,
+        return self.featurizer.pool(
+            outputs,
+            data,
         )
 
 
