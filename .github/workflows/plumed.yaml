@@ -3,10 +3,10 @@ name: Plumed
 on:
   push:
     branches:
-      - "release/2.0" # TODO, this need to be changed upon new release
+      - "release/2.0" # TODO, this needs to be changed upon new release
   pull_request:
     branches:
-      - "release/2.0" # TODO, this need to be changed upon new release
+      - "release/2.0" # TODO, this needs to be changed upon new release
   schedule:
     - cron: "0 2 * * 1"
 
@@ -14,6 +14,7 @@ jobs:
   plumed_interfaces:
     name: Test plumed interfaces
     runs-on: ubuntu-latest
+
     env:
       CC: gcc
       CXX: g++
@@ -25,9 +26,10 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      
+
       - name: Upgrade pip
-        run: python -m pip install -U pip
+        run: |
+          python -m pip install --upgrade pip
 
       - name: Install package
         run: |
@@ -35,121 +37,193 @@ jobs:
           python -m pip install -e .[test]
 
       - name: Configure libtorch flags
-        # we take the flags to point to the libtorch shipped with pytorch
+        # Use the LibTorch libraries shipped with the installed PyTorch package.
         run: |
           PIP_CPPFLAGS=$(python libtorch_flags_from_python.py --cppflags)
           PIP_LDFLAGS=$(python libtorch_flags_from_python.py --ldflags)
 
-          echo "LDFLAGS=$PIP_LDFLAGS $LDFLAGS" >> $GITHUB_ENV
-          echo "CPPFLAGS=$PIP_CPPFLAGS $CPPFLAGS" >> $GITHUB_ENV
-      
+          TORCH_LIB_DIR=$(python -c '
+          from pathlib import Path
+          import torch
+
+          print(Path(torch.__file__).resolve().parent / "lib")
+          ')
+
+          echo "PyTorch version:"
+          python -c "import torch; print(torch.__version__)"
+
+          echo "PyTorch library directory:"
+          echo "$TORCH_LIB_DIR"
+
+          if [ ! -f "$TORCH_LIB_DIR/libtorch.so" ]; then
+            echo "libtorch.so could not be found in $TORCH_LIB_DIR"
+            exit 1
+          fi
+
+          ls -la "$TORCH_LIB_DIR"
+
+          echo "TORCH_LIB_DIR=$TORCH_LIB_DIR" >> "$GITHUB_ENV"
+          echo "LDFLAGS=$PIP_LDFLAGS ${LDFLAGS:-}" >> "$GITHUB_ENV"
+          echo "CPPFLAGS=$PIP_CPPFLAGS ${CPPFLAGS:-}" >> "$GITHUB_ENV"
+          echo "LIBRARY_PATH=$TORCH_LIB_DIR:${LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$TORCH_LIB_DIR:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+
       - name: Get plumed
-        # get plumed src from github and unpack
+        # Get PLUMED source from GitHub and unpack it.
         run: |
           PLUMED_VER="2.10.0"
-          echo "PLUMED_VER=$PLUMED_VER" >> $GITHUB_ENV
-          wget https://github.com/plumed/plumed2/releases/download/v$PLUMED_VER/plumed-src-$PLUMED_VER.tgz
-          tar -xzf plumed-src-$PLUMED_VER.tgz
-        
-      - name: Configure and make plumed
-        # configure and make plumed to enable libtorch and pytorch
-        run: |
-          cd plumed-$PLUMED_VER
-          mkdir build
-          ./configure --prefix=$PWD/build --enable-libtorch --enable-modules=+pytorch
-          make -j 8
-          make -j 8 install 
-      
-      - name: Create sourceme.sh plumed
-        # edit sourceme.sh file to load all the correct dependencies
-        run: |
-          cd plumed-$PLUMED_VER
-      
-          PLUMED_DIR=$PWD
-          echo """export PLUMED_DIR=$PLUMED_DIR
 
-          export PATH="$PLUMED_DIR/build/bin/:$PATH"
-          export LIBRARY_PATH="$PLUMED_DIR/build/lib/:$LIBRARY_PATH"
-          export LD_LIBRARY_PATH="$PLUMED_DIR/build/lib/:$LD_LIBRARY_PATH"
+          echo "PLUMED_VER=$PLUMED_VER" >> "$GITHUB_ENV"
+
+          wget \
+            "https://github.com/plumed/plumed2/releases/download/v$PLUMED_VER/plumed-src-$PLUMED_VER.tgz"
+
+          tar -xzf "plumed-src-$PLUMED_VER.tgz"
+
+      - name: Configure and make plumed
+        # Configure and compile PLUMED with LibTorch and the PyTorch module.
+        run: |
+          cd "plumed-$PLUMED_VER"
+
+          mkdir build
+
+          ./configure \
+            --prefix="$PWD/build" \
+            --enable-libtorch \
+            --enable-modules=+pytorch
+
+          make -j 8
+          make -j 8 install
+
+      - name: Create sourceme.sh plumed
+        # Create a PLUMED environment file containing both the PLUMED and
+        # PyTorch runtime library paths.
+        run: |
+          cd "plumed-$PLUMED_VER"
+
+          PLUMED_DIR="$PWD"
+
+          cat > sourceme.sh <<EOF
+          export PLUMED_DIR="$PLUMED_DIR"
+          export TORCH_LIB_DIR="$TORCH_LIB_DIR"
+
+          export PATH="$PLUMED_DIR/build/bin/:\${PATH}"
+          export LIBRARY_PATH="$TORCH_LIB_DIR:$PLUMED_DIR/build/lib/:\${LIBRARY_PATH:-}"
+          export LD_LIBRARY_PATH="$TORCH_LIB_DIR:$PLUMED_DIR/build/lib/:\${LD_LIBRARY_PATH:-}"
           export PLUMED_KERNEL="$PLUMED_DIR/build/lib/libplumedKernel.so"
           export PLUMED_VIMPATH="$PLUMED_DIR/vim"
-          export PYTHONPATH="$PLUMED_DIR/python:$PYTHONPATH"
-          export PKG_CONFIG_PATH="$PLUMED_DIR/build/lib/pkgconfig:$PKG_CONFIG_PATH"
-          """ > sourceme.sh
+          export PYTHONPATH="$PLUMED_DIR/python:\${PYTHONPATH:-}"
+          export PKG_CONFIG_PATH="$PLUMED_DIR/build/lib/pkgconfig:\${PKG_CONFIG_PATH:-}"
+          EOF
 
-          head sourceme.sh -n 20
+          cat sourceme.sh
 
           source sourceme.sh
 
-          echo "plumed path: $(which plumed)"
+          echo "PLUMED path: $(which plumed)"
+          echo "PyTorch library directory: $TORCH_LIB_DIR"
+          echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+
+          if [ ! -f "$TORCH_LIB_DIR/libtorch.so" ]; then
+            echo "libtorch.so could not be found after sourcing PLUMED."
+            exit 1
+          fi
 
       - name: Check installation
-        # check if libtorch and pytorch have been successfully enabled
+        # Check that LibTorch and the PLUMED PyTorch module are enabled.
         run: |
-          cd plumed-$PLUMED_VER
-          
+          cd "plumed-$PLUMED_VER"
+
           source sourceme.sh
-          
+
           plumed config has libtorch
           plumed config module pytorch
 
+          python -c "import torch; print('PyTorch version:', torch.__version__)"
+
+          echo "Checking PyTorch shared libraries:"
+          ls -l "$TORCH_LIB_DIR/libtorch.so"
+          ls -l "$TORCH_LIB_DIR/libtorch_cpu.so"
+          ls -l "$TORCH_LIB_DIR/libc10.so"
+
+          echo "LD_LIBRARY_PATH:"
+          echo "$LD_LIBRARY_PATH"
+
       - name: Setup plumed tests
-        # edit plumed and python paths in the test scripts
+        # Edit PLUMED and Python paths in the test scripts.
         run: |
-          # define paths for plumed sourceme.sh and python with mdtraj
           PLUMED_SOURCE_PATH="$PWD/plumed-$PLUMED_VER/sourceme.sh"
           PYTHON_PATH="$(which python)"
 
-          echo "plumed_source_path : $PLUMED_SOURCE_PATH"
-          echo "python_path : $PYTHON_PATH"
+          echo "plumed_source_path: $PLUMED_SOURCE_PATH"
+          echo "python_path: $PYTHON_PATH"
 
-          # edit the test scripts with the correct paths
-          sed -i "s|PLUMED_SOURCE=\"/path/to/plumed/sourceme.sh\"|PLUMED_SOURCE=\"$PLUMED_SOURCE_PATH\"|g" plumed_interfaces/tests/driver_alanine.sh
-          sed -i "s|PYTHON_PATH=\"/path/to/python/with/mdtraj\"|PYTHON_PATH=\"$PYTHON_PATH\"|g" plumed_interfaces/tests/driver_alanine.sh
+          sed -i \
+            "s|PLUMED_SOURCE=\"/path/to/plumed/sourceme.sh\"|PLUMED_SOURCE=\"$PLUMED_SOURCE_PATH\"|g" \
+            plumed_interfaces/tests/driver_alanine.sh
 
-          sed -i "s|PLUMED_SOURCE=\"/path/to/plumed/sourceme.sh\"|PLUMED_SOURCE=\"$PLUMED_SOURCE_PATH\"|g" plumed_interfaces/tests/driver_NaCl.sh
-          sed -i "s|PYTHON_PATH=\"/path/to/python/with/mdtraj\"|PYTHON_PATH=\"$PYTHON_PATH\"|g" plumed_interfaces/tests/driver_NaCl.sh
+          sed -i \
+            "s|PYTHON_PATH=\"/path/to/python/with/mdtraj\"|PYTHON_PATH=\"$PYTHON_PATH\"|g" \
+            plumed_interfaces/tests/driver_alanine.sh
 
-          # create folder directory
+          sed -i \
+            "s|PLUMED_SOURCE=\"/path/to/plumed/sourceme.sh\"|PLUMED_SOURCE=\"$PLUMED_SOURCE_PATH\"|g" \
+            plumed_interfaces/tests/driver_NaCl.sh
+
+          sed -i \
+            "s|PYTHON_PATH=\"/path/to/python/with/mdtraj\"|PYTHON_PATH=\"$PYTHON_PATH\"|g" \
+            plumed_interfaces/tests/driver_NaCl.sh
+
           mkdir plumed_test
-          
-      # the tests are separated to make it easier to find the results in the compilation outputs
-      # each step need to move to the plumed_test directory
+
+      # The tests are separated to make the results easier to inspect.
+      # Each test step must first move to the plumed_test directory.
+
       - name: Test alanine descriptors
         run: |
           cd plumed_test
           bash ../plumed_interfaces/tests/driver_alanine.sh descriptors
-      
+
       - name: Test alanine descriptors-kbias
         run: |
           cd plumed_test
           bash ../plumed_interfaces/tests/driver_alanine.sh descriptors-kbias
-          
+
       - name: Test alanine gnn
         run: |
-          cd plumed_test    
+          cd plumed_test
           bash ../plumed_interfaces/tests/driver_alanine.sh gnn
-      
+
+      - name: Test alanine gnn-exported
+        run: |
+          cd plumed_test
+          bash ../plumed_interfaces/tests/driver_alanine.sh gnn-exported
+
+      - name: Test alanine gnn-kbias-exported
+        run: |
+          cd plumed_test
+          bash ../plumed_interfaces/tests/driver_alanine.sh gnn-kbias-exported
+
       - name: Test alanine gnn-kbias
         run: |
           cd plumed_test
           bash ../plumed_interfaces/tests/driver_alanine.sh gnn-kbias
-          
+
       - name: Test NaCl gnn
         run: |
           cd plumed_test
           bash ../plumed_interfaces/tests/driver_NaCl.sh gnn
-        
+
       - name: Test NaCl gnn-lr
         run: |
           cd plumed_test
           bash ../plumed_interfaces/tests/driver_NaCl.sh gnn-lr
-      
+
       - name: Test NaCl gnn-kbias
         run: |
           cd plumed_test
           bash ../plumed_interfaces/tests/driver_NaCl.sh gnn-kbias
-      
+
       - name: Test NaCl gnn-lr-kbias
         run: |
           cd plumed_test

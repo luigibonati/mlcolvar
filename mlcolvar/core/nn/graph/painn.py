@@ -227,6 +227,11 @@ class MessagePassingPaiNN(MessagePassing):
         aggr: str = 'sum',
     ) -> None:
         super(MessagePassingPaiNN, self).__init__(aggr=aggr)
+        
+        if long_range_cutoff > 0 and long_range_cutoff <= cutoff:
+            raise ValueError(
+                "long_range_cutoff must be larger than cutoff."
+            )
 
         self.cutoff = cutoff
         self.long_range_cutoff = long_range_cutoff
@@ -278,7 +283,6 @@ class MessagePassingPaiNN(MessagePassing):
         C = 0.5 * torch.cos(edge_lengths * math.pi / self.cutoff) + 0.5
 
         if edge_masks_lr is not None and self.lin_rbf_l is not None:
-            assert self.long_range_cutoff > self.cutoff
 
             indices_l = edge_masks_lr.nonzero()[:, 0]
             lengths_l = edge_lengths[indices_l]
@@ -504,10 +508,11 @@ def test_painn_2() -> None:
     )
 
     data = _create_test_data_list()
-    data['edge_masks_le'] = torch.zeros(
+    data['edge_masks_lr'] = torch.zeros(
         ((data['edge_index'].shape[1]), 1), dtype=bool
     )
-    data['edge_masks_le'][:-6] = True
+    data['edge_masks_lr'][:-6] = True
     torch.set_printoptions(precision=16)
-    ref_out = torch.tensor([[0.0720856700379041, -0.0420276151917215]] * 5)
+    ref_out = torch.tensor([[ 0.0580523212375041, -0.0220428793692266]] * 4
+                           + [[ 0.0720856700379041, -0.0420276151917215]])
     assert ( torch.allclose(model(data), ref_out) )
