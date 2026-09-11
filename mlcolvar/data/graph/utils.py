@@ -2,6 +2,7 @@ import copy
 from collections import defaultdict
 from typing import Union
 
+import numpy as np
 import torch
 import torch_geometric
 from torch_geometric.data import Data, HeteroData
@@ -47,8 +48,8 @@ def _create_pyg_data_from_configuration(
 
     # NOTE: here we do not take care about the nodes that are not taking part
     # the graph, like, we don't even change the node indices in `edge_index`.
-    # Here we simply ignore them, and rely on the `RemoveIsolatedNodes` method
-    # that will be called later (in `create_dataset_from_configurations`).
+    # Here we simply ignore them and rely on `RemoveIsolatedNodes`,
+    # which is applied later during dataset preparation.
     edge_index, shifts, unit_shifts = get_neighborhood(positions=config.positions,
                                                        cutoff=cutoff,
                                                        cell=config.cell,
@@ -132,120 +133,272 @@ def _create_pyg_data_from_configuration(
     return pyg_data
 
 
-def create_dataset_from_configurations(config: atomic.Configurations,
-                                       atomic_numbers: atomic.AtomicNumberTable,
-                                       cutoff: float,
-                                       buffer: float = 0.0,
-                                       long_range_cutoff: float = -1.0,
-                                       atom_names: List = None,
-                                       remove_isolated_nodes: bool = False,
-                                       show_progress: bool = True
-                                      ) -> DictDataset:
-    """Build DictDataset object containing torch_geometric graph data objects from configurations.
+def _prepare_dataset_from_configurations(
+    config: atomic.Configurations,
+    atomic_numbers: atomic.AtomicNumberTable,
+    cutoff: float,
+    buffer: float = 0.0,
+    long_range_cutoff: float = -1.0,
+    atom_names: List = None,
+    remove_isolated_nodes: bool = False,
+    show_progress: bool = True,
+):
+    """Prepare graph data and metadata for dataset construction.
+
+    This internal helper converts atomic configurations into
+    ``torch_geometric`` graph objects and prepares the keyword arguments
+    required to instantiate a graph-based ``DictDataset`` or compatible
+    subclass.
 
     Parameters
     ----------
-    config: mlcolvar.graph.utils.atomic.Configurations
-        The configurations from whihc to generate the dataset
-    atomic_numbers: mlcolvar.graph.utils.atomic.AtomicNumberTable
-        The atomic number table used to build the node attributes
-    cutoff: float
-        The graph cutoff radius
-    buffer: float
-        Buffer size used in finding active environment atoms if 
-        restricting the neighborhood to a subsystem (i.e., system + environment), 
-        `see also mlcolvar.data.grap.neighborhood.get_neighborhood`
-    long_range_cutoff : float
-        Cutoff radius for the long-range edges defined on subsystem atoms. 
-        If negative, no long-range interactions are considered, by default -1.0
-    atom_names, List[str]
-        Names of the system atoms. If using truncated graphs, use the system atoms only
-    remove_isolated_nodes: bool
-        If to remove isolated nodes from the dataset
-    show_progress: bool
-        If to show the progress bar
+    config : mlcolvar.data.graph.atomic.Configurations
+        Configurations from which to generate graph data.
+    atomic_numbers : mlcolvar.data.graph.atomic.AtomicNumberTable
+        Atomic number table used to build node attributes.
+    cutoff : float
+        Graph cutoff radius.
+    buffer : float, optional
+        Buffer used when selecting environment atoms around the system.
+    long_range_cutoff : float, optional
+        Cutoff radius for long-range edges defined on subsystem atoms.
+        If negative, long-range interactions are not included.
+    atom_names : list[str], optional
+        Names of the system atoms.
+    remove_isolated_nodes : bool, optional
+        Whether to remove isolated nodes from the generated graphs.
+    show_progress : bool, optional
+        Whether to display the graph-construction progress bar.
+
+    Returns
+    -------
+    dataset_kwargs : dict
+        Keyword arguments required to instantiate a graph-based
+        ``DictDataset`` or compatible subclass.
     """
+
     if show_progress:
-        items = pbar(config, frequency=0.0001, prefix='Making graphs')
+        items = pbar(
+            config,
+            frequency=0.0001,
+            prefix="Making graphs",
+        )
     else:
         items = config
-    # create a list of torch_geometric data objects, one for each configuration
-    data_list = [ _create_pyg_data_from_configuration(config=c, 
-                                                      atomic_numbers=atomic_numbers, 
-                                                      cutoff=cutoff, 
-                                                      buffer=buffer, 
-                                                      long_range_cutoff=long_range_cutoff,
-                                                     ) for c in items
-                ]
+
+    # Create one torch_geometric Data object per configuration
+    data_list = [
+        _create_pyg_data_from_configuration(
+            config=c,
+            atomic_numbers=atomic_numbers,
+            cutoff=cutoff,
+            buffer=buffer,
+            long_range_cutoff=long_range_cutoff,
+        )
+        for c in items
+    ]
+
     try:
-        truncated = True if any([c.environment.any() for c in items]) else False
+        truncated = (
+            True
+            if any([c.environment.any() for c in config])
+            else False
+        )
     except AttributeError:
-        truncated = True if any([c.environment for c in items]) else False
+        truncated = (
+            True
+            if any([c.environment for c in config])
+            else False
+        )
 
-    # get atom names if needed
+    # Generate default atom names when not provided
     if atom_names is None:
-        atom_names = [f"X{i}" for i in range(data_list[0]['n_system'].to(torch.int64).item())]
-
+        atom_names = [
+            f"X{i}"
+            for i in range(
+                data_list[0]["n_system"]
+                .to(torch.int64)
+                .item()
+            )
+        ]
 
     if remove_isolated_nodes:
-        # TODO: not the worst way to fake the `is_node_attr` method of `torch_geometric.data.storage.GlobalStorage`
-        # If there are exact three atoms in the graph, the `RemoveIsolatedNodes` method will remove the cell vectors that
-        # correspond to the isolated node. This is a consequence of pyg regarding the cell vectors as some kind of node features.
-        # So here we first have to remove the isolated nodes and then set the cell back.
-        
-        # this aux var is only to check what isolated nodes have been removed
-        _pre_remove_nodes_pos = torch.Tensor(np.array([d['positions'].numpy() for d in data_list]))
-        _pre_remove_nodes_system_masks = np.array([d['system_masks'].numpy() for d in data_list], dtype=bool)
-        
-        cell_list = [d.cell.clone() for d in data_list]
+        # Keep track of system atoms before removing isolated nodes.
+        # This is needed to restore the correspondence between graph
+        # nodes and the original system atom indices.
+        _pre_remove_nodes_pos = torch.Tensor(
+            np.array(
+                [
+                    d["positions"].numpy()
+                    for d in data_list
+                ]
+            )
+        )
+
+        _pre_remove_nodes_system_masks = np.array(
+            [
+                d["system_masks"].numpy()
+                for d in data_list
+            ],
+            dtype=bool,
+        )
+
+        # torch_geometric may interpret cell vectors as node features
+        # for three-atom systems, so restore the cell after removing nodes.
+        cell_list = [
+            d.cell.clone()
+            for d in data_list
+        ]
+
         transform = _RemoveIsolatedNodes()
-        data_list = [transform(d) for d in data_list]
-        
-        # check what have been removed and restore cell
-        unique_idx = [] # store the indeces of the atoms that have been used at least once
+        data_list = [
+            transform(d)
+            for d in data_list
+        ]
+
+        unique_idx = []
+
         for i in range(len(data_list)):
             data_list[i].cell = cell_list[i]
 
-            # get and save the original index before removing isolated nodes for each entry
-            # we slice by the system mask as we don't care about environment atoms
-            original_idx = torch.unique( torch.where(torch.isin(torch.round(_pre_remove_nodes_pos[i][_pre_remove_nodes_system_masks[i].squeeze(), :], decimals=5), 
-                                                                torch.round(data_list[i]['positions'][data_list[i]['system_masks'].squeeze(), :], decimals=5))
-                                                    )[0]
-                                        )
-            
-            data_list[i]['system_names_idx'] = original_idx.to(torch.int64)
-            
-            # update if needed the overall list
-            check = np.isin(original_idx.numpy(), unique_idx, invert=True)
+            original_idx = torch.unique(
+                torch.where(
+                    torch.isin(
+                        torch.round(
+                            _pre_remove_nodes_pos[i][
+                                _pre_remove_nodes_system_masks[
+                                    i
+                                ].squeeze(),
+                                :
+                            ],
+                            decimals=5,
+                        ),
+                        torch.round(
+                            data_list[i]["positions"][
+                                data_list[i][
+                                    "system_masks"
+                                ].squeeze(),
+                                :
+                            ],
+                            decimals=5,
+                        ),
+                    )
+                )[0]
+            )
+
+            data_list[i]["system_names_idx"] = (
+                original_idx.to(torch.int64)
+            )
+
+            check = np.isin(
+                original_idx.numpy(),
+                unique_idx,
+                invert=True,
+            )
+
             if check.any():
                 aux = np.where(check)[0]
-                unique_idx.extend(original_idx[aux].tolist())
-        
+                unique_idx.extend(
+                    original_idx[aux].tolist()
+                )
+
         unique_idx.sort()
-        unique_idx = torch.Tensor(unique_idx).to(torch.int64)
-    
-    # if not remove_isolated_nodes we simply take all the system atoms
+        unique_idx = torch.tensor(
+            unique_idx,
+            dtype=torch.int64,
+        )
+
     else:
-        unique_idx = torch.arange(data_list[0]['n_system'].item()).to(torch.int64)
-        for i in range(len(data_list)):
-            data_list[i]['system_names_idx'] = unique_idx
-    
-    # we also save the names of the atoms that have been actually used, ensuring correct dimensions
+        # Without node removal, all system atoms are retained.
+        unique_idx = torch.arange(
+            data_list[0]["n_system"].item(),
+            dtype=torch.int64,
+        )
 
-    unique_names = np.array(atom_names)[unique_idx] if len(unique_idx) > 1 else np.array(np.array(atom_names)[unique_idx])
-    unique_names = unique_names.tolist()
+        for data in data_list:
+            data["system_names_idx"] = unique_idx
 
-    dataset = DictDataset(dictionary={'data_list': data_list},
-                          metadata={'atomic_numbers': atomic_numbers.zs,
-                                    'cutoff': cutoff,
-                                    'buffer': buffer,
-                                    'long_range_cutoff': long_range_cutoff,
-                                    'system_idx': unique_idx,
-                                    'system_atoms_names': unique_names,
-                                    'is_truncated_graph': truncated},
-                          data_type='graphs')
+    # Store names only for system atoms actually present in the graphs.
+    unique_names = [
+        atom_names[i]
+        for i in unique_idx.tolist()
+    ]
 
-    return dataset
+    dataset_kwargs = {
+        "dictionary": {
+            "data_list": data_list,
+        },
+        "metadata": {
+            "atomic_numbers": atomic_numbers.zs,
+            "cutoff": cutoff,
+            "buffer": buffer,
+            "long_range_cutoff": long_range_cutoff,
+            "system_idx": unique_idx,
+            "system_atoms_names": unique_names,
+            "is_truncated_graph": truncated,
+        },
+        "data_type": "graphs",
+    }
+
+    return dataset_kwargs
+
+
+def create_dataset_from_configurations(
+    config: atomic.Configurations,
+    atomic_numbers: atomic.AtomicNumberTable,
+    cutoff: float,
+    buffer: float = 0.0,
+    long_range_cutoff: float = -1.0,
+    atom_names: List = None,
+    remove_isolated_nodes: bool = False,
+    show_progress: bool = True,
+) -> DictDataset:
+    """Build a DictDataset containing graph data from configurations.
+
+    Parameters
+    ----------
+    config : mlcolvar.data.graph.atomic.Configurations
+        Configurations from which to generate graph data.
+    atomic_numbers : mlcolvar.data.graph.atomic.AtomicNumberTable
+        Atomic number table used to build node attributes.
+    cutoff : float
+        Graph cutoff radius.
+    buffer : float, optional
+        Buffer used when selecting environment atoms around the system.
+    long_range_cutoff : float, optional
+        Cutoff radius for long-range edges defined on subsystem atoms.
+        If negative, long-range interactions are not included.
+    atom_names : list[str], optional
+        Names of the system atoms.
+    remove_isolated_nodes : bool, optional
+        Whether to remove isolated nodes from the generated graphs.
+    show_progress : bool, optional
+        Whether to display the graph-construction progress bar.
+
+    Returns
+    -------
+    DictDataset
+        Graph-based dataset containing one ``torch_geometric`` object
+        per configuration.
+
+    Notes
+    -----
+    ``DictDataset.graph_from_configurations`` provides the equivalent
+    class-based API.
+    """
+
+    dataset_kwargs = _prepare_dataset_from_configurations(
+        config=config,
+        atomic_numbers=atomic_numbers,
+        cutoff=cutoff,
+        buffer=buffer,
+        long_range_cutoff=long_range_cutoff,
+        atom_names=atom_names,
+        remove_isolated_nodes=remove_isolated_nodes,
+        show_progress=show_progress,
+    )
+
+    return DictDataset(**dataset_kwargs)
 
 
 def to_one_hot(indices: torch.Tensor, n_classes: int) -> torch.Tensor:
@@ -584,8 +737,6 @@ def create_graph_tracing_example(n_species: int,
 # ==================================== TESTS ====================================
 # ===============================================================================
 # ===============================================================================
-
-import numpy as np
 
 def test_to_one_hot() -> None:
     i = torch.tensor([[0], [2], [1]], dtype=torch.int64)

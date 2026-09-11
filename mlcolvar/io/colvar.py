@@ -187,6 +187,175 @@ def load_dataframe(file_names: Union[str, list],
     return df
 
 
+def _prepare_dataset_from_files(
+    file_names: Union[list, str],
+    folder: str = None,
+    create_labels: bool = None,
+    load_args: List[dict] = None,
+    filter_args: dict = None,
+    modifier_function=None,
+    verbose: bool = True,
+    start: int = 0,
+    stop: int = None,
+    stride: int = 1,
+    delete_download: bool = True,
+    read_csv_kwargs: dict = None,
+):
+    """Load and preprocess COLVAR-like files for dataset construction.
+
+    This internal helper performs all file loading and preprocessing steps
+    required to construct a descriptor-based dataset, but does not instantiate
+    a :class:`DictDataset`.
+
+    Parameters
+    ----------
+    file_names : str or list[str]
+        File name or list of file names to load.
+    folder : str, optional
+        Common directory containing the input files.
+    create_labels : bool, optional
+        Assign one integer label to each input file. If None, labels are
+        created automatically when more than one file is provided.
+    load_args : list[dict], optional
+        Per-file loading arguments. Each dictionary can contain ``start``,
+        ``stop``, ``stride``, and arguments forwarded to ``pandas.read_csv``.
+    filter_args : dict, optional
+        Arguments passed to ``DataFrame.filter`` to select descriptors.
+    modifier_function : callable, optional
+        Function applied element-wise to the descriptor dataframe.
+    verbose : bool, optional
+        Print information about the loaded data.
+    start, stop, stride : int, optional
+        Global slicing parameters used when ``load_args`` is not provided.
+    delete_download : bool, optional
+        Delete temporary files downloaded from URLs after loading.
+    read_csv_kwargs : dict, optional
+        Global keyword arguments forwarded to ``pandas.read_csv``.
+
+    Returns
+    -------
+    dataset_kwargs : dict
+        Keyword arguments required to instantiate a descriptor-based
+        ``DictDataset`` or compatible subclass.
+    dataframe : pandas.DataFrame
+        Full loaded dataframe before descriptor-only filtering.
+    """
+
+    # Normalize file names
+    if isinstance(file_names, str):
+        file_names = [file_names]
+    elif not isinstance(file_names, list):
+        raise TypeError(
+            f"file_names must be a string or list of strings, not {type(file_names)}."
+        )
+
+    num_files = len(file_names)
+
+    # Add common folder
+    if folder is not None:
+        file_names = [
+            os.path.join(folder, fname)
+            for fname in file_names
+        ]
+
+    # Global pandas.read_csv options
+    if read_csv_kwargs is None:
+        read_csv_kwargs = {}
+
+    # Configure loading arguments
+    if load_args is None:
+        load_args = [
+            {
+                "start": start,
+                "stop": stop,
+                "stride": stride,
+            }
+            for _ in file_names
+        ]
+    else:
+        if start != 0 or stop is not None or stride != 1:
+            raise ValueError(
+                "Both global and per-file loading parameters have been "
+                "specified. Use either `load_args` or `start`, `stop`, "
+                "and `stride`."
+            )
+
+        if (
+            not isinstance(load_args, list)
+            or len(load_args) != num_files
+        ):
+            raise TypeError(
+                "load_args must be a list of dictionaries with the "
+                "same length as file_names."
+            )
+
+    # Default labeling behavior
+    if create_labels is None:
+        create_labels = num_files > 1
+
+    df = pd.DataFrame()
+
+    # Load each file
+    for i, filename in enumerate(file_names):
+        file_load_args = dict(read_csv_kwargs)
+        file_load_args.update(load_args[i])
+
+        df_tmp = load_dataframe(
+            filename,
+            delete_download=delete_download,
+            **file_load_args,
+        )
+
+        if create_labels:
+            df_tmp["labels"] = i
+
+        if verbose:
+            print(f"Class {i} dataframe shape: ", np.shape(df_tmp))
+
+        df = pd.concat([df, df_tmp], ignore_index=True)
+
+    # Select descriptors
+    df_data = (
+        df.filter(**filter_args)
+        if filter_args is not None
+        else df.copy()
+    )
+
+    # Always remove non-descriptor columns
+    df_data = df_data.filter(
+        regex="^(?!.*labels)^(?!.*time)^(?!.*bias)^(?!.*walker)"
+    )
+
+    if verbose:
+        print(f"\n - Loaded dataframe {df.shape}:", list(df.columns))
+        print(
+            f" - Descriptors {df_data.shape}:",
+            list(df_data.columns),
+        )
+
+    # Optional descriptor transformation
+    if modifier_function is not None:
+        df_data = df_data.apply(modifier_function)
+
+    # Prepare constructor arguments only
+    dictionary = {
+        "data": torch.Tensor(df_data.values)
+    }
+
+    if create_labels:
+        dictionary["labels"] = torch.Tensor(
+            df["labels"].values
+        )
+
+    dataset_kwargs = {
+        "dictionary": dictionary,
+        "feature_names": df_data.columns.values,
+        "data_type": "descriptors",
+    }
+
+    return dataset_kwargs, df
+
+
 def create_dataset_from_files(
     file_names: Union[list, str],
     folder: str = None,
@@ -198,104 +367,81 @@ def create_dataset_from_files(
     verbose: bool = True,
     **kwargs,
 ):
-    """
-    Initialize a dataset from (a list of) files. Suitable for supervised/unsupervised tasks.
+    """Create a DictDataset from one or more COLVAR-like files.
 
     Parameters
     ----------
-    file_names : list
-        Names of files from which import the data
+    file_names : str or list[str]
+        File name or list of file names to load.
     folder : str, optional
-        Common path for the files to be imported, by default None. If set, filenames become 'folder/file_name'.
-    create_labels: bool, optional
-        Assign a label to each file, default True if more than a file is given, otherwise False
-    load_args: list[dict], optional
-        List of dictionaries with the arguments passed to load_dataframe function for each file (keys: start,stop,stride and pandas.read_csv options), by default None
-    filter_args: dict, optional
-        Dictionary of arguments which are passed to df.filter() to select descriptors (keys: items, like, regex), by default None
-        Note that 'time' and '*.bias' columns are always discarded.
+        Common directory containing the input files.
+    create_labels : bool, optional
+        Assign one integer label to each input file. If None, labels are
+        created automatically when more than one file is provided.
+    load_args : list[dict], optional
+        Per-file loading arguments.
+    filter_args : dict, optional
+        Arguments passed to ``DataFrame.filter`` to select descriptors.
+    modifier_function : callable, optional
+        Function applied to the descriptor dataframe.
     return_dataframe : bool, optional
-        Return also the imported Pandas dataframe for convenience, by default False
-    modifier_function : function, optional
-        Function to be applied to the input data, by default None.
+        If True, return the loaded dataframe together with the dataset.
     verbose : bool, optional
-        Print info on the datasets, by default True
-    kwargs : optional
-        args passed to mlcolvar.io.load_dataframe
+        Print information about the loaded data.
+    **kwargs
+        Additional arguments forwarded to ``load_dataframe``.
 
     Returns
     -------
-    torch.Dataset
-        Torch labeled dataset of the given data
-    optional, pandas.Dataframe
-        Pandas dataframe of the given data #TODO improve
+    DictDataset
+        Dataset containing the selected descriptors.
+    pandas.DataFrame, optional
+        Loaded dataframe, returned when ``return_dataframe=True``.
 
-    See also
-    --------
-    mlcolvar.io.load_dataframe
-        Function that is used to load the files
-
+    Notes
+    -----
+    ``DictDataset.from_colvars`` provides the equivalent class-based API.
     """
-    if isinstance(file_names, str):
-        file_names = [file_names]
 
-    num_files = len(file_names)
+    # Preserve the legacy **kwargs API
+    start = kwargs.pop("start", 0)
+    stop = kwargs.pop("stop", None)
+    stride = kwargs.pop("stride", 1)
+    delete_download = kwargs.pop("delete_download", True)
 
-    # set file paths
-    if folder is not None:
-        file_names = [os.path.join(folder, fname) for fname in file_names]
+    # Also allow the new explicit style
+    read_csv_kwargs = kwargs.pop("read_csv_kwargs", None)
 
-    # check if per file args are given, otherwise set to {}
-    if load_args is None:
-        load_args = [{} for _ in file_names]
-    else:
-        if (not isinstance(load_args, list)) or (len(file_names) != len(load_args)):
-            raise TypeError(
-                "load_args should be a list of dictionaries of arguments of same length as file_names. If you want to use the same args for all file pass them directly as **kwargs."
-            )
+    if read_csv_kwargs is None:
+        read_csv_kwargs = {}
 
-    # check if create_labels if given, otherwise set it to True if more than one file is given
-    if create_labels is None:
-        create_labels = False if len(file_names) == 1 else True
+    # Remaining legacy kwargs are pandas.read_csv options
+    read_csv_kwargs = {
+        **read_csv_kwargs,
+        **kwargs,
+    }
 
-    # initialize pandas dataframe
-    df = pd.DataFrame()
+    dataset_kwargs, dataframe = _prepare_dataset_from_files(
+        file_names=file_names,
+        folder=folder,
+        create_labels=create_labels,
+        load_args=load_args,
+        filter_args=filter_args,
+        modifier_function=modifier_function,
+        verbose=verbose,
+        start=start,
+        stop=stop,
+        stride=stride,
+        delete_download=delete_download,
+        read_csv_kwargs=read_csv_kwargs,
+    )
 
-    # load data
-    for i in range(num_files):
-        df_tmp = load_dataframe(file_names[i], **load_args[i], **kwargs)
-
-        # add label in the dataframe
-        if create_labels:
-            df_tmp["labels"] = i
-        if verbose:
-            print(f"Class {i} dataframe shape: ", np.shape(df_tmp))
-
-        # update collective dataframe
-        df = pd.concat([df, df_tmp], ignore_index=True)
-
-    # filter inputs
-    df_data = df.filter(**filter_args) if filter_args is not None else df.copy()
-    df_data = df_data.filter(regex="^(?!.*labels)^(?!.*time)^(?!.*bias)^(?!.*walker)")
-
-    if verbose:
-        print(f"\n - Loaded dataframe {df.shape}:", list(df.columns))
-        print(f" - Descriptors {df_data.shape}:", list(df_data.columns))
-
-    # apply transformation
-    if modifier_function is not None:
-        df_data = df_data.apply(modifier_function)
-
-    # create DictDataset
-    dictionary = {"data": torch.Tensor(df_data.values)}
-    if create_labels:
-        dictionary["labels"] = torch.Tensor(df["labels"].values)
-    dataset = DictDataset(dictionary, feature_names=df_data.columns.values, data_type='descriptors')
+    dataset = DictDataset(**dataset_kwargs)
 
     if return_dataframe:
-        return dataset, df
-    else:
-        return dataset
+        return dataset, dataframe
+
+    return dataset
 
 
 # =================================================================================================
@@ -428,3 +574,50 @@ def test_load_dataframe():
                                     )
         except ValueError as e:
             print("[TEST LOG] Checked this error: ", e)
+
+def test_from_colvars_matches_legacy_api():
+    from mlcolvar.tests import data_dir
+
+    with data_dir() as data_folder:
+        kwargs = dict(
+            file_names=["state_A.dat", "state_B.dat"],
+            folder=str(data_folder),
+            create_labels=True,
+            filter_args={"regex": "n|o"},
+            start=0,
+            stop=5,
+            stride=1,
+            return_dataframe=True,
+        )
+
+        legacy, legacy_df = create_dataset_from_files(**kwargs)
+        new, new_df = DictDataset.from_colvars(**kwargs)
+
+        assert legacy.keys == new.keys
+        assert np.array_equal(
+            legacy.feature_names,
+            new.feature_names,
+        )
+
+        for key in legacy.keys:
+            assert torch.equal(legacy[key], new[key])
+
+        pd.testing.assert_frame_equal(legacy_df, new_df)
+        
+
+def test_from_colvars_preserves_subclass():
+    from mlcolvar.tests import data_dir
+
+    class CustomDataset(DictDataset):
+        pass
+
+    with data_dir() as data_folder:
+        dataset = CustomDataset.from_colvars(
+            file_names="state_A.dat",
+            folder=str(data_folder),
+            start=0,
+            stop=5,
+        )
+
+        assert isinstance(dataset, CustomDataset)
+        assert isinstance(dataset[:2], CustomDataset)
