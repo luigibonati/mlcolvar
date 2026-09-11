@@ -139,7 +139,7 @@ def create_dataset_from_configurations(config: atomic.Configurations,
                                        long_range_cutoff: float = -1.0,
                                        atom_names: List = None,
                                        remove_isolated_nodes: bool = False,
-                                       show_progress: bool = True,
+                                       show_progress: bool = True
                                       ) -> DictDataset:
     """Build DictDataset object containing torch_geometric graph data objects from configurations.
 
@@ -232,21 +232,18 @@ def create_dataset_from_configurations(config: atomic.Configurations,
     
     # we also save the names of the atoms that have been actually used, ensuring correct dimensions
 
-    unique_names = np.asarray(atom_names)[unique_idx.detach().cpu().numpy()].tolist()
+    unique_names = np.array(atom_names)[unique_idx] if len(unique_idx) > 1 else np.array(np.array(atom_names)[unique_idx])
+    unique_names = unique_names.tolist()
 
-    dataset = DictDataset(
-        dictionary={"data_list": data_list},
-        metadata={
-            "atomic_numbers": atomic_numbers.zs,
-            "cutoff": cutoff,
-            "buffer": buffer,
-            "long_range_cutoff": long_range_cutoff,
-            "system_idx": unique_idx,
-            "system_atoms_names": unique_names,
-            "is_truncated_graph": truncated,
-        },
-        data_type="graphs",
-    )
+    dataset = DictDataset(dictionary={'data_list': data_list},
+                          metadata={'atomic_numbers': atomic_numbers.zs,
+                                    'cutoff': cutoff,
+                                    'buffer': buffer,
+                                    'long_range_cutoff': long_range_cutoff,
+                                    'system_idx': unique_idx,
+                                    'system_atoms_names': unique_names,
+                                    'is_truncated_graph': truncated},
+                          data_type='graphs')
 
     return dataset
 
