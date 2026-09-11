@@ -1,51 +1,57 @@
 import numpy as np
 import torch
 import os
-from typing import Union, List, Tuple
-import mdtraj
+from typing import Union, List
 
 from mlcolvar.io._utils import _download_temp_file
 from mlcolvar.io.graphs._utils import *
-from mlcolvar.io.graphs.mdtraj_ import *
-from mlcolvar.io.graphs.ase_ import *
+from mlcolvar.io.graphs.mdtraj_ import (
+    load_traj_with_mdtraj,
+    _prepare_configurations_from_mdtraj_trajectories,
+)
+from mlcolvar.io.graphs.ase_ import (
+    create_pdb_from_xyz,
+    load_traj_with_ase,
+    _prepare_configurations_from_ase_trajectories,
+)
 
 from mlcolvar.data import DictDataset
-from mlcolvar.data.graph.atomic import AtomicNumberTable
+from mlcolvar.data.graph.utils import _prepare_dataset_from_configurations
 
 __all__ = ["create_dataset_from_trajectories"]
 
 
-def create_dataset_from_trajectories(trajectories: Union[List[str], str],
-                                     cutoff: float,
-                                     topologies: Union[List[str], str, None] = None,
-                                     load_args: list = None,
-                                     folder: str = None,
-                                     trajectory_labels: list = None,
-                                     graph_labels: list = None,
-                                     node_labels: list = None,
-                                     system_selection: str = None,
-                                     environment_selection: str = None,
-                                     buffer: float = 0.0,
-                                     subsystem_selection: str = None,
-                                     long_range_cutoff: float = -1.0,
-                                     return_trajectories: bool = False,
-                                     remove_isolated_nodes: bool = True,
-                                     show_progress: bool = False,
-                                     atom_names: List = None,
-                                     lengths_conversion : float = None,
-                                     delete_download: bool = True,
-                                     backend : str = 'mdtraj',
-                                    ) -> Union[DictDataset, 
-                                               Tuple[DictDataset, Union[List[List[mdtraj.Trajectory]], List[mdtraj.Trajectory]]
-    ]
-]:
+def _prepare_dataset_from_trajectories(
+    trajectories: Union[List[str], str],
+    cutoff: float,
+    topologies: Union[List[str], str, None] = None,
+    load_args: list = None,
+    folder: str = None,
+    trajectory_labels: list = None,
+    graph_labels: list = None,
+    node_labels: list = None,
+    system_selection=None,
+    environment_selection=None,
+    buffer: float = 0.0,
+    subsystem_selection=None,
+    long_range_cutoff: float = -1.0,
+    remove_isolated_nodes: bool = True,
+    show_progress: bool = False,
+    atom_names: List = None,
+    lengths_conversion: float = None,
+    delete_download: bool = True,
+    backend: str = "mdtraj",
+):
     """
-    Create a dataset from a set of trajectory files using either mdtraj or ase as a backend.
+    Load trajectories and prepare graph dataset constructor arguments.
+
+    This internal helper handles trajectory loading, backend-specific conversion to atomic configurations, 
+    and graph construction, but does not instantiate a ``DictDataset``.
 
     Parameters
     ----------
     trajectories: Union[List[str], str]
-        Paths to trajectories files.
+        Paths to trajectory files.
     cutoff: float (units: Ang)
         The graph cutoff radius in Angstroms.
     topologies: Union[List[str], str, None], optional
@@ -69,44 +75,43 @@ def create_dataset_from_trajectories(trajectories: Union[List[str], str],
     buffer: float
         Buffer size used in finding active environment atoms. This option should be defined with the `environment_selection` option, by default None.
     subsystem_selection: str
-        Atom selections of the system atoms in the syntax of the chosen backend (see notes), by default None (no susbsystem atoms). 
+        Atom selections of the system atoms in the syntax of the chosen backend (see notes), by default None (no subsystem atoms). 
         If given, long-range edges will be put between subsystem atoms. This option should be defined along with the `long_range_cutoff` option. 
         Besides, all atoms selected by this selection should also be selected by the `system_selection`.
     long_range_cutoff : float
         Cutoff radius for the long-range edges defined on subsystem atoms. If negative, no long-range interactions are considered, by default -1.0. 
         This option should be defined with the `subsystem_selection` option.
-    return_trajectories: bool
-        If also return the loaded trajectory objects, either as mdtraj or ase object based on the chose backend, by default False.
     remove_isolated_nodes: bool
         If remove isolated nodes from the dataset, by default True.
     show_progress: bool
         If show the progress bar, by default False.
     atom_names : List, optional
         Optional atom names used by the dataset constructor, by default None.
-        If not provided, atomic names will be infered from trajectory/topology objects
+        If not provided, atomic names will be inferred from trajectory/topology objects
     lengths_conversion: float,
         Conversion factor for length units, by default None. The default sends to Angstroms whatever the backend used.
-    delete_download: bool, optinal
+    delete_download : bool, optional
         Whether to delete the downloaded file after it has been loaded, default True.
     backend: str
-        Which external library to be used for loading the trajectory file, either `mdtraj` or `ase`, by defualt `mdtraj`.
+        Which external library to be used for loading the trajectory file, either `mdtraj` or `ase`, by default `mdtraj`.
 
     Returns
     -------
-    dataset: mlcolvar.graph.data.GraphDataSet
-        The graph dataset.
-    trajectories: Union[List[List[mdtraj.Trajectory]], List[mdtraj.Trajectory]]
-        The loaded trajectory objects.
-
+    dataset_kwargs : dict
+        Keyword arguments required to instantiate a graph-based
+        ``DictDataset`` or compatible subclass.
+    trajectories_in_memory : list
+        Loaded trajectory objects from the selected backend.
+        
     Notes
     -----
     The logic behind the system-environment-subsystem selections is as follows:
         1. If only `system_selection` is given, only atoms selected by this selection will be loaded from the trajectories and
-         used ot build the graphs, with edges drawn according to the given `cutoff`.
+         used to build the graphs, with edges drawn according to the given `cutoff`.
         2. If both `system_selection` and `environment_selection` are given, atoms selected by both selections will
          be loaded from the trajectories but only [the system atoms] and [the environment atoms within the given `cutoff`+`buffer` 
          from the system atoms] will be included in the graphs, with edges drawn according to the given `cutoff`.
-        3. If `system_selection`, `environment_selection` and `system_selection` are given, everything is as case 2, but,
+        3. If `system_selection`, `environment_selection` and `subsystem_selection` are given, everything is as case 2, but,
          in addition, long-range edges will be drawn between subsystem atoms within the `long_range_cutoff` from each other.
 
     The selection syntax can be either mdtraj-based or ase-based:
@@ -116,7 +121,13 @@ def create_dataset_from_trajectories(trajectories: Union[List[str], str],
 
     # ======================================= Initial checks =======================================
 
-    # ensure trajectories is a list
+    if backend not in {"mdtraj", "ase"}:
+        raise ValueError(
+            f"Unknown backend {backend!r}. "
+            "Expected 'mdtraj' or 'ase'."
+        )
+
+    # Ensure trajectories is a list
     if isinstance(trajectories, str):
         trajectories = [trajectories]
 
@@ -142,14 +153,16 @@ def create_dataset_from_trajectories(trajectories: Union[List[str], str],
     # ================================== Topology files handling ===================================
 
     # check topologies if given, with xyz it can be None
-    if backend == 'mtraj':
+    if backend == "mdtraj":
         if topologies is not None:
             assert len(trajectories) == len(topologies) or len(topologies)==1 or isinstance(topologies, str), (
                 'Either a single topology file or as many as the trajectory files must be provided!'
             )
     elif backend == 'ase':
         if topologies is not None:
-            raise ValueError('Topologies must be None wwhen using `ase` as backend!')
+            raise ValueError(
+                "Topologies must be None when using `ase` as backend!"
+            )
     
     # Allow topology to be None or empty. In that case, create a list of empty strings.
     shared_top = True
@@ -158,7 +171,7 @@ def create_dataset_from_trajectories(trajectories: Union[List[str], str],
     elif topologies is None or (isinstance(topologies, list) and len(topologies) == 0):
         topologies = ["" for _ in trajectories]
     elif len(topologies) == 1 and len(trajectories) > 1:
-        topologies = [topologies for _ in trajectories]
+        topologies = [topologies[0] for _ in trajectories]
     else: 
         shared_top = False
 
@@ -232,7 +245,7 @@ def create_dataset_from_trajectories(trajectories: Union[List[str], str],
 
         trajectories_in_memory.append(traj)
 
-        # remove temporary files from dowload if needed
+        # Remove temporary downloaded files if needed
         if download_traj:
             if delete_download:
                 temp_traj.close()
@@ -240,11 +253,16 @@ def create_dataset_from_trajectories(trajectories: Union[List[str], str],
                 print(f"downloaded file ({url_traj}) saved as ({trajectories[i]}).")
 
         if download_top:
-            if not shared_top or (shared_top and i == len(trajectories)):
+            if not shared_top or (
+                shared_top and i == len(trajectories) - 1
+            ):
                 if delete_download:
                     temp_top.close()
                 else:
-                    print(f"downloaded file ({url_top}) saved as ({topologies[i]}).")
+                    print(
+                        f"downloaded file ({url_top}) "
+                        f"saved as ({topologies[i]})."
+                    )
     #endfor i in range(len(trajectories)):
 
     graph_labels, node_labels = _normalize_graph_target_inputs(
@@ -253,39 +271,158 @@ def create_dataset_from_trajectories(trajectories: Union[List[str], str],
         graph_labels=graph_labels,
         node_labels=node_labels,
     )
-    if backend == 'mdtraj':
-        dataset = dataset_from_mdtraj_trajectories(trajectories=trajectories_in_memory,
-                                                   graph_labels=graph_labels,
-                                                   node_labels=node_labels,
-                                                   cutoff=cutoff, 
-                                                   system_selection=system_selection,
-                                                   environment_selection=environment_selection,
-                                                   subsystem_selection=subsystem_selection,
-                                                   lengths_conversion=lengths_conversion,
-                                                   buffer=buffer,
-                                                   long_range_cutoff=long_range_cutoff,
-                                                   atom_names=atom_names,
-                                                   remove_isolated_nodes=remove_isolated_nodes,
-                                                   show_progress=show_progress)
-    elif backend == 'ase':
-        dataset = dataset_from_ase_trajectories(trajectories=trajectories_in_memory,
-                                                graph_labels=graph_labels,
-                                                node_labels=node_labels,
-                                                cutoff=cutoff, 
-                                                system_selection=system_selection,
-                                                environment_selection=environment_selection,
-                                                subsystem_selection=subsystem_selection,
-                                                lengths_conversion=lengths_conversion,
-                                                buffer=buffer,
-                                                long_range_cutoff=long_range_cutoff,
-                                                atom_names=atom_names,
-                                                remove_isolated_nodes=remove_isolated_nodes,
-                                                show_progress=show_progress)
+    if backend == "mdtraj":
+        configurations, atomic_numbers, atom_names = (
+            _prepare_configurations_from_mdtraj_trajectories(
+                trajectories=trajectories_in_memory,
+                graph_labels=graph_labels,
+                node_labels=node_labels,
+                system_selection=system_selection,
+                environment_selection=environment_selection,
+                subsystem_selection=subsystem_selection,
+                lengths_conversion=lengths_conversion,
+                atom_names=atom_names,
+            )
+        )
+
+    elif backend == "ase":
+        configurations, atomic_numbers, atom_names = (
+            _prepare_configurations_from_ase_trajectories(
+                trajectories=trajectories_in_memory,
+                graph_labels=graph_labels,
+                node_labels=node_labels,
+                system_selection=system_selection,
+                environment_selection=environment_selection,
+                subsystem_selection=subsystem_selection,
+                lengths_conversion=lengths_conversion,
+                atom_names=atom_names,
+            )
+        )
+
+    dataset_kwargs = _prepare_dataset_from_configurations(
+        config=configurations,
+        atomic_numbers=atomic_numbers,
+        cutoff=cutoff,
+        buffer=buffer,
+        long_range_cutoff=long_range_cutoff,
+        atom_names=atom_names,
+        remove_isolated_nodes=remove_isolated_nodes,
+        show_progress=show_progress,
+    )
+
+    return dataset_kwargs, trajectories_in_memory
+
+
+def create_dataset_from_trajectories(
+    trajectories: Union[List[str], str],
+    cutoff: float,
+    topologies: Union[List[str], str, None] = None,
+    load_args: list = None,
+    folder: str = None,
+    trajectory_labels: list = None,
+    graph_labels: list = None,
+    node_labels: list = None,
+    system_selection=None,
+    environment_selection=None,
+    buffer: float = 0.0,
+    subsystem_selection=None,
+    long_range_cutoff: float = -1.0,
+    return_trajectories: bool = False,
+    remove_isolated_nodes: bool = True,
+    show_progress: bool = False,
+    atom_names: List = None,
+    lengths_conversion: float = None,
+    delete_download: bool = True,
+    backend: str = "mdtraj",
+):
+    """Create a graph-based DictDataset from trajectory files.
+
+    Parameters
+    ----------
+    trajectories : str or list[str]
+        Path or paths to trajectory files.
+    cutoff : float
+        Graph cutoff radius in Angstroms.
+    topologies : str or list[str], optional
+        Topology file or files used with the MDTraj backend.
+    load_args : list[dict], optional
+        Per-file loading options containing ``start``, ``stop``, and ``stride``.
+    folder : str, optional
+        Common directory containing trajectory and topology files.
+    trajectory_labels : list, optional
+        Labels assigned per trajectory and broadcast to selected frames.
+    graph_labels : list, optional
+        Labels assigned per selected frame.
+    node_labels : list, optional
+        Node-level labels assigned per selected frame.
+    system_selection
+        Backend-specific selection defining system atoms.
+    environment_selection
+        Backend-specific selection defining environment atoms.
+    buffer : float, optional
+        Buffer used when selecting environment atoms.
+    subsystem_selection
+        Backend-specific selection defining atoms used for long-range edges.
+    long_range_cutoff : float, optional
+        Cutoff used for long-range subsystem edges.
+    return_trajectories : bool, optional
+        If True, also return the loaded trajectory objects.
+    remove_isolated_nodes : bool, optional
+        Whether to remove isolated graph nodes.
+    show_progress : bool, optional
+        Whether to display graph-construction progress.
+    atom_names : list, optional
+        Optional names for system atoms.
+    lengths_conversion : float, optional
+        Conversion factor applied to trajectory coordinates.
+    delete_download : bool, optional
+        Whether temporary downloaded files are deleted.
+    backend : {"mdtraj", "ase"}, optional
+        Backend used to load trajectory files.
+
+    Returns
+    -------
+    DictDataset
+        Graph-based dataset constructed from the trajectories.
+    list, optional
+        Loaded trajectory objects when ``return_trajectories=True``.
+
+    Notes
+    -----
+    ``DictDataset.graph_from_trajectories`` provides the equivalent
+    class-based API.
+    """
+
+    dataset_kwargs, trajectories_in_memory = (
+        _prepare_dataset_from_trajectories(
+            trajectories=trajectories,
+            cutoff=cutoff,
+            topologies=topologies,
+            load_args=load_args,
+            folder=folder,
+            trajectory_labels=trajectory_labels,
+            graph_labels=graph_labels,
+            node_labels=node_labels,
+            system_selection=system_selection,
+            environment_selection=environment_selection,
+            buffer=buffer,
+            subsystem_selection=subsystem_selection,
+            long_range_cutoff=long_range_cutoff,
+            remove_isolated_nodes=remove_isolated_nodes,
+            show_progress=show_progress,
+            atom_names=atom_names,
+            lengths_conversion=lengths_conversion,
+            delete_download=delete_download,
+            backend=backend,
+        )
+    )
+
+    dataset = DictDataset(**dataset_kwargs)
 
     if return_trajectories:
         return dataset, trajectories_in_memory
-    else:
-        return dataset
+
+    return dataset
 
 
 
