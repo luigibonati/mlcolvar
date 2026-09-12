@@ -6,6 +6,7 @@ from .base import (
 )
 from .cache import (
     CachedRepresentationDerivatives,
+    IdentityDescriptorDerivatives,
     RepresentationCache,
     precompute_committor_cache,
     precompute_representation_cache,
@@ -33,6 +34,7 @@ __all__ = [
     "PoolReducer",
     "ConcatReducer",
     "RepresentationCache",
+    "IdentityDescriptorDerivatives",
     "CachedRepresentationDerivatives",
     "precompute_representation_cache",
     "precompute_committor_cache",
