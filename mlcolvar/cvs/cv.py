@@ -24,7 +24,7 @@ class BaseCV(lightning.LightningModule):
 
     def __init__(
         self,
-        model: Union[List[int], FeedForward, BaseGNN],
+        model: Union[List[int], torch.nn.Module],
         preprocessing: torch.nn.Module = None,
         postprocessing: torch.nn.Module = None,
         *args,
@@ -82,31 +82,43 @@ class BaseCV(lightning.LightningModule):
                                                 long_range=True if hasattr(self, 'long_range_cutoff') and self.long_range_cutoff > 0 else False)
 
 
-    # TODO add general torch.nn.Module
-    def parse_model(self, model: Union[List[int], FeedForward, BaseGNN]):
+    def parse_model(
+        self,
+        model: Union[List[int], torch.nn.Module],
+    ):
         if isinstance(model, list):
             self.layers = model
             self.BLOCKS = self.DEFAULT_BLOCKS
             self._override_model = False
             self.in_features = self.layers[0]
             self.out_features = self.layers[-1]
-        elif isinstance(model, FeedForward) or isinstance(model, BaseGNN):
+
+        elif isinstance(model, torch.nn.Module):
             self.BLOCKS = self.MODEL_BLOCKS
             self._override_model = True
             self.in_features = model.in_features
             self.out_features = model.out_features
-            # save buffers for the interface for PLUMED
+
+            # PLUMED metadata handling for BaseGNN.
             if isinstance(model, BaseGNN):
-                self.register_buffer('n_out', model.n_out)    
-                self.register_buffer('cutoff', model.cutoff)
-                self.register_buffer('buffer', model.buffer)
-                self.register_buffer('long_range_cutoff', model.long_range_cutoff)
-                self.register_buffer('atomic_numbers', model.atomic_numbers)
+                self.register_buffer("n_out", model.n_out)
+                self.register_buffer("cutoff", model.cutoff)
+                self.register_buffer("buffer", model.buffer)
+                self.register_buffer(
+                    "long_range_cutoff",
+                    model.long_range_cutoff,
+                )
+                self.register_buffer(
+                    "atomic_numbers",
+                    model.atomic_numbers,
+                )
+
         else:
             raise ValueError(
-                f"Keyword model can either accept type list, FeedForward or BaseGNN. Found {type(model)}"
+                "Keyword model must be either a list of layer sizes "
+                f"or a torch.nn.Module. Found {type(model)}."
             )
-        
+            
 
     def parse_options(self, options: dict = None):
         """
