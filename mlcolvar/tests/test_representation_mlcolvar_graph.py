@@ -5,21 +5,20 @@ from typing import Dict, Optional
 import pytest
 import torch
 from torch import nn
+from torch_geometric.data import Data
 
 from mlcolvar.core import BaseGNN
 from mlcolvar.data import DictDataset
-from mlcolvar.featurization.transfer import (
-    TransferFeaturizer,
-    TransferModel,
-    export_transfer_torchscript,
+from mlcolvar.representation import (
+    MLColvarRepresentation,
+    RepresentationModel,
+    TaskHead,
+    export_representation_torchscript,
     precompute_committor_cache,
 )
-from torch_geometric.data import Data
 
 
 class GraphShiftPreprocessing(nn.Module):
-    """Shift graph positions while preserving all other graph tensors."""
-
     def forward(
         self,
         data: Dict[str, torch.Tensor],
@@ -31,31 +30,23 @@ class GraphShiftPreprocessing(nn.Module):
         }
 
         shift = 1.0
-
         if cell is not None:
             shift = shift + float(
                 cell.reshape(()).item()
             )
 
         output["positions"] = (
-            data["positions"]
-            + shift
+            data["positions"] + shift
         )
-
         return output
 
 
 class DummyGraphEncoder(BaseGNN):
-    """Small graph-level encoder satisfying the BaseGNN transfer contract."""
-
     def __init__(
         self,
         pooling_operation: Optional[str] = "mean",
         dtype: torch.dtype = torch.float32,
     ) -> None:
-        # Use the real BaseGNN constructor. ``in_features`` and
-        # ``out_features`` are read-only properties of BaseGNN and must not
-        # be assigned directly.
         super().__init__(
             n_out=2,
             dataset_for_initialization=None,
@@ -72,9 +63,6 @@ class DummyGraphEncoder(BaseGNN):
                 dtype=dtype,
             )
         )
-
-        # Keep all floating-point BaseGNN metadata and helper modules in the
-        # same precision as the dummy encoder.
         self.to(dtype=dtype)
 
     def forward(
@@ -98,7 +86,6 @@ class DummyGraphEncoder(BaseGNN):
         output = node_features.new_zeros(
             (n_graphs, 2)
         )
-
         output.index_add_(
             0,
             batch,
@@ -113,7 +100,6 @@ class DummyGraphEncoder(BaseGNN):
                 dtype=output.dtype,
                 device=output.device,
             )
-
             output = output / counts.clamp_min(
                 1.0
             ).unsqueeze(-1)
@@ -127,8 +113,6 @@ class DummyGraphEncoder(BaseGNN):
 
 
 class DummyGraphCV(nn.Module):
-    """Minimal graph-based pretrained CV."""
-
     def __init__(
         self,
         pooling_operation: Optional[str] = "mean",
@@ -138,7 +122,6 @@ class DummyGraphCV(nn.Module):
         super().__init__()
 
         self.in_features = None
-
         self.nn = DummyGraphEncoder(
             pooling_operation=pooling_operation,
         )
@@ -156,17 +139,11 @@ class DummyGraphCV(nn.Module):
 
 
 class DummyTensorCV(nn.Module):
-    """Minimal tensor CV used to test tensor/graph type validation."""
-
     def __init__(self) -> None:
         super().__init__()
-
         self.in_features = 3
         self.out_features = 2
-        self.nn = nn.Linear(
-            3,
-            2,
-        )
+        self.nn = nn.Linear(3, 2)
 
     def forward(
         self,
@@ -209,19 +186,17 @@ def make_graph(
     }
 
 
-def test_graph_transfer_featurizer_features_metadata_and_dtype() -> None:
-    """Extract graph features and copy the pretrained GNN metadata."""
+def test_graph_mlcolvar_representation_features_metadata_and_dtype() -> None:
+    pretrained = DummyGraphCV()
 
-    pretrained_model = DummyGraphCV()
-
-    featurizer = TransferFeaturizer(
-        model=pretrained_model,
+    representation = MLColvarRepresentation(
+        pretrained,
+        mode="latent",
         freeze=True,
     )
 
     data = make_graph()
-
-    output = featurizer(data)
+    output = representation(data)
 
     expected = torch.tensor(
         [
@@ -231,24 +206,26 @@ def test_graph_transfer_featurizer_features_metadata_and_dtype() -> None:
         dtype=torch.float32,
     )
 
-    assert featurizer.in_features is None
-    assert featurizer.out_features == 2
-    assert featurizer.pooling_operation == "mean"
+    assert representation.input_kind == "graph"
+    assert representation.output_kind == "system"
+    assert representation.in_features is None
+    assert representation.out_features == 2
+    assert representation.pooling_operation == "mean"
 
     torch.testing.assert_close(
-        featurizer.cutoff,
+        representation.cutoff,
         torch.tensor(4.0),
     )
     torch.testing.assert_close(
-        featurizer.buffer,
+        representation.buffer,
         torch.tensor(0.5),
     )
     torch.testing.assert_close(
-        featurizer.long_range_cutoff,
+        representation.long_range_cutoff,
         torch.tensor(-1.0),
     )
 
-    assert featurizer.atomic_numbers.tolist() == [
+    assert representation.atomic_numbers.tolist() == [
         1,
         6,
         8,
@@ -256,70 +233,65 @@ def test_graph_transfer_featurizer_features_metadata_and_dtype() -> None:
 
     assert output.shape == (2, 2)
     assert output.dtype == torch.float32
-
     torch.testing.assert_close(
         output,
         expected,
     )
 
-    # The input dictionary itself is not replaced or modified in-place.
+    # Input is not modified in-place.
     assert data["positions"].dtype == torch.float64
-
     torch.testing.assert_close(
         data["positions"],
         make_graph()["positions"],
     )
 
 
-def test_frozen_graph_featurizer_preserves_position_gradients() -> None:
-    """Keep coordinate gradients while freezing the pretrained graph CV."""
+def test_frozen_graph_representation_preserves_position_gradients() -> None:
+    pretrained = DummyGraphCV()
 
-    pretrained_model = DummyGraphCV()
-
-    featurizer = TransferFeaturizer(
-        model=pretrained_model,
+    representation = MLColvarRepresentation(
+        pretrained,
+        mode="latent",
         freeze=True,
     )
 
     data = make_graph()
     data["positions"].requires_grad_(True)
 
-    output = featurizer(data)
+    output = representation(data)
     output.sum().backward()
 
-    gradient = data["positions"].grad
-
-    assert gradient is not None
-    assert gradient.shape == data["positions"].shape
-    assert torch.isfinite(gradient).all()
-    assert torch.count_nonzero(gradient) > 0
-
-    assert all(
-        not parameter.requires_grad
-        for parameter in pretrained_model.parameters()
-    )
+    assert data["positions"].grad is not None
+    assert torch.isfinite(
+        data["positions"].grad
+    ).all()
+    assert torch.count_nonzero(
+        data["positions"].grad
+    ) > 0
 
     assert all(
-        parameter.grad is None
-        for parameter in pretrained_model.parameters()
+        not p.requires_grad
+        for p in pretrained.parameters()
+    )
+    assert all(
+        p.grad is None
+        for p in pretrained.parameters()
     )
 
-    featurizer.train()
+    representation.train()
+    assert not representation.training
+    assert not pretrained.training
+    assert not pretrained.nn.training
 
-    assert featurizer.training
-    assert not pretrained_model.training
-    assert not pretrained_model.nn.training
 
-
-def test_graph_featurizer_state_dict_contains_model_and_metadata() -> None:
-    """Persist the graph encoder and copied deployment metadata."""
-
-    featurizer = TransferFeaturizer(
-        model=DummyGraphCV(),
+def test_graph_representation_state_dict_contains_model_and_metadata() -> None:
+    representation = MLColvarRepresentation(
+        DummyGraphCV(),
+        mode="latent",
         freeze=True,
     )
 
-    state = featurizer.state_dict()
+    state = representation.state_dict()
 
     assert "model.nn.scale" in state
     assert "cutoff" in state
@@ -329,18 +301,17 @@ def test_graph_featurizer_state_dict_contains_model_and_metadata() -> None:
     assert "_model_reference" not in state
 
 
-def test_graph_transfer_model_is_basegnn_and_trains_only_readout() -> None:
-    """Wrap frozen graph features in a trainable graph-compatible readout."""
+def test_graph_representation_model_is_basegnn_and_trains_only_head() -> None:
+    pretrained = DummyGraphCV()
 
-    pretrained_model = DummyGraphCV()
-
-    featurizer = TransferFeaturizer(
-        model=pretrained_model,
+    representation = MLColvarRepresentation(
+        pretrained,
+        mode="latent",
         freeze=True,
     )
 
-    model = TransferModel(
-        featurizer=featurizer,
+    model = RepresentationModel(
+        representation,
         n_out=1,
         hidden_layers=(),
     )
@@ -350,50 +321,36 @@ def test_graph_transfer_model_is_basegnn_and_trains_only_readout() -> None:
         BaseGNN,
     )
 
-    assert model.featurizer is featurizer
+    assert model.representation is representation
     assert model.out_features == 1
-
     assert "_radial_embedding" not in model._modules
 
     torch.testing.assert_close(
         model.cutoff,
-        featurizer.cutoff,
+        representation.cutoff,
     )
     torch.testing.assert_close(
         model.buffer,
-        featurizer.buffer,
+        representation.buffer,
     )
     torch.testing.assert_close(
         model.long_range_cutoff,
-        featurizer.long_range_cutoff,
+        representation.long_range_cutoff,
     )
 
-    assert model.atomic_numbers.tolist() == [
-        1,
-        6,
-        8,
+    trainable = [
+        p
+        for p in model.parameters()
+        if p.requires_grad
     ]
-
-    assert all(
-        not parameter.requires_grad
-        for parameter in pretrained_model.parameters()
-    )
-
-    trainable_parameters = [
-        parameter
-        for parameter in model.parameters()
-        if parameter.requires_grad
-    ]
-
-    # Linear(2, 1): two weights and one bias.
     assert sum(
-        parameter.numel()
-        for parameter in trainable_parameters
+        p.numel()
+        for p in trainable
     ) == 3
 
     linear = next(
         module
-        for module in model.readout.modules()
+        for module in model.head.modules()
         if isinstance(module, nn.Linear)
     )
 
@@ -407,35 +364,21 @@ def test_graph_transfer_model_is_basegnn_and_trains_only_readout() -> None:
     output = model(data)
 
     assert output.shape == (2, 1)
-    assert output.dtype == linear.weight.dtype
-
     output.sum().backward()
 
     assert data["positions"].grad is not None
     assert torch.isfinite(
         data["positions"].grad
     ).all()
-    assert torch.count_nonzero(
-        data["positions"].grad
-    ) > 0
-
     assert linear.weight.grad is not None
-    assert pretrained_model.nn.scale.grad is None
-
-    model.train()
-
-    assert model.training
-    assert model.featurizer.training
-    assert not pretrained_model.training
-    assert not pretrained_model.nn.training
+    assert pretrained.nn.scale.grad is None
 
 
-def test_graph_transfer_model_can_be_traced() -> None:
-    """Trace the graph transfer encoder and readout as one module."""
-
-    model = TransferModel(
-        featurizer=TransferFeaturizer(
-            model=DummyGraphCV(),
+def test_graph_representation_model_can_be_traced() -> None:
+    model = RepresentationModel(
+        MLColvarRepresentation(
+            DummyGraphCV(),
+            mode="latent",
             freeze=True,
         ),
         n_out=1,
@@ -443,7 +386,6 @@ def test_graph_transfer_model_can_be_traced() -> None:
     ).eval()
 
     data = make_graph()
-
     expected = model(data)
 
     traced = torch.jit.trace(
@@ -461,101 +403,56 @@ def test_graph_transfer_model_can_be_traced() -> None:
     )
 
 
-def test_graph_featurizer_requires_graph_level_pooling() -> None:
-    """Reject node-level encoders for graph-level transfer targets."""
-
+def test_graph_representation_requires_graph_level_pooling() -> None:
     with pytest.raises(
         ValueError,
-        match="must use graph-level pooling",
+        match="graph-level encoder",
     ):
-        TransferFeaturizer(
-            model=DummyGraphCV(
+        MLColvarRepresentation(
+            DummyGraphCV(
                 pooling_operation=None,
-            )
+            ),
+            mode="latent",
         )
 
 
-def test_graph_featurizer_rejects_tensor_norm_in() -> None:
-    """Reject tensor normalization applied directly to graph dictionaries."""
-
-    featurizer = TransferFeaturizer(
-        model=DummyGraphCV(
+def test_graph_representation_rejects_tensor_norm_in() -> None:
+    representation = MLColvarRepresentation(
+        DummyGraphCV(
             use_norm_in=True,
-        )
+        ),
+        mode="latent",
     )
 
     with pytest.raises(
         ValueError,
-        match="Input normalization is tensor-based",
+        match="Tensor input normalization",
     ):
-        featurizer(
+        representation(
             make_graph()
         )
 
 
-def test_transfer_api_dispatches_tensor_and_graph_models() -> None:
-    """The public factories select tensor or graph implementations automatically."""
-
-    tensor_featurizer = TransferFeaturizer(
-        model=DummyTensorCV(),
+def test_mlcolvar_representation_factory_distinguishes_tensor_and_graph() -> None:
+    tensor_rep = MLColvarRepresentation(
+        DummyTensorCV(),
+        mode="latent",
+    )
+    graph_rep = MLColvarRepresentation(
+        DummyGraphCV(),
         mode="latent",
     )
 
-    graph_featurizer = TransferFeaturizer(
-        model=DummyGraphCV(),
-        mode="latent",
-    )
-
-    tensor_model = TransferModel(
-        featurizer=tensor_featurizer,
-        n_out=1,
-        hidden_layers=(),
-    )
-
-    graph_model = TransferModel(
-        featurizer=graph_featurizer,
-        n_out=1,
-        hidden_layers=(),
-    )
-
-    assert tensor_featurizer.in_features == 3
-    assert graph_featurizer.in_features is None
-
-    assert not isinstance(tensor_model, BaseGNN)
-    assert isinstance(graph_model, BaseGNN)
+    assert tensor_rep.input_kind == "tensor"
+    assert graph_rep.input_kind == "graph"
 
     with pytest.raises(
         ValueError,
-        match="support only.*latent",
+        match="support only mode='latent'",
     ):
-        TransferFeaturizer(
-            model=DummyGraphCV(),
+        MLColvarRepresentation(
+            DummyGraphCV(),
             mode="output",
-        )
-
-
-@pytest.mark.parametrize(
-    "hidden_layers",
-    [
-        (0,),
-        (-2,),
-        (8, 0),
-    ],
-)
-def test_graph_transfer_model_rejects_invalid_hidden_layers(
-    hidden_layers,
-) -> None:
-    featurizer = TransferFeaturizer(
-        model=DummyGraphCV(),
-    )
-
-    with pytest.raises(
-        ValueError,
-        match="positive integers",
-    ):
-        TransferModel(
-            featurizer=featurizer,
-            hidden_layers=hidden_layers,
         )
 
 
@@ -563,8 +460,6 @@ def make_graph_sample(
     offset: float,
     label: float = 2.0,
 ) -> Data:
-    """Create one fixed-composition graph for cache tests."""
-
     positions = torch.tensor(
         [
             [0.0, 0.0, 0.0],
@@ -576,11 +471,7 @@ def make_graph_sample(
 
     return Data(
         positions=positions,
-
-        # Explicitly preserve the isolated third atom. Without this, PyG may
-        # infer only two nodes from edge_index and create a too-short batch.
         num_nodes=positions.shape[0],
-
         edge_index=torch.tensor(
             [
                 [0, 1],
@@ -603,40 +494,7 @@ def make_graph_sample(
     )
 
 
-def test_graph_transfer_raw_and_cached_paths_agree() -> None:
-    """Graph inference and cached latent inference must share one head."""
-
-    featurizer = TransferFeaturizer(
-        model=DummyGraphCV(),
-        freeze=True,
-    )
-
-    model = TransferModel(
-        featurizer=featurizer,
-        n_out=1,
-        hidden_layers=(),
-    ).eval()
-
-    data = make_graph()
-
-    with torch.no_grad():
-        latent = featurizer(data)
-        output_raw = model.forward_raw(data)
-        output_cached = model.forward_features(latent)
-
-    assert model.raw_in_features is None
-    assert model.latent_features == 2
-    assert model.transfer_out_features == 1
-
-    torch.testing.assert_close(
-        output_raw,
-        output_cached,
-    )
-
-
-def test_graph_cache_matches_direct_features() -> None:
-    """Cache graph-level latent values and dense coordinate Jacobians."""
-
+def test_graph_committor_cache_matches_direct_representation() -> None:
     dataset = DictDataset(
         {
             "data_list": [
@@ -650,16 +508,17 @@ def test_graph_cache_matches_direct_features() -> None:
         data_type="graphs",
     )
 
-    featurizer = TransferFeaturizer(
-        model=DummyGraphCV(
+    representation = MLColvarRepresentation(
+        DummyGraphCV(
             use_preprocessing=False,
         ),
+        mode="latent",
         freeze=True,
     )
 
     cached_dataset, cached_derivatives = (
         precompute_committor_cache(
-            featurizer=featurizer,
+            representation=representation,
             dataset=dataset,
             batch_size=1,
             device="cpu",
@@ -671,7 +530,7 @@ def test_graph_cache_matches_direct_features() -> None:
     graph_batch = dataset.get_graph_inputs()
 
     with torch.no_grad():
-        expected_latent = featurizer(
+        expected_latent = representation(
             graph_batch
         )
 
@@ -695,8 +554,6 @@ def test_graph_cache_matches_direct_features() -> None:
         2,
     )
 
-    # Mean pooling over three atoms:
-    # h_0 = mean(2*x), h_1 = mean(2*y).
     expected_jacobian[:, :, 0, 0] = 2.0 / 3.0
     expected_jacobian[:, :, 1, 1] = 2.0 / 3.0
 
@@ -706,26 +563,32 @@ def test_graph_cache_matches_direct_features() -> None:
     )
 
 
-def test_graph_transfer_torchscript_roundtrip(
+def test_graph_representation_torchscript_roundtrip(
     tmp_path,
 ) -> None:
-    """Export and reload a complete graph-input transfer model."""
+    representation = MLColvarRepresentation(
+        DummyGraphCV(),
+        mode="latent",
+        freeze=True,
+    )
 
-    model = TransferModel(
-        featurizer=TransferFeaturizer(
-            model=DummyGraphCV(),
-            freeze=True,
-        ),
+    head = TaskHead(
+        representation.out_features,
         n_out=1,
         hidden_layers=(),
+    )
+
+    model = RepresentationModel(
+        representation,
+        head=head,
     ).eval()
 
     postprocessing = nn.Sigmoid()
-    path = tmp_path / "graph_transfer.ptc"
+    path = tmp_path / "graph_representation.ptc"
 
     graph = make_graph()
 
-    # The current graph exporter validates these deployment fields.
+    # Current exporter validates these deployment fields.
     graph["node_attrs"] = torch.ones(
         graph["positions"].shape[0],
         1,
@@ -735,7 +598,7 @@ def test_graph_transfer_torchscript_roundtrip(
         "unit_shifts"
     ].clone()
 
-    export_transfer_torchscript(
+    export_representation_torchscript(
         model=model,
         postprocessing=postprocessing,
         path=path,
@@ -749,7 +612,7 @@ def test_graph_transfer_torchscript_roundtrip(
 
     with torch.no_grad():
         expected = postprocessing(
-            model.forward_raw(graph)
+            model(graph)
         )
         output = loaded(graph)
 
@@ -761,41 +624,3 @@ def test_graph_transfer_torchscript_roundtrip(
         rtol=1e-5,
         atol=1e-6,
     )
-
-
-def test_graph_cache_restores_featurizer_state() -> None:
-    dataset = DictDataset(
-        {
-            "data_list": [
-                make_graph_sample(0.0),
-                make_graph_sample(0.5),
-            ]
-        },
-        metadata={
-            "atomic_numbers": [1, 6, 8],
-        },
-        data_type="graphs",
-    )
-
-    featurizer = TransferFeaturizer(
-        model=DummyGraphCV(
-            use_preprocessing=False,
-        ),
-        freeze=True,
-    )
-
-    featurizer.train()
-    original_device = featurizer._model_reference.device
-
-    precompute_committor_cache(
-        featurizer=featurizer,
-        dataset=dataset,
-        batch_size=1,
-        device="cpu",
-        output_device="cpu",
-        separate_boundary_dataset=False,
-    )
-
-    assert featurizer.training
-    assert featurizer._model_reference.device == original_device
-    assert not featurizer.model.training

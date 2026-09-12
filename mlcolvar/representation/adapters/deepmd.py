@@ -1,18 +1,16 @@
-from __future__ import annotations
-
 from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 from torch import nn
 
-from .base import BaseAtomisticBackbone
-from ..graph import (
+from ..base import GraphRepresentation
+from ..base import (
     get_graph_ptr,
     prepare_cells,
     prepare_pbc,
 )
 
-from .utils import to_bool, to_float, to_int, to_int_list
+from ._utils import to_bool, to_float, to_int, to_int_list
 
 
 try:
@@ -33,7 +31,7 @@ except ImportError as exc:
     _DEEPMD_IMPORT_ERROR = exc
 
 
-__all__ = ["DeepMDBackbone"]
+__all__ = ["DeepMDRepresentation"]
 
 
 _PRECISION_TO_DTYPE = {
@@ -262,7 +260,7 @@ def _type_map_to_atomic_numbers(
     return atomic_numbers
 
 
-class DeepMDBackbone(BaseAtomisticBackbone):
+class DeepMDRepresentation(GraphRepresentation):
     """Extract atom-level descriptors from a DeePMD PyTorch model."""
 
     __constants__ = [
@@ -278,10 +276,11 @@ class DeepMDBackbone(BaseAtomisticBackbone):
         model: nn.Module,
         buffer: float = 0.0,
         long_range_cutoff: float = -1.0,
+        freeze: bool = True,
     ) -> None:
         if not _DEEPMD_AVAILABLE:
             raise ImportError(
-                "DeepMDBackbone requires DeePMD-kit with the PyTorch backend."
+                "DeepMDRepresentation requires DeePMD-kit with the PyTorch backend."
             ) from _DEEPMD_IMPORT_ERROR
 
         if not isinstance(model, nn.Module):
@@ -289,7 +288,7 @@ class DeepMDBackbone(BaseAtomisticBackbone):
 
         if long_range_cutoff >= 0.0:
             raise ValueError(
-                "DeepMDBackbone does not support `long_range_cutoff`."
+                "DeepMDRepresentation does not support `long_range_cutoff`."
             )
 
         model = _unwrap_deepmd_model(model)
@@ -358,10 +357,11 @@ class DeepMDBackbone(BaseAtomisticBackbone):
             out_features=descriptor_dim,
             atomic_numbers=atomic_numbers,
             cutoff=descriptor_cutoff,
-            sample_kind="atom",
+            output_kind="atom",
             buffer=buffer,
             long_range_cutoff=-1.0,
             full_neighbor_list=False,
+            freeze=freeze,
         )
 
         # Keep a reference to the original native DeePMD model for metadata and
@@ -389,6 +389,7 @@ class DeepMDBackbone(BaseAtomisticBackbone):
         # Register only the descriptor. The full DeePMD potential is not
         # needed after metadata has been collected.
         self.descriptor = descriptor
+        self._freeze_module(self.descriptor)
         self._restore_internal_precision()
 
     @staticmethod
@@ -556,7 +557,7 @@ class DeepMDBackbone(BaseAtomisticBackbone):
             box = cell.unsqueeze(0)
         elif bool(torch.any(pbc).item()):
             raise ValueError(
-                "DeepMDBackbone supports only fully periodic or fully "
+                "DeepMDRepresentation supports only fully periodic or fully "
                 "non-periodic systems."
             )
 

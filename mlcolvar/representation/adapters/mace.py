@@ -1,14 +1,13 @@
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import torch
 from torch import nn
 
-from .base import BaseAtomisticBackbone
+from ..base import GraphRepresentation
+from ._utils import to_float, to_int, to_int_list
 
-from .utils import to_float, to_int, to_int_list
 
-
-__all__ = ["MACEBackbone"]
+__all__ = ["MACERepresentation"]
 
 
 def _resolve_num_layers(
@@ -18,27 +17,26 @@ def _resolve_num_layers(
     """Resolve the number of selected MACE interaction layers."""
 
     if hasattr(model, "num_interactions"):
-        available_layers = to_int(
+        available = to_int(
             model.num_interactions,
             name="model.num_interactions",
         )
 
-        if available_layers <= 0:
+        if available <= 0:
             raise ValueError(
-                "MACE `num_interactions` must be positive, "
-                f"found {available_layers}."
+                "MACE `num_interactions` must be positive."
             )
 
-        selected_layers = (
-            available_layers
+        selected = (
+            available
             if num_layers is None
             else to_int(num_layers, name="num_layers")
         )
 
-        if selected_layers > available_layers:
+        if selected > available:
             raise ValueError(
-                f"Requested {selected_layers} MACE layers, but the "
-                f"model contains only {available_layers}."
+                f"Requested {selected} MACE layers, "
+                f"but the model contains only {available}."
             )
 
     elif num_layers is None:
@@ -48,29 +46,28 @@ def _resolve_num_layers(
         )
 
     else:
-        selected_layers = to_int(
+        selected = to_int(
             num_layers,
             name="num_layers",
         )
 
-    if selected_layers <= 0:
+    if selected <= 0:
         raise ValueError(
-            "`num_layers` must be positive, "
-            f"found {selected_layers}."
+            "`num_layers` must be positive."
         )
 
-    return selected_layers
+    return selected
 
 
 def _infer_descriptor_layout(
     model: nn.Module,
 ) -> Tuple[int, int]:
-    """Infer ``num_features`` and ``l_max`` from a MACE model."""
+    """Infer ``num_features`` and ``l_max``."""
 
     try:
-        irreps_out = model.products[0].linear.irreps_out
-        descriptor_dim = int(irreps_out.dim)
-        l_max = int(irreps_out.lmax)
+        irreps = model.products[0].linear.irreps_out
+        descriptor_dim = int(irreps.dim)
+        l_max = int(irreps.lmax)
 
     except (
         AttributeError,
@@ -86,23 +83,20 @@ def _infer_descriptor_layout(
 
     if descriptor_dim <= 0:
         raise ValueError(
-            "The MACE descriptor dimension must be positive, "
-            f"found {descriptor_dim}."
+            "The MACE descriptor dimension must be positive."
         )
 
     if l_max < 0:
         raise ValueError(
-            "The MACE descriptor `l_max` must be non-negative, "
-            f"found {l_max}."
+            "`l_max` must be non-negative."
         )
 
     angular_size = (l_max + 1) ** 2
 
     if descriptor_dim % angular_size != 0:
         raise ValueError(
-            "The MACE descriptor dimension is incompatible with "
-            f"`l_max`: descriptor_dim={descriptor_dim}, "
-            f"l_max={l_max}."
+            "The MACE descriptor dimension is incompatible "
+            f"with l_max={l_max}."
         )
 
     return descriptor_dim // angular_size, l_max
@@ -116,19 +110,20 @@ def _resolve_descriptor_layout(
     """Resolve the MACE descriptor layout."""
 
     if num_features is None or l_max is None:
-        inferred_num_features, inferred_l_max = _infer_descriptor_layout(model)
+        inferred_features, inferred_lmax = (
+            _infer_descriptor_layout(model)
+        )
 
         if num_features is None:
-            num_features = inferred_num_features
+            num_features = inferred_features
 
         if l_max is None:
-            l_max = inferred_l_max
+            l_max = inferred_lmax
 
     num_features = to_int(
         num_features,
         name="num_features",
     )
-
     l_max = to_int(
         l_max,
         name="l_max",
@@ -136,20 +131,18 @@ def _resolve_descriptor_layout(
 
     if num_features <= 0:
         raise ValueError(
-            "`num_features` must be positive, "
-            f"found {num_features}."
+            "`num_features` must be positive."
         )
 
     if l_max < 0:
         raise ValueError(
-            "`l_max` must be non-negative, "
-            f"found {l_max}."
+            "`l_max` must be non-negative."
         )
 
     return num_features, l_max
 
 
-class MACEBackbone(BaseAtomisticBackbone):
+class MACERepresentation(GraphRepresentation):
     """Extract invariant atom-level features from a pretrained MACE model."""
 
     __constants__ = [
@@ -159,7 +152,7 @@ class MACEBackbone(BaseAtomisticBackbone):
         "layer_size",
         "required_input_features",
     ]
-    
+
     def __init__(
         self,
         model: nn.Module,
@@ -168,6 +161,7 @@ class MACEBackbone(BaseAtomisticBackbone):
         l_max: Optional[int] = None,
         buffer: float = 0.0,
         long_range_cutoff: float = -1.0,
+        freeze: bool = True,
     ) -> None:
         if not hasattr(model, "atomic_numbers"):
             raise ValueError(
@@ -180,14 +174,14 @@ class MACEBackbone(BaseAtomisticBackbone):
             )
 
         num_layers = _resolve_num_layers(
-            model=model,
-            num_layers=num_layers,
+            model,
+            num_layers,
         )
 
         num_features, l_max = _resolve_descriptor_layout(
-            model=model,
-            num_features=num_features,
-            l_max=l_max,
+            model,
+            num_features,
+            l_max,
         )
 
         super().__init__(
@@ -200,35 +194,53 @@ class MACEBackbone(BaseAtomisticBackbone):
                 model.r_max,
                 name="model.r_max",
             ),
-            sample_kind="atom",
+            output_kind="atom",
             buffer=buffer,
             long_range_cutoff=long_range_cutoff,
             full_neighbor_list=True,
+            freeze=freeze,
         )
 
         self.num_layers = num_layers
         self.num_features = num_features
         self.l_max = l_max
-        self.layer_size = (l_max + 1) ** 2 * num_features
+
+        self.layer_size = (
+            (l_max + 1) ** 2
+            * num_features
+        )
 
         self.required_input_features = (
-            (num_layers - 1) * self.layer_size + num_features
+            (num_layers - 1)
+            * self.layer_size
+            + num_features
         )
 
         self.model = model
+        self._freeze_module(self.model)
 
     def forward(
         self,
         data: Dict[str, torch.Tensor],
         cell: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        _ = cell
+        """Extract invariant atom-level MACE features."""
+
+        del cell
 
         output = self.model(
             data,
-            training=self.training,
+            training=(
+                self.training
+                and not self.freeze
+            ),
             compute_force=False,
         )
+
+        if "node_feats" not in output:
+            raise RuntimeError(
+                "The MACE model output does not contain `node_feats`."
+            )
 
         node_features = output["node_feats"]
 
@@ -237,22 +249,56 @@ class MACEBackbone(BaseAtomisticBackbone):
                 "The MACE model returned `node_feats=None`."
             )
 
-        return self._extract_invariant_features(node_features)
+        return self._extract_invariant_features(
+            node_features
+        )
 
     def _extract_invariant_features(
         self,
         node_features: torch.Tensor,
     ) -> torch.Tensor:
-        """Extract the leading scalar block from each selected MACE layer."""
+        """Extract scalar features from selected MACE layers."""
+
+        blocks = torch.jit.annotate(
+            List[torch.Tensor],
+            [],
+        )
+
+        for i in range(self.num_layers):
+            start = i * self.layer_size
+            end = start + self.num_features
+
+            blocks.append(
+                node_features[:, start:end]
+            )
 
         return torch.cat(
-            [
-                node_features[
-                    :,
-                    layer_index * self.layer_size:
-                    layer_index * self.layer_size + self.num_features,
-                ]
-                for layer_index in range(self.num_layers)
-            ],
+            blocks,
             dim=-1,
+        )
+
+    @torch.jit.unused
+    def prepare_for_torchscript(
+        self,
+    ) -> None:
+        """Prepare the native MACE model for TorchScript export."""
+
+        if isinstance(
+            self.model,
+            torch.jit.ScriptModule,
+        ):
+            return
+
+        try:
+            from e3nn.util.jit import (
+                script as e3nn_script,
+            )
+        except ImportError as exc:
+            raise ImportError(
+                "Exporting a MACE representation requires e3nn."
+            ) from exc
+
+        self.model = e3nn_script(
+            self.model.eval(),
+            in_place=False,
         )

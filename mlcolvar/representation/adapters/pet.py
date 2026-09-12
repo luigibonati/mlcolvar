@@ -1,21 +1,15 @@
-from __future__ import annotations
-
-# Apply the PET/TorchScript compatibility patch before importing metatensor or metatomic.
-from ..patches import pet_jit as _pet_jit  # noqa: F401
-
 from typing import Dict, List, Optional, Tuple
 
 import torch
 from torch import nn
 
-from .base import BaseAtomisticBackbone
-from ..graph import (
+from ..base import (
+    GraphRepresentation,
     get_graph_ptr,
     prepare_cells,
     prepare_pbc,
 )
-
-from .utils import (
+from ._utils import (
     to_bool,
     to_float,
     to_int,
@@ -24,8 +18,16 @@ from .utils import (
 
 
 try:
-    from metatensor.torch import Labels, TensorBlock
-    from metatomic.torch import ModelOutput, System
+    from metatensor.torch import (
+        Labels,
+        TensorBlock,
+        TensorMap,
+    )
+    from metatomic.torch import (
+        ModelOutput,
+        NeighborListOptions,
+        System,
+    )
 
     _METATOMIC_AVAILABLE = True
     _METATOMIC_IMPORT_ERROR = None
@@ -33,14 +35,16 @@ try:
 except ImportError as exc:
     Labels = None
     TensorBlock = None
+    TensorMap = None
     ModelOutput = None
+    NeighborListOptions = None
     System = None
 
     _METATOMIC_AVAILABLE = False
     _METATOMIC_IMPORT_ERROR = exc
 
 
-__all__ = ["PETBackbone"]
+__all__ = ["PETRepresentation"]
 
 
 _PRECISION_TO_DTYPE = {
@@ -198,7 +202,7 @@ def _infer_pet_layout(
     return d_node, d_pet, num_readout_layers
 
 
-class PETBackbone(BaseAtomisticBackbone):
+class PETRepresentation(GraphRepresentation):
     """Extract atom-level features from a pretrained metatrain PET model."""
 
     __constants__ = [
@@ -216,10 +220,11 @@ class PETBackbone(BaseAtomisticBackbone):
         model: nn.Module,
         buffer: float = 0.0,
         long_range_cutoff: float = -1.0,
+        freeze: bool = True,
     ) -> None:
         if not _METATOMIC_AVAILABLE:
             raise ImportError(
-                "PETBackbone requires the optional PET dependencies. "
+                "PETRepresentation requires the optional PET dependencies. "
                 'Install them with `pip install "metatrain[pet]"`.'
             ) from _METATOMIC_IMPORT_ERROR
 
@@ -239,7 +244,7 @@ class PETBackbone(BaseAtomisticBackbone):
 
         if len(requested_neighbor_lists) != 1:
             raise ValueError(
-                "PETBackbone expects PET to request exactly one neighbor "
+                "PETRepresentation expects PET to request exactly one neighbor "
                 f"list, but found {len(requested_neighbor_lists)}."
             )
 
@@ -281,10 +286,11 @@ class PETBackbone(BaseAtomisticBackbone):
             out_features=out_features,
             atomic_numbers=atomic_numbers,
             cutoff=neighbor_cutoff,
-            sample_kind="atom",
+            output_kind="atom",
             buffer=buffer,
             long_range_cutoff=long_range_cutoff,
             full_neighbor_list=neighbor_full_list,
+            freeze=freeze,
         )
 
         self.d_node = d_node
@@ -307,6 +313,7 @@ class PETBackbone(BaseAtomisticBackbone):
         )
 
         self.model = model
+        self._freeze_module(self.model)
         self._restore_model_precision()
 
     @torch.jit.unused

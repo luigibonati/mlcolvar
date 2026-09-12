@@ -6,28 +6,25 @@ import pytest
 import torch
 from torch import nn
 
-
-# Skip the complete module when optional Metatomic dependencies are absent.
 pytest.importorskip("metatensor.torch")
 pytest.importorskip("metatomic.torch")
-
 
 from metatomic.torch import (  # noqa: E402
     ModelOutput,
     NeighborListOptions,
 )
 
-from mlcolvar.featurization.atomistic.metatomic import (  # noqa: E402
+from mlcolvar.representation.metatomic import (  # noqa: E402
     CVInferenceModel,
     MetatomicCVWrapper,
 )
-from mlcolvar.featurization.atomistic.metatomic.export import (  # noqa: E402
+from mlcolvar.representation.metatomic.export import (  # noqa: E402
     _get_neighbor_options,
 )
 
 
 class DummyGraphNetwork(nn.Module):
-    """Minimal mlcolvar-like atomistic model accepting a graph dictionary."""
+    """Minimal graph model accepting an mlcolvar graph dictionary."""
 
     def forward(
         self,
@@ -44,38 +41,26 @@ class DummyGraphNetwork(nn.Module):
         output = positions.new_zeros(
             (n_systems, 1)
         )
-
         output.index_add_(
             0,
             batch,
             positions[:, :1],
         )
-
         return output
 
 
 class _FakeSamples:
-    """Minimal stand-in for Metatensor Labels values."""
-
-    def __init__(
-        self,
-        values: torch.Tensor,
-    ) -> None:
+    def __init__(self, values: torch.Tensor) -> None:
         self.values = values
 
 
 class _FakeNeighborList:
-    """Minimal neighbor-list object exposing sample values."""
-
-    def __init__(
-        self,
-        samples: torch.Tensor,
-    ) -> None:
+    def __init__(self, samples: torch.Tensor) -> None:
         self.samples = _FakeSamples(samples)
 
 
 class _FakeSystem:
-    """Small eager-mode stand-in for ``metatomic.torch.System``."""
+    """Small eager-mode stand-in for `metatomic.torch.System`."""
 
     def __init__(
         self,
@@ -89,10 +74,7 @@ class _FakeSystem:
         self.positions = positions
         self.cell = cell
         self.pbc = pbc
-
-        self._neighbor_list = _FakeNeighborList(
-            neighbors
-        )
+        self._neighbor_list = _FakeNeighborList(neighbors)
 
     def __len__(self) -> int:
         return self.positions.shape[0]
@@ -108,8 +90,6 @@ class _FakeSystem:
 def _neighbor_options(
     cutoff: float = 3.0,
 ) -> NeighborListOptions:
-    """Create deterministic full-neighbor-list options for tests."""
-
     return NeighborListOptions(
         cutoff=cutoff,
         full_list=True,
@@ -119,8 +99,6 @@ def _neighbor_options(
 
 
 def test_systems_to_graph() -> None:
-    """Convert Metatomic systems to the expected mlcolvar graph."""
-
     model = CVInferenceModel(
         network=DummyGraphNetwork(),
         postprocessing=nn.Identity(),
@@ -253,40 +231,28 @@ def test_systems_to_graph() -> None:
     assert graph["pbc"].dtype == torch.bool
 
 
-def test_neighbor_options_resolution_prefers_backbone_request() -> None:
-    """Prefer neighbor-list options explicitly requested by the backbone."""
-
+def test_neighbor_options_resolution_prefers_representation_request() -> None:
     requested = _neighbor_options(
         cutoff=4.5
     )
 
-    class BackboneWithRequest(nn.Module):
+    class RepresentationWithRequest(nn.Module):
         def requested_neighbor_lists(
             self,
         ) -> List[NeighborListOptions]:
             return [requested]
 
-    class Featurizer(nn.Module):
-        def __init__(
-            self,
-            backbone: nn.Module,
-        ) -> None:
-            super().__init__()
-            self.backbone = backbone
-
     class Network(nn.Module):
         def __init__(
             self,
-            backbone: nn.Module,
+            representation: nn.Module,
         ) -> None:
             super().__init__()
-            self.featurizer = Featurizer(
-                backbone
-            )
+            self.representation = representation
 
     resolved = _get_neighbor_options(
         network=Network(
-            BackboneWithRequest()
+            RepresentationWithRequest()
         ),
         interaction_range=8.0,
     )
@@ -295,12 +261,9 @@ def test_neighbor_options_resolution_prefers_backbone_request() -> None:
 
 
 def test_neighbor_options_resolution_uses_cutoff_fallback() -> None:
-    """Fall back to the backbone cutoff when no request is exposed."""
-
-    class BackboneWithCutoff(nn.Module):
+    class RepresentationWithCutoff(nn.Module):
         def __init__(self) -> None:
             super().__init__()
-
             self.register_buffer(
                 "cutoff",
                 torch.tensor(
@@ -308,30 +271,19 @@ def test_neighbor_options_resolution_uses_cutoff_fallback() -> None:
                     dtype=torch.float64,
                 ),
             )
-
             self.full_neighbor_list = True
-
-    class Featurizer(nn.Module):
-        def __init__(
-            self,
-            backbone: nn.Module,
-        ) -> None:
-            super().__init__()
-            self.backbone = backbone
 
     class Network(nn.Module):
         def __init__(
             self,
-            backbone: nn.Module,
+            representation: nn.Module,
         ) -> None:
             super().__init__()
-            self.featurizer = Featurizer(
-                backbone
-            )
+            self.representation = representation
 
     fallback = _get_neighbor_options(
         network=Network(
-            BackboneWithCutoff()
+            RepresentationWithCutoff()
         ),
         interaction_range=8.0,
     )
@@ -344,8 +296,6 @@ def test_neighbor_options_resolution_uses_cutoff_fallback() -> None:
 
 
 def test_metatomic_wrapper_empty_system() -> None:
-    """Return zero samples for PLUMED's empty-system capability probe."""
-
     inference = CVInferenceModel(
         network=DummyGraphNetwork(),
         postprocessing=nn.Identity(),
@@ -406,8 +356,6 @@ def test_metatomic_wrapper_empty_system() -> None:
 
 
 def test_inference_model_is_torchscript_compatible() -> None:
-    """Compile the System-to-graph inference adapter with TorchScript."""
-
     inference = CVInferenceModel(
         network=DummyGraphNetwork(),
         postprocessing=nn.Identity(),
