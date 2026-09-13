@@ -224,7 +224,7 @@ if mode in [
     "gnn-exported",
     "gnn-kbias-exported",
 ]:
-    from mlcolvar.utils.export import export
+    from mlcolvar.utils.aot import export
 
     model.eval()
     model.cpu()

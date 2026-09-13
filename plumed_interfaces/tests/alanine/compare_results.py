@@ -77,7 +77,7 @@ elif mode in [
     )
 
     if mode == "gnn-kbias-exported":
-        from mlcolvar.utils.export import (
+        from mlcolvar.utils.aot import (
             GraphAdapter,
             load_exported,
         )
@@ -225,7 +225,7 @@ elif mode in [
 
 
     elif mode == "gnn-exported":
-        from mlcolvar.utils.export import (
+        from mlcolvar.utils.aot import (
             GraphAdapter,
             load_exported,
         )

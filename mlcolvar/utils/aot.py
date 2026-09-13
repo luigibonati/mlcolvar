@@ -1,3 +1,7 @@
+"""Ahead-of-Time compilation utilities for deploying mlcolvar GNN models."""
+
+from __future__ import annotations
+
 import os
 import json
 import uuid
@@ -12,11 +16,13 @@ import torch
 import torch._inductor.package
 import torch_geometric
 
-from lightning import LightningModule
 from torch.fx.experimental.proxy_tensor import make_fx
 
 from mlcolvar.core.nn import BaseGNN
 from mlcolvar.utils import _code
+
+
+__all__ = ["export", "load"]
 
 
 # Maximum optimization settings for exporting models with AOTInductor.
@@ -35,8 +41,10 @@ if os.environ.get("MLCOLVAR_EXPORT_MAXIMUM_OPT") == "1":
     os.environ["MLCOLVAR_EXPORT_FLOAT_TOL"] = "1E-4"
 
 
-# Graph serialization schema used by the exported GNN models.
-GRAPH_FIELDS = [
+# Graph serialization schema used by AOT-compiled GNN models.
+_AOT_FORMAT_VERSION = 1
+
+_GRAPH_FIELDS = (
     "edge_index",
     "shifts",
     "unit_shifts",
@@ -48,21 +56,21 @@ GRAPH_FIELDS = [
     "cell",
     "ptr",
     "n_system",
-]
+)
 
 
-OPTIONAL_GRAPH_FIELDS = [
+_OPTIONAL_GRAPH_FIELDS = (
     "system_masks",
     "subsystem_masks",
     "edge_masks_lr",
-]
+)
 
 
-EXCLUDED_AGGR_MODULES = [
+_EXCLUDED_AGGR_MODULES = (
     "MedianAggregation",
     "MinAggregation",
     "MaxAggregation",
-]
+)
 
 
 # Static fallback implementations of scatter operations used during export.
@@ -91,12 +99,12 @@ def _scatter_mean_static(
     return torch.mean(src, dim=dim, keepdim=True)
 
 
-class ExportWrapper(torch.nn.Module):
+class _AOTWrapper(torch.nn.Module):
     """
-    Wrapper used during GNN model export.
+    Adapter that makes a GNN model compatible with the AOTInductor interface.
 
-    The exported model always returns four tensors for compatibility with the
-    exported-model interface.
+    The compiled model always returns four tensors for compatibility with the
+    PLUMED AOT interface.
 
     Normal CV mode:
         returns (CV, dCV/dx, 0, 0)
@@ -105,8 +113,8 @@ class ExportWrapper(torch.nn.Module):
         returns ([z, q], [dz/dx, dq/dx], V_K, dV_K/dx)
 
     In normal CV mode, the third and fourth outputs are scalar zero placeholders.
-    They are only meaningful when Kolmogorov-bias export is explicitly enabled
-    through k_bias_options.
+    They are only meaningful when Kolmogorov-bias mode is explicitly enabled
+    through ``k_bias_options``.
 
     The Kolmogorov-bias mode assumes that the model has:
         - model.forward_nn(...)
@@ -128,9 +136,15 @@ class ExportWrapper(torch.nn.Module):
         self.calculate_gradients = calculate_gradients
         self.calculate_k_bias = calculate_k_bias
 
-        self.epsilon = torch.tensor(epsilon, dtype=torch.get_default_dtype())
-        self.lambd = torch.tensor(lambd, dtype=torch.get_default_dtype())
-        self.beta = torch.tensor(beta, dtype=torch.get_default_dtype())
+        self.register_buffer(
+            "epsilon", torch.tensor(epsilon, dtype=torch.get_default_dtype())
+        )
+        self.register_buffer(
+            "lambd", torch.tensor(lambd, dtype=torch.get_default_dtype())
+        )
+        self.register_buffer(
+            "beta", torch.tensor(beta, dtype=torch.get_default_dtype())
+        )
 
         if self.calculate_k_bias:
             if not hasattr(self.model, "forward_nn"):
@@ -145,15 +159,18 @@ class ExportWrapper(torch.nn.Module):
                     "committor model, but it does not have sigmoid."
                 )
 
-            self.kb_sigmoid_p = torch.tensor(
-                self.model.sigmoid.p,
-                dtype=torch.get_default_dtype(),
+            self.register_buffer(
+                "kb_sigmoid_p",
+                torch.tensor(
+                    self.model.sigmoid.p,
+                    dtype=torch.get_default_dtype(),
+                ),
             )
 
         if self.calculate_k_bias and not self.calculate_gradients:
             raise RuntimeError("Can not calculate k_bias without gradients")
 
-    # The token argument is kept for compatibility with the AOT export wrapper.
+    # The token argument is kept for compatibility with the compiled AOT interface.
     def forward(self, inputs, token: bool = False):
         if self.calculate_k_bias:
             return self._forward_kbias(inputs)
@@ -161,7 +178,7 @@ class ExportWrapper(torch.nn.Module):
         return self._forward_cv(inputs)
 
     def _compute_cv_outputs(self, inputs):
-        data = GraphAdapter.tuple_to_dict(inputs)
+        data = _GraphAdapter.tuple_to_dict(inputs)
 
         x = data["positions"].requires_grad_(True)
         data["positions"] = x
@@ -211,14 +228,10 @@ class ExportWrapper(torch.nn.Module):
         return gradients
 
     def _forward_kbias(self, inputs):
-        outputs, gradients, k_bias_value, gradients_b = self._compute_kbias_outputs(
-            inputs
-        )
-
-        return outputs, gradients, k_bias_value, gradients_b
+        return self._compute_kbias_outputs(inputs)
 
     def _compute_kbias_outputs(self, inputs):
-        data = GraphAdapter.tuple_to_dict(inputs)
+        data = _GraphAdapter.tuple_to_dict(inputs)
 
         x = data["positions"].requires_grad_(True)
         data["positions"] = x
@@ -279,7 +292,7 @@ class ExportWrapper(torch.nn.Module):
 
 
 @dataclass
-class ExportConfig:
+class _AOTConfig:
     file_name: str = "model.pt2"
     calculate_gradients: bool = True
     k_bias_options: Optional[Dict[str, Any]] = None
@@ -287,7 +300,7 @@ class ExportConfig:
     run_check: bool = False
 
 
-class GraphAdapter:
+class _GraphAdapter:
     """
     Utility class for converting between PyG graph objects, dictionaries and
     tensor tuples used by the exported GNN model.
@@ -296,12 +309,17 @@ class GraphAdapter:
     @staticmethod
     def data_to_tuple(
         data: Union[torch_geometric.data.Data, Dict[str, Any], List[Any]],
-        device: str = "cpu",
+        device: Union[str, torch.device] = "cpu",
     ) -> Tuple[torch.Tensor, ...]:
         if isinstance(data, dict) and "data_list" in data:
             data = data["data_list"]
 
         if isinstance(data, list):
+            if len(data) != 1:
+                raise ValueError(
+                    "AOT export expects exactly one example graph, "
+                    f"but received {len(data)} graphs."
+                )
             data = data[0]
 
         loader = torch_geometric.loader.DataLoader([data], batch_size=1, shuffle=False)
@@ -310,16 +328,16 @@ class GraphAdapter:
 
         dd["positions"].requires_grad_(True)
 
-        return GraphAdapter.dict_to_tuple(dd)
+        return _GraphAdapter.dict_to_tuple(dd)
 
     @staticmethod
     def dict_to_tuple(inputs: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, ...]:
         dtype = inputs["positions"].dtype
         device = inputs["positions"].device
 
-        tensors = [inputs[k] for k in GRAPH_FIELDS]
+        tensors = [inputs[k] for k in _GRAPH_FIELDS]
 
-        for k in OPTIONAL_GRAPH_FIELDS:
+        for k in _OPTIONAL_GRAPH_FIELDS:
             if k in inputs:
                 tensors.append(inputs[k])
             else:
@@ -331,12 +349,12 @@ class GraphAdapter:
     def tuple_to_dict(inputs: Tuple[torch.Tensor, ...]) -> Dict[str, torch.Tensor]:
         outputs: Dict[str, torch.Tensor] = {}
 
-        for i, k in enumerate(GRAPH_FIELDS):
+        for i, k in enumerate(_GRAPH_FIELDS):
             outputs[k] = inputs[i]
 
-        offset = len(GRAPH_FIELDS)
+        offset = len(_GRAPH_FIELDS)
 
-        for i, k in enumerate(OPTIONAL_GRAPH_FIELDS):
+        for i, k in enumerate(_OPTIONAL_GRAPH_FIELDS):
             tensor = inputs[offset + i]
             if tensor.ndim != 0:
                 outputs[k] = tensor
@@ -344,23 +362,23 @@ class GraphAdapter:
         return outputs
 
 
-class ModelExporter:
+class _AOTExporter:
     """
-    Exporter for GNN models.
+    AOTInductor compiler for mlcolvar GNN models.
 
     This class manages:
       - graph input normalization
       - metadata generation
-      - symbolic tracing + AOT compile
-      - packaging
-      - optional output precision checking
+      - symbolic tracing
+      - AOTInductor compilation and packaging
+      - optional numerical validation
     """
 
     def __init__(
         self,
-        model: LightningModule,
+        model: torch.nn.Module,
         example_inputs: Union[torch_geometric.data.Data, Dict[str, Any], List[Any]],
-        config: ExportConfig,
+        config: _AOTConfig,
     ):
         self.model = model
         self.example_inputs = example_inputs
@@ -409,7 +427,7 @@ class ModelExporter:
         return results
 
     def _prepare_example_inputs(self) -> Tuple[torch.Tensor, ...]:
-        return GraphAdapter.data_to_tuple(
+        return _GraphAdapter.data_to_tuple(
             self.example_inputs,
             self.model.device,
         )
@@ -450,6 +468,7 @@ class ModelExporter:
         n_cvs = 2 if self.calculate_k_bias else int(self.model.n_cvs.item())
 
         metadata = {
+            "aot_format_version": str(_AOT_FORMAT_VERSION),
             "n_cvs": str(n_cvs),
             "cutoff": str(self.model.cutoff.item()),
             "buffer": str(self.model.buffer.item()),
@@ -500,13 +519,13 @@ class ModelExporter:
 
     def _check_aggr_modules(self) -> None:
         model_summary = self._build_model_summary("", self.model, 100, 0)
-        for name in EXCLUDED_AGGR_MODULES:
+        for name in _EXCLUDED_AGGR_MODULES:
             if name in model_summary:
                 message = (
-                    "Aggregation modules {} can not be correctly exported on some "
+                    "Aggregation modules {} cannot be correctly exported on some "
                     + "machines, and your input model contains the {} module!"
                 )
-                raise RuntimeError(message.format(EXCLUDED_AGGR_MODULES, name))
+                raise RuntimeError(message.format(_EXCLUDED_AGGR_MODULES, name))
 
     @staticmethod
     def _check_exported_model_outputs(
@@ -516,7 +535,7 @@ class ModelExporter:
     ) -> None:
         print("Export precision check:")
 
-        def check_mae(x: float, dtype: str, prefix: str) -> bool:
+        def check_max_abs_error(x: float, dtype: str, prefix: str) -> None:
             if dtype == "32":
                 tol = float(os.environ.get("MLCOLVAR_EXPORT_FLOAT_TOL", "1E-6"))
             elif dtype == "64":
@@ -526,11 +545,13 @@ class ModelExporter:
 
             if x > tol:
                 raise RuntimeError(
-                    "MAE ({:e}) of {:s} is larger than ".format(x, prefix)
+                    "Maximum absolute error ({:e}) of {:s} is larger than ".format(
+                        x, prefix
+                    )
                     + "{:e} for a float{:s} model!".format(tol, dtype)
                 )
             else:
-                print("  MAE of {:s}: {:e}".format(prefix, x))
+                print("  Maximum absolute error of {:s}: {:e}".format(prefix, x))
 
         aot_model = torch._inductor.aoti_load_package(file_name)
         metadata = aot_model.get_metadata()
@@ -548,23 +569,27 @@ class ModelExporter:
         aot_model_outputs = aot_model(example_inputs)
 
         delta = model_outputs[0] - aot_model_outputs[0]
-        mae = delta.abs().max().item()
-        check_mae(mae, float_dtype, "CV values")
+        max_abs_error = delta.abs().max().item()
+        check_max_abs_error(max_abs_error, float_dtype, "CV values")
 
         if calculate_gradients:
             for i in range(n_cvs):
                 delta_i = model_outputs[1][i] - aot_model_outputs[1][i]
-                mae = delta_i.abs().max().item()
-                check_mae(mae, float_dtype, "CV gradients {:d}".format(i))
+                max_abs_error = delta_i.abs().max().item()
+                check_max_abs_error(
+                    max_abs_error,
+                    float_dtype,
+                    "CV gradients {:d}".format(i),
+                )
 
         if calculate_k_bias:
             delta_k = model_outputs[2] - aot_model_outputs[2]
-            mae = delta_k.abs().max().item()
-            check_mae(mae, float_dtype, "KBias")
+            max_abs_error = delta_k.abs().max().item()
+            check_max_abs_error(max_abs_error, float_dtype, "KBias")
 
             delta_k_grad = model_outputs[3][0] - aot_model_outputs[3][0]
-            mae = delta_k_grad.abs().max().item()
-            check_mae(mae, float_dtype, "KBias gradients")
+            max_abs_error = delta_k_grad.abs().max().item()
+            check_max_abs_error(max_abs_error, float_dtype, "KBias gradients")
 
     @contextmanager
     def _patched_graph_ops(self):
@@ -593,23 +618,23 @@ class ModelExporter:
             else:
                 delattr(self.model, "_exporting")
 
-    def _wrap_model_for_export(self) -> ExportWrapper:
-        return ExportWrapper(
+    def _wrap_model(self) -> _AOTWrapper:
+        return _AOTWrapper(
             self.model,
             calculate_gradients=self.config.calculate_gradients,
             calculate_k_bias=self.calculate_k_bias,
             **self.k_bias_options,
         )
 
-    def _compile_and_export(
+    def _compile_and_package(
         self,
-        exportable_model: ExportWrapper,
+        wrapped_model: _AOTWrapper,
         inputs: Tuple[torch.Tensor, ...],
         metadata: Dict[str, str],
     ) -> str:
         # Taken from: https://depyf.readthedocs.io/en/latest/walk_through.html
-        def forward_and_backward(_inputs, kwargs={}):
-            return exportable_model(_inputs, False)
+        def forward_and_backward(_inputs, _kwargs=None):
+            return wrapped_model(_inputs, False)
 
         wrapped = make_fx(
             forward_and_backward,
@@ -640,7 +665,7 @@ class ModelExporter:
         if self.config.run_check:
             self._check_exported_model_outputs(
                 file_name=file_name,
-                model=exportable_model,
+                model=wrapped_model,
                 example_inputs=inputs,
             )
 
@@ -653,15 +678,14 @@ class ModelExporter:
 
         inputs = self._prepare_example_inputs()
         metadata = self._build_model_metadata()
-        exportable = self._wrap_model_for_export()
+        wrapped_model = self._wrap_model()
 
-        with self._exporting_flag():
-            with self._patched_graph_ops():
-                return self._compile_and_export(
-                    exportable_model=exportable,
-                    inputs=inputs,
-                    metadata=metadata,
-                )
+        with self._exporting_flag(), self._patched_graph_ops():
+            return self._compile_and_package(
+                wrapped_model=wrapped_model,
+                inputs=inputs,
+                metadata=metadata,
+            )
 
 
 def export(
@@ -672,31 +696,30 @@ def export(
     k_bias_options: Optional[Dict[str, Any]] = None,
     model_summary_level: int = 3,
     run_check: bool = False,
-):
+) -> str:
     """
-    Export a GNN CV model using symbolic tracing and Ahead-Of-Time (AOT)
-    compilation.
+    Ahead-of-Time compile a GNN CV model with AOTInductor.
 
     Parameters
     ----------
     model : lightning.LightningModule
-        The GNN CV model to export. The model itself, or ``model.nn``, must be
+        The GNN CV model to compile. The model itself, or ``model.nn``, must be
         an instance of ``BaseGNN``.
 
     example_inputs : torch_geometric.data.Data or dict/list containing Data
         Example graph input used to trace the model.
 
     file_name : str, optional
-        Name of the exported model file. The filename should include the
+        Name of the compiled model package. The filename should include the
         ``.pt2`` extension.
 
     calculate_gradients : bool, optional
-        Whether gradient calculations should be included in the exported model.
+        Whether gradient calculations should be included in the compiled model.
 
     k_bias_options : dict[str, Any], optional
         Options for enabling the Kolmogorov bias :math:`V_K` for committor
         models. If this dictionary is provided, the Kolmogorov bias is
-        automatically enabled in the exported model.
+        automatically enabled in the compiled model.
 
         When enabled, the exported CV output contains two components,
         ``[z, q]``, where ``z`` is the raw committor coordinate and ``q`` is the
@@ -718,16 +741,20 @@ def export(
         Depth of the model summary stored in the exported metadata.
 
     run_check : bool, optional
-        If ``True``, a precision check is performed by comparing the outputs of
-        the original model and the exported model.
+        If ``True``, a numerical check compares eager and AOT-compiled outputs.
+
+    Returns
+    -------
+    str
+        Path to the generated ``.pt2`` AOTInductor package.
 
     Notes
     -----
-    The dtype and device of the model are fixed after export. Move the model to
-    the desired device and dtype before exporting.
+    The dtype and device of the model are fixed at compile time. Move the model
+    to the desired device and dtype before calling this function.
 
-    The exported model always returns four tensors for compatibility with the
-    exported-model interface. In normal CV mode, only the first two tensors are
+    The compiled model always returns four tensors for compatibility with the
+    PLUMED AOT interface. In normal CV mode, only the first two tensors are
     meaningful: the CV values and their gradients. The third and fourth tensors
     are scalar zero placeholders.
 
@@ -747,14 +774,14 @@ def export(
     )
     if not is_gnn:
         raise TypeError(
-            "This GNN-only exporter only supports BaseGNN models or wrappers "
+            "AOT compilation currently supports only BaseGNN models or wrappers "
             "whose `nn` attribute is a BaseGNN."
         )
 
-    exporter = ModelExporter(
+    exporter = _AOTExporter(
         model=model,
         example_inputs=example_inputs,
-        config=ExportConfig(
+        config=_AOTConfig(
             file_name=file_name,
             calculate_gradients=calculate_gradients,
             k_bias_options=k_bias_options,
@@ -766,54 +793,15 @@ def export(
     return exporter.export()
 
 
-def load_exported(
+def load(
     file_name: str,
 ) -> torch._inductor.package.package.AOTICompiledModel:
     """
-    Load an exported GNN CV model.
+    Load an AOT-compiled GNN CV model.
 
     Parameters
     ----------
     file_name: str
-        Name of the ``.pt2`` file.
+        Name of the ``.pt2`` AOTInductor package.
     """
     return torch._inductor.aoti_load_package(file_name)
-
-
-def test_export_gnn() -> None:
-    torch.manual_seed(0)
-    torch.set_default_dtype(torch.float32)
-
-    model = __import__("mlcolvar").core.nn.graph.SchNetModel(
-        n_out=2,
-        cutoff=0.1,
-        atomic_numbers=[1, 8],
-        n_bases=6,
-        n_layers=2,
-        n_filters=16,
-        n_hidden_channels=16,
-    )
-
-    model.n_cvs = model.n_out
-    model.dtype = torch.float32
-    model.device = "cpu"
-
-    batch = __import__("mlcolvar").data.graph.utils.create_test_graph_input(
-        output_type="batch",
-        n_atoms=3,
-        n_samples=6,
-        n_states=1,
-        add_noise=False,
-    )["data_list"]
-
-    dataset = batch.to_data_list()[0]
-
-    export(
-        model,
-        example_inputs=dataset,
-        file_name="model.pt2",
-        run_check=True,
-    )
-
-    os.remove("model.pt2")
-    
