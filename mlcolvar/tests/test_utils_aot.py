@@ -45,5 +45,6 @@ def test_aot_export_gnn(tmp_path) -> None:
 
         assert output_path.exists()
         assert str(result).endswith(".pt2")
+
     finally:
         torch.set_default_dtype(old_dtype)

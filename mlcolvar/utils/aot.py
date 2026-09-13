@@ -1,10 +1,6 @@
-"""Ahead-of-Time compilation utilities for deploying mlcolvar GNN models."""
-
-from __future__ import annotations
-
 import os
 import json
-import uuid
+import tempfile
 import zipfile
 import warnings
 
@@ -22,7 +18,7 @@ from mlcolvar.core.nn import BaseGNN
 from mlcolvar.utils import _code
 
 
-__all__ = ["export", "load"]
+__all__ = ["GraphAdapter", "export", "load"]
 
 
 # Maximum optimization settings for exporting models with AOTInductor.
@@ -178,7 +174,7 @@ class _AOTWrapper(torch.nn.Module):
         return self._forward_cv(inputs)
 
     def _compute_cv_outputs(self, inputs):
-        data = _GraphAdapter.tuple_to_dict(inputs)
+        data = GraphAdapter.tuple_to_dict(inputs)
 
         x = data["positions"].requires_grad_(True)
         data["positions"] = x
@@ -231,7 +227,7 @@ class _AOTWrapper(torch.nn.Module):
         return self._compute_kbias_outputs(inputs)
 
     def _compute_kbias_outputs(self, inputs):
-        data = _GraphAdapter.tuple_to_dict(inputs)
+        data = GraphAdapter.tuple_to_dict(inputs)
 
         x = data["positions"].requires_grad_(True)
         data["positions"] = x
@@ -300,7 +296,7 @@ class _AOTConfig:
     run_check: bool = False
 
 
-class _GraphAdapter:
+class GraphAdapter:
     """
     Utility class for converting between PyG graph objects, dictionaries and
     tensor tuples used by the exported GNN model.
@@ -328,7 +324,7 @@ class _GraphAdapter:
 
         dd["positions"].requires_grad_(True)
 
-        return _GraphAdapter.dict_to_tuple(dd)
+        return GraphAdapter.dict_to_tuple(dd)
 
     @staticmethod
     def dict_to_tuple(inputs: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, ...]:
@@ -427,7 +423,7 @@ class _AOTExporter:
         return results
 
     def _prepare_example_inputs(self) -> Tuple[torch.Tensor, ...]:
-        return _GraphAdapter.data_to_tuple(
+        return GraphAdapter.data_to_tuple(
             self.example_inputs,
             self.model.device,
         )
@@ -499,23 +495,43 @@ class _AOTExporter:
         return metadata
 
     @staticmethod
-    def _update_package_metadata(file_name: str, data: Dict[str, str]) -> None:
-        tmp = str(uuid.uuid4())
+    def _update_package_metadata(
+        file_name: str,
+        data: Dict[str, str],
+    ) -> None:
+        file_path = os.path.abspath(file_name)
+        directory = os.path.dirname(file_path)
 
-        with (
-            zipfile.ZipFile(file_name, "r") as fin,
-            zipfile.ZipFile(tmp, "w") as fout,
-        ):
-            for item in fin.infolist():
-                if "metadata" in item.filename:
-                    metadata = json.loads(fin.read(item.filename))
-                    metadata.update(data)
-                    fout.writestr(item.filename, json.dumps(metadata))
-                else:
-                    fout.writestr(item.filename, fin.read(item.filename))
+        fd, tmp_path = tempfile.mkstemp(
+            dir=directory,
+            suffix=".pt2",
+        )
+        os.close(fd)
 
-        os.remove(file_name)
-        os.rename(tmp, file_name)
+        try:
+            with (
+                zipfile.ZipFile(file_path, "r") as fin,
+                zipfile.ZipFile(tmp_path, "w") as fout,
+            ):
+                for item in fin.infolist():
+                    if "metadata" in item.filename:
+                        metadata = json.loads(fin.read(item.filename))
+                        metadata.update(data)
+                        fout.writestr(
+                            item,
+                            json.dumps(metadata),
+                        )
+                    else:
+                        fout.writestr(
+                            item,
+                            fin.read(item.filename),
+                        )
+
+            os.replace(tmp_path, file_path)
+
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
 
     def _check_aggr_modules(self) -> None:
         model_summary = self._build_model_summary("", self.model, 100, 0)
