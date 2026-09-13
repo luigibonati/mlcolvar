@@ -177,7 +177,7 @@ PYTORCH_GNN ...
 
 class PytorchGNN: public Colvar
 {
-  int n_out = 0;
+  int n_cvs = 0;
   bool pbc = true;
   bool serial = false;
   bool firsttime = true;
@@ -414,13 +414,13 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   // summary
   std::string model_architecture = model_summary("CV", model, 3, 0);
 
-  // get CV length
-  if (!model.hasattr("n_out"))
+  // get number of CVs
+  if (!model.hasattr("n_cvs"))
     plumed_merror(
-      "Can not find model attribute 'n_out'! This has to be set during the compilation of the model!"
+      "Can not find model attribute 'n_cvs'! This has to be set during the compilation of the model!"
     );
-  if (model.hasattr("n_out"))
-    n_out = model.attr("n_out").toTensor().item<int>();
+
+  n_cvs = model.attr("n_cvs").toTensor().item<int>();
   
   // get cutoff radius
   if (!model.hasattr("r_max") && !model.hasattr("cutoff") )
@@ -553,7 +553,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   }
 
   // create components
-  for (int i = 0; i < n_out; i++) {
+  for (int i = 0; i < n_cvs; i++) {
     string name_comp = "node-" + std::to_string(i);
     addComponentWithDerivatives(name_comp);
     componentIsNotPeriodic(name_comp);
@@ -645,7 +645,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
     log.printf("  Environment buffer size: %f (PLUMED length unit)\n", buffer);
   if (atom_list_sub_a.size() > 0)
     log.printf("  Subsystem long-range cutoff radius: %f (PLUMED length unit)\n", r_max_l);
-  log.printf("  Number of outputs: %d \n", n_out);
+  log.printf("  Number of CVs: %d \n", n_cvs);
   log.printf("  Will run on device: ");
   if (use_cuda)
     log.printf("CUDA\n");
@@ -1019,7 +1019,7 @@ void PytorchGNN::calculate()
   auto grad_output = torch::ones({1}).expand({1, 1}).to(device);
 
   // Here we simply compute the output and its derivatives
-  for (int i = 0; i < n_out; i++) {
+  for (int i = 0; i < n_cvs; i++) {
     // set CV values
     string name_comp = "node-" + std::to_string(i);
     getPntrToComponent(name_comp)->set(output[0][i].cpu().item<double>());

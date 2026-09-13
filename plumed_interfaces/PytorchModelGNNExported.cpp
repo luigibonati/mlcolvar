@@ -177,7 +177,7 @@ PYTORCH_GNN_EXPORTED ...
 
 class PytorchGNNExported: public Colvar
 {
-  int n_out = 0;
+  int n_cvs = 0;
   bool pbc = true;
   bool serial = false;
   bool firsttime = true;
@@ -384,7 +384,7 @@ PytorchGNNExported::PytorchGNNExported(const ActionOptions& ao):
   }
 
   // CV size/cutoff radius
-  n_out = std::atoi(metadata.at("n_cvs").c_str());
+  n_cvs = std::atoi(metadata.at("n_cvs").c_str());
   r_max = std::atof(metadata.at("cutoff").c_str());
   r_max = r_max / getLengthUnit(plumed, plumed.getAtoms(), 0) * 0.1; // TODO: remove the `atoms.` prefix when release
   buffer = std::atof(metadata.at("buffer").c_str());
@@ -477,7 +477,7 @@ PytorchGNNExported::PytorchGNNExported(const ActionOptions& ao):
   }
 
   // create components
-  for (int i = 0; i < n_out; i++) {
+  for (int i = 0; i < n_cvs; i++) {
     string name_comp = "node-" + std::to_string(i);
     addComponentWithDerivatives(name_comp);
     componentIsNotPeriodic(name_comp);
@@ -569,7 +569,7 @@ PytorchGNNExported::PytorchGNNExported(const ActionOptions& ao):
     log.printf("  Environment buffer size: %f (PLUMED length unit)\n", buffer);
   if (atom_list_sub_a.size() > 0)
     log.printf("  Subsystem long-range cutoff radius: %f (PLUMED length unit)\n", r_max_l);
-  log.printf("  Number of outputs: %d \n", n_out);
+  log.printf("  Number of CVs: %d \n", n_cvs);
   log.printf("  Will run on device: ");
   if (use_cuda)
     log.printf("CUDA\n");
@@ -982,7 +982,7 @@ for (size_t i = 0; i < atom_list_a.size(); i++) {
   std::vector<PLMD::Vector> derivatives(n_atoms);
 
   // Here we simply compute the output and its derivatives
-  for (int i = 0; i < n_out; i++) {
+  for (int i = 0; i < n_cvs; i++) {
     // set CV values
       string name_comp = "node-" + std::to_string(i);
       getPntrToComponent(name_comp)->set(

@@ -92,6 +92,7 @@ class SelfTICA(BaseCV):
 
         # here we need to override the self.out_features attribute
         self.out_features = n_cvs
+        self.n_cvs.fill_(n_cvs)
 
         # ======= OPTIONS =======
         # parse and sanitize
@@ -111,8 +112,6 @@ class SelfTICA(BaseCV):
         
         elif self._override_model:
             self.nn = model
-            if self.out_features is not None:
-                self.register_buffer('n_out', torch.as_tensor(self.out_features))   
 
         # initalize predictor
         o = "predictor"
@@ -227,7 +226,7 @@ class SelfTICA(BaseCV):
         # In evaluation mode, apply TICA projection to obtain CVs
         if not self.training:
             centered = x - self.current_means
-            x = centered @ self.current_evecs[:, :self.n_cvs]
+            x = centered @ self.current_evecs[:, :self.out_features]
         
         if self.postprocessing is not None:
             x = self._apply_module(self.postprocessing, x)

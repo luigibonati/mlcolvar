@@ -49,6 +49,10 @@ class BaseCV(lightning.LightningModule):
 
         # MODEL
         self.parse_model(model=model)
+        self.register_buffer(
+            "n_cvs",
+            torch.as_tensor(self.out_features),
+        )
         self.initialize_blocks()
         self._exporting_flag = False
 
@@ -62,11 +66,6 @@ class BaseCV(lightning.LightningModule):
         self.preprocessing = preprocessing
         self.postprocessing = postprocessing
         self._preprocessing_training_warning_shown = False
-
-    @property
-    def n_cvs(self):
-        """Number of CVs."""
-        return self.out_features
 
     @property
     def example_input_array(self):
@@ -98,11 +97,10 @@ class BaseCV(lightning.LightningModule):
             self.out_features = model.out_features
             # save buffers for the interface for PLUMED
             if isinstance(model, BaseGNN):
-                self.register_buffer('n_out', model.n_out)    
-                self.register_buffer('cutoff', model.cutoff)
-                self.register_buffer('buffer', model.buffer)
-                self.register_buffer('long_range_cutoff', model.long_range_cutoff)
-                self.register_buffer('atomic_numbers', model.atomic_numbers)
+                self.register_buffer("cutoff", model.cutoff)
+                self.register_buffer("buffer", model.buffer)
+                self.register_buffer("long_range_cutoff", model.long_range_cutoff)
+                self.register_buffer("atomic_numbers", model.atomic_numbers)
         else:
             raise ValueError(
                 f"Keyword model can either accept type list, FeedForward or BaseGNN. Found {type(model)}"

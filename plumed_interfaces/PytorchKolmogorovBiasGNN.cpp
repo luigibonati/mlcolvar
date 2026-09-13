@@ -207,7 +207,7 @@ PRINT FILE=COLVAR ARG=gnn.z,gnn.q,gnn.kbias STRIDE=100
 
 class PytorchKolmogorovBiasGNN: public Colvar
 {
-  int n_out = 0;
+  int n_cvs = 0;  
   bool pbc = true;
   bool serial = false;
   bool firsttime = true;
@@ -515,13 +515,18 @@ PytorchKolmogorovBiasGNN::PytorchKolmogorovBiasGNN(const ActionOptions& ao):
   // summary
   std::string model_architecture = model_summary("CV", model, 3, 0);
 
-  // get CV length
-  if (!model.hasattr("n_out"))
+  // get number of CVs
+  if (!model.hasattr("n_cvs"))
     plumed_merror(
-      "Can not find model attribute 'n_out'! This has to be set during the compilation of the model!"
+      "Can not find model attribute 'n_cvs'! This has to be set during the compilation of the model!"
     );
-  if (model.hasattr("n_out"))
-    n_out = model.attr("n_out").toTensor().item<int>();
+
+  n_cvs = model.attr("n_cvs").toTensor().item<int>();
+
+  if (n_cvs != 1)
+    plumed_merror(
+      "PYTORCH_KOLMOGOROV_BIAS_GNN requires a single-CV model (n_cvs=1)!"
+    );
 
   // get cutoff radius
   if (!model.hasattr("r_max") && !model.hasattr("cutoff") )
@@ -746,7 +751,7 @@ PytorchKolmogorovBiasGNN::PytorchKolmogorovBiasGNN(const ActionOptions& ao):
     log.printf("  Environment buffer size: %f (PLUMED length unit)\n", buffer);
   if (atom_list_sub_a.size() > 0)
     log.printf("  Subsystem long-range cutoff radius: %f (PLUMED length unit)\n", r_max_l);
-  log.printf("  Number of outputs: %d \n", n_out);
+  log.printf("  Number of CVs: %d \n", n_cvs);
   
   log.printf("  LAMBDA    value for calculating V_K: %f\n", lambda);
   log.printf("  BETA      value for calculating V_K: %f\n", beta);

@@ -12,7 +12,7 @@ def test_aot_export_gnn(tmp_path) -> None:
 
     try:
         model = SchNetModel(
-            n_out=2,
+            n_out=4,
             cutoff=0.1,
             atomic_numbers=[1, 8],
             n_bases=6,
@@ -21,7 +21,6 @@ def test_aot_export_gnn(tmp_path) -> None:
             n_hidden_channels=16,
         )
 
-        model.n_cvs = model.n_out
         model.dtype = torch.float32
         model.device = "cpu"
 
@@ -45,6 +44,12 @@ def test_aot_export_gnn(tmp_path) -> None:
 
         assert output_path.exists()
         assert str(result).endswith(".pt2")
+
+        compiled_model = aot.load(str(output_path))
+        metadata = compiled_model.get_metadata()
+
+        assert metadata["n_cvs"] == "4"
+        assert metadata["n_outputs"] == "4"
 
     finally:
         torch.set_default_dtype(old_dtype)

@@ -166,7 +166,8 @@ PRINT FILE=COLVAR ARG=gnn.z,gnn.q,gnn.kbias STRIDE=100
 
 class PytorchKolmogorovBiasGNNExported: public Colvar
 {
-  int n_out = 0;
+  int n_cvs = 0;
+  int n_outputs = 0;
   bool pbc = true;
   bool serial = false;
   bool firsttime = true;
@@ -371,9 +372,18 @@ PytorchKolmogorovBiasGNNExported::PytorchKolmogorovBiasGNNExported(const ActionO
     );
   }
 
-  if (std::atoi(metadata.at("n_cvs").c_str()) != 2) {
+  n_cvs = std::atoi(metadata.at("n_cvs").c_str());
+  n_outputs = std::atoi(metadata.at("n_outputs").c_str());
+
+  if (n_cvs != 1) {
     plumed_merror(
-      "This interface expects n_cvs=2, corresponding to [z, q]."
+      "PYTORCH_KOLMOGOROV_BIAS_GNN_EXPORTED requires a single-CV model (n_cvs=1)!"
+    );
+  }
+
+  if (n_outputs != 2) {
+    plumed_merror(
+      "PYTORCH_KOLMOGOROV_BIAS_GNN_EXPORTED expects n_outputs=2, corresponding to [z, q]!"
     );
   }
 
@@ -399,8 +409,7 @@ PytorchKolmogorovBiasGNNExported::PytorchKolmogorovBiasGNNExported(const ActionO
     use_cuda = false;
   }
 
-  // CV size/cutoff radius
-  n_out = std::atoi(metadata.at("n_cvs").c_str());
+  // cutoff radius
   r_max = std::atof(metadata.at("cutoff").c_str());
   r_max = r_max / getLengthUnit(plumed, plumed.getAtoms(), 0) * 0.1; // TODO: remove the `atoms.` prefix when release
   buffer = std::atof(metadata.at("buffer").c_str());
@@ -595,7 +604,8 @@ PytorchKolmogorovBiasGNNExported::PytorchKolmogorovBiasGNNExported(const ActionO
     log.printf("  Environment buffer size: %f (PLUMED length unit)\n", buffer);
   if (atom_list_sub_a.size() > 0)
     log.printf("  Subsystem long-range cutoff radius: %f (PLUMED length unit)\n", r_max_l);
-  log.printf("  Number of outputs: %d \n", n_out);
+  log.printf("  Number of CVs: %d \n", n_cvs);
+  log.printf("  Number of model outputs: %d \n", n_outputs);
   
   log.printf("  LAMBDA    value for calculating V_K: %f\n", lambda);
   log.printf("  EPSILON   value for calculating V_K: %e\n", epsilon);

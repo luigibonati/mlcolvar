@@ -38,7 +38,7 @@ if os.environ.get("MLCOLVAR_EXPORT_MAXIMUM_OPT") == "1":
 
 
 # Graph serialization schema used by AOT-compiled GNN models.
-_AOT_FORMAT_VERSION = 1
+_AOT_FORMAT_VERSION = 2
 
 _GRAPH_FIELDS = (
     "edge_index",
@@ -459,13 +459,26 @@ class _AOTExporter:
         return result
 
     def _build_model_metadata(self) -> Dict[str, str]:
-        # TODO: currently the GNN output is associated with model.n_out, which is
-        # not necessarily the same as model.n_cvs. This should be cleaned up.
-        n_cvs = 2 if self.calculate_k_bias else int(self.model.n_cvs.item())
+        if isinstance(self.model, BaseGNN):
+            # A raw GNN directly defines the exported CV output dimension.
+            n_cvs = int(self.model.n_out)
+        else:
+            # CV wrappers expose the final number of CVs explicitly.
+            n_cvs = int(self.model.n_cvs)
+
+        if self.calculate_k_bias and n_cvs != 1:
+            raise ValueError(
+                "Kolmogorov-bias export requires a single-CV model."
+            )
+
+        # In Kolmogorov-bias mode the compiled interface returns [z, q],
+        # while the underlying committor model still has a single CV.
+        n_outputs = 2 if self.calculate_k_bias else n_cvs
 
         metadata = {
             "aot_format_version": str(_AOT_FORMAT_VERSION),
             "n_cvs": str(n_cvs),
+            "n_outputs": str(n_outputs),
             "cutoff": str(self.model.cutoff.item()),
             "buffer": str(self.model.buffer.item()),
             "long_range_cutoff": str(self.model.long_range_cutoff.item()),
@@ -579,7 +592,7 @@ class _AOTExporter:
             "1",
             True,
         )
-        n_cvs = int(metadata["n_cvs"])
+        n_outputs = int(metadata["n_outputs"])
 
         model_outputs = model(example_inputs)
         aot_model_outputs = aot_model(example_inputs)
@@ -589,7 +602,7 @@ class _AOTExporter:
         check_max_abs_error(max_abs_error, float_dtype, "CV values")
 
         if calculate_gradients:
-            for i in range(n_cvs):
+            for i in range(n_outputs):
                 delta_i = model_outputs[1][i] - aot_model_outputs[1][i]
                 max_abs_error = delta_i.abs().max().item()
                 check_max_abs_error(
