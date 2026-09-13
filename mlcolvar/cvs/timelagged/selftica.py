@@ -81,7 +81,10 @@ class SelfTICA(BaseCV):
             Available blocks: ['norm_in', 'encoder', 'predictor', 'tica'].
             Set 'block_name' = None or False to turn off that block.
         """
-        super().__init__(model, **kwargs)        
+        super().__init__(model, **kwargs)      
+        
+        # encoder output dimension
+        out_dim = int(self.out_features)  
 
         # =======   LOSS  =======
         self.loss_fn = ContrastiveLoss(reg=regularization, mode="l2")
@@ -90,7 +93,7 @@ class SelfTICA(BaseCV):
         if not isinstance(n_cvs, int) or n_cvs < 1:
             raise ValueError("n_cvs must be a positive integer (>= 1)")
 
-        # here we need to override the self.out_features attribute
+        # final CV dimension
         self.out_features = n_cvs
         self.n_cvs.fill_(n_cvs)
 
@@ -115,13 +118,6 @@ class SelfTICA(BaseCV):
 
         # initalize predictor
         o = "predictor"
-        # ===== infer output dimension =====
-        if hasattr(self.nn, "out_features") and isinstance(self.nn.out_features, int):
-            out_dim = self.nn.out_features
-        elif hasattr(self.nn, "n_out"):
-            out_dim = int(self.nn.n_out)
-        else:
-            raise ValueError("Cannot infer output dimension from model")
         
         if not isinstance(predictor_depth, int) or predictor_depth < 2:
             raise ValueError("predictor_depth must be an integer greater than or equal to 2.")
