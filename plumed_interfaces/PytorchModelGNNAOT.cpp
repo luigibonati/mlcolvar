@@ -21,10 +21,10 @@ along with plumed.  If not, see <http://www.gnu.org/licenses/>.
 #include <memory>
 #include <fstream>
 #include <type_traits>
-#include <unordered_map>
 #include <torch/torch.h>
 #include <torch/script.h>
 #include <torch/csrc/jit/jit_log.h>
+
 #if __has_include("torch/csrc/inductor/aoti_package/model_package_loader.h")
 #include <torch/csrc/inductor/aoti_package/model_package_loader.h>
 #else
@@ -50,7 +50,7 @@ class NeighborList;
 
 namespace colvar {
 
-namespace pytorch_kolmogorov_bias_gnn {
+namespace pytorch_gnn_aot {
 
 template <typename Main, typename Atoms>
 auto getUsingNaturalUnits(Main& main, Atoms&, int)
@@ -76,10 +76,10 @@ auto getLengthUnit(Main&, Atoms& atoms, long)
   return atoms.getUnits().getLength();
 }
 
-//+PLUMEDOC PYTORCH_KOLMOGOROV_BIAS_GNN_EXPORTED 
+//+PLUMEDOC PytorchModelGNNAOT PytorchModelGNNAOT
 /*
-Load an exported GNN model that returns the latent coordinate `z`, the committor
-value `q`, and the Kolmogorov bias `kbias`.
+Load a Graph Neural Network (GNN) model exported with the
+`mlcolvar.utils.export.export()` method.
 
 This module uses a fixed length unit of _Angstrom_. Thus, the GNN model read by
 this module should be trained under the same unit convention. Besides, the
@@ -105,47 +105,62 @@ in `SYSTEM_SELECTION` and all atoms in `ENVIRONMENT_SELECTION` that are within a
 radius from _any_ atom in `SYSTEM_SELECTION`. Such a radius equals to the cutoff recorded in the
 model file _plus_ the buffer size, also recorded in the model file. 
 Thus, when `ENVIRONMENT_SELECTION` is given, the node number of the input 
-graph can change dynamically during the simulation. Besides, when SUBSYSTEM_SELECTION is defined the module 
-will add long edges bewteen such a group. Cutoff radius of these long edges will equal to the 
-long_range_cutoff attribute recorded in the model file.
+graph can change dynamically during the simulation. Besides, when SUBSYSTEM_SELECTION is defined
+the module will add long edges bewteen such a group. Cutoff radius of these
+long edges will equal to the long_range_cutoff attribute recorded in the model file.
 
-The Kolmogorov bias parameters are fixed at export time and stored in the exported model metadata.
+The outputs are exposed as `node-0`, `node-1`, etc.
 
-The outputs are exposed as `z`, `q`, and `kbias`.
 Besides, dtype and running device of the model will be fixed after export, which
 means that one can not exporting a model stored on CPU and then inference on GPU.
 What's more, The exported models are generally MUCH FASTER when running on GPUs.
-See the docstring of the `mlcolvar.graph.utils.export.export()` method for
+See the docstring of the `mlcolvar.utils.export()` method for
 details.
+
 Note that this function requires \ref installation-libtorch LibTorch C++ library.
 Check the instructions in the \ref PYTORCH page to enable the module.
 Specifically, we encourage the user to install the GPU-enabled version of
 LibTorch, when dealing with large input graphs.
 
 \par Examples
-The following example instructs plumed to evaluate a committor GNN model using 
-atoms 1-10 and compute the committor outputs `z`, `q`, and the Kolmogorov bias `kbias`. The neighbor list for determining the edges will be updated every 1 steps.
+The following example instructs plumed to evaluate the GNN model using the atoms 1-10. The neighbor list for determining the edges will be updated every 100 steps.
 \plumedfile
-PYTORCH_KOLMOGOROV_BIAS_GNN_EXPORTED ...
+PYTORCH_GNN_AOT ...
   SYSTEM_SELECTION=1-10
   MODEL=model.pt2
   STRUCTURE=plumed_topo.pdb
-  NL_STRIDE=1
+  NL_STRIDE=100
   LABEL=gnn
-... PYTORCH_KOLMOGOROV_BIAS_GNN_EXPORTED
-
-BIASVALUE ARG=gnn.kbias
-
-PRINT FILE=COLVAR ARG=gnn.z,gnn.q,gnn.kbias STRIDE=100
+... PYTORCH_GNN_AOT
 \endplumedfile
 
-The following example instructs plumed to evaluate the committor GNN model using atoms 
-1-10 as system atoms and atoms 11-100 as the environment atoms. 
+The following example instructs plumed to do the same calculation as the above example, and will add an OPES bias potential on the CV.
+\plumedfile
+PYTORCH_GNN_AOT ...
+  SYSTEM_SELECTION=1-10
+  MODEL=model.pt2
+  STRUCTURE=plumed_topo.pdb
+  NL_STRIDE=100
+  LABEL=gnn
+... PYTORCH_GNN_AOT
+
+OPES_METAD ...
+  LABEL=opes
+  ARG=gnn.node-0
+  FILE=KERNELS
+  PACE=500
+  TEMP=300
+  BARRIER=35
+... OPES_METAD
+\endplumedfile
+
+
+The following example instructs plumed to evaluate the GNN model using 
+the atoms 1-10 as system atoms, and atoms 11-100 as the environment atoms.
 In addition, long-range edges will be added between the subsystem atoms (1-10). 
 The neighbor list for determining the edges will be updated every 2 steps.
-
 \plumedfile
-PYTORCH_KOLMOGOROV_BIAS_GNN_EXPORTED ...
+PYTORCH_GNN_AOT ...
   SYSTEM_SELECTION=1-10
   SUBSYSTEM_SELECTION=1-10
   ENVIRONMENT_SELECTION=11-100
@@ -153,31 +168,24 @@ PYTORCH_KOLMOGOROV_BIAS_GNN_EXPORTED ...
   STRUCTURE=plumed_topo.pdb
   NL_STRIDE=2
   LABEL=gnn
-... PYTORCH_KOLMOGOROV_BIAS_GNN_EXPORTED
-
-BIASVALUE ARG=gnn.kbias
-
-PRINT FILE=COLVAR ARG=gnn.z,gnn.q,gnn.kbias STRIDE=100
+... PYTORCH_GNN_AOT
 \endplumedfile
 
 */
 //+ENDPLUMEDOC
 
 
-class PytorchKolmogorovBiasGNNExported: public Colvar
+class PytorchGNNAOT: public Colvar
 {
   int n_cvs = 0;
-  int n_outputs = 0;
   bool pbc = true;
   bool serial = false;
   bool firsttime = true;
   bool invalidate_list = true;
+  bool bailout_fusion = false;
   double r_max = 0.0; // In PLUMED length unit
   double buffer = 0.0; // In PLUMED length unit
   double r_max_l = -1.0; // In PLUMED length unit
-  double lambda = 1.0;
-  double epsilon = -1;
-  double beta = -1.0;
   std::string model_file_name;
   std::string structure_file_name;
   std::vector<int> system_node_types;
@@ -209,16 +217,16 @@ class PytorchKolmogorovBiasGNNExported: public Colvar
   void find_active_subgroup_atoms(void);
 
 public:
-  explicit PytorchKolmogorovBiasGNNExported(const ActionOptions&);
-  ~PytorchKolmogorovBiasGNNExported();
+  explicit PytorchGNNAOT(const ActionOptions&);
+  ~PytorchGNNAOT();
   static void registerKeywords(Keywords& keys);
   void calculate() override;
   void prepare() override;
-}; // class PytorchKolmogorovBiasGNNExported
+}; // class PytorchGNNAOT
 
-PLUMED_REGISTER_ACTION(PytorchKolmogorovBiasGNNExported, "PYTORCH_KOLMOGOROV_BIAS_GNN_EXPORTED")
+PLUMED_REGISTER_ACTION(PytorchGNNAOT, "PYTORCH_GNN_AOT")
 
-void PytorchKolmogorovBiasGNNExported::registerKeywords(Keywords& keys)
+void PytorchGNNAOT::registerKeywords(Keywords& keys)
 {
   Colvar::registerKeywords(keys);
 
@@ -265,27 +273,16 @@ void PytorchKolmogorovBiasGNNExported::registerKeywords(Keywords& keys)
   );
 
   keys.addOutputComponent(
-    "z",
+    "node",
     "default",
     "Model outputs"
   );
 
-  keys.addOutputComponent(
-    "q",
-    "default",
-    "Model outputs"
-  );
-
-  keys.addOutputComponent(
-    "kbias",
-    "default",
-    "Kolmogorov's bias potential $V_K$"
-  );
 }
 
-PytorchKolmogorovBiasGNNExported::PytorchKolmogorovBiasGNNExported(const ActionOptions& ao):
+PytorchGNNAOT::PytorchGNNAOT(const ActionOptions& ao):
   PLUMED_COLVAR_INIT(ao)
-{ // print libtorch version
+{// print libtorch version
   std::stringstream ss;
   ss << TORCH_VERSION_MAJOR << "." \
      << TORCH_VERSION_MINOR << "." \
@@ -357,35 +354,12 @@ PytorchKolmogorovBiasGNNExported::PytorchKolmogorovBiasGNNExported(const ActionO
     );
   } catch (const c10::Error& e) {
     plumed_merror(
-      "Can't load exported model file: '" + model_file_name + "'. Reason: " + e.what()
+      "Cannot load exported model file: '" + model_file_name + "'. Reason: " + e.what()
     );
   }
 
   // read information from the model
   auto metadata = model->get_metadata();
-
-  // check calculation of k_bias
-  if (metadata.at("calculate_k_bias") != "True") {
-    plumed_merror(
-      "This interface requires an exported model with calculate_k_bias=True, "
-      "but the model metadata has calculate_k_bias=False."
-    );
-  }
-
-  n_cvs = std::atoi(metadata.at("n_cvs").c_str());
-  n_outputs = std::atoi(metadata.at("n_outputs").c_str());
-
-  if (n_cvs != 1) {
-    plumed_merror(
-      "PYTORCH_KOLMOGOROV_BIAS_GNN_EXPORTED requires a single-CV model (n_cvs=1)!"
-    );
-  }
-
-  if (n_outputs != 2) {
-    plumed_merror(
-      "PYTORCH_KOLMOGOROV_BIAS_GNN_EXPORTED expects n_outputs=2, corresponding to [z, q]!"
-    );
-  }
 
   // dtype/device
   bool use_cuda = false;
@@ -409,7 +383,8 @@ PytorchKolmogorovBiasGNNExported::PytorchKolmogorovBiasGNNExported(const ActionO
     use_cuda = false;
   }
 
-  // cutoff radius
+  // CV size/cutoff radius
+  n_cvs = std::atoi(metadata.at("n_cvs").c_str());
   r_max = std::atof(metadata.at("cutoff").c_str());
   r_max = r_max / getLengthUnit(plumed, plumed.getAtoms(), 0) * 0.1; // TODO: remove the `atoms.` prefix when release
   buffer = std::atof(metadata.at("buffer").c_str());
@@ -458,11 +433,6 @@ PytorchKolmogorovBiasGNNExported::PytorchKolmogorovBiasGNNExported(const ActionO
       std::atoi(metadata.at("atomic_number_" + to_string(i)).c_str())
     );
 
-  // check model type
-  lambda = std::atof(metadata.at("lambd").c_str());
-  epsilon = std::atof(metadata.at("epsilon").c_str());
-  beta = std::atof(metadata.at("beta").c_str());
-
   // summary/number of parameters/training time
   std::string model_summary(metadata.at("model_summary").c_str());
   std::string model_n_parameters(metadata.at("n_parameters").c_str());
@@ -507,16 +477,11 @@ PytorchKolmogorovBiasGNNExported::PytorchKolmogorovBiasGNNExported(const ActionO
   }
 
   // create components
-  string name_comp_z = "z";
-  addComponentWithDerivatives(name_comp_z);
-  componentIsNotPeriodic(name_comp_z);
-  string name_comp_q = "q";
-  addComponentWithDerivatives(name_comp_q);
-  componentIsNotPeriodic(name_comp_q);
-  
-  string name_comp_b = "kbias";
-  addComponentWithDerivatives(name_comp_b);
-  componentIsNotPeriodic(name_comp_b);
+  for (int i = 0; i < n_cvs; i++) {
+    string name_comp = "node-" + std::to_string(i);
+    addComponentWithDerivatives(name_comp);
+    componentIsNotPeriodic(name_comp);
+  }
 
   // initialize the neighbor list
   if (atom_list_b.size() > 0)
@@ -605,14 +570,6 @@ PytorchKolmogorovBiasGNNExported::PytorchKolmogorovBiasGNNExported(const ActionO
   if (atom_list_sub_a.size() > 0)
     log.printf("  Subsystem long-range cutoff radius: %f (PLUMED length unit)\n", r_max_l);
   log.printf("  Number of CVs: %d \n", n_cvs);
-  log.printf("  Number of model outputs: %d \n", n_outputs);
-  
-  log.printf("  LAMBDA    value for calculating V_K: %f\n", lambda);
-  log.printf("  EPSILON   value for calculating V_K: %e\n", epsilon);
-  log << "  Output alignment: " + thename + ".kbias  -> V_K\n";
-  log << "  Output alignment: " + thename + ".q -> committor\n";
-  log << "  Output alignment: " + thename + ".z -> zeta\n";
-  
   log.printf("  Will run on device: ");
   if (use_cuda)
     log.printf("CUDA\n");
@@ -625,18 +582,15 @@ PytorchKolmogorovBiasGNNExported::PytorchKolmogorovBiasGNNExported(const ActionO
   log.printf("  Bibliography: ");
   log << plumed.cite("Bonati, Trizio, Rizzi and Parrinello, J. Chem. Phys. 159, 014801 (2023)");
   log << plumed.cite("Zhang et al., J. Chem. Theory Comput. 20, 24, 10787–10797 (2024)");
-  log<<plumed.cite("Kang, Trizio, and Parrinello, Nat. Comp. Sci. 4, 451-460 (2024)");
-  log<<plumed.cite("Trizio, Kang and Parrinello, Nat. Comp. Sci. 5, 582-591 (2025)");
-  log<<plumed.cite("Kang, Zhang, Trizio, Hou, and Parrinello, J. Chem. Theory Comput., 22, 4, 1613–1620 (2026)");
   log.printf("\n");
 }
 
-PytorchKolmogorovBiasGNNExported::~PytorchKolmogorovBiasGNNExported()
+PytorchGNNAOT::~PytorchGNNAOT()
 {
   return;
 }
 
-void PytorchKolmogorovBiasGNNExported::prepare()
+void PytorchGNNAOT::prepare()
 {
   if (neighbor_list->getStride() > 0) {
     if (firsttime || ((getStep() % neighbor_list->getStride()) == 0)) {
@@ -657,7 +611,7 @@ void PytorchKolmogorovBiasGNNExported::prepare()
 }
 
 
-void PytorchKolmogorovBiasGNNExported::calculate()
+void PytorchGNNAOT::calculate()
 {
   // get some common data
   auto pbc_tools = getPbc();
@@ -686,7 +640,6 @@ void PytorchKolmogorovBiasGNNExported::calculate()
     find_active_atoms(n_threads);
   n_atoms = (int)atom_list_active.size();
   n_threads = std::min(n_threads, n_atoms);
-
   // get the unit
   double to_ang = 10 * getLengthUnit(plumed, plumed.getAtoms(), 0);
 
@@ -931,7 +884,7 @@ void PytorchKolmogorovBiasGNNExported::calculate()
   auto weight = torch::empty({1}, torch_float_dtype);
   auto label = torch::ones({1, 1}, torch_float_dtype);
   auto n_system = torch::ones({1, 1}, torch::dtype(torch_float_dtype));
-  
+
   ptr[0] = 0;
   ptr[1] = n_atoms;
   weight[0] = 1.0;
@@ -1023,96 +976,39 @@ for (size_t i = 0; i < atom_list_a.size(); i++) {
     edge_masks_lr,
   };
 
-// forward
-std::vector<torch::Tensor> outputs = model->run(input_vector);
+  // forward
+  std::vector<torch::Tensor> outputs = model->run(input_vector);  
 
-std::vector<PLMD::Vector> derivatives(n_atoms);
+  std::vector<PLMD::Vector> derivatives(n_atoms);
 
-// ======================================================
-// 1. Set values: z, q, kbias
-// ======================================================
-
-string name_comp_z = "z";
-getPntrToComponent(name_comp_z)->set(
-  outputs[0][0][0].cpu().item<double>()
-);
-
-string name_comp_q = "q";
-getPntrToComponent(name_comp_q)->set(
-  outputs[0][0][1].cpu().item<double>()
-);
-
-string name_comp_b = "kbias";
-getPntrToComponent(name_comp_b)->set(
-  outputs[2].cpu().item<double>()
-);
-
-// ======================================================
-// 2. Set derivatives of z
-// ======================================================
-
-auto gradients_z = outputs[1][0].cpu();
-
-#pragma omp parallel for num_threads(n_threads)
-for (int j = 0; j < n_atoms; j++) {
-  derivatives[j][0] = gradients_z[j][0].item<double>() * to_ang;
-  derivatives[j][1] = gradients_z[j][1].item<double>() * to_ang;
-  derivatives[j][2] = gradients_z[j][2].item<double>() * to_ang;
+  // Here we simply compute the output and its derivatives
+  for (int i = 0; i < n_cvs; i++) {
+    // set CV values
+      string name_comp = "node-" + std::to_string(i);
+      getPntrToComponent(name_comp)->set(
+        outputs[0][0][i].cpu().item<double>()
+      );
+      // set derivatives
+      auto gradients = outputs[1][i];
+    #pragma omp parallel for num_threads(n_threads)
+    for (int j = 0; j < n_atoms; j++) {
+      derivatives[j][0] = gradients[j][0].item<double>() * to_ang;
+      derivatives[j][1] = gradients[j][1].item<double>() * to_ang;
+      derivatives[j][2] = gradients[j][2].item<double>() * to_ang;
+    }
+    #pragma omp parallel for num_threads(n_threads)
+    for (int j = 0; j < n_atoms; j++) {
+      int index = atom_list_active[j];
+      setAtomsDerivatives(
+        getPntrToComponent(name_comp), index, derivatives[j]
+      );
+  
+    }
+  }
 }
 
-#pragma omp parallel for num_threads(n_threads)
-for (int j = 0; j < n_atoms; j++) {
-  int index = atom_list_active[j];
-  setAtomsDerivatives(
-    getPntrToComponent(name_comp_z), index, derivatives[j]
-  );
-}
 
-// ======================================================
-// 3. Set derivatives of q
-// ======================================================
-
-auto gradients_q = outputs[1][1].cpu();
-
-#pragma omp parallel for num_threads(n_threads)
-for (int j = 0; j < n_atoms; j++) {
-  derivatives[j][0] = gradients_q[j][0].item<double>() * to_ang;
-  derivatives[j][1] = gradients_q[j][1].item<double>() * to_ang;
-  derivatives[j][2] = gradients_q[j][2].item<double>() * to_ang;
-}
-
-#pragma omp parallel for num_threads(n_threads)
-for (int j = 0; j < n_atoms; j++) {
-  int index = atom_list_active[j];
-  setAtomsDerivatives(
-    getPntrToComponent(name_comp_q), index, derivatives[j]
-  );
-}
-
-// ======================================================
-// 4. Set derivatives of kbias
-// ======================================================
-
-auto gradients_b = outputs[3][0].cpu();
-
-#pragma omp parallel for num_threads(n_threads)
-for (int j = 0; j < n_atoms; j++) {
-  derivatives[j][0] = gradients_b[j][0].item<double>() * to_ang;
-  derivatives[j][1] = gradients_b[j][1].item<double>() * to_ang;
-  derivatives[j][2] = gradients_b[j][2].item<double>() * to_ang;
-}
-
-#pragma omp parallel for num_threads(n_threads)
-for (int j = 0; j < n_atoms; j++) {
-  int index = atom_list_active[j];
-  setAtomsDerivatives(
-    getPntrToComponent(name_comp_b), index, derivatives[j]
-  );
-}
-
-}
-
-int PytorchKolmogorovBiasGNNExported::atomic_number_from_name(std::string name)
+int PytorchGNNAOT::atomic_number_from_name(std::string name)
 {
   std::transform(
     name.begin(),
@@ -1128,7 +1024,8 @@ int PytorchKolmogorovBiasGNNExported::atomic_number_from_name(std::string name)
   return std::distance(periodic_table.begin(), iter) + 1;
 }
 
-bool PytorchKolmogorovBiasGNNExported::groups_have_intersection(void) {
+
+bool PytorchGNNAOT::groups_have_intersection(void) {
   std::vector<AtomNumber> intersections;
   std::vector<AtomNumber> atom_list_a_copy(atom_list_a);
   std::vector<AtomNumber> atom_list_b_copy(atom_list_b);
@@ -1147,7 +1044,7 @@ bool PytorchKolmogorovBiasGNNExported::groups_have_intersection(void) {
   return intersections.size() > 0;
 }
 
-bool PytorchKolmogorovBiasGNNExported::subgroup_is_in_group_a(void) {
+bool PytorchGNNAOT::subgroup_is_in_group_a(void) {
   std::vector<AtomNumber> atom_list_a_copy(atom_list_a);
   std::vector<AtomNumber> atom_list_sub_a_copy(atom_list_sub_a);
   for (auto atom_elt: atom_list_sub_a_copy)
@@ -1159,7 +1056,7 @@ bool PytorchKolmogorovBiasGNNExported::subgroup_is_in_group_a(void) {
   return true;
 }
 
-void PytorchKolmogorovBiasGNNExported::find_active_atoms(int n_threads) {
+void PytorchGNNAOT::find_active_atoms(int n_threads) {
   if (atom_list_b.size() > 0) {
     atom_list_active.clear();
     std::vector<int> neighbors(neighbor_list->size());
@@ -1186,7 +1083,7 @@ void PytorchKolmogorovBiasGNNExported::find_active_atoms(int n_threads) {
   }
 }
 
-void PytorchKolmogorovBiasGNNExported::find_active_subgroup_atoms(void) {
+void PytorchGNNAOT::find_active_subgroup_atoms(void) {
   atom_list_active_subgroup.clear();
   // NOTE: since system atoms (atom_list_a) always appear at the head of the
   // local indices, we simply find subsystem indices in atom_list_a.
@@ -1199,7 +1096,7 @@ void PytorchKolmogorovBiasGNNExported::find_active_subgroup_atoms(void) {
   }
 }
 
-} // pytorch_kolmogorov_bias_gnn
+} // pytorch_gnn_aot
 
 } // colvar
 

@@ -2,8 +2,8 @@
 
 UNITS LENGTH=A
 
-# load interface for GNNs aot-comile model
-LOAD FILE=PytorchKolmogorovBiasGNNExported.cpp
+# load interface for GNN AOT-compiled model
+LOAD FILE=PytorchKolmogorovBiasGNNAOT.cpp
 
 # use molinfo to select atoms (optional but recommended)
 MOLINFO STRUCTURE=ref.pdb PYTHON_BIN=/path/to/python/with/mdtraj
@@ -61,13 +61,13 @@ x43: DISTANCE ATOMS=16,17
 x44: DISTANCE ATOMS=16,19
 x45: DISTANCE ATOMS=17,19
 
-PYTORCH_KOLMOGOROV_BIAS_GNN_EXPORTED ...
+PYTORCH_KOLMOGOROV_BIAS_GNN_AOT ...
   SYSTEM_SELECTION=sys
-  MODEL=model.pt2 # use z model BETA=0.5 LAMBDA=1
+  MODEL=model.pt2 # Kolmogorov-bias parameters are fixed at export time
   STRUCTURE=ref.pdb
   LABEL=gnn
   NL_STRIDE=1
-... PYTORCH_KOLMOGOROV_BIAS_GNN_EXPORTED
+... PYTORCH_KOLMOGOROV_BIAS_GNN_AOT
 
 BIASVALUE ARG=gnn.kbias
 
