@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import Dict, Optional
 
 import pytest
@@ -16,7 +14,6 @@ from mlcolvar.representation import (
     export_representation_torchscript,
     precompute_committor_cache,
 )
-
 
 class GraphShiftPreprocessing(nn.Module):
     def forward(

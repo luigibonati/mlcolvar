@@ -1,15 +1,13 @@
-from __future__ import annotations
-
 from typing import Optional
 
 import pytest
 import torch
 from torch import nn
 
-from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
 from mlcolvar.data import DictDataset
 from mlcolvar.representation import (
     CachedRepresentationDerivatives,
+    IdentityDescriptorDerivatives,
     MLColvarRepresentation,
     RepresentationModel,
     TaskHead,
@@ -474,19 +472,6 @@ def test_mlcolvar_tensor_adapter_validates_interfaces() -> None:
             MissingEncoder(),
             mode="latent",
         )
-
-
-class IdentityDescriptorDerivatives(SmartDerivatives):
-    def __init__(self) -> None:
-        nn.Module.__init__(self)
-
-    def forward(
-        self,
-        gradient_descriptor: torch.Tensor,
-        ref_idx: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
-        del ref_idx
-        return gradient_descriptor.unsqueeze(1)
 
 
 def test_tensor_committor_cache_matches_direct_representation() -> None:

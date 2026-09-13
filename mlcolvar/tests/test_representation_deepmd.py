@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import Dict, List, Optional
 
 import pytest
@@ -15,7 +13,6 @@ from mlcolvar.representation import (  # noqa: E402
     PoolReducer,
     RepresentationModel,
 )
-
 
 class DummyDeepMDDescriptor(nn.Module):
     """Minimal DeePMD-like descriptor using float32 internally."""

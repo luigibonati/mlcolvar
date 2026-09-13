@@ -1,14 +1,8 @@
-from __future__ import annotations
-
 from typing import Dict, List, Optional
 
 import pytest
 import torch
 from torch import nn
-
-# Import the PET adapter first: it installs the PET TorchScript compatibility
-# patch before metatensor/metatomic internals are imported.
-pytest.importorskip("mlcolvar.representation.adapters.pet")
 
 metatensor_torch = pytest.importorskip("metatensor.torch")
 metatomic_torch = pytest.importorskip("metatomic.torch")

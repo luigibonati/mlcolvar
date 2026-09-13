@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import Dict
 
 import pytest
@@ -11,7 +9,6 @@ from mlcolvar.representation import (
     PoolReducer,
     RepresentationModel,
 )
-
 
 class DummyMACE(nn.Module):
     """Minimal MACE-like model used for unit testing."""

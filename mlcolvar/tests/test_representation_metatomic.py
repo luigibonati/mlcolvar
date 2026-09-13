@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import Dict, List
 
 import pytest
@@ -21,7 +19,6 @@ from mlcolvar.representation.metatomic import (  # noqa: E402
 from mlcolvar.representation.metatomic.export import (  # noqa: E402
     _get_neighbor_options,
 )
-
 
 class DummyGraphNetwork(nn.Module):
     """Minimal graph model accepting an mlcolvar graph dictionary."""
