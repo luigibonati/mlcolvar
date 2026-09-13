@@ -197,7 +197,6 @@ jobs:
       - name: Test alanine gnn-aot
         run: |
           cd plumed_test
-          ../plumed_interfaces/tests/driver_alanine.sh gnn-aot
           bash ../plumed_interfaces/tests/driver_alanine.sh gnn-aot
 
       - name: Test alanine gnn-kbias-aot
