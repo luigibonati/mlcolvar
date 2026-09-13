@@ -194,15 +194,16 @@ jobs:
           cd plumed_test
           bash ../plumed_interfaces/tests/driver_alanine.sh gnn
 
-      - name: Test alanine gnn-exported
+      - name: Test alanine gnn-aot
         run: |
           cd plumed_test
-          bash ../plumed_interfaces/tests/driver_alanine.sh gnn-exported
+          ../plumed_interfaces/tests/driver_alanine.sh gnn-aot
+          bash ../plumed_interfaces/tests/driver_alanine.sh gnn-aot
 
-      - name: Test alanine gnn-kbias-exported
+      - name: Test alanine gnn-kbias-aot
         run: |
           cd plumed_test
-          bash ../plumed_interfaces/tests/driver_alanine.sh gnn-kbias-exported
+          bash ../plumed_interfaces/tests/driver_alanine.sh gnn-kbias-aot
 
       - name: Test alanine gnn-kbias
         run: |

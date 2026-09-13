@@ -2,7 +2,7 @@
 
 # retrieve mode:
 # descriptors, descriptors-kbias, gnn, gnn-kbias,
-# gnn-exported, gnn-kbias-exported
+# gnn-aot, gnn-kbias-aot
 mode=$1
 
 # =====================================================================================
@@ -35,8 +35,8 @@ fi
 # check python and mdtraj for GNN-based modes
 if [ "$mode" = "gnn" ] \
     || [ "$mode" = "gnn-kbias" ] \
-    || [ "$mode" = "gnn-exported" ] \
-    || [ "$mode" = "gnn-kbias-exported" ]; then
+    || [ "$mode" = "gnn-aot" ] \
+    || [ "$mode" = "gnn-kbias-aot" ]; then
 
     if [ ! -x "$PYTHON_PATH" ]; then
         echo "Python could not be found. Please edit the script to set the PYTHON_PATH variable to a Python executable with mdtraj installed."
@@ -51,7 +51,7 @@ fi
 
 # add PyTorch shared libraries to the runtime search path
 # required when loading AOTInductor packages such as model.pt2
-if [[ "$mode" == *-exported ]]; then
+if [[ "$mode" == *-aot ]]; then
 
     TORCH_LIB_DIR=$(
         "$PYTHON_PATH" -c \
@@ -89,22 +89,21 @@ if [ "$mode" = "descriptors" ] \
 
 elif [ "$mode" = "gnn" ] \
     || [ "$mode" = "gnn-kbias" ] \
-    || [ "$mode" = "gnn-exported" ] \
-    || [ "$mode" = "gnn-kbias-exported" ]; then
+    || [ "$mode" = "gnn-aot" ] \
+    || [ "$mode" = "gnn-kbias-aot" ]; then
 
     cp -r \
         ../plumed_interfaces/tests/alanine/gnn_based_inputs \
         "$FOLDER_NAME"
 
 else
-    echo "Invalid mode. Use 'descriptors', 'descriptors-kbias', 'gnn', 'gnn-kbias', 'gnn-exported' or 'gnn-kbias-exported'."
+    echo "Invalid mode. Use 'descriptors', 'descriptors-kbias', 'gnn', 'gnn-kbias', 'gnn-aot' or 'gnn-kbias-aot'."
     exit 1
 fi
 
 cd "$FOLDER_NAME" || exit 1
 
 cp ../../plumed_interfaces/tests/alanine/driver_data/* .
-
 
 if [ "$mode" = "descriptors" ]; then
 
@@ -126,15 +125,15 @@ elif [ "$mode" = "gnn-kbias" ]; then
     cp ../../plumed_interfaces/PytorchKolmogorovBiasGNN.cpp .
     mv plumed_PytorchKolmogorovBiasGNN.dat plumed.dat
 
-elif [ "$mode" = "gnn-exported" ]; then
+elif [ "$mode" = "gnn-aot" ]; then
 
-    cp ../../plumed_interfaces/PytorchModelGNNExported.cpp .
-    mv plumed_PytorchModelGNNExported.dat plumed.dat
+    cp ../../plumed_interfaces/PytorchModelGNNAOT.cpp .
+    mv plumed_PytorchModelGNNAOT.dat plumed.dat
 
-elif [ "$mode" = "gnn-kbias-exported" ]; then
+elif [ "$mode" = "gnn-kbias-aot" ]; then
 
-    cp ../../plumed_interfaces/PytorchKolmogorovBiasGNNExported.cpp .
-    mv plumed_PytorchKolmogorovBiasGNNExported.dat plumed.dat
+    cp ../../plumed_interfaces/PytorchKolmogorovBiasGNNAOT.cpp .
+    mv plumed_PytorchKolmogorovBiasGNNAOT.dat plumed.dat
 
 fi
 

@@ -3,18 +3,18 @@ import sys
 import torch
 from lightning import Trainer
 
+from mlcolvar.core.nn.graph.schnet import SchNetModel
+from mlcolvar.core.nn.utils import Custom_Sigmoid
+from mlcolvar.cvs import DeepTDA
 from mlcolvar.data import DictModule
 from mlcolvar.io import (
     create_dataset_from_files,
     create_dataset_from_trajectories,
 )
-from mlcolvar.core.nn.graph.schnet import SchNetModel
-from mlcolvar.core.nn.utils import Custom_Sigmoid
-from mlcolvar.cvs import DeepTDA
 
 
-class DeepTDAForKBiasExport(DeepTDA):
-    """DeepTDA adapter for exported Kolmogorov-bias models."""
+class DeepTDAForKBiasAOT(DeepTDA):
+    """DeepTDA adapter for AOT Kolmogorov-bias models."""
 
     def __init__(
         self,
@@ -47,7 +47,7 @@ if mode in [
     "descriptors-kbias",
 ]:
 
-    # we get the files from github
+    # get the files from GitHub
     filenames = [
         (
             "https://raw.githubusercontent.com/"
@@ -61,7 +61,7 @@ if mode in [
         ),
     ]
 
-    # we only load a few points
+    # only load a few points
     load_args = [
         {
             "start": 0,
@@ -81,6 +81,7 @@ if mode in [
         filter_args={
             "regex": "x",
         },
+        load_args=load_args,
         create_labels=True,
     )
 
@@ -95,11 +96,11 @@ if mode in [
 elif mode in [
     "gnn",
     "gnn-kbias",
-    "gnn-exported",
-    "gnn-kbias-exported",
+    "gnn-aot",
+    "gnn-kbias-aot",
 ]:
 
-    # we get the files from github
+    # get the files from GitHub
     filenames = [
         (
             "https://raw.githubusercontent.com/"
@@ -119,7 +120,7 @@ elif mode in [
         "refs/heads/main/unbiased/A/confAvac.gro"
     )
 
-    # we only load a few points
+    # only load a few points
     load_args = [
         {
             "start": 0,
@@ -161,8 +162,8 @@ else:
     raise ValueError(
         "Invalid mode. Use 'descriptors', "
         "'descriptors-kbias', 'gnn', "
-        "'gnn-kbias', 'gnn-exported' or "
-        "'gnn-kbias-exported'."
+        "'gnn-kbias', 'gnn-aot' or "
+        "'gnn-kbias-aot'."
     )
 
 
@@ -189,8 +190,8 @@ model_options = {
 
 
 # initialize model
-if mode == "gnn-kbias-exported":
-    model = DeepTDAForKBiasExport(
+if mode == "gnn-kbias-aot":
+    model = DeepTDAForKBiasAOT(
         **model_options,
         sigmoid_p=3.0,
     )
@@ -221,8 +222,8 @@ trainer.fit(
 
 # export model
 if mode in [
-    "gnn-exported",
-    "gnn-kbias-exported",
+    "gnn-aot",
+    "gnn-kbias-aot",
 ]:
     from mlcolvar.utils.aot import export
 
@@ -233,7 +234,7 @@ if mode in [
         "data_list"
     ][0]
 
-    if mode == "gnn-kbias-exported":
+    if mode == "gnn-kbias-aot":
         k_bias_options = {
             "beta": 0.5,
             "lambd": 1.0,
@@ -252,7 +253,7 @@ if mode in [
 
 else:
     # trace to TorchScript
-    traced_model = model.to_torchscript(
+    model.to_torchscript(
         "model.pt",
         method="trace",
     )
