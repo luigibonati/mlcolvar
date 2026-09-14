@@ -49,7 +49,12 @@ class BaseCV(lightning.LightningModule):
 
         # MODEL
         self.parse_model(model=model)
+        self.register_buffer(
+            "n_cvs",
+            torch.as_tensor(self.out_features),
+        )
         self.initialize_blocks()
+        self._exporting_flag = False
 
         # OPTIM
         self._optimizer_name = "Adam"
@@ -61,11 +66,6 @@ class BaseCV(lightning.LightningModule):
         self.preprocessing = preprocessing
         self.postprocessing = postprocessing
         self._preprocessing_training_warning_shown = False
-
-    @property
-    def n_cvs(self):
-        """Number of CVs."""
-        return self.out_features
 
     @property
     def example_input_array(self):
@@ -97,11 +97,10 @@ class BaseCV(lightning.LightningModule):
             self.out_features = model.out_features
             # save buffers for the interface for PLUMED
             if isinstance(model, BaseGNN):
-                self.register_buffer('n_out', model.n_out)    
-                self.register_buffer('cutoff', model.cutoff)
-                self.register_buffer('buffer', model.buffer)
-                self.register_buffer('long_range_cutoff', model.long_range_cutoff)
-                self.register_buffer('atomic_numbers', model.atomic_numbers)
+                self.register_buffer("cutoff", model.cutoff)
+                self.register_buffer("buffer", model.buffer)
+                self.register_buffer("long_range_cutoff", model.long_range_cutoff)
+                self.register_buffer("atomic_numbers", model.atomic_numbers)
         else:
             raise ValueError(
                 f"Keyword model can either accept type list, FeedForward or BaseGNN. Found {type(model)}"
@@ -327,8 +326,9 @@ class BaseCV(lightning.LightningModule):
                 super().__setattr__(key, value)
     def _setup_graph_data(self, train_batch, key : str='data_list'):
             data = train_batch[key]
-            data['positions'].requires_grad_(True)
-            data['node_attrs'].requires_grad_(True)
+            if not self._exporting:
+                data['positions'].requires_grad_(True)
+                data['node_attrs'].requires_grad_(True)
             return data
     
     def _apply_module(self, module: torch.nn.Module, x, cell=None):
@@ -421,3 +421,11 @@ class BaseCV(lightning.LightningModule):
                 torch.jit.save(torchscript_module, f)
 
         return torchscript_module
+
+    @property
+    def _exporting(self) -> bool:
+        return self._exporting_flag
+
+    @_exporting.setter
+    def _exporting(self, v: bool) -> None:
+        self._exporting_flag = bool(v)

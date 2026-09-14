@@ -177,7 +177,7 @@ PYTORCH_GNN ...
 
 class PytorchGNN: public Colvar
 {
-  int n_out = 0;
+  int n_cvs = 0;
   bool pbc = true;
   bool serial = false;
   bool firsttime = true;
@@ -335,8 +335,12 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   if (required_cuda and serial)
     plumed_merror("Can not enable CUDA with SERIAL at the same time!");
 
+
   bool use_float64 = false;
   parseFlag("FLOAT64", use_float64);
+
+  if (checkNumericalDerivatives())
+    use_float64 = true;
 
   bool nopbc = !pbc;
   parseFlag("NOPBC", nopbc);
@@ -410,13 +414,13 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   // summary
   std::string model_architecture = model_summary("CV", model, 3, 0);
 
-  // get CV length
-  if (!model.hasattr("n_out"))
+  // get number of CVs
+  if (!model.hasattr("n_cvs"))
     plumed_merror(
-      "Can not find model attribute 'n_out'! This has to be set during the compilation of the model!"
+      "Can not find model attribute 'n_cvs'! This has to be set during the compilation of the model!"
     );
-  if (model.hasattr("n_out"))
-    n_out = model.attr("n_out").toTensor().item<int>();
+
+  n_cvs = model.attr("n_cvs").toTensor().item<int>();
   
   // get cutoff radius
   if (!model.hasattr("r_max") && !model.hasattr("cutoff") )
@@ -549,7 +553,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   }
 
   // create components
-  for (int i = 0; i < n_out; i++) {
+  for (int i = 0; i < n_cvs; i++) {
     string name_comp = "node-" + std::to_string(i);
     addComponentWithDerivatives(name_comp);
     componentIsNotPeriodic(name_comp);
@@ -641,7 +645,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
     log.printf("  Environment buffer size: %f (PLUMED length unit)\n", buffer);
   if (atom_list_sub_a.size() > 0)
     log.printf("  Subsystem long-range cutoff radius: %f (PLUMED length unit)\n", r_max_l);
-  log.printf("  Number of outputs: %d \n", n_out);
+  log.printf("  Number of CVs: %d \n", n_cvs);
   log.printf("  Will run on device: ");
   if (use_cuda)
     log.printf("CUDA\n");
@@ -719,7 +723,7 @@ void PytorchGNN::calculate()
   // get the positions
   // TODO: now, the positions used by the model file is in unit of Angstrom.
   // We should warn the users about this default
-  std::vector<float> positions_vector(n_atoms * 3);
+  std::vector<double> positions_vector(n_atoms * 3);
   #pragma omp parallel for num_threads(n_threads)
   for (int i = 0; i < n_atoms; i++) {
     int index = atom_list_active[i]; 
@@ -731,7 +735,7 @@ void PytorchGNN::calculate()
   torch::Tensor positions = torch::from_blob(  
     positions_vector.data(),
     n_atoms * 3,
-    torch::TensorOptions().dtype(torch::kFloat32)
+    torch::TensorOptions().dtype(torch::kFloat64)
   );
   positions = positions.to(device).to(torch_float_dtype);
   positions = positions.reshape({n_atoms, 3});
@@ -740,7 +744,7 @@ void PytorchGNN::calculate()
   // TODO: now, the box data used by the model file is in unit of Angstrom.
   // We should warn the users about this default
   PLMD::Tensor box = getBox();
-  std::vector<float> cell_vector(9);
+  std::vector<double> cell_vector(9);
   for (int i = 0; i < 3; i++) {
     for (int j = 0; j < 3; j++)
       cell_vector[i * 3 + j] = box[i][j] * to_ang;
@@ -748,7 +752,7 @@ void PytorchGNN::calculate()
   torch::Tensor cell = torch::from_blob(
     cell_vector.data(),
     9,
-    torch::TensorOptions().dtype(torch::kFloat32)
+    torch::TensorOptions().dtype(torch::kFloat64)
   );
   cell = cell.to(device).to(torch_float_dtype);
   cell = cell.reshape({3, 3});
@@ -757,7 +761,7 @@ void PytorchGNN::calculate()
   // TODO: now, the node attributes are in MACE's format.
   // We should try to give more options, or warn the users about this default
   int n_node_feats = (int)model_atomic_numbers.size();
-  std::vector<float> node_attrs_vector(n_node_feats * n_atoms);
+  std::vector<double> node_attrs_vector(n_node_feats * n_atoms);
   #pragma omp parallel for num_threads(n_threads)
   for (int i = 0; i < n_atoms; i++) {
     int index = atom_list_active[i];
@@ -767,7 +771,7 @@ void PytorchGNN::calculate()
   torch::Tensor node_attrs = torch::from_blob(
     node_attrs_vector.data(),
     n_node_feats * n_atoms,
-    torch::TensorOptions().dtype(torch::kFloat32)
+    torch::TensorOptions().dtype(torch::kFloat64)
   );
   node_attrs = node_attrs.to(device).to(torch_float_dtype);
   node_attrs = node_attrs.reshape({n_atoms, n_node_feats});
@@ -779,7 +783,7 @@ void PytorchGNN::calculate()
 
   if (atom_list_b.size() > 0) {
     n_edges = n_atoms * (n_atoms - 1);
-    std::vector<float> distance_vector(n_edges);
+    std::vector<double> distance_vector(n_edges);
     std::vector<std::vector<int64_t>> edge_index_vector;
     edge_index_vector.resize(2, std::vector<int64_t>(n_edges));
 
@@ -807,7 +811,7 @@ void PytorchGNN::calculate()
     torch::Tensor distances = torch::from_blob(
       distance_vector.data(),
       n_edges,
-      torch::TensorOptions().dtype(torch::kFloat32)
+      torch::TensorOptions().dtype(torch::kFloat64)
     );
     torch::Tensor senders = torch::from_blob(
       edge_index_vector[0].data(),
@@ -857,7 +861,7 @@ void PytorchGNN::calculate()
     torch::Tensor edge_index_l;
     int n_atoms_l = atom_list_sub_a.size();
     n_edges_l = n_atoms_l * (n_atoms_l - 1);
-    std::vector<float> distance_vector_l(n_edges_l);
+    std::vector<double> distance_vector_l(n_edges_l);
     std::vector<std::vector<int64_t>> edge_index_vector_l;
     edge_index_vector_l.resize(2, std::vector<int64_t>(n_edges_l));
 
@@ -890,7 +894,7 @@ void PytorchGNN::calculate()
     torch::Tensor distances_l = torch::from_blob(
       distance_vector_l.data(),
       n_edges_l,
-      torch::TensorOptions().dtype(torch::kFloat32)
+      torch::TensorOptions().dtype(torch::kFloat64)
     );
     const torch::Tensor mask_l = distances_l <= r_max_l;
 
@@ -938,10 +942,8 @@ void PytorchGNN::calculate()
         torch::index_select(positions_s, 1, edge_index[0])
         - torch::index_select(positions_s, 1, edge_index[1])
       );
-      unit_shifts = torch::round(deltas);
-      shifts = torch::matmul(
-        cell.transpose(1, 0), unit_shifts
-      ).transpose(1, 0);
+      unit_shifts = torch::round(deltas).transpose(1, 0);
+      shifts = torch::matmul(unit_shifts, cell);
     }
   } else {
     shifts = torch::zeros({n_edges, 3}, torch_float_dtype);
@@ -1017,7 +1019,7 @@ void PytorchGNN::calculate()
   auto grad_output = torch::ones({1}).expand({1, 1}).to(device);
 
   // Here we simply compute the output and its derivatives
-  for (int i = 0; i < n_out; i++) {
+  for (int i = 0; i < n_cvs; i++) {
     // set CV values
     string name_comp = "node-" + std::to_string(i);
     getPntrToComponent(name_comp)->set(output[0][i].cpu().item<double>());

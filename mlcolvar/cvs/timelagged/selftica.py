@@ -81,7 +81,10 @@ class SelfTICA(BaseCV):
             Available blocks: ['norm_in', 'encoder', 'predictor', 'tica'].
             Set 'block_name' = None or False to turn off that block.
         """
-        super().__init__(model, **kwargs)        
+        super().__init__(model, **kwargs)      
+        
+        # encoder output dimension
+        out_dim = int(self.out_features)  
 
         # =======   LOSS  =======
         self.loss_fn = ContrastiveLoss(reg=regularization, mode="l2")
@@ -90,8 +93,9 @@ class SelfTICA(BaseCV):
         if not isinstance(n_cvs, int) or n_cvs < 1:
             raise ValueError("n_cvs must be a positive integer (>= 1)")
 
-        # here we need to override the self.out_features attribute
+        # final CV dimension
         self.out_features = n_cvs
+        self.n_cvs.fill_(n_cvs)
 
         # ======= OPTIONS =======
         # parse and sanitize
@@ -111,18 +115,9 @@ class SelfTICA(BaseCV):
         
         elif self._override_model:
             self.nn = model
-            if self.out_features is not None:
-                self.register_buffer('n_out', torch.as_tensor(self.out_features))   
 
         # initalize predictor
         o = "predictor"
-        # ===== infer output dimension =====
-        if hasattr(self.nn, "out_features") and isinstance(self.nn.out_features, int):
-            out_dim = self.nn.out_features
-        elif hasattr(self.nn, "n_out"):
-            out_dim = int(self.nn.n_out)
-        else:
-            raise ValueError("Cannot infer output dimension from model")
         
         if not isinstance(predictor_depth, int) or predictor_depth < 2:
             raise ValueError("predictor_depth must be an integer greater than or equal to 2.")
@@ -227,7 +222,7 @@ class SelfTICA(BaseCV):
         # In evaluation mode, apply TICA projection to obtain CVs
         if not self.training:
             centered = x - self.current_means
-            x = centered @ self.current_evecs[:, :self.n_cvs]
+            x = centered @ self.current_evecs[:, :self.out_features]
         
         if self.postprocessing is not None:
             x = self._apply_module(self.postprocessing, x)

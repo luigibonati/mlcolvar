@@ -328,6 +328,12 @@ class CFConv(MessagePassing):
             Aggregation function, by default 'mean'
         """
         super().__init__(aggr=aggr)
+        
+        if network_lr is not None and long_range_cutoff <= cutoff:
+            raise ValueError(
+                "long_range_cutoff must be larger than cutoff when network_lr is used."
+            )
+            
         self.lin1 = nn.Linear(in_channels, num_filters, bias=False)
         self.lin2 = nn.Linear(num_filters, out_channels)
         self.network = network
@@ -354,8 +360,6 @@ class CFConv(MessagePassing):
         W = self.network(edge_attr) * C.view(-1, 1)
 
         if edge_masks_lr is not None and self.network_lr is not None:
-            assert self.network_lr is not None
-            assert self.long_range_cutoff > self.cutoff
 
             indices_lr = edge_masks_lr.nonzero()[:, 0]
             lengths_lr = edge_weight[indices_lr]
