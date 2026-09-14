@@ -54,7 +54,6 @@
       ~DeepGenerator.local_rank
       ~DeepGenerator.logger
       ~DeepGenerator.loggers
-      ~DeepGenerator.n_cvs
       ~DeepGenerator.on_gpu
       ~DeepGenerator.optimizer_name
       ~DeepGenerator.strict_loading

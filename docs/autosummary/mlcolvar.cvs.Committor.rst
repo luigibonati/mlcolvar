@@ -52,7 +52,6 @@
       ~Committor.local_rank
       ~Committor.logger
       ~Committor.loggers
-      ~Committor.n_cvs
       ~Committor.on_gpu
       ~Committor.optimizer_name
       ~Committor.strict_loading

@@ -19,28 +19,32 @@ __all__ = ["SchNetModel", "InteractionBlock"]
 
 class SchNetModel(BaseGNN):
     """
-    The SchNet [1] model. This implementation is adapted from torch_geometric:
+    The SchNet model.
+
+    This implementation follows the continuous-filter convolution architecture
+    introduced in Ref. [1]_ and is adapted from ``torch_geometric``:
     https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/nn/models/schnet.py
-    
+
     References
     ----------
-    .. [1] Schütt, Kristof T., et al. "Schnet–a deep learning architecture for
-        molecules and materials." The Journal of Chemical Physics 148.24
-        (2018).
+    .. [1] Schütt, Kristof T., et al.
+       "SchNet: A continuous-filter convolutional neural network for modeling
+       quantum interactions." Advances in Neural Information Processing
+       Systems, 2017.
     """
 
     def __init__(
         self,
         n_out: int,
         dataset_for_initialization: DictDataset = None,
-        pooling_operation : str = 'mean',
+        pooling_operation: str = "mean",
         n_bases: int = 16,
         n_layers: int = 2,
         n_filters: int = 16,
         n_hidden_channels: int = 16,
-        aggr: str = 'mean',
+        aggr: str = "mean",
         w_out_after_pool: bool = False,
-        **kwargs
+        **kwargs,
     ) -> None:
         """
         Parameters
@@ -48,66 +52,84 @@ class SchNetModel(BaseGNN):
         n_out : int
             Size of the output node features.
         dataset_for_initialization : DictDataset, optional
-            Dataset containing the graphs on which the gnn model will be applied. 
-            This is used to initialize and register the cutoff, buffer, long_range_cutoff and atomic_numbers from the dataset metadata.
-            This is the preferred way to initialize the gnn model, as it ensures consistency between the model and the dataset.
-            As an alternative this can be set to None and the cutoff, buffer, long_range_cutoff and atomic_numbers can be provided as kwargs.
-        pooling_operation : str
-            Type of pooling operation to combine node-level features into graph-level features, either mean or sum, by default 'mean'
+            Dataset containing the graphs on which the GNN model will be
+            applied. It is used to initialize and register the cutoff, buffer,
+            long-range cutoff, and atomic numbers from the dataset metadata.
+
+            This is the preferred way to initialize the GNN model because it
+            ensures consistency between the model and the dataset.
+            Alternatively, this can be set to ``None`` and the cutoff, buffer,
+            long-range cutoff, and atomic numbers can be provided as keyword
+            arguments.
+        pooling_operation : str, optional
+            Pooling operation used to combine node-level features into
+            graph-level features. Typical choices are ``"mean"`` and
+            ``"sum"``. By default ``"mean"``.
         n_bases : int, optional
-            Size of the basis set used for the embedding, by default 16
+            Size of the radial basis set used for the edge embedding.
+            By default 16.
         n_layers : int, optional
-            Number of the graph convolution layers, by default 2
+            Number of graph convolution layers. By default 2.
         n_filters : int, optional
-            Number of filters, by default 16
+            Number of filters used in each interaction block. By default 16.
         n_hidden_channels : int, optional
-            Size of hidden embeddings, by default 16
+            Size of the hidden node embeddings. By default 16.
         aggr : str, optional
-            Type of the GNN aggregation function, by default 'mean'
-            Possible choices are: 'mean', 'sum', 'max', 'min', 'mul', 
-            'attention'/'attentional' (shared attention gate across all layers), 
-            'attention_separate'/'attentional_separate' (Independent attention gate for each layer).
+            Aggregation operation used in the message-passing layers.
+            Supported choices are ``"mean"``, ``"sum"``, ``"max"``,
+            ``"min"``, ``"mul"``, ``"attention"``/``"attentional"``, and
+            ``"attention_separate"``/``"attentional_separate"``.
+
+            ``"attention"`` and ``"attentional"`` use a shared attention gate
+            across all graph-convolution layers, whereas
+            ``"attention_separate"`` and ``"attentional_separate"`` use an
+            independent attention gate for each layer.
+
+            By default ``"mean"``.
         w_out_after_pool : bool, optional
-            Whether to apply the last linear transformation form hidden to output channels after the pooling sum, by default False
+            Whether to apply the final linear transformation from hidden
+            channels to output channels after pooling. By default ``False``.
         """
 
         super().__init__(
             n_out=n_out,
             dataset_for_initialization=dataset_for_initialization,
-            pooling_operation=pooling_operation, 
-            n_bases=n_bases, 
-            n_polynomials=0, 
-            basis_type='gaussian',
-            **kwargs
+            pooling_operation=pooling_operation,
+            n_bases=n_bases,
+            n_polynomials=0,
+            basis_type="gaussian",
+            **kwargs,
         )
 
         # transforms embedding into hidden channels
         self.W_v = nn.Linear(
-            in_features=len(self.atomic_numbers), 
-            out_features=n_hidden_channels, 
-            bias=False
+            in_features=len(self.atomic_numbers),
+            out_features=n_hidden_channels,
+            bias=False,
         )
 
-        # attentional aggregation 
-        if aggr in ['attention', 'attentional']:
+        # attentional aggregation
+        if aggr in ["attention", "attentional"]:
             self.attention_gate = nn.Sequential(
                 nn.Linear(n_filters, n_filters // 2),
                 Shifted_Softplus(),
-                nn.Linear(n_filters // 2, 1)
+                nn.Linear(n_filters // 2, 1),
             )
             aggr = [
                 AttentionalAggregation(self.attention_gate)
             ] * n_layers
 
-        elif aggr in ['attention_separate', 'attentional_separate']:
-            self.attention_gate = nn.ModuleList([
-                nn.Sequential(
-                    nn.Linear(n_filters, n_filters // 2),
-                    Shifted_Softplus(),
-                    nn.Linear(n_filters // 2, 1)
-                )
-                for _ in range(n_layers)
-            ])
+        elif aggr in ["attention_separate", "attentional_separate"]:
+            self.attention_gate = nn.ModuleList(
+                [
+                    nn.Sequential(
+                        nn.Linear(n_filters, n_filters // 2),
+                        Shifted_Softplus(),
+                        nn.Linear(n_filters // 2, 1),
+                    )
+                    for _ in range(n_layers)
+                ]
+            )
             aggr = [
                 AttentionalAggregation(self.attention_gate[i])
                 for i in range(n_layers)
@@ -117,19 +139,28 @@ class SchNetModel(BaseGNN):
             aggr = [aggr] * n_layers
 
         # initialize layers with interaction blocks
-        self.layers = nn.ModuleList([
-            InteractionBlock(
-                n_hidden_channels, n_bases, n_filters, self.cutoff, self.long_range_cutoff, aggr[i]
-            )
-            for i in range(n_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                InteractionBlock(
+                    n_hidden_channels,
+                    n_bases,
+                    n_filters,
+                    self.cutoff,
+                    self.long_range_cutoff,
+                    aggr[i],
+                )
+                for i in range(n_layers)
+            ]
+        )
 
         # transforms hidden channels into output channels
-        self.W_out = nn.ModuleList([
-            nn.Linear(n_hidden_channels, n_hidden_channels // 2),
-            Shifted_Softplus(),
-            nn.Linear(n_hidden_channels // 2, n_out)
-        ])
+        self.W_out = nn.ModuleList(
+            [
+                nn.Linear(n_hidden_channels, n_hidden_channels // 2),
+                Shifted_Softplus(),
+                nn.Linear(n_hidden_channels // 2, n_out),
+            ]
+        )
 
         self._w_out_after_pool = w_out_after_pool
 
@@ -137,7 +168,7 @@ class SchNetModel(BaseGNN):
 
     def reset_parameters(self) -> None:
         """
-        Resets all learnable parameters of the module.
+        Reset all learnable parameters of the module.
         """
         self.W_v.reset_parameters()
 
@@ -154,6 +185,7 @@ class SchNetModel(BaseGNN):
             self.attention_gate[0].bias.data.fill_(0)
             nn.init.xavier_uniform_(self.attention_gate[2].weight)
             self.attention_gate[2].bias.data.fill_(0)
+
         elif isinstance(self.attention_gate, torch.nn.ModuleList):
             for gate in self.attention_gate:
                 nn.init.xavier_uniform_(gate[0].weight)
@@ -162,20 +194,27 @@ class SchNetModel(BaseGNN):
                 gate[2].bias.data.fill_(0)
 
     def forward(
-        self, data: Dict[str, torch.Tensor]
+        self,
+        data: Dict[str, torch.Tensor],
     ) -> torch.Tensor:
         """
-        The forward pass.
+        Perform the forward pass.
+
         Parameters
         ----------
-        data: Dict[str, torch.Tensor]
-            The data dict. Usually came from the `to_dict` method of a
-            `torch_geometric.data.Batch` object.
+        data : Dict[str, torch.Tensor]
+            Graph data dictionary, typically obtained from the ``to_dict``
+            method of a ``torch_geometric.data.Batch`` object.
+
+        Returns
+        -------
+        torch.Tensor
+            Graph-level model output.
         """
 
         # embed edges and node attrs
         h_E = self.embed_edge(data)
-        h_V = self.W_v(data['node_attrs'])
+        h_V = self.W_v(data["node_attrs"])
 
         # update through layers
         mask = data.get("edge_masks_lr", None)
@@ -193,11 +232,15 @@ class SchNetModel(BaseGNN):
         if not self._w_out_after_pool:
             for w in self.W_out:
                 h_V = w(h_V)
+
         out = h_V
 
-        # pooling is controlled by `self.pooling_operation` (mean/sum/None)
-        out = self.pooling(input=out, data=data)
-        
+        # pooling is controlled by self.pooling_operation
+        out = self.pooling(
+            input=out,
+            data=data,
+        )
+
         # in case the last linear transformation is performed AFTER pooling
         if self._w_out_after_pool:
             for w in self.W_out:
@@ -328,6 +371,12 @@ class CFConv(MessagePassing):
             Aggregation function, by default 'mean'
         """
         super().__init__(aggr=aggr)
+        
+        if network_lr is not None and long_range_cutoff <= cutoff:
+            raise ValueError(
+                "long_range_cutoff must be larger than cutoff when network_lr is used."
+            )
+            
         self.lin1 = nn.Linear(in_channels, num_filters, bias=False)
         self.lin2 = nn.Linear(num_filters, out_channels)
         self.network = network
@@ -354,8 +403,6 @@ class CFConv(MessagePassing):
         W = self.network(edge_attr) * C.view(-1, 1)
 
         if edge_masks_lr is not None and self.network_lr is not None:
-            assert self.network_lr is not None
-            assert self.long_range_cutoff > self.cutoff
 
             indices_lr = edge_masks_lr.nonzero()[:, 0]
             lengths_lr = edge_weight[indices_lr]

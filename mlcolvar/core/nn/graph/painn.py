@@ -1,82 +1,103 @@
 import math
+from typing import Dict, List, Optional, Tuple
+
 import torch
 from torch import nn
 from torch_geometric.nn import MessagePassing
 
-from mlcolvar.data import DictDataset
 from mlcolvar.core.nn.graph.gnn import BaseGNN
+from mlcolvar.data import DictDataset
 
-from typing import List, Dict, Optional, Tuple
 
 """
-The PaiNN components. This module is adapted from repo:
+The PaiNN components. This module is adapted from:
 https://github.com/MaxH1996/PaiNN-in-PyG
 """
 
-__all__ = ['PaiNNModel', 'MessagePassingPaiNN', 'UpdatePaiNN', 'AttentionGatePaiNN']
+
+__all__ = [
+    "PaiNNModel",
+    "MessagePassingPaiNN",
+    "UpdatePaiNN",
+    "AttentionGatePaiNN",
+]
+
 
 class PaiNNModel(BaseGNN):
     """
-    The PaiNN model [1]. This implementation is adapted from:
+    The PaiNN model.
+
+    This implementation follows the equivariant message-passing architecture
+    introduced in Ref. [1]_ and is adapted from:
     https://github.com/MaxH1996/PaiNN-in-PyG/blob/main/PaiNN.py
 
     References
     ----------
     .. [1] Schütt, Kristof, Oliver Unke, and Michael Gastegger.
-        "Equivariant message passing for the prediction of tensorial properties
-        and molecular spectra." International conference on machine learning.
-        PMLR, 2021.
+       "Equivariant message passing for the prediction of tensorial properties
+       and molecular spectra." International Conference on Machine Learning.
+       PMLR, 2021.
     """
 
     def __init__(
         self,
         n_out: int,
         dataset_for_initialization: DictDataset = None,
-        pooling_operation : str = 'mean',
+        pooling_operation: str = "mean",
         n_bases: int = 6,
         n_layers: int = 2,
         n_hidden_channels: int = 16,
-        aggr: str = 'sum',
+        aggr: str = "sum",
         w_out_after_pool: bool = True,
-        **kwargs
+        **kwargs,
     ) -> None:
         """
         Parameters
         ----------
-        n_out: int
+        n_out : int
             Size of the output node features.
         dataset_for_initialization : DictDataset, optional
-                Dataset containing the graphs on which the gnn model will be applied. 
-                This is used to initialize and register the cutoff, buffer, long_range_cutoff and atomic_numbers from the dataset metadata.
-                This is the preferred way to initialize the gnn model, as it ensures consistency between the model and the dataset.
-                As an alternative this can be set to None and the cutoff, buffer, long_range_cutoff and atomic_numbers can be provided as kwargs.
-        pooling_operation : str
-            Type of pooling operation to combine node-level features into graph-level features, either mean or sum, by default 'mean'
+            Dataset containing the graphs on which the GNN model will be
+            applied. This is used to initialize and register the cutoff,
+            buffer, long-range cutoff, and atomic numbers from the dataset
+            metadata. This is the preferred way to initialize the GNN model,
+            as it ensures consistency between the model and the dataset.
+            Alternatively, this can be set to ``None`` and the cutoff, buffer,
+            long-range cutoff, and atomic numbers can be provided as keyword
+            arguments.
+        pooling_operation : str, optional
+            Pooling operation used to combine node-level features into
+            graph-level features. Supported options include ``"mean"`` and
+            ``"sum"``. By default ``"mean"``.
         n_bases : int, optional
-            Size of the basis set used for the embedding, by default 6
+            Size of the basis set used for the embedding. By default 6.
         n_layers : int, optional
-            Number of the graph convolution layers, by default 2
+            Number of graph convolution layers. By default 2.
         n_hidden_channels : int, optional
-            Size of hidden embeddings, by default 16
-        aggr: str
-            Type of the GNN aggr function, by default `sum`.
-            Possible choices are: 'mean', 'sum', 'max', 'min', 'mul'.
+            Size of the hidden embeddings. By default 16.
+        aggr : str, optional
+            Aggregation function used by the GNN. Possible choices are
+            ``"mean"``, ``"sum"``, ``"max"``, ``"min"``, and ``"mul"``.
+            By default ``"sum"``.
         w_out_after_pool : bool, optional
-            Whether to apply the last linear transformation form hidden to output channels after the pooling sum, by default True
+            Whether to apply the final linear transformation from hidden
+            channels to output channels after pooling. By default ``True``.
         """
 
         super().__init__(
-            n_out=n_out, 
+            n_out=n_out,
             dataset_for_initialization=dataset_for_initialization,
-            pooling_operation=pooling_operation, 
-            n_bases=n_bases, 
-            n_polynomials=0, 
-            basis_type='gaussian',
-            **kwargs
+            pooling_operation=pooling_operation,
+            n_bases=n_bases,
+            n_polynomials=0,
+            basis_type="gaussian",
+            **kwargs,
         )
 
         self.W_v = nn.Linear(
-            len(self.atomic_numbers), n_hidden_channels, bias=False
+            len(self.atomic_numbers),
+            n_hidden_channels,
+            bias=False,
         )
 
         # TODO: find out how to do attentional aggr properly.
@@ -227,6 +248,11 @@ class MessagePassingPaiNN(MessagePassing):
         aggr: str = 'sum',
     ) -> None:
         super(MessagePassingPaiNN, self).__init__(aggr=aggr)
+        
+        if long_range_cutoff > 0 and long_range_cutoff <= cutoff:
+            raise ValueError(
+                "long_range_cutoff must be larger than cutoff."
+            )
 
         self.cutoff = cutoff
         self.long_range_cutoff = long_range_cutoff
@@ -278,7 +304,6 @@ class MessagePassingPaiNN(MessagePassing):
         C = 0.5 * torch.cos(edge_lengths * math.pi / self.cutoff) + 0.5
 
         if edge_masks_lr is not None and self.lin_rbf_l is not None:
-            assert self.long_range_cutoff > self.cutoff
 
             indices_l = edge_masks_lr.nonzero()[:, 0]
             lengths_l = edge_lengths[indices_l]
@@ -504,10 +529,11 @@ def test_painn_2() -> None:
     )
 
     data = _create_test_data_list()
-    data['edge_masks_le'] = torch.zeros(
+    data['edge_masks_lr'] = torch.zeros(
         ((data['edge_index'].shape[1]), 1), dtype=bool
     )
-    data['edge_masks_le'][:-6] = True
+    data['edge_masks_lr'][:-6] = True
     torch.set_printoptions(precision=16)
-    ref_out = torch.tensor([[0.0720856700379041, -0.0420276151917215]] * 5)
+    ref_out = torch.tensor([[ 0.0580523212375041, -0.0220428793692266]] * 4
+                           + [[ 0.0720856700379041, -0.0420276151917215]])
     assert ( torch.allclose(model(data), ref_out) )

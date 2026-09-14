@@ -49,7 +49,12 @@ class BaseCV(lightning.LightningModule):
 
         # MODEL
         self.parse_model(model=model)
+        self.register_buffer(
+            "n_cvs",
+            torch.as_tensor(self.out_features),
+        )
         self.initialize_blocks()
+        self._exporting_flag = False
 
         # OPTIM
         self._optimizer_name = "Adam"
@@ -61,11 +66,6 @@ class BaseCV(lightning.LightningModule):
         self.preprocessing = preprocessing
         self.postprocessing = postprocessing
         self._preprocessing_training_warning_shown = False
-
-    @property
-    def n_cvs(self):
-        """Number of CVs."""
-        return self.out_features
 
     @property
     def example_input_array(self):
@@ -339,8 +339,9 @@ class BaseCV(lightning.LightningModule):
                 super().__setattr__(key, value)
     def _setup_graph_data(self, train_batch, key : str='data_list'):
             data = train_batch[key]
-            data['positions'].requires_grad_(True)
-            data['node_attrs'].requires_grad_(True)
+            if not self._exporting:
+                data['positions'].requires_grad_(True)
+                data['node_attrs'].requires_grad_(True)
             return data
     
     def _apply_module(self, module: torch.nn.Module, x, cell=None):
@@ -433,3 +434,11 @@ class BaseCV(lightning.LightningModule):
                 torch.jit.save(torchscript_module, f)
 
         return torchscript_module
+
+    @property
+    def _exporting(self) -> bool:
+        return self._exporting_flag
+
+    @_exporting.setter
+    def _exporting(self, v: bool) -> None:
+        self._exporting_flag = bool(v)
