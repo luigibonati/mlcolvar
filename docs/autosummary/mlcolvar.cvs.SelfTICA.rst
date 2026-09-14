@@ -55,7 +55,6 @@
       ~SelfTICA.local_rank
       ~SelfTICA.logger
       ~SelfTICA.loggers
-      ~SelfTICA.n_cvs
       ~SelfTICA.on_gpu
       ~SelfTICA.optimizer_name
       ~SelfTICA.strict_loading

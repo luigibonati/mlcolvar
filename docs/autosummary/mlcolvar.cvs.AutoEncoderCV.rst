@@ -54,7 +54,6 @@
       ~AutoEncoderCV.local_rank
       ~AutoEncoderCV.logger
       ~AutoEncoderCV.loggers
-      ~AutoEncoderCV.n_cvs
       ~AutoEncoderCV.on_gpu
       ~AutoEncoderCV.optimizer_name
       ~AutoEncoderCV.strict_loading

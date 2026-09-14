@@ -1,0 +1,59 @@
+[35mdocs/notebooks/examples/ex_GNN_committor.ipynb[m[36m:[m[32m178[m[36m:[m    "gnn_model = SchNetModel([1;31mn_out[m=1,\n",
+[35mdocs/notebooks/examples/ex_GNN_committor.ipynb[m[36m:[m[32m578[m[36m:[m    "gnn_model = SchNetModel([1;31mn_out[m=1,\n",
+[35mdocs/notebooks/tutorials/gnn_based_cvs.ipynb[m[36m:[m[32m260[m[36m:[m    "        [1;31mn_out[m=1,\n",
+[35mdocs/notebooks/tutorials/gnn_based_cvs.ipynb[m[36m:[m[32m273[m[36m:[m    "        [1;31mn_out[m=1,\n",
+[35mdocs/notebooks/tutorials/gnn_based_cvs.ipynb[m[36m:[m[32m285[m[36m:[m    "        [1;31mn_out[m=1,\n",
+[35mdocs/notebooks/tutorials/gnn_truncated_graphs.ipynb[m[36m:[m[32m276[m[36m:[m    "        [1;31mn_out[m=1,\n",
+[35mdocs/notebooks/tutorials/gnn_truncated_graphs.ipynb[m[36m:[m[32m289[m[36m:[m    "        [1;31mn_out[m=1,\n",
+[35mdocs/notebooks/tutorials/gnn_truncated_graphs.ipynb[m[36m:[m[32m301[m[36m:[m    "        [1;31mn_out[m=1,\n",
+[35mdocs/notebooks/tutorials/gnn_truncated_graphs.ipynb[m[36m:[m[32m724[m[36m:[m    "gnn_model = SchNetModel([1;31mn_out[m=1,\n",
+[35mmlcolvar/core/loss/utils/smart_derivatives.py[m[36m:[m[32m274[m[36m:[m            Derivatives of the output wrt atomic positions, shape (N, n_atoms, n_dim, ([1;31mn_out[m)))
+[35mmlcolvar/core/nn/graph/gnn.py[m[36m:[m[32m23[m[36m:[m        [1;31mn_out[m: int,
+[35mmlcolvar/core/nn/graph/gnn.py[m[36m:[m[32m38[m[36m:[m        [1;31mn_out[m : int
+[35mmlcolvar/core/nn/graph/gnn.py[m[36m:[m[32m94[m[36m:[m        self.register_buffer('[1;31mn_out[m', torch.tensor([1;31mn_out[m, dtype=torch.int64))
+[35mmlcolvar/core/nn/graph/gnn.py[m[36m:[m[32m103[m[36m:[m        return self.[1;31mn_out[m
+[35mmlcolvar/core/nn/graph/gvp.py[m[36m:[m[32m35[m[36m:[m        [1;31mn_out[m: int,
+[35mmlcolvar/core/nn/graph/gvp.py[m[36m:[m[32m56[m[36m:[m        [1;31mn_out[m: int
+[35mmlcolvar/core/nn/graph/gvp.py[m[36m:[m[32m91[m[36m:[m            [1;31mn_out[m=[1;31mn_out[m, 
+[35mmlcolvar/core/nn/graph/gvp.py[m[36m:[m[32m135[m[36m:[m                out_dims=([1;31mn_out[m, 0),
+[35mmlcolvar/core/nn/graph/gvp.py[m[36m:[m[32m936[m[36m:[m        [1;31mn_out[m=2,
+[35mmlcolvar/core/nn/graph/gvp.py[m[36m:[m[32m959[m[36m:[m        [1;31mn_out[m=2,
+[35mmlcolvar/core/nn/graph/gvp.py[m[36m:[m[32m996[m[36m:[m        [1;31mn_out[m=2,
+[35mmlcolvar/core/nn/graph/gvp.py[m[36m:[m[32m1030[m[36m:[m        [1;31mn_out[m=2,
+[35mmlcolvar/core/nn/graph/painn.py[m[36m:[m[32m33[m[36m:[m        [1;31mn_out[m: int,
+[35mmlcolvar/core/nn/graph/painn.py[m[36m:[m[32m46[m[36m:[m        [1;31mn_out[m: int
+[35mmlcolvar/core/nn/graph/painn.py[m[36m:[m[32m69[m[36m:[m            [1;31mn_out[m=[1;31mn_out[m, 
+[35mmlcolvar/core/nn/graph/painn.py[m[36m:[m[32m107[m[36m:[m            nn.Linear(n_hidden_channels // 2, [1;31mn_out[m)
+[35mmlcolvar/core/nn/graph/painn.py[m[36m:[m[32m472[m[36m:[m        [1;31mn_out[m=2,
+[35mmlcolvar/core/nn/graph/painn.py[m[36m:[m[32m500[m[36m:[m        [1;31mn_out[m=2,
+[35mmlcolvar/core/nn/graph/radial.py[m[36m:[m[32m350[m[36m:[m        self.[1;31mn_out[m = n_bases
+[35mmlcolvar/core/nn/graph/schnet.py[m[36m:[m[32m34[m[36m:[m        [1;31mn_out[m: int,
+[35mmlcolvar/core/nn/graph/schnet.py[m[36m:[m[32m48[m[36m:[m        [1;31mn_out[m : int
+[35mmlcolvar/core/nn/graph/schnet.py[m[36m:[m[32m75[m[36m:[m            [1;31mn_out[m=[1;31mn_out[m,
+[35mmlcolvar/core/nn/graph/schnet.py[m[36m:[m[32m131[m[36m:[m            nn.Linear(n_hidden_channels // 2, [1;31mn_out[m)
+[35mmlcolvar/core/nn/graph/schnet.py[m[36m:[m[32m404[m[36m:[m        [1;31mn_out[m=2,
+[35mmlcolvar/core/nn/graph/schnet.py[m[36m:[m[32m418[m[36m:[m        [1;31mn_out[m=2,
+[35mmlcolvar/core/nn/graph/schnet.py[m[36m:[m[32m441[m[36m:[m        [1;31mn_out[m=2,
+[35mmlcolvar/core/nn/graph/schnet.py[m[36m:[m[32m471[m[36m:[m        [1;31mn_out[m=2,
+[35mmlcolvar/core/nn/graph/schnet.py[m[36m:[m[32m501[m[36m:[m        [1;31mn_out[m=2,
+[35mmlcolvar/core/nn/graph/schnet.py[m[36m:[m[32m527[m[36m:[m        [1;31mn_out[m=2,
+[35mmlcolvar/core/nn/graph/schnet.py[m[36m:[m[32m542[m[36m:[m        [1;31mn_out[m=2,
+[35mmlcolvar/core/nn/graph/schnet.py[m[36m:[m[32m564[m[36m:[m        [1;31mn_out[m=2,
+[35mmlcolvar/cvs/committor/committor.py[m[36m:[m[32m444[m[36m:[m    gnn_model = SchNetModel([1;31mn_out[m=1, cutoff=0.1, atomic_numbers=[1, 8])
+[35mmlcolvar/cvs/committor/committor.py[m[36m:[m[32m687[m[36m:[m    gnn_model = SchNetModel([1;31mn_out[m=1, cutoff=0.1, atomic_numbers=[1, 8])
+[35mmlcolvar/cvs/committor/utils.py[m[36m:[m[32m180[m[36m:[m    gnn_model = SchNetModel([1;31mn_out[m=1, 
+[35mmlcolvar/cvs/supervised/deeplda.py[m[36m:[m[32m258[m[36m:[m    gnn_model = SchNetModel([1;31mn_out[m=2, cutoff=0.1, atomic_numbers=[1, 8])
+[35mmlcolvar/cvs/supervised/deeptda.py[m[36m:[m[32m239[m[36m:[m        gnn_model = SchNetModel([1;31mn_out[m=n_cvs, cutoff=0.1, atomic_numbers=[1, 8])
+[35mmlcolvar/cvs/supervised/regression.py[m[36m:[m[32m259[m[36m:[m    gnn_model = SchNetModel([1;31mn_out[m=1, cutoff=0.1, atomic_numbers=[1, 8])
+[35mmlcolvar/cvs/supervised/regression.py[m[36m:[m[32m292[m[36m:[m    gnn_model_node = SchNetModel([1;31mn_out[m=1, cutoff=0.1, atomic_numbers=[1, 8], pooling_operation=None)
+[35mmlcolvar/cvs/timelagged/deeptica.py[m[36m:[m[32m221[m[36m:[m    gnn_model = SchNetModel([1;31mn_out[m=2, cutoff=0.1, atomic_numbers=[1, 8])
+[35mmlcolvar/cvs/timelagged/selftica.py[m[36m:[m[32m121[m[36m:[m        elif hasattr(self.nn, "[1;31mn_out[m"):
+[35mmlcolvar/cvs/timelagged/selftica.py[m[36m:[m[32m122[m[36m:[m            out_dim = int(self.nn.[1;31mn_out[m)
+[35mmlcolvar/cvs/timelagged/selftica.py[m[36m:[m[32m357[m[36m:[m    gnn_model = SchNetModel([1;31mn_out[m=2, cutoff=0.1, atomic_numbers=[1, 8])
+[35mmlcolvar/explain/graph_sensitivity.py[m[36m:[m[32m282[m[36m:[m    gnn_model = SchNetModel([1;31mn_out[m=1, cutoff=0.1, atomic_numbers=[8, 1])
+[35mmlcolvar/explain/graph_sensitivity.py[m[36m:[m[32m319[m[36m:[m        gnn_model = SchNetModel([1;31mn_out[m=1, cutoff=0.1, atomic_numbers=[8, 1])
+[35mmlcolvar/tests/test_cvs.py[m[36m:[m[32m202[m[36m:[m            gnn_model = SchNetModel([1;31mn_out[m=1, 
+[35mmlcolvar/tests/test_utils_aot.py[m[36m:[m[32m15[m[36m:[m            [1;31mn_out[m=4,
+[35mmlcolvar/utils/aot.py[m[36m:[m[32m464[m[36m:[m            n_cvs = int(self.model.[1;31mn_out[m)
+[35mplumed_interfaces/tests/NaCl/train_cv.py[m[36m:[m[32m47[m[36m:[m    model_arch = SchNetModel([1;31mn_out[m=1,
+[35mplumed_interfaces/tests/alanine/train_cv.py[m[36m:[m[32m148[m[36m:[m        [1;31mn_out[m=1,

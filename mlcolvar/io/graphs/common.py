@@ -114,9 +114,13 @@ def _prepare_dataset_from_trajectories(
         3. If `system_selection`, `environment_selection` and `subsystem_selection` are given, everything is as case 2, but,
          in addition, long-range edges will be drawn between subsystem atoms within the `long_range_cutoff` from each other.
 
-    The selection syntax can be either mdtraj-based or ase-based:
-        mdtraj-based: refer to https://www.mdtraj.org/1.9.8.dev0/atom_selection.html
-        ase-based: refer to https://ase-lib.org/ase/atoms.html
+    The atom-selection syntax depends on the selected backend:
+
+    * MDTraj:
+      https://www.mdtraj.org/1.9.8.dev0/atom_selection.html
+
+    * ASE:
+      https://ase-lib.org/ase/atoms.html
     """
 
     # ======================================= Initial checks =======================================

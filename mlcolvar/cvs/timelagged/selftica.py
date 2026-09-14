@@ -10,39 +10,55 @@ __all__ = ["SelfTICA"]
     
 
 class SelfTICA(BaseCV):
-    """Self-supervised time-lagged independent component analysis (Self-TICA).
-    
-    It is a self-supervised generalization of Deep-TICA in which an encoder is used
-    to learn a latent representation of the input data using contrastive learning. 
-    TICA is then applied to this latent space to extract the slowest modes of the CV.
+    """
+    Self-supervised time-lagged independent component analysis (SelfTICA).
 
-    **Data**: for training it requires a DictDataset containing:
-        - If using descriptors as input, the keys 'data' (input at time t)
-        and 'data_lag' (input at time t+lag), as well as the corresponding 'weights' and
-        'weights_lag' which will be used to weight the time correlation functions.
-        - If using graphs as input, the keys 'data_list' and 'data_list_lag', each containing the respective 'weight'
-    This can be created in both cases with the helper function `create_timelagged_dataset`.
+    SelfTICA learns dynamical representations from time-lagged configurations
+    using contrastive learning and subsequently applies TICA to the learned
+    latent space to extract slow collective variables. The method is described
+    in Ref. [1]_, and its connection to self-supervised evolution-operator
+    learning is discussed in Ref. [2]_.
 
-    **Loss** : L2 contrastive loss encouraging temporal consistency and decorrelation (ContrastiveLoss)
-    The contrastive loss is related to the VAMP-2 score and can be interpreted as a self-supervised 
-    approximation of time-lagged covariance maximization.
+    The model supports both descriptor-based and graph-based encoders.
+
+    Data
+    ----
+    For descriptor-based models, the training dataset should contain
+    ``data`` and ``data_lag`` for configurations at times ``t`` and
+    ``t + lag``, together with the corresponding ``weights`` and
+    ``weights_lag``.
+
+    For graph-based models, the dataset should contain ``data_list`` and
+    ``data_list_lag`` with the corresponding graph weights.
+
+    Time-lagged datasets can be constructed with
+    ``mlcolvar.utils.timelagged.create_timelagged_dataset``.
+
+    Loss
+    ----
+    SelfTICA uses ``ContrastiveLoss`` to encourage temporal consistency and
+    decorrelation of the learned representations. The contrastive objective is
+    related to the VAMP-2 score.
 
     References
     ----------
-    .. [1] Zhu, K., Zhang, J., Novelli, P., Hou, T., & Bonati, L., "Contrastive Learning of 
-    Dynamical Representations for Enhanced Molecular Sampling," arXiv preprint arXiv:2606.15495 (2026).
-    .. [2] Turri, G., Bonati, L., Zhu, K., Pontil, M., & Novelli, P, "Self-Supervised Evolution 
-        Operator Learning for High-Dimensional Dynamical Systems," International Conference on Learning 
-        Representations (ICLR), 2026.
+    .. [1] Zhu, K., Zhang, J., Novelli, P., Hou, T., & Bonati, L.
+       "Contrastive Learning of Dynamical Representations for Enhanced
+       Molecular Sampling." arXiv:2606.15495 (2026).
 
-    See also
+    .. [2] Turri, G., Bonati, L., Zhu, K., Pontil, M., & Novelli, P.
+       "Self-Supervised Evolution Operator Learning for High-Dimensional
+       Dynamical Systems." International Conference on Learning
+       Representations (ICLR), 2026.
+
+    See Also
     --------
     mlcolvar.core.estimators.TICA
-        Time Lagged Indipendent Component Analysis
+        Time-lagged independent component analysis.
     mlcolvar.core.loss.ContrastiveLoss
-        Encourging temporal consistency and decorrelation
+        Contrastive loss for learning time-lagged representations.
     mlcolvar.utils.timelagged.create_timelagged_dataset
-        Create dataset of time-lagged data.
+        Create datasets of time-lagged configurations.
     """
 
     DEFAULT_BLOCKS = ["norm_in", "nn", "predictor", "tica"]
@@ -81,7 +97,10 @@ class SelfTICA(BaseCV):
             Available blocks: ['norm_in', 'encoder', 'predictor', 'tica'].
             Set 'block_name' = None or False to turn off that block.
         """
-        super().__init__(model, **kwargs)        
+        super().__init__(model, **kwargs)      
+        
+        # encoder output dimension
+        out_dim = int(self.out_features)  
 
         # =======   LOSS  =======
         self.loss_fn = ContrastiveLoss(reg=regularization, mode="l2")
@@ -90,8 +109,9 @@ class SelfTICA(BaseCV):
         if not isinstance(n_cvs, int) or n_cvs < 1:
             raise ValueError("n_cvs must be a positive integer (>= 1)")
 
-        # here we need to override the self.out_features attribute
+        # final CV dimension
         self.out_features = n_cvs
+        self.n_cvs.fill_(n_cvs)
 
         # ======= OPTIONS =======
         # parse and sanitize
@@ -111,18 +131,9 @@ class SelfTICA(BaseCV):
         
         elif self._override_model:
             self.nn = model
-            if self.out_features is not None:
-                self.register_buffer('n_out', torch.as_tensor(self.out_features))   
 
         # initalize predictor
         o = "predictor"
-        # ===== infer output dimension =====
-        if hasattr(self.nn, "out_features") and isinstance(self.nn.out_features, int):
-            out_dim = self.nn.out_features
-        elif hasattr(self.nn, "n_out"):
-            out_dim = int(self.nn.n_out)
-        else:
-            raise ValueError("Cannot infer output dimension from model")
         
         if not isinstance(predictor_depth, int) or predictor_depth < 2:
             raise ValueError("predictor_depth must be an integer greater than or equal to 2.")
@@ -227,7 +238,7 @@ class SelfTICA(BaseCV):
         # In evaluation mode, apply TICA projection to obtain CVs
         if not self.training:
             centered = x - self.current_means
-            x = centered @ self.current_evecs[:, :self.n_cvs]
+            x = centered @ self.current_evecs[:, :self.out_features]
         
         if self.postprocessing is not None:
             x = self._apply_module(self.postprocessing, x)
