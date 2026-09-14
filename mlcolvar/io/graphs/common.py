@@ -15,103 +15,143 @@ from mlcolvar.data.graph.atomic import AtomicNumberTable
 __all__ = ["create_dataset_from_trajectories"]
 
 
-def create_dataset_from_trajectories(trajectories: Union[List[str], str],
-                                     cutoff: float,
-                                     topologies: Union[List[str], str, None] = None,
-                                     load_args: list = None,
-                                     folder: str = None,
-                                     trajectory_labels: list = None,
-                                     graph_labels: list = None,
-                                     node_labels: list = None,
-                                     system_selection: str = None,
-                                     environment_selection: str = None,
-                                     buffer: float = 0.0,
-                                     subsystem_selection: str = None,
-                                     long_range_cutoff: float = -1.0,
-                                     return_trajectories: bool = False,
-                                     remove_isolated_nodes: bool = True,
-                                     show_progress: bool = False,
-                                     atom_names: List = None,
-                                     lengths_conversion : float = None,
-                                     delete_download: bool = True,
-                                     backend : str = 'mdtraj',
-                                    ) -> Union[DictDataset, 
-                                               Tuple[DictDataset, Union[List[List[mdtraj.Trajectory]], List[mdtraj.Trajectory]]
-    ]
+def create_dataset_from_trajectories(
+    trajectories: Union[List[str], str],
+    cutoff: float,
+    topologies: Union[List[str], str, None] = None,
+    load_args: list = None,
+    folder: str = None,
+    trajectory_labels: list = None,
+    graph_labels: list = None,
+    node_labels: list = None,
+    system_selection: str = None,
+    environment_selection: str = None,
+    buffer: float = 0.0,
+    subsystem_selection: str = None,
+    long_range_cutoff: float = -1.0,
+    return_trajectories: bool = False,
+    remove_isolated_nodes: bool = True,
+    show_progress: bool = False,
+    atom_names: List = None,
+    lengths_conversion: float = None,
+    delete_download: bool = True,
+    backend: str = "mdtraj",
+) -> Union[
+    DictDataset,
+    Tuple[
+        DictDataset,
+        Union[
+            List[List[mdtraj.Trajectory]],
+            List[mdtraj.Trajectory],
+        ],
+    ],
 ]:
     """
-    Create a dataset from a set of trajectory files using either mdtraj or ase as a backend.
+    Create a graph dataset from trajectory files using either MDTraj or ASE
+    as the backend.
 
     Parameters
     ----------
-    trajectories: Union[List[str], str]
-        Paths to trajectories files.
-    cutoff: float (units: Ang)
-        The graph cutoff radius in Angstroms.
-    topologies: Union[List[str], str, None], optional
-        Path to topology files when using mdtraj as backend. When loading .xyz files it can be set to None to generate automatically a topology file.
-    load_args: list[dict], optional
-        List of dictionaries for loading options for each file (keys: start,stop,stride), by default None
-    folder: str
-        Common path for the files to be imported. If set, filenames become `folder/file_name`, by default None.
-    trajectory_labels: list
-        One label (or vector of labels) per trajectory file. It is broadcast to all selected frames and saved as `graph_labels`, by default None.
-    graph_labels: list
-        One label (or vector of labels) per selected frame of each trajectory. Mutually exclusive with `trajectory_labels`, by default None.
-    node_labels: list
-        Optional node-level labels per selected frame and trajectory, by default None.
-    system_selection: str
-        Atom selections of the system atoms in the syntax of the chosen backend (see notes), by default None (select all atoms). 
-        If given, only the selected atoms will be loaded from the trajectories. 
-    environment_selection: str
-        Atom selections of the environment atoms in the syntax of the chosen backend (see notes), by default None (no environment atoms). 
-        If given, only the system atoms and [the environment atoms within the cutoff radius of the system atoms] will be kept in the graph.
-    buffer: float
-        Buffer size used in finding active environment atoms. This option should be defined with the `environment_selection` option, by default None.
-    subsystem_selection: str
-        Atom selections of the system atoms in the syntax of the chosen backend (see notes), by default None (no susbsystem atoms). 
-        If given, long-range edges will be put between subsystem atoms. This option should be defined along with the `long_range_cutoff` option. 
-        Besides, all atoms selected by this selection should also be selected by the `system_selection`.
-    long_range_cutoff : float
-        Cutoff radius for the long-range edges defined on subsystem atoms. If negative, no long-range interactions are considered, by default -1.0. 
-        This option should be defined with the `subsystem_selection` option.
-    return_trajectories: bool
-        If also return the loaded trajectory objects, either as mdtraj or ase object based on the chose backend, by default False.
-    remove_isolated_nodes: bool
-        If remove isolated nodes from the dataset, by default True.
-    show_progress: bool
-        If show the progress bar, by default False.
+    trajectories : Union[List[str], str]
+        Path or paths to trajectory files.
+    cutoff : float
+        Graph cutoff radius in Angstrom.
+    topologies : Union[List[str], str, None], optional
+        Path or paths to topology files when using MDTraj as the backend.
+        For ``.xyz`` files, this can be set to ``None`` and a topology is
+        generated automatically. By default ``None``.
+    load_args : list[dict], optional
+        Loading options for each trajectory file. Each dictionary can contain
+        the keys ``start``, ``stop``, and ``stride``. By default ``None``.
+    folder : str, optional
+        Common directory containing the files. If provided, file names are
+        interpreted relative to this directory. By default ``None``.
+    trajectory_labels : list, optional
+        One label or vector of labels per trajectory file. Labels are
+        broadcast to all selected frames and stored as graph-level labels.
+        Mutually exclusive with ``graph_labels``. By default ``None``.
+    graph_labels : list, optional
+        One label or vector of labels per selected frame of each trajectory.
+        Mutually exclusive with ``trajectory_labels``. By default ``None``.
+    node_labels : list, optional
+        Optional node-level labels for each selected frame and trajectory.
+        By default ``None``.
+    system_selection : str, optional
+        Selection of system atoms using the syntax of the selected backend.
+        If ``None``, all atoms are considered system atoms. If provided, only
+        the selected system atoms and any requested environment atoms are
+        loaded into the graph.
+    environment_selection : str, optional
+        Selection of environment atoms using the syntax of the selected
+        backend. Environment atoms within ``cutoff + buffer`` of the system
+        atoms are retained in the graph. By default ``None``.
+    buffer : float, optional
+        Additional distance used when selecting active environment atoms.
+        This option is used together with ``environment_selection``.
+        By default 0.0.
+    subsystem_selection : str, optional
+        Selection of subsystem atoms on which long-range edges are defined.
+        All subsystem atoms must also belong to ``system_selection``.
+        This option is used together with ``long_range_cutoff``.
+        By default ``None``.
+    long_range_cutoff : float, optional
+        Cutoff radius for long-range edges between subsystem atoms. If
+        negative, long-range interactions are disabled. By default -1.0.
+    return_trajectories : bool, optional
+        Whether to return the loaded trajectory objects together with the
+        dataset. By default ``False``.
+    remove_isolated_nodes : bool, optional
+        Whether to remove isolated nodes from the graph. By default ``True``.
+    show_progress : bool, optional
+        Whether to display a progress bar. By default ``False``.
     atom_names : List, optional
-        Optional atom names used by the dataset constructor, by default None.
-        If not provided, atomic names will be infered from trajectory/topology objects
-    lengths_conversion: float,
-        Conversion factor for length units, by default None. The default sends to Angstroms whatever the backend used.
-    delete_download: bool, optinal
-        Whether to delete the downloaded file after it has been loaded, default True.
-    backend: str
-        Which external library to be used for loading the trajectory file, either `mdtraj` or `ase`, by defualt `mdtraj`.
+        Optional atom names used by the dataset constructor. If not provided,
+        atom names are inferred from the trajectory or topology objects.
+        By default ``None``.
+    lengths_conversion : float, optional
+        Conversion factor applied to coordinates. If ``None``, coordinates are
+        converted to Angstrom according to the selected backend. MDTraj uses
+        nanometers internally, while ASE uses Angstrom. By default ``None``.
+    delete_download : bool, optional
+        Whether temporary files downloaded from URLs are deleted after loading.
+        By default ``True``.
+    backend : str, optional
+        Backend used to load trajectory files. Supported values are
+        ``"mdtraj"`` and ``"ase"``. By default ``"mdtraj"``.
 
     Returns
     -------
-    dataset: mlcolvar.graph.data.GraphDataSet
-        The graph dataset.
-    trajectories: Union[List[List[mdtraj.Trajectory]], List[mdtraj.Trajectory]]
-        The loaded trajectory objects.
+    DictDataset
+        Graph dataset constructed from the selected trajectory frames.
+    trajectories : Union[List[List[mdtraj.Trajectory]], List[mdtraj.Trajectory]]
+        Loaded trajectory objects. Returned only when
+        ``return_trajectories=True``.
 
     Notes
     -----
-    The logic behind the system-environment-subsystem selections is as follows:
-        1. If only `system_selection` is given, only atoms selected by this selection will be loaded from the trajectories and
-         used ot build the graphs, with edges drawn according to the given `cutoff`.
-        2. If both `system_selection` and `environment_selection` are given, atoms selected by both selections will
-         be loaded from the trajectories but only [the system atoms] and [the environment atoms within the given `cutoff`+`buffer` 
-         from the system atoms] will be included in the graphs, with edges drawn according to the given `cutoff`.
-        3. If `system_selection`, `environment_selection` and `system_selection` are given, everything is as case 2, but,
-         in addition, long-range edges will be drawn between subsystem atoms within the `long_range_cutoff` from each other.
+    The system, environment, and subsystem selections are interpreted as
+    follows:
 
-    The selection syntax can be either mdtraj-based or ase-based:
-        mdtraj-based: refer to https://www.mdtraj.org/1.9.8.dev0/atom_selection.html
-        ase-based: refer to https://ase-lib.org/ase/atoms.html
+    1. If only ``system_selection`` is provided, only the selected system atoms
+       are included in the graph. Edges are constructed using ``cutoff``.
+
+    2. If both ``system_selection`` and ``environment_selection`` are provided,
+       the graph contains the selected system atoms together with environment
+       atoms located within ``cutoff + buffer`` of the system atoms. Graph
+       edges are constructed using ``cutoff``.
+
+    3. If ``system_selection``, ``environment_selection``, and
+       ``subsystem_selection`` are provided, the graph is constructed as in
+       case 2, and additional long-range edges are created between subsystem
+       atoms separated by less than ``long_range_cutoff``.
+
+    The atom-selection syntax depends on the selected backend:
+
+    * MDTraj:
+      https://www.mdtraj.org/1.9.8.dev0/atom_selection.html
+
+    * ASE:
+      https://ase-lib.org/ase/atoms.html
     """
 
     # ======================================= Initial checks =======================================
@@ -142,7 +182,7 @@ def create_dataset_from_trajectories(trajectories: Union[List[str], str],
     # ================================== Topology files handling ===================================
 
     # check topologies if given, with xyz it can be None
-    if backend == 'mtraj':
+    if backend == 'mdtraj':
         if topologies is not None:
             assert len(trajectories) == len(topologies) or len(topologies)==1 or isinstance(topologies, str), (
                 'Either a single topology file or as many as the trajectory files must be provided!'

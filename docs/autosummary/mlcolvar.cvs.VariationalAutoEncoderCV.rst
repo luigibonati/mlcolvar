@@ -54,7 +54,6 @@
       ~VariationalAutoEncoderCV.local_rank
       ~VariationalAutoEncoderCV.logger
       ~VariationalAutoEncoderCV.loggers
-      ~VariationalAutoEncoderCV.n_cvs
       ~VariationalAutoEncoderCV.on_gpu
       ~VariationalAutoEncoderCV.optimizer_name
       ~VariationalAutoEncoderCV.strict_loading

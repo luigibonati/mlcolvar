@@ -1,8 +1,9 @@
 Graph-based CVs
 ===============
 
-These tutorials introduce graph-based collective variables and the graph
-neural network architectures available in ``mlcolvar``.
+These tutorials introduce graph-based collective variables, graph neural
+network architectures, and graph construction strategies available in
+``mlcolvar``.
 
 .. toctree::
    :maxdepth: 1

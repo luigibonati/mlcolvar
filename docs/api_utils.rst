@@ -1,11 +1,10 @@
 Utils
 -----
 
-
 Input/Output
 ^^^^^^^^^^^^
 
-Helper functions for loading dataframes (incl. PLUMED files) and directly creating datasets from them.
+Helper functions for loading dataframes (including PLUMED files) and directly creating datasets from files or trajectories.
 
 .. currentmodule:: mlcolvar.io
 
@@ -15,6 +14,7 @@ Helper functions for loading dataframes (incl. PLUMED files) and directly creati
 
    load_dataframe
    create_dataset_from_files
+   create_dataset_from_trajectories
 
 
 Time-lagged datasets
@@ -33,6 +33,7 @@ Create a dataset of pairs of time-lagged configurations.
 
 FES
 ^^^
+
 Compute (and plot) the free energy surface along the CVs.
 
 .. currentmodule:: mlcolvar.utils.fes
@@ -44,9 +45,33 @@ Compute (and plot) the free energy surface along the CVs.
    compute_fes
 
 
+AOT compilation
+^^^^^^^^^^^^^^^
+
+Utilities for exporting and loading graph-based CV models using PyTorch Ahead-of-Time (AOT) compilation.
+
+.. currentmodule:: mlcolvar.utils.aot
+
+.. autosummary::
+   :toctree: autosummary
+
+   export
+   load
+
+Graph utilities
+"""""""""""""""
+
+.. autosummary::
+   :toctree: autosummary
+   :template: custom-class-template.rst
+
+   GraphAdapter
+
+
 Trainer
 ^^^^^^^
-Functions used in conjunction with the lightning Trainer (e.g. logging, metrics...).
+
+Functions used in conjunction with the Lightning Trainer (e.g. logging and metrics).
 
 .. currentmodule:: mlcolvar.utils.trainer
 
