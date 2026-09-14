@@ -51,7 +51,6 @@
       ~DeepTDA.local_rank
       ~DeepTDA.logger
       ~DeepTDA.loggers
-      ~DeepTDA.n_cvs
       ~DeepTDA.on_gpu
       ~DeepTDA.optimizer_name
       ~DeepTDA.strict_loading

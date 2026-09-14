@@ -10,39 +10,55 @@ __all__ = ["SelfTICA"]
     
 
 class SelfTICA(BaseCV):
-    """Self-supervised time-lagged independent component analysis (Self-TICA).
-    
-    It is a self-supervised generalization of Deep-TICA in which an encoder is used
-    to learn a latent representation of the input data using contrastive learning. 
-    TICA is then applied to this latent space to extract the slowest modes of the CV.
+    """
+    Self-supervised time-lagged independent component analysis (SelfTICA).
 
-    **Data**: for training it requires a DictDataset containing:
-        - If using descriptors as input, the keys 'data' (input at time t)
-        and 'data_lag' (input at time t+lag), as well as the corresponding 'weights' and
-        'weights_lag' which will be used to weight the time correlation functions.
-        - If using graphs as input, the keys 'data_list' and 'data_list_lag', each containing the respective 'weight'
-    This can be created in both cases with the helper function `create_timelagged_dataset`.
+    SelfTICA learns dynamical representations from time-lagged configurations
+    using contrastive learning and subsequently applies TICA to the learned
+    latent space to extract slow collective variables. The method is described
+    in Ref. [1]_, and its connection to self-supervised evolution-operator
+    learning is discussed in Ref. [2]_.
 
-    **Loss** : L2 contrastive loss encouraging temporal consistency and decorrelation (ContrastiveLoss)
-    The contrastive loss is related to the VAMP-2 score and can be interpreted as a self-supervised 
-    approximation of time-lagged covariance maximization.
+    The model supports both descriptor-based and graph-based encoders.
+
+    Data
+    ----
+    For descriptor-based models, the training dataset should contain
+    ``data`` and ``data_lag`` for configurations at times ``t`` and
+    ``t + lag``, together with the corresponding ``weights`` and
+    ``weights_lag``.
+
+    For graph-based models, the dataset should contain ``data_list`` and
+    ``data_list_lag`` with the corresponding graph weights.
+
+    Time-lagged datasets can be constructed with
+    ``mlcolvar.utils.timelagged.create_timelagged_dataset``.
+
+    Loss
+    ----
+    SelfTICA uses ``ContrastiveLoss`` to encourage temporal consistency and
+    decorrelation of the learned representations. The contrastive objective is
+    related to the VAMP-2 score.
 
     References
     ----------
-    .. [1] Zhu, K., Zhang, J., Novelli, P., Hou, T., & Bonati, L., "Contrastive Learning of 
-    Dynamical Representations for Enhanced Molecular Sampling," arXiv preprint arXiv:2606.15495 (2026).
-    .. [2] Turri, G., Bonati, L., Zhu, K., Pontil, M., & Novelli, P, "Self-Supervised Evolution 
-        Operator Learning for High-Dimensional Dynamical Systems," International Conference on Learning 
-        Representations (ICLR), 2026.
+    .. [1] Zhu, K., Zhang, J., Novelli, P., Hou, T., & Bonati, L.
+       "Contrastive Learning of Dynamical Representations for Enhanced
+       Molecular Sampling." arXiv:2606.15495 (2026).
 
-    See also
+    .. [2] Turri, G., Bonati, L., Zhu, K., Pontil, M., & Novelli, P.
+       "Self-Supervised Evolution Operator Learning for High-Dimensional
+       Dynamical Systems." International Conference on Learning
+       Representations (ICLR), 2026.
+
+    See Also
     --------
     mlcolvar.core.estimators.TICA
-        Time Lagged Indipendent Component Analysis
+        Time-lagged independent component analysis.
     mlcolvar.core.loss.ContrastiveLoss
-        Encourging temporal consistency and decorrelation
+        Contrastive loss for learning time-lagged representations.
     mlcolvar.utils.timelagged.create_timelagged_dataset
-        Create dataset of time-lagged data.
+        Create datasets of time-lagged configurations.
     """
 
     DEFAULT_BLOCKS = ["norm_in", "nn", "predictor", "tica"]

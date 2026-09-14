@@ -1,14 +1,19 @@
 Core modules
 ============
 
-These are the building blocks which are used to construct the CVs.
+These are the building blocks used to construct CVs.
+
 
 NN
 --
-This module implements the architectures with learnable weights that can be used to build CV models.
 
-Descriptors-based
-^^^^^^^^^^^^^^^^^
+This module implements neural-network architectures with learnable weights
+that can be used to build CV models.
+
+
+Descriptor-based
+^^^^^^^^^^^^^^^^
+
 .. currentmodule:: mlcolvar.core.nn
 
 .. autosummary::
@@ -17,30 +22,37 @@ Descriptors-based
 
    FeedForward
 
-Graphs-based
-^^^^^^^^^^^^
+
+Graph-based
+^^^^^^^^^^^
+
 .. currentmodule:: mlcolvar.core.nn.graph
 
 Base class
 """"""""""
+
 .. autosummary::
    :toctree: autosummary
    :template: custom-class-template.rst
 
    BaseGNN
 
+
 Architectures
 """""""""""""
+
 .. autosummary::
    :toctree: autosummary
    :template: custom-class-template.rst
 
    SchNetModel
+   PaiNNModel
    GVPModel
-   
+
 
 Loss
 ----
+
 This module implements the loss functions that can be used to optimize CV models.
 
 .. currentmodule:: mlcolvar.core.loss
@@ -55,6 +67,7 @@ This module implements the loss functions that can be used to optimize CV models
    AutocorrelationLoss
    ReduceEigenvaluesLoss
    TDALoss
+   ContrastiveLoss
    CommittorLoss
    GeneratorLoss
    SmartDerivatives
@@ -64,6 +77,7 @@ Estimators
 ----------
 
 This module implements statistical estimators used in CV models.
+
 
 Base class
 ^^^^^^^^^^
@@ -76,10 +90,9 @@ Base class
 
    Estimator
 
+
 Linear methods
 ^^^^^^^^^^^^^^
-
-.. currentmodule:: mlcolvar.core.estimators
 
 .. autosummary::
    :toctree: autosummary
@@ -93,7 +106,9 @@ Linear methods
 
 Transform
 ---------
-This module implements **non-learnable** pre/postprocessing tools 
+
+This module implements **non-learnable** pre- and post-processing tools.
+
 
 Base class
 ^^^^^^^^^^
@@ -105,11 +120,13 @@ Base class
    :template: custom-class-template.rst
 
    Transform
-   
+
 
 Descriptors
 ^^^^^^^^^^^
-This submodule implements several descriptors that can be computed starting from atomic positions.
+
+This submodule implements descriptors that can be computed from atomic
+positions.
 
 .. currentmodule:: mlcolvar.core.transform.descriptors
 
@@ -123,9 +140,11 @@ This submodule implements several descriptors that can be computed starting from
    EigsAdjMat
    MultipleDescriptors
 
+
 Tools
 ^^^^^
-This submodule implements pre/postporcessing tools.
+
+This submodule implements pre- and post-processing tools.
 
 .. currentmodule:: mlcolvar.core.transform.tools
 

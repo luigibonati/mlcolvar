@@ -62,7 +62,6 @@
       ~BaseCV.local_rank
       ~BaseCV.logger
       ~BaseCV.loggers
-      ~BaseCV.n_cvs
       ~BaseCV.on_gpu
       ~BaseCV.optimizer_name
       ~BaseCV.strict_loading

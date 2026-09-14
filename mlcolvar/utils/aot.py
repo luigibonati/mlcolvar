@@ -732,45 +732,45 @@ def export(
     Parameters
     ----------
     model : lightning.LightningModule
-        The GNN CV model to compile. The model itself, or ``model.nn``, must be
-        an instance of ``BaseGNN``.
-
-    example_inputs : torch_geometric.data.Data or dict/list containing Data
-        Example graph input used to trace the model.
-
+        GNN-based CV model to compile. The model itself, or its ``nn``
+        attribute, must be an instance of ``BaseGNN``.
+    example_inputs : torch_geometric.data.Data or dict or list
+        Example graph input used to trace and compile the model.
     file_name : str, optional
-        Name of the compiled model package. The filename should include the
-        ``.pt2`` extension.
-
+        Name of the compiled model package. The filename should use the
+        ``.pt2`` extension. By default ``"model.pt2"``.
     calculate_gradients : bool, optional
-        Whether gradient calculations should be included in the compiled model.
-
+        Whether to include gradients of the CVs with respect to atomic
+        positions in the compiled model. By default ``True``.
     k_bias_options : dict[str, Any], optional
-        Options for enabling the Kolmogorov bias :math:`V_K` for committor
-        models. If this dictionary is provided, the Kolmogorov bias is
-        automatically enabled in the compiled model.
+        Options for enabling the Kolmogorov bias for a committor model.
+        Providing this dictionary automatically enables Kolmogorov-bias
+        evaluation.
 
-        When enabled, the exported CV output contains two components,
-        ``[z, q]``, where ``z`` is the raw committor coordinate and ``q`` is the
-        sigmoid-transformed committor. The third and fourth returned tensors
-        contain ``V_K`` and ``dV_K/dx``, respectively.
+        Supported options are:
 
-        Supported fields include:
-
-        - ``epsilon`` : float
+        ``epsilon``
             Numerical regularization parameter used in the Kolmogorov bias.
 
-        - ``lambd`` : float
+        ``lambd``
             Scaling factor of the Kolmogorov bias.
 
-        - ``beta`` : float
+        ``beta``
             Inverse-temperature-like scaling parameter.
 
-    model_summary_level : int, optional
-        Depth of the model summary stored in the exported metadata.
+        When Kolmogorov-bias mode is enabled, the first returned tensor
+        contains two components, ``[z, q]``, where ``z`` is the raw
+        committor coordinate and ``q`` is the sigmoid-transformed committor.
+        The third and fourth returned tensors contain the Kolmogorov bias
+        and its gradient, respectively.
 
+        By default ``None``.
+    model_summary_level : int, optional
+        Maximum depth of the model summary stored in the exported metadata.
+        By default 3.
     run_check : bool, optional
-        If ``True``, a numerical check compares eager and AOT-compiled outputs.
+        Whether to numerically compare eager and AOT-compiled outputs after
+        compilation. By default ``False``.
 
     Returns
     -------
@@ -779,24 +779,55 @@ def export(
 
     Notes
     -----
-    The dtype and device of the model are fixed at compile time. Move the model
-    to the desired device and dtype before calling this function.
+    The dtype and device of the model are fixed at compile time. Move the
+    model to the desired device and dtype before calling this function.
 
-    The compiled model always returns four tensors for compatibility with the
-    PLUMED AOT interface. In normal CV mode, only the first two tensors are
-    meaningful: the CV values and their gradients. The third and fourth tensors
-    are scalar zero placeholders.
+    The compiled model always returns four tensors for compatibility with
+    the PLUMED AOT interface.
 
-    Example:
+    In normal CV mode, the tensors correspond to:
 
-    ```python
-    export(
-        model,
-        example_inputs=dataset[0],
-        file_name="model.pt2",
-        run_check=True,
-    )
-    ```
+    1. CV values.
+    2. CV gradients.
+    3. A scalar zero placeholder.
+    4. A scalar zero placeholder.
+
+    In Kolmogorov-bias mode, they correspond to:
+
+    1. The ``[z, q]`` outputs.
+    2. Their gradients.
+    3. The Kolmogorov bias.
+    4. The gradient of the Kolmogorov bias.
+
+    Examples
+    --------
+    Export a GNN-based CV model:
+
+    .. code-block:: python
+
+        from mlcolvar.utils.aot import export
+
+        export(
+            model=model,
+            example_inputs=dataset[0],
+            file_name="model.pt2",
+            run_check=True,
+        )
+
+    Export a committor model with the Kolmogorov bias:
+
+    .. code-block:: python
+
+        export(
+            model=model,
+            example_inputs=dataset[0],
+            file_name="model.pt2",
+            calculate_gradients=True,
+            k_bias_options={
+                "beta": 0.5,
+                "lambd": 1.0,
+            },
+        )
     """
     is_gnn = isinstance(model, BaseGNN) or (
         hasattr(model, "nn") and isinstance(model.nn, BaseGNN)
@@ -830,7 +861,20 @@ def load(
 
     Parameters
     ----------
-    file_name: str
-        Name of the ``.pt2`` AOTInductor package.
+    file_name : str
+        Path to the ``.pt2`` AOTInductor package.
+
+    Returns
+    -------
+    torch._inductor.package.package.AOTICompiledModel
+        Loaded AOTInductor model.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from mlcolvar.utils.aot import load
+
+        model = load("model.pt2")
     """
     return torch._inductor.aoti_load_package(file_name)

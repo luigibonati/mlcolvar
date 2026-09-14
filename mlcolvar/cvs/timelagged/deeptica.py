@@ -10,37 +10,55 @@ __all__ = ["DeepTICA"]
 
 
 class DeepTICA(BaseCV):
-    """Neural network-based time-lagged independent component analysis (Deep-TICA).
+    """
+    Neural network-based time-lagged independent component analysis (DeepTICA).
 
-    It is a non-linear generalization of TICA in which a feature map is learned by a
-    neural network optimized as to maximize the eigenvalues of the transfer operator,
-    approximated by TICA. The method is described in [1]_. Note that from the point of view
-    of the architecture DeepTICA is similar to the SRV [2] method.
+    DeepTICA is a nonlinear generalization of TICA in which a feature map is
+    learned by a neural network by maximizing the eigenvalues of the transfer
+    operator approximated through TICA. The method is described in Ref. [1]_.
+    From an architectural perspective, DeepTICA is closely related to the
+    state-free reversible VAMPnet (SRV) approach [2]_.
 
-    **Data**: for training it requires a DictDataset containing:
-        - If using descriptors as input, the keys 'data' (input at time t)
-        and 'data_lag' (input at time t+lag), as well as the corresponding 'weights' and
-        'weights_lag' which will be used to weight the time correlation functions.
-        - If using graphs as input, the keys 'data_list' and 'data_list_lag', each containing the respective 'weight'
-    This can be created in both cases with the helper function `create_timelagged_dataset`.
+    The model supports both descriptor-based and graph-based neural networks.
 
-    **Loss**: maximize TICA eigenvalues (ReduceEigenvaluesLoss)
+    Data
+    ----
+    For descriptor-based models, the training dataset should contain
+    ``data`` and ``data_lag`` for configurations at times ``t`` and
+    ``t + lag``, together with the corresponding ``weights`` and
+    ``weights_lag``.
+
+    For graph-based models, the dataset should contain ``data_list`` and
+    ``data_list_lag``, with the corresponding graph weights.
+
+    Time-lagged datasets can be constructed with
+    ``mlcolvar.utils.timelagged.create_timelagged_dataset``.
+
+    Loss
+    ----
+    DeepTICA maximizes the TICA eigenvalues using
+    ``ReduceEigenvaluesLoss``.
 
     References
     ----------
-    .. [1] L. Bonati, G. Piccini, and M. Parrinello, “ Deep learning the slow modes for
-        rare events sampling,” PNAS USA 118, e2113533118 (2021)
-    .. [2] W. Chen, H. Sidky, and A. L. Ferguson, “ Nonlinear discovery of slow molecular
-        modes using state-free reversible vampnets,” JCP 150, 214114 (2019).
+    .. [1] L. Bonati, G. Piccini, and M. Parrinello.
+       "Deep learning the slow modes for rare events sampling."
+       Proceedings of the National Academy of Sciences 118,
+       e2113533118 (2021).
 
-    See also
+    .. [2] W. Chen, H. Sidky, and A. L. Ferguson.
+       "Nonlinear discovery of slow molecular modes using state-free
+       reversible VAMPnets." Journal of Chemical Physics 150,
+       214114 (2019).
+
+    See Also
     --------
     mlcolvar.core.estimators.TICA
-        Time Lagged Indipendent Component Analysis
-    mlcolvar.core.loss.ReduceEigenvalueLoss
-        Eigenvalue reduction to a scalar quantity
+        Time-lagged independent component analysis.
+    mlcolvar.core.loss.ReduceEigenvaluesLoss
+        Reduce multiple eigenvalues to a scalar loss.
     mlcolvar.utils.timelagged.create_timelagged_dataset
-        Create dataset of time-lagged data.
+        Create datasets of time-lagged configurations.
     """
 
     DEFAULT_BLOCKS = ["norm_in", "nn", "tica"]

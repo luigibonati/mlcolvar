@@ -51,7 +51,6 @@
       ~RegressionCV.local_rank
       ~RegressionCV.logger
       ~RegressionCV.loggers
-      ~RegressionCV.n_cvs
       ~RegressionCV.on_gpu
       ~RegressionCV.optimizer_name
       ~RegressionCV.strict_loading

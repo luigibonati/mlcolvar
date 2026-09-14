@@ -53,7 +53,6 @@
       ~DeepTICA.local_rank
       ~DeepTICA.logger
       ~DeepTICA.loggers
-      ~DeepTICA.n_cvs
       ~DeepTICA.on_gpu
       ~DeepTICA.optimizer_name
       ~DeepTICA.strict_loading
