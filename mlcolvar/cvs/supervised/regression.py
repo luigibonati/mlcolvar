@@ -87,42 +87,49 @@ class RegressionCV(BaseCV):
         elif self._override_model:
             self.nn = model
 
-    def training_step(self, train_batch, batch_idx):
-        """Compute and return the training loss and record metrics."""
-        # =================get data===================
+    def evaluate_loss(
+        self,
+        batch,
+        batch_idx: int,
+        update_state: bool = False,
+    ) -> dict[str, torch.Tensor]:
+        """Compute the regression loss and associated metrics."""
+        # ================= get data =================
         loss_kwargs = {}
         if isinstance(self.nn, FeedForward):
-            x = train_batch["data"]
-            labels = train_batch["target"]
-            if "weights" in train_batch:
-                loss_kwargs["weights"] = train_batch["weights"]
+            x = batch["data"]
+            labels = batch["target"]
+            if "weights" in batch:
+                loss_kwargs["weights"] = batch["weights"]
         elif isinstance(self.nn, BaseGNN):
-            x = self._setup_graph_data(train_batch)
+            x = self._setup_graph_data(batch)
             if self.graph_target_key not in x:
                 raise KeyError(
-                    f"Missing '{self.graph_target_key}' in graph batch. Available keys: {list(x.keys())}"
+                    f"Missing '{self.graph_target_key}' in graph batch. "
+                    f"Available keys: {list(x.keys())}"
                 )
             labels = x[self.graph_target_key]
             if self.graph_target_key == "graph_labels" and "weight" in x:
                 loss_kwargs["weights"] = x["weight"]
-
-        # =================forward====================
+        # ================= forward ==================
         y = self.forward_cv(x)
-
         # Keep compatibility with scalar targets stored with extra singleton dims.
         y, labels = self._align_regression_tensors(y, labels)
-        # ===================loss=====================
+        # ================== loss ====================
         try:
-            loss = self.loss_fn(y, labels, **loss_kwargs)
+            loss = self.loss_fn(
+                y,
+                labels,
+                **loss_kwargs,
+            )
         except TypeError as e:
             if "unexpected keyword argument 'weights'" in str(e):
                 loss = self.loss_fn(y, labels)
             else:
                 raise
-        # ====================log=====================
-        name = "train" if self.training else "valid"
-        self.log(f"{name}_loss", loss, on_epoch=True)
-        return loss
+        return {
+            "loss": loss,
+        }
 
     @staticmethod
     def _squeeze_trailing_singletons(x: torch.Tensor) -> torch.Tensor:

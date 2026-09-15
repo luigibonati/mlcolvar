@@ -164,56 +164,54 @@ class Committor(BaseCV):
         z = self.nn(x)
         return z
 
-    def training_step(self, train_batch, batch_idx):
-        torch.set_grad_enabled(True)
-
-        """Compute and return the training loss and record metrics."""
-        # =================get data===================
-        if isinstance(self.nn, FeedForward):
-            x = train_batch["data"]
-            # check data have shape (n_data, -1)
-            x = x.reshape((x.shape[0], -1))
-            x.requires_grad = True
-
-            labels = train_batch["labels"]
-            weights = train_batch["weights"]
-        elif isinstance(self.nn, BaseGNN):
-            x = self._setup_graph_data(train_batch)
-            labels = x['graph_labels']
-            weights = x['weight'].clone()
-        
-        try:
-            ref_idx = train_batch["ref_idx"]
-        except KeyError:
-            ref_idx = None
-
-        cell = self._get_batch_cell(train_batch)
-
-        # =================forward====================
-        z = self.forward_nn(x, cell=cell)
-        
-        if self.sigmoid is not None:
-            q = self.sigmoid(z)
-        else:
-            q = z        
-        
-        # ===================loss=====================
-        if self.training:
-            loss, loss_var, loss_bound_A, loss_bound_B = self.loss_fn(
-                x, z, q, labels, weights, ref_idx
+    def evaluate_loss(
+        self,
+        batch,
+        batch_idx: int,
+        update_state: bool = False,
+    ) -> dict[str, torch.Tensor]:
+        """Compute the committor loss and associated metrics."""
+        # The variational committor loss may require derivatives
+        # with respect to the input coordinates.
+        with torch.enable_grad():
+            # ================= get data =================
+            if isinstance(self.nn, FeedForward):
+                x = batch["data"]
+                # Ensure shape (n_data, -1)
+                x = x.reshape((x.shape[0], -1))
+                x.requires_grad_(True)
+                labels = batch["labels"]
+                weights = batch["weights"]
+            elif isinstance(self.nn, BaseGNN):
+                x = self._setup_graph_data(batch)
+                labels = x["graph_labels"]
+                weights = x["weight"].clone()
+            ref_idx = batch.get("ref_idx", None)
+            cell = self._get_batch_cell(batch)
+            # ================= forward ==================
+            z = self.forward_nn(
+                x,
+                cell=cell,
             )
-        else:
+            if self.sigmoid is not None:
+                q = self.sigmoid(z)
+            else:
+                q = z
+            # ================== loss ====================
             loss, loss_var, loss_bound_A, loss_bound_B = self.loss_fn(
-                x, z, q, labels, weights, ref_idx
+                x,
+                z,
+                q,
+                labels,
+                weights,
+                ref_idx,
             )
-
-        # ====================log=====================+
-        name = "train" if self.training else "valid"
-        self.log(f"{name}_loss", loss, on_epoch=True)
-        self.log(f"{name}_loss_var", loss_var, on_epoch=True)
-        self.log(f"{name}_loss_bound_A", loss_bound_A, on_epoch=True)
-        self.log(f"{name}_loss_bound_B", loss_bound_B, on_epoch=True)
-        return loss
+        return {
+            "loss": loss,
+            "loss_var": loss_var,
+            "loss_bound_A": loss_bound_A,
+            "loss_bound_B": loss_bound_B,
+        }
 
 def test_committor_1():
     from mlcolvar.data import DictDataset, DictModule

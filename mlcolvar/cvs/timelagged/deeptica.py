@@ -141,39 +141,56 @@ class DeepTICA(BaseCV):
         """
         self.tica.reg_C_0 = c0_reg
 
-    def training_step(self, train_batch, batch_idx):
+    def evaluate_loss(
+        self,
+        batch,
+        batch_idx: int,
+        update_state: bool = False,
+    ) -> dict[str, torch.Tensor]:
         """Compute and return the training loss and record metrics.
         1) Calculate the NN output
         2) Remove average (inside forward_nn)
         3) Compute TICA
         """
-        # =================get data===================
+        # ================= get data =================
         if isinstance(self.nn, FeedForward):
-            x_t = train_batch["data"]
-            x_lag = train_batch["data_lag"]
-            w_t = train_batch["weights"]
-            w_lag = train_batch["weights_lag"]
+            x_t = batch["data"]
+            x_lag = batch["data_lag"]
+            w_t = batch["weights"]
+            w_lag = batch["weights_lag"]
         elif isinstance(self.nn, BaseGNN):
-            x_t = self._setup_graph_data(train_batch, key='data_list')
-            x_lag = self._setup_graph_data(train_batch, key='data_list_lag')
-            w_t = x_t['weight']
-            w_lag = x_lag['weight']
-
-        # =================forward====================
+            x_t = self._setup_graph_data(
+                batch,
+                key="data_list",
+            )
+            x_lag = self._setup_graph_data(
+                batch,
+                key="data_list_lag",
+            )
+            w_t = x_t["weight"]
+            w_lag = x_lag["weight"]
+        # ================= forward ==================
         f_t = self.forward_nn(x_t)
         f_lag = self.forward_nn(x_lag)
-        # ===================tica=====================
+        # ================== TICA ====================
         eigvals, _ = self.tica.compute(
-            data=[f_t, f_lag], weights=[w_t, w_lag], save_params=True
+            data=[f_t, f_lag],
+            weights=[w_t, w_lag],
+            save_params=update_state,
         )
-        # ===================loss=====================
+        # ================== loss ====================
         loss = self.loss_fn(eigvals)
-        # ====================log=====================
-        name = "train" if self.training else "valid"
-        loss_dict = {f"{name}_loss": loss}
-        eig_dict = {f"{name}_eigval_{i+1}": eigvals[i] for i in range(len(eigvals))}
-        self.log_dict(dict(loss_dict, **eig_dict), on_step=True, on_epoch=True)
-        return loss
+        # ================= metrics ==================
+        output = {
+            "loss": loss,
+        }
+        output.update(
+            {
+                f"eigval_{i + 1}": eigval
+                for i, eigval in enumerate(eigvals)
+            }
+        )
+        return output
 
 
 def test_deep_tica():

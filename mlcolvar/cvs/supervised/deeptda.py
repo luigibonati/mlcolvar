@@ -122,32 +122,33 @@ class DeepTDA(BaseCV):
         elif self._override_model:
             self.nn = model
 
-    def training_step(self, train_batch, *args, **kwargs) -> torch.Tensor:
-        """Compute and return the training loss and record metrics."""
-        # =================get data===================
+    def evaluate_loss(
+        self,
+        batch,
+        batch_idx: int,
+        update_state: bool = False,
+    ) -> dict[str, torch.Tensor]:
+        """Compute the Deep-TDA loss and associated metrics."""
+        # ================= get data =================
         if isinstance(self.nn, FeedForward):
-            x = train_batch["data"]
-            labels = train_batch["labels"]
+            x = batch["data"]
+            labels = batch["labels"]
         elif isinstance(self.nn, BaseGNN):
-            x = self._setup_graph_data(train_batch)
-            labels = x['graph_labels'].squeeze()
-        
-        # =================forward====================
+            x = self._setup_graph_data(batch)
+            labels = x["graph_labels"].squeeze()
+        # ================= forward ==================
         z = self.forward_cv(x)
-
-        # ===================loss=====================
-        loss, loss_centers, loss_sigmas = self.loss_fn(z, 
-                                                        labels, 
-                                                        return_loss_terms=True
-                                                        )
-        
-        # ====================log=====================
-        name = "train" if self.training else "valid"
-        self.log(f"{name}_loss", loss, on_epoch=True)
-        self.log(f"{name}_loss_centers", loss_centers, on_epoch=True)
-        self.log(f"{name}_loss_sigmas", loss_sigmas, on_epoch=True)
-
-        return loss
+        # ================== loss ====================
+        loss, loss_centers, loss_sigmas = self.loss_fn(
+            z,
+            labels,
+            return_loss_terms=True,
+        )
+        return {
+            "loss": loss,
+            "loss_centers": loss_centers,
+            "loss_sigmas": loss_sigmas,
+        }
 
 
 import numpy as np
