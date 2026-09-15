@@ -213,17 +213,95 @@ class BaseCV(lightning.LightningModule):
 
         return x
 
+    def evaluate_loss(
+        self,
+        batch,
+        batch_idx: int,
+        update_state: bool = False,
+    ) -> Dict[str, torch.Tensor]:
+        """Compute the loss and associated metrics for a batch.
+
+        This method should be implemented by subclasses and return a
+        dictionary containing at least the ``loss`` key.
+
+        Parameters
+        ----------
+        batch
+            Input batch.
+        batch_idx : int
+            Index of the current batch.
+        update_state : bool, optional
+            Whether internal estimators or buffers should be updated.
+            This is normally True only during training.
+
+        Returns
+        -------
+        Dict[str, torch.Tensor]
+            Dictionary containing the loss and optional additional metrics.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement evaluate_loss()."
+        )
+
+    def _shared_step(
+        self,
+        batch,
+        batch_idx: int,
+        stage: str,
+    ) -> torch.Tensor:
+        """Evaluate and log the loss for a training, validation, or test step."""
+        output = self.evaluate_loss(
+            batch,
+            batch_idx,
+            update_state=(stage == "train"),
+        )
+        if not isinstance(output, dict):
+            raise TypeError(
+                "evaluate_loss() must return a dictionary."
+            )
+
+        if "loss" not in output:
+            raise KeyError(
+                "evaluate_loss() must return a dictionary "
+                "containing the 'loss' key."
+            )
+
+        metrics = {
+            f"{stage}_{name}": value
+            for name, value in output.items()
+        }
+
+        self.log_dict(
+            metrics,
+            on_step=(stage == "train"),
+            on_epoch=True,
+        )
+
+        return output["loss"]
+
+    def training_step(self, train_batch, batch_idx):
+        """Compute and log the training loss."""
+        return self._shared_step(
+            train_batch,
+            batch_idx,
+            stage="train",
+        )
+
     def validation_step(self, val_batch, batch_idx):
-        """
-        Equal to training step if not overridden. Different behaviors for train/valid step can be enforced in training_step() based on the self.training variable.
-        """
-        self.training_step(val_batch, batch_idx)
+        """Compute and log the validation loss."""
+        return self._shared_step(
+            val_batch,
+            batch_idx,
+            stage="valid",
+        )
 
     def test_step(self, test_batch, batch_idx):
-        """
-        Equal to training step if not overridden. Different behaviors for train/valid step can be enforced in training_step() based on the self.training variable.
-        """
-        self.training_step(test_batch, batch_idx)
+        """Compute and log the test loss."""
+        return self._shared_step(
+            test_batch,
+            batch_idx,
+            stage="test",
+        )
 
     def on_fit_start(self):
         self._warn_preprocessing_training_recommendations()

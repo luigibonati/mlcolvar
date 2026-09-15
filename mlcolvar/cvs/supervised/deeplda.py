@@ -153,36 +153,48 @@ class DeepLDA(BaseCV):
         reg_loss_lor = -self.lorentzian_reg / (1 + (reg_loss - 1).pow(2))
         return reg_loss_lor
 
-    def training_step(self, train_batch, batch_idx):
-        """Compute and return the training loss and record metrics."""
-        # =================get data===================
+    def evaluate_loss(
+        self,
+        batch,
+        batch_idx: int,
+        update_state: bool = False,
+    ) -> dict[str, torch.Tensor]:
+        """Compute the Deep-LDA loss and associated metrics."""
+        # ================= get data =================
         if isinstance(self.nn, FeedForward):
-            x = train_batch["data"]
-            labels = train_batch["labels"]
+            x = batch["data"]
+            labels = batch["labels"]
         elif isinstance(self.nn, BaseGNN):
-            x = self._setup_graph_data(train_batch)
-            labels = x['graph_labels'].squeeze()
-        
-        # =================forward====================
+            x = self._setup_graph_data(batch)
+            labels = x["graph_labels"].squeeze()
+        # ================= forward ==================
         h = self.forward_nn(x)
-
-        # ===================lda======================
+        # =================== LDA ====================
         eigvals, _ = self.lda.compute(
-            h, labels, save_params=True if self.training else False
+            h,
+            labels,
+            save_params=update_state,
         )
-        # ===================loss=====================
+        # ================== loss ====================
         loss = self.loss_fn(eigvals)
+        # Keep this metric always defined, also when regularization is disabled.
+        lorentzian_reg = torch.zeros_like(loss)
         if self.lorentzian_reg > 0:
             s = self.lda(h)
             lorentzian_reg = self.regularization_lorentzian(s)
-            loss += lorentzian_reg
-
-        # ====================log=====================
-        name = "train" if self.training else "valid"
-        loss_dict = {f"{name}_loss": loss, f"{name}_lorentzian_reg": lorentzian_reg}
-        eig_dict = {f"{name}_eigval_{i+1}": eigvals[i] for i in range(len(eigvals))}
-        self.log_dict(dict(loss_dict, **eig_dict), on_step=True, on_epoch=True)
-        return loss
+            loss = loss + lorentzian_reg
+        # ================= metrics ==================
+        output = {
+            "loss": loss,
+            "lorentzian_reg": lorentzian_reg,
+        }
+        output.update(
+            {
+                f"eigval_{i + 1}": eigval
+                for i, eigval in enumerate(eigvals)
+            }
+        )
+        return output
 
 
 def test_deeplda(n_states=2):

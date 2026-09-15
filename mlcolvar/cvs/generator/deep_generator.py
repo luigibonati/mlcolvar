@@ -210,50 +210,49 @@ class DeepGenerator(BaseCV):
         else: #This should only be called upon initialization
             return self.forward_nn(x, cell=cell) 
 
-    def training_step(self, 
-                      train_batch, 
-                      batch_idx):
-        """Compute and return the training loss and record metrics."""
-        torch.set_grad_enabled(True)
-        if isinstance(self.nn, FeedForward):
-        # =================get data===================
-            x = train_batch["data"]
-        # check data are have shape (n_data, -1)
-            x = x.reshape((x.shape[0], -1))
-
-            x.requires_grad = True
-
-            weights = train_batch["weights"]
-        elif isinstance(self.nn, BaseGNN):
-            x = self._setup_graph_data(train_batch)
-            labels = x['graph_labels']
-            weights = x['weight'].clone()
-        try:
-            ref_idx = train_batch["ref_idx"]
-        except KeyError:
-            ref_idx = None 
-
-        cell = self._get_batch_cell(train_batch)
-
-        # =================forward====================
-        # we use forward and not forward_cv to also apply the preprocessing (if present)
-        z = self.forward_nn(x, cell=cell)
-        if self.postprocessing is not None:
-            q=self.postprocessing(z)
-        else:
-            q=z
-        # ===================loss=====================
-        if self.training:
-            loss, loss_ef, loss_ortho = self.loss_fn(x, q, weights, ref_idx)
-        else:
-            loss, loss_ef, loss_ortho = self.loss_fn(x, q, weights, ref_idx)
-        # ====================log=====================+
-        name = "train" if self.training else "valid"
-        self.log(f"{name}_loss", loss, on_epoch=True)
-        self.log(f"{name}_loss_var", loss_ef, on_epoch=True)
-        self.log(f"{name}_loss_ortho", loss_ortho, on_epoch=True)
-        return loss
-
+    def evaluate_loss(
+        self,
+        batch,
+        batch_idx: int,
+        update_state: bool = False,
+    ) -> dict[str, torch.Tensor]:
+        """Compute the generator loss and associated metrics."""
+        # Generator loss requires derivatives with respect to the inputs.
+        with torch.enable_grad():
+            # ================= get data =================
+            if isinstance(self.nn, FeedForward):
+                x = batch["data"]
+                # Ensure shape (n_data, -1)
+                x = x.reshape((x.shape[0], -1))
+                x.requires_grad_(True)
+                weights = batch["weights"]
+            elif isinstance(self.nn, BaseGNN):
+                x = self._setup_graph_data(batch)
+                weights = x["weight"].clone()
+            ref_idx = batch.get("ref_idx", None)
+            cell = self._get_batch_cell(batch)
+            # ================= forward ==================
+            # Use forward_nn to include preprocessing when present.
+            z = self.forward_nn(
+                x,
+                cell=cell,
+            )
+            if self.postprocessing is not None:
+                q = self.postprocessing(z)
+            else:
+                q = z
+            # ================== loss ====================
+            loss, loss_ef, loss_ortho = self.loss_fn(
+                x,
+                q,
+                weights,
+                ref_idx,
+            )
+        return {
+            "loss": loss,
+            "loss_var": loss_ef,
+            "loss_ortho": loss_ortho,
+        }
 
 
 

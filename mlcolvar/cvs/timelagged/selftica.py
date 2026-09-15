@@ -222,10 +222,10 @@ class SelfTICA(BaseCV):
     
     def _update_tica_params(self, lag_time):
         """Update optimal TICA parameters for inference."""
-        self.current_evecs = self.tica.evecs.clone()
-        self.current_means = self.tica.mean.clone()
+        self.current_evecs.copy_(self.tica.evecs)
+        self.current_means.copy_(self.tica.mean)
         if lag_time is not None:
-            self.optimal_lag_time = torch.tensor(lag_time)
+            self.optimal_lag_time.fill_(lag_time)
 
     def forward(self, x: torch.Tensor, cell=None) -> torch.Tensor:
 
@@ -263,47 +263,65 @@ class SelfTICA(BaseCV):
         """
         self.tica.reg_C_0 = c0_reg
     
-    def training_step(self, train_batch, batch_idx):
-        """Compute and return the training loss and record metrics
-        1) Perform a forward pass through the neural network to obtain the latent representations
-        2) Compute the loss between the current and lagged representations
-        3) Without gradient tracking
-            - Compute the unregularized loss for monitoring
-            - Apply the TICA estimator to obtain approximate eigenvalues of the transfer operator
-        """
-        # =================get data===================
+    def evaluate_loss(
+        self,
+        batch,
+        batch_idx: int,
+        update_state: bool = False,
+    ) -> dict[str, torch.Tensor]:
+        """Compute the SelfTICA loss and associated metrics."""
+        # ================= get data =================
         if isinstance(self.nn, FeedForward):
-            x_t = train_batch["data"]
-            x_lag = train_batch["data_lag"]
-            w_t = train_batch["weights"]
-            w_lag = train_batch["weights_lag"]
+            x_t = batch["data"]
+            x_lag = batch["data_lag"]
+            w_t = batch["weights"]
+            w_lag = batch["weights_lag"]
         elif isinstance(self.nn, BaseGNN):
-            x_t = self._setup_graph_data(train_batch, key='data_list')
-            x_lag = self._setup_graph_data(train_batch, key='data_list_lag')
-            w_t = x_t['weight']
-            w_lag = x_lag['weight']
-            
-        # =================forward====================
+            x_t = self._setup_graph_data(
+                batch,
+                key="data_list",
+            )
+            x_lag = self._setup_graph_data(
+                batch,
+                key="data_list_lag",
+            )
+            w_t = x_t["weight"]
+            w_lag = x_lag["weight"]
+        # ================= forward ==================
         z_t = self.forward_nn(x_t)
         z_t_pred = self.predictor(z_t)
         z_lag = self.forward_nn(x_lag)
-        # ===================loss=====================
-        loss = self.loss_fn(z_t_pred, z_lag)
-        # ===================tica=====================
+        # ================== loss ====================
+        loss = self.loss_fn(
+            z_t_pred,
+            z_lag,
+        )
+        # ============== monitoring =================
         with torch.no_grad():
-            loss_noreg = self.loss_fn.noreg(z_t_pred, z_lag)
-            eigvals, _ = self.tica.compute(
-                data=[z_t, z_lag], weights=[w_t, w_lag], save_params=True
+            loss_noreg = self.loss_fn.noreg(
+                z_t_pred,
+                z_lag,
             )
-            self.current_evecs = self.tica.evecs.clone()
-            self.current_means = self.tica.mean.clone()
-        # ====================log=====================
-        name = "train" if self.training else "valid"
-        loss_dict = {f"{name}_loss": loss}
-        loss_noreg_dict = {f"{name}_loss_noreg": loss_noreg}
-        eig_dict = {f"{name}_eigval_{i+1}": eigvals[i] for i in range(len(eigvals))}
-        self.log_dict({**loss_dict, **loss_noreg_dict, **eig_dict}, on_step=True, on_epoch=True)
-        return loss
+            eigvals, _ = self.tica.compute(
+                data=[z_t, z_lag],
+                weights=[w_t, w_lag],
+                save_params=update_state,
+            )
+            if update_state:
+                self.current_evecs.copy_(self.tica.evecs)
+                self.current_means.copy_(self.tica.mean)
+        # ================= metrics ==================
+        output = {
+            "loss": loss,
+            "loss_noreg": loss_noreg,
+        }
+        output.update(
+            {
+                f"eigval_{i + 1}": eigval
+                for i, eigval in enumerate(eigvals)
+            }
+        )
+        return output
         
 
 def test_self_tica():

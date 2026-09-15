@@ -72,9 +72,17 @@ class MockCV(BaseCV):
         super().__init__(model=model)
         self.loss_fn = MockAuxLoss(in_features, out_features)
 
-    def training_step(self, train_batch, batch_idx):
-        """Training step."""
-        return self.loss_fn(**train_batch)
+    def evaluate_loss(
+        self,
+        batch,
+        batch_idx: int,
+        update_state: bool = False,
+    ) -> dict[str, torch.Tensor]:
+        """Compute the mock loss."""
+        loss = self.loss_fn(**batch)
+        return {
+            "loss": loss,
+        }
 
 
 def create_dataset(

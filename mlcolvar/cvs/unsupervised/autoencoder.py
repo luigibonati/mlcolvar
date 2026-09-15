@@ -120,27 +120,31 @@ class AutoEncoderCV(BaseCV):
             x = self.norm_in.inverse(x)
         return x
 
-    def training_step(self, train_batch, batch_idx):
-        """Compute and return the training loss and record metrics."""
-        # =================get data===================
-        x = train_batch["data"]
+    def evaluate_loss(
+        self,
+        batch,
+        batch_idx: int,
+        update_state: bool = False,
+    ) -> dict[str, torch.Tensor]:
+        """Compute the autoencoder reconstruction loss."""
+        # ================= get data =================
+        x = batch["data"]
         loss_kwargs = {}
-        if "weights" in train_batch:
-            loss_kwargs["weights"] = train_batch["weights"]
-        # =================forward====================
+        if "weights" in batch:
+            loss_kwargs["weights"] = batch["weights"]
+        # ================= forward ==================
         x_hat = self.encode_decode(x)
-        # ===================loss=====================
-        # Reference output (compare with a 'target' key
-        # if any, otherwise with input 'data')
-        if "target" in train_batch:
-            x_ref = train_batch["target"]
-        else:
-            x_ref = x
-        loss = self.loss_fn(x_hat, x_ref, **loss_kwargs)
-        # ====================log=====================
-        name = "train" if self.training else "valid"
-        self.log(f"{name}_loss", loss, on_epoch=True)
-        return loss
+        # ================= reference ================
+        x_ref = batch["target"] if "target" in batch else x
+        # ================== loss ====================
+        loss = self.loss_fn(
+            x_hat,
+            x_ref,
+            **loss_kwargs,
+        )
+        return {
+            "loss": loss,
+        }
 
     def get_decoder(self, return_normalization=False):
         """Return a torch model with the decoder and optionally the normalization inverse"""

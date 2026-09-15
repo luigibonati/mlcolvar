@@ -140,9 +140,19 @@ def test_basecv_error_and_print(dataset):
     output = model(dataset["data"])
     assert output.shape[0] == len(dataset)
 
-    # test_step delegates to training_step branch.
-    batch = {"data": dataset["data"], "target": dataset["target"]}
-    model.test_step(batch, 0)
+    # Loss evaluation works independently of the Lightning step hooks.
+    batch = {
+        "data": dataset["data"],
+        "target": dataset["target"],
+    }
+    output = model.evaluate_loss(
+        batch,
+        batch_idx=0,
+        update_state=False,
+    )
+
+    assert "loss" in output
+    assert torch.is_tensor(output["loss"])
 
     # Invalid optimizer setter branch.
     with pytest.raises(AttributeError):

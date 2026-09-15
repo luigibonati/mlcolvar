@@ -226,39 +226,37 @@ class VariationalAutoEncoderCV(BaseCV):
 
         return mean, log_variance, x_hat
 
-    def training_step(self, train_batch, batch_idx):
-        """Single training step performed by the PyTorch Lightning Trainer."""
-        x = train_batch["data"]
+    def evaluate_loss(
+        self,
+        batch,
+        batch_idx: int,
+        update_state: bool = False,
+    ) -> dict[str, torch.Tensor]:
+        """Compute the variational autoencoder loss and associated metrics."""
+        # ================= get data =================
+        x = batch["data"]
         loss_kwargs = {}
-        if "weights" in train_batch:
-            loss_kwargs["weights"] = train_batch["weights"]
-
-        # Encode/decode.
+        if "weights" in batch:
+            loss_kwargs["weights"] = batch["weights"]
+        # =============== encode/decode =============
         mean, log_variance, x_hat = self.encode_decode(x)
-
-        # Reference output (compare with a 'target' key if any, otherwise with input 'data')
-        if "target" in train_batch:
-            x_ref = train_batch["target"]
-        else:
-            x_ref = x
-
-        # Loss function.
-        loss, reconstruction_loss, kl_loss = self.loss_fn(target = x_ref, 
-                                                          output = x_hat, 
-                                                          mean = mean, 
-                                                          log_variance = log_variance, 
-                                                          beta = self.beta,
-                                                          return_loss_terms = True, 
-                                                          **loss_kwargs)
-
-        # Log.
-        name = "train" if self.training else "valid"
-        self.log(f"{name}_loss", loss, on_epoch=True)
-        self.log(f"{name}_reconstruction_loss", reconstruction_loss, on_epoch=True)
-        self.log(f"{name}_kl_loss", kl_loss, on_epoch=True)
-        self.log(f"beta", self.beta, on_epoch=True)
-
-        return loss
+        # ================= reference ================
+        x_ref = batch["target"] if "target" in batch else x
+        # ================== loss ====================
+        loss, reconstruction_loss, kl_loss = self.loss_fn(
+            target=x_ref,
+            output=x_hat,
+            mean=mean,
+            log_variance=log_variance,
+            beta=self.beta,
+            return_loss_terms=True,
+            **loss_kwargs,
+        )
+        return {
+            "loss": loss,
+            "reconstruction_loss": reconstruction_loss,
+            "kl_loss": kl_loss,
+        }
 
     def get_decoder(self, return_normalization=False):
         """Return a torch model with the decoder and optionally the normalization inverse"""
