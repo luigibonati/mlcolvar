@@ -1,6 +1,8 @@
 import torch
 import torch_geometric
 import numpy as np
+
+from typing import List, Union
 from mlcolvar.core.transform.utils import Statistics
 from torch.utils.data import Dataset
 
@@ -98,6 +100,166 @@ class DictDataset(Dataset):
         # add indexing of entries for shuffling and slicing reference
         if create_ref_idx and "ref_idx" not in self._dictionary.keys():
             dictionary['ref_idx'] = torch.arange(len(self), dtype=torch.int)
+            
+    @classmethod
+    def from_colvars(
+        cls,
+        file_names: Union[List[str], str],
+        folder: str = None,
+        create_labels: bool = None,
+        load_args: List[dict] = None,
+        filter_args: dict = None,
+        modifier_function=None,
+        return_dataframe: bool = False,
+        verbose: bool = True,
+        start: int = 0,
+        stop: int = None,
+        stride: int = 1,
+        delete_download: bool = True,
+        read_csv_kwargs: dict = None,
+    ):
+        """Create a descriptor dataset from COLVAR-like files.
+
+        Parameters
+        ----------
+        file_names
+            File name or list of file names.
+        folder
+            Optional common folder containing the files.
+        create_labels
+            Whether to assign one label to each input file.
+        load_args
+            Per-file loading arguments.
+        filter_args
+            Arguments passed to ``DataFrame.filter`` to select descriptors.
+        modifier_function
+            Optional function applied to the descriptor dataframe.
+        return_dataframe
+            If True, also return the loaded pandas DataFrame.
+        verbose
+            Print information about the loaded data.
+        start, stop, stride
+            Global slicing options.
+        delete_download
+            Delete temporary downloaded files after loading.
+        read_csv_kwargs
+            Additional arguments passed to ``pandas.read_csv``.
+        """
+        from mlcolvar.io.colvar import _prepare_dataset_from_files
+
+        dataset_kwargs, dataframe = _prepare_dataset_from_files(
+            file_names=file_names,
+            folder=folder,
+            create_labels=create_labels,
+            load_args=load_args,
+            filter_args=filter_args,
+            modifier_function=modifier_function,
+            verbose=verbose,
+            start=start,
+            stop=stop,
+            stride=stride,
+            delete_download=delete_download,
+            read_csv_kwargs=read_csv_kwargs,
+        )
+
+        dataset = cls(**dataset_kwargs)
+
+        if return_dataframe:
+            return dataset, dataframe
+
+        return dataset
+
+
+    @classmethod
+    def graph_from_configurations(
+        cls,
+        config,
+        atomic_numbers,
+        cutoff: float,
+        buffer: float = 0.0,
+        long_range_cutoff: float = -1.0,
+        atom_names: List = None,
+        remove_isolated_nodes: bool = False,
+        show_progress: bool = True,
+    ):
+        """Create a graph dataset from atomic configurations."""
+        from mlcolvar.data.graph.utils import (
+            _prepare_dataset_from_configurations,
+        )
+
+        dataset_kwargs = _prepare_dataset_from_configurations(
+            config=config,
+            atomic_numbers=atomic_numbers,
+            cutoff=cutoff,
+            buffer=buffer,
+            long_range_cutoff=long_range_cutoff,
+            atom_names=atom_names,
+            remove_isolated_nodes=remove_isolated_nodes,
+            show_progress=show_progress,
+        )
+
+        return cls(**dataset_kwargs)
+
+
+    @classmethod
+    def graph_from_trajectories(
+        cls,
+        trajectories: Union[List[str], str],
+        cutoff: float,
+        topologies: Union[List[str], str, None] = None,
+        load_args: List[dict] = None,
+        folder: str = None,
+        trajectory_labels: list = None,
+        graph_labels: list = None,
+        node_labels: list = None,
+        system_selection: str = None,
+        environment_selection: str = None,
+        buffer: float = 0.0,
+        subsystem_selection: str = None,
+        long_range_cutoff: float = -1.0,
+        return_trajectories: bool = False,
+        remove_isolated_nodes: bool = True,
+        show_progress: bool = False,
+        atom_names: List = None,
+        lengths_conversion: float = None,
+        delete_download: bool = True,
+        backend: str = "mdtraj",
+    ):
+        """Create a graph dataset from trajectory files."""
+        from mlcolvar.io.graphs.common import (
+            _prepare_dataset_from_trajectories,
+        )
+
+        dataset_kwargs, loaded_trajectories = (
+            _prepare_dataset_from_trajectories(
+                trajectories=trajectories,
+                cutoff=cutoff,
+                topologies=topologies,
+                load_args=load_args,
+                folder=folder,
+                trajectory_labels=trajectory_labels,
+                graph_labels=graph_labels,
+                node_labels=node_labels,
+                system_selection=system_selection,
+                environment_selection=environment_selection,
+                buffer=buffer,
+                subsystem_selection=subsystem_selection,
+                long_range_cutoff=long_range_cutoff,
+                remove_isolated_nodes=remove_isolated_nodes,
+                show_progress=show_progress,
+                atom_names=atom_names,
+                lengths_conversion=lengths_conversion,
+                delete_download=delete_download,
+                backend=backend,
+            )
+        )
+
+        dataset = cls(**dataset_kwargs)
+
+        if return_trajectories:
+            return dataset, loaded_trajectories
+
+        return dataset
         
 
     def __getitem__(self, index):
@@ -171,7 +333,7 @@ class DictDataset(Dataset):
                 for key, value in self._dictionary.items()
             }
 
-        return DictDataset(
+        return type(self)(
             dictionary=sliced,
             feature_names=self.feature_names,
             metadata=self.metadata.copy(),

@@ -1,11 +1,10 @@
-import os
 from typing import List, Any, Union
 import numpy as np
 from warnings import warn
 
 from mlcolvar.data import DictDataset
 from mlcolvar.io.graphs._utils import *
-from mlcolvar.data.graph.atomic import AtomicNumberTable, Configuration, Configurations
+from mlcolvar.data.graph.atomic import Configuration, Configurations
 from mlcolvar.data.graph.utils import create_dataset_from_configurations
 from mlcolvar.io.graphs._utils import _to_torch_tensor
 
@@ -18,123 +17,199 @@ __all__ = ["create_pdb_from_xyz",
            "dataset_from_ase_trajectories",
            "_configurations_from_ase_trajectory"]
 
-def dataset_from_ase_trajectories(trajectories: Union[List[ase.Atoms], List[List[ase.Atoms]]],
-                                  cutoff: float,
-                                  graph_labels: Union[list, List[list]] = None,
-                                  node_labels: Union[list, List[list]] = None,
-                                  system_selection=None,
-                                  environment_selection=None,
-                                  subsystem_selection=None,
-                                  lengths_conversion: float = 1.0,
-                                  buffer: float = 0.0,
-                                  long_range_cutoff: float = -1.0,
-                                  atom_names: List = None,
-                                  remove_isolated_nodes: bool = True,
-                                  show_progress: bool = False,
-                                  ) -> DictDataset :
-    """
-    Create a graph dataset from ASE trajectories.
+def _prepare_configurations_from_ase_trajectories(
+    trajectories: Union[
+        List[ase.Atoms],
+        List[List[ase.Atoms]],
+    ],
+    graph_labels: Union[list, List[list]] = None,
+    node_labels: Union[list, List[list]] = None,
+    system_selection=None,
+    environment_selection=None,
+    subsystem_selection=None,
+    lengths_conversion: float = 1.0,
+    atom_names: List = None,
+):
+    """Convert ASE trajectories into atomic configurations.
 
     Parameters
     ----------
-    trajectories : List[ase.Atoms] or List[ List[ase.Atoms] ]
-        List of ASE trajectory frame sequences loaded with ASE.
-    cutoff : float
-        Cutoff distance for graph edge construction (Angstroms).
-    graph_labels : list or List[list]
-        Frame-level graph labels for each trajectory, by default None.
-    node_labels : list or List[list]
-        Node-level labels for each trajectory, by default None.
+    trajectories : List[ase.Atoms] or List[List[ase.Atoms]]
+        ASE trajectory objects to convert.
+    graph_labels : list, optional
+        Frame-level graph labels for each trajectory.
+    node_labels : list, optional
+        Node-level labels for each trajectory.
     system_selection : optional
-        ASE-style atom selection for the system atoms, by default None
+        Atom selection defining the system atoms. See Notes for supported formats.
     environment_selection : optional
-        ASE-style atom selection for environment atoms, by default None
+        Atom selection defining the environment atoms. See Notes for supported formats.
     subsystem_selection : optional
-        ASE-style atom selection for subsystem atoms, by default None
+        Atom selection defining the subsystem atoms. See Notes for supported formats.
     lengths_conversion : float, optional
-        Length unit conversion factor, default 1.0 for ASE Angstroms
-    buffer : float, optional
-        Buffer size for truncated graph construction.
-    long_range_cutoff : float, optional
-        Long-range edge cutoff radius, by default -1.0 (no long-range edges). 
-        If negative, long-range edges will not be constructed
-    atom_names : List, optional
-        Optional atom names used by the dataset constructor, by default None.
-        If not provided, atomic numbers will be used to infer atom names from the ASE Atoms objects.
-    remove_isolated_nodes : bool, optional
-        Whether to remove isolated nodes from the final dataset, by default True
-    show_progress : bool, optional
-        Whether to show progress while building the dataset, by default False
+        Length conversion factor, by default 1.0 because ASE uses Angstroms.
+    atom_names : list, optional
+        Optional names for system atoms. If not provided, names are
+        inferred from the ASE Atoms objects.
 
-    Notes
-    -------
-    Atom selection can be done as in ASE. Supported formats are:
-        - None: keep all atoms
-        - list/tuple/np.ndarray of indices
-        - boolean mask array-like
-        - callable(atoms) -> indices
-    
     Returns
     -------
-    DictDataset
-         The graph dataset created from the MDtraj trajectories.
+    configurations : Configurations
+        Atomic configurations generated from all trajectory frames.
+    atomic_numbers : AtomicNumberTable
+        Atomic number table containing all species found in the trajectories.
+    atom_names : list
+        Names of the selected system atoms, either provided explicitly or
+        inferred from the ASE Atoms objects.
     """
-    
+
     if isinstance(trajectories, list):
         if isinstance(trajectories[0], ase.Atoms):
             trajectories = [trajectories]
     else:
-        raise TypeError("Trajectories must be a list of ase.Atoms or a list of lists!")
-    
-    graph_labels = _format_labels(trajectories=trajectories, labels=graph_labels)
-    node_labels = _format_labels(trajectories=trajectories, labels=node_labels)
-    
-    # Check compatibility of selection keywords combinations. NOTE: This doesn't check if the selection is correct.
-    _check_atom_selection(system_selection=system_selection,
-                          environment_selection=environment_selection,
-                          subsystem_selection=subsystem_selection,
-                          buffer=buffer,
-                          long_range_cutoff=long_range_cutoff)
-    
-    # create configurations objects from trajectories
+        raise TypeError(
+            "Trajectories must be a list of ase.Atoms or a list of lists!"
+        )
+
+    graph_labels = _format_labels(
+        trajectories=trajectories,
+        labels=graph_labels,
+    )
+    node_labels = _format_labels(
+        trajectories=trajectories,
+        labels=node_labels,
+    )
+
     configurations = []
     atomic_numbers = []
+
     for i in range(len(trajectories)):
+        configuration = _configurations_from_ase_trajectory(
+            trajectory=trajectories[i],
+            graph_labels=graph_labels[i],
+            node_labels=node_labels[i],
+            system_selection=system_selection,
+            environment_selection=environment_selection,
+            subsystem_selection=subsystem_selection,
+            lengths_conversion=lengths_conversion,
+        )
 
-        # TODO maybe this can be a single function with a backend argument
-        # create configurations for this trajectory
-        configuration = _configurations_from_ase_trajectory(trajectory=trajectories[i],
-                                                            graph_labels=graph_labels[i],
-                                                            node_labels=node_labels[i],
-                                                            system_selection=system_selection,
-                                                            environment_selection=environment_selection,
-                                                            subsystem_selection=subsystem_selection,
-                                                            lengths_conversion=lengths_conversion,
-                                                           )
-        # add configuration to configurations
         configurations.extend(configuration)
-        
-        # check if new atomic species have been discovered
-        atomic_numbers = _update_atomic_numbers_from_configurations(configurations=configuration,
-                                                                    atomic_numbers=atomic_numbers)
-        
-    # get atomic numbers and names from ASE Atoms objects if not provided
-    if atom_names is None:
-        atom_names = _names_from_ase_atoms(ase_atoms_list=trajectories,
-                                           system_selection=system_selection)
 
-    # create dataset from configurations list
-    dataset = create_dataset_from_configurations(config=configurations,
-                                                 atomic_numbers=atomic_numbers,
-                                                 cutoff=cutoff,
-                                                 buffer=buffer,
-                                                 long_range_cutoff=long_range_cutoff,
-                                                 atom_names=atom_names,
-                                                 remove_isolated_nodes=remove_isolated_nodes,
-                                                 show_progress=show_progress,
-                                                )
+        atomic_numbers = _update_atomic_numbers_from_configurations(
+            configurations=configuration,
+            atomic_numbers=atomic_numbers,
+        )
+
+    if atom_names is None:
+        atom_names = _names_from_ase_atoms(
+            ase_atoms_list=trajectories,
+            system_selection=system_selection,
+        )
+
+    return configurations, atomic_numbers, atom_names
+
+
+def dataset_from_ase_trajectories(
+    trajectories: Union[
+        List[ase.Atoms],
+        List[List[ase.Atoms]],
+    ],
+    cutoff: float,
+    graph_labels: Union[list, List[list]] = None,
+    node_labels: Union[list, List[list]] = None,
+    system_selection=None,
+    environment_selection=None,
+    subsystem_selection=None,
+    lengths_conversion: float = 1.0,
+    buffer: float = 0.0,
+    long_range_cutoff: float = -1.0,
+    atom_names: List = None,
+    remove_isolated_nodes: bool = True,
+    show_progress: bool = False,
+) -> DictDataset:
+    """Create a graph dataset from ASE trajectories.
+
+    Parameters
+    ----------
+    trajectories : List[ase.Atoms] or List[List[ase.Atoms]]
+        List of ASE trajectory frame sequences.
+    cutoff : float
+        Cutoff distance for graph edge construction in Angstroms.
+    graph_labels : list, optional
+        Frame-level graph labels for each trajectory.
+    node_labels : list, optional
+        Node-level labels for each trajectory.
+    system_selection : optional
+        ASE-style atom selection defining the system atoms.
+    environment_selection : optional
+        ASE-style atom selection defining the environment atoms.
+    subsystem_selection : optional
+        ASE-style atom selection defining the subsystem atoms.
+    lengths_conversion : float, optional
+        Length conversion factor, by default 1.0 because ASE uses Angstroms.
+    buffer : float, optional
+        Buffer used when selecting environment atoms.
+    long_range_cutoff : float, optional
+        Cutoff radius for long-range subsystem edges. If negative,
+        long-range edges are not constructed.
+    atom_names : list, optional
+        Optional names for system atoms. If not provided, names are
+        inferred from the ASE Atoms objects.
+    remove_isolated_nodes : bool, optional
+        Whether to remove isolated graph nodes.
+    show_progress : bool, optional
+        Whether to display graph-construction progress.
+
+    Returns
+    -------
+    DictDataset
+        Graph dataset created from the ASE trajectories.
+        
+    Notes
+    -----
+    Atom selection supports the following formats:
+
+    - ``None``: select all atoms.
+    - ``list``, ``tuple``, or ``np.ndarray`` of atom indices.
+    - Boolean mask array-like.
+    - ``callable(atoms)`` returning atom indices or a boolean mask.
+    """
+
+    _check_atom_selection(
+        system_selection=system_selection,
+        environment_selection=environment_selection,
+        subsystem_selection=subsystem_selection,
+        buffer=buffer,
+        long_range_cutoff=long_range_cutoff,
+    )
+
+    (
+        configurations,
+        atomic_numbers,
+        atom_names,
+    ) = _prepare_configurations_from_ase_trajectories(
+        trajectories=trajectories,
+        graph_labels=graph_labels,
+        node_labels=node_labels,
+        system_selection=system_selection,
+        environment_selection=environment_selection,
+        subsystem_selection=subsystem_selection,
+        lengths_conversion=lengths_conversion,
+        atom_names=atom_names,
+    )
     
-    return dataset
+
+    return create_dataset_from_configurations(
+        config=configurations,
+        atomic_numbers=atomic_numbers,
+        cutoff=cutoff,
+        buffer=buffer,
+        long_range_cutoff=long_range_cutoff,
+        atom_names=atom_names,
+        remove_isolated_nodes=remove_isolated_nodes,
+        show_progress=show_progress,
+    )
 
 
 def load_traj_with_ase(trajectory: str,
@@ -193,7 +268,6 @@ def _selection_to_indices(selection, atoms):
     return indices.tolist()
 
 
-# TODO maybe also this can framed into a shared function
 def _configurations_from_ase_trajectory(trajectory: List[ase.Atoms],
                                         graph_labels: list = None,
                                         node_labels: list = None,
@@ -252,7 +326,6 @@ def _configurations_from_ase_trajectory(trajectory: List[ase.Atoms],
                             'environment': environment_selection, 
                             'subsystem': subsystem_selection}.items():
         if selection is not None:
-            # TODO maybe also this can framed into a shared function
             selected_atoms[name] = _selection_to_indices(selection, trajectory[0])
             if not len(selected_atoms[name]) > 0:
                 raise ValueError(f"No atoms will be selected with selection {name}_selection: {selection}!")
@@ -309,8 +382,10 @@ def _configurations_from_ase_trajectory(trajectory: List[ase.Atoms],
     return configurations
 
 
-def _names_from_ase_atoms(ase_atoms_list: List[ase.Atoms],
-                          system_selection: Any) -> AtomicNumberTable:
+def _names_from_ase_atoms(
+    ase_atoms_list: List[ase.Atoms],
+    system_selection: Any,
+) -> List[str]:
     """Create atomic names from a list of ASE Atoms objects."""
     try:
         indices = _selection_to_indices(system_selection, ase_atoms_list[0])
