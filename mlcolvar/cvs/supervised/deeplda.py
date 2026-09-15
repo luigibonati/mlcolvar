@@ -277,4 +277,3 @@ def test_deeplda(n_states=2):
     with torch.no_grad():
         s = model(example_input_graph_test).numpy()
     print(s)
-
