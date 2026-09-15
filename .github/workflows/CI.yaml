@@ -24,8 +24,13 @@ jobs:
     # macOS CI temporarily disabled due to a PyTorch MPS/Metal issue.
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]      
+        os: [ubuntu-latest, windows-latest]
         python-version: ["3.11", "3.12", "3.13"]
+        include:
+          - os: macos-latest
+            python-version: "3.11"
+          - os: macos-latest
+            python-version: "3.12"
 
     steps:
       - uses: actions/checkout@v4
