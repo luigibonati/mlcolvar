@@ -168,11 +168,9 @@ class MultiTaskCV:
             output[f"aux_loss_{loss_idx}"] = aux_loss
             # Apply coefficient only to the optimization objective.
             if self.loss_coefficients is not None:
-                aux_loss = (
-                    self.loss_coefficients[loss_idx]
-                    * aux_loss
-                )
+                aux_loss = self.loss_coefficients[loss_idx] * aux_loss
             total_loss = total_loss + aux_loss
         # `loss` is always the quantity optimized by Lightning.
+        output["total_loss"] = total_loss
         output["loss"] = total_loss
         return output

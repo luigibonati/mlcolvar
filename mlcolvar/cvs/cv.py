@@ -273,7 +273,7 @@ class BaseCV(lightning.LightningModule):
 
         self.log_dict(
             metrics,
-            on_step=(stage == "train"),
+            on_step=True,
             on_epoch=True,
         )
 
