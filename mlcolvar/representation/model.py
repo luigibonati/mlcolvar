@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Dict, Literal, Optional, Sequence
 
 import torch
 from torch import nn
@@ -16,7 +16,7 @@ __all__ = [
 
 
 class TaskHead(FeedForward):
-    """Small task-specific MLP acting on a reusable representation."""
+    """Small trainable MLP applied on top of a reusable representation."""
 
     def __init__(
         self,
@@ -43,6 +43,8 @@ class TaskHead(FeedForward):
 
 
 class _RepresentationPipelineMixin:
+    """Shared representation → reducer → head pipeline."""
+
     def _init_pipeline(
         self,
         *,
@@ -55,15 +57,35 @@ class _RepresentationPipelineMixin:
         self.pre_head = pre_head
         self.head = head
         self.post_head = post_head
+
         self.register_buffer(
             "_head_reference",
             module_reference_tensor(head),
             persistent=False,
         )
 
+    @torch.jit.unused
+    def cache(
+        self,
+        dataset,
+        *,
+        jacobian: bool = False,
+        **kwargs,
+    ):
+        """Precompute frozen features, optionally with coordinate Jacobians."""
+        from .cache import precompute_representation_cache
+
+        return precompute_representation_cache(
+            self.representation,
+            dataset,
+            reducer=self.pre_head,
+            compute_jacobian=jacobian,
+            **kwargs,
+        )
+
 
 class _TensorRepresentationModel(_RepresentationPipelineMixin, nn.Module):
-    """Complete tensor-input representation + task-head model."""
+    """Complete model for tensor-input representations."""
 
     def __init__(
         self,
@@ -74,12 +96,14 @@ class _TensorRepresentationModel(_RepresentationPipelineMixin, nn.Module):
         post_head: Reducer,
     ) -> None:
         nn.Module.__init__(self)
+
         self._init_pipeline(
             representation=representation,
             pre_head=pre_head,
             head=head,
             post_head=post_head,
         )
+
         self.in_features = int(representation.in_features)
         self.out_features = int(head.out_features)
 
@@ -90,6 +114,7 @@ class _TensorRepresentationModel(_RepresentationPipelineMixin, nn.Module):
     ) -> torch.Tensor:
         if x.ndim < 2:
             raise ValueError("`x` must include a batch dimension.")
+
         if x.shape[-1] != self.in_features:
             raise ValueError(
                 f"Expected {self.in_features} input features, found {x.shape[-1]}."
@@ -101,12 +126,15 @@ class _TensorRepresentationModel(_RepresentationPipelineMixin, nn.Module):
             device=self._head_reference.device,
             dtype=self._head_reference.dtype,
         )
-        output = self.head(features)
-        return self.post_head(output, x)
+
+        return self.post_head(
+            self.head(features),
+            x,
+        )
 
 
 class _GraphRepresentationModel(_RepresentationPipelineMixin, BaseGNN):
-    """Graph-input model with BaseGNN compatibility isolated in one class."""
+    """Complete model for graph-input representations."""
 
     def __init__(
         self,
@@ -129,8 +157,7 @@ class _GraphRepresentationModel(_RepresentationPipelineMixin, BaseGNN):
             atomic_numbers=representation.atomic_numbers.detach().cpu().tolist(),
         )
 
-        # Compatibility only: representation adapters construct their own
-        # neighborhood features, therefore BaseGNN's radial embedding is unused.
+        # Representation adapters construct their own neighborhood features.
         self._modules.pop("_radial_embedding", None)
 
         self._init_pipeline(
@@ -151,37 +178,46 @@ class _GraphRepresentationModel(_RepresentationPipelineMixin, BaseGNN):
             device=self._head_reference.device,
             dtype=self._head_reference.dtype,
         )
-        output = self.head(features)
-        return self.post_head(output, data)
+
+        return self.post_head(
+            self.head(features),
+            data,
+        )
 
 
 def _make_reducers(
     representation: Representation,
-    mode: Optional[str],
+    mode: Optional[Literal["direct", "pooled", "nodewise", "concat"]],
     selected_atom_indices: Optional[Sequence[int]],
     pooling: str,
     n_out: int,
 ) -> tuple[Reducer, Reducer]:
-    if mode is None:
-        mode = "pooled" if representation.output_kind == "atom" else "direct"
+    mode = mode or (
+        "pooled"
+        if representation.output_kind == "atom"
+        else "direct"
+    )
 
-    mode = mode.lower()
     allowed = {"direct", "pooled", "nodewise", "concat"}
-
     if mode not in allowed:
         raise ValueError(
             f"`mode` must be one of {sorted(allowed)}. Found {mode!r}."
         )
 
-    if representation.output_kind == "system" and mode != "direct":
-        raise ValueError(
-            f"`mode={mode!r}` requires an atom-level representation."
-        )
-
     if mode == "direct":
+        if representation.output_kind != "system":
+            raise ValueError(
+                "`mode='direct'` requires a system-level representation."
+            )
+
         return (
             IdentityReducer(representation.out_features),
             IdentityReducer(n_out),
+        )
+
+    if representation.output_kind != "atom":
+        raise ValueError(
+            f"`mode={mode!r}` requires an atom-level representation."
         )
 
     if mode == "pooled":
@@ -223,49 +259,52 @@ def RepresentationModel(
     n_out: int = 1,
     hidden_layers: Sequence[int] = (32, 32),
     options: Optional[Dict[str, Any]] = None,
-    mode: Optional[str] = None,
-    pooling: str = "mean",
+    mode: Optional[
+        Literal["direct", "pooled", "nodewise", "concat"]
+    ] = None,
+    pooling: Literal["mean", "sum"] = "mean",
     selected_atom_indices: Optional[Sequence[int]] = None,
 ) -> nn.Module:
-    """Build a complete model from any reusable representation.
+    """Build a task model on top of a reusable representation.
+
+    Modes
+    -----
+    direct
+        System features → task head.
+    pooled
+        Atom features → pooling → task head.
+    nodewise
+        Atom features → task head → pooling.
+    concat
+        Selected atom features → concatenation → task head.
+
+    If ``mode`` is omitted, system-level representations use ``direct`` and
+    atom-level representations use ``pooled``.
 
     Parameters
     ----------
     representation
-        Tensor or graph representation adapter.
+        Reusable tensor or graph representation.
     head
-        Optional pre-built task head. If omitted, a :class:`TaskHead` is built.
+        Optional custom task head. By default, a :class:`TaskHead` is created.
+    n_out
+        Number of model outputs.
+    hidden_layers
+        Hidden layers of the default :class:`TaskHead`.
     mode
-        ``direct`` for system-level representations; ``pooled``, ``nodewise``
-        or ``concat`` for atom-level representations. If omitted, system-level
-        outputs use ``direct`` and atom-level outputs use ``pooled``.
+        How atom/system features are connected to the task head.
+    pooling
+        ``"mean"`` or ``"sum"`` pooling.
+    selected_atom_indices
+        Atom indices used by ``mode="concat"``.
     """
     if not isinstance(representation, Representation):
         raise TypeError(
             "`representation` must derive from `Representation`."
         )
 
-    if head is None:
-        temporary_pre, _ = _make_reducers(
-            representation=representation,
-            mode=mode,
-            selected_atom_indices=selected_atom_indices,
-            pooling=pooling,
-            n_out=n_out,
-        )
-
-        head = TaskHead(
-            in_features=temporary_pre.out_features,
-            n_out=n_out,
-            hidden_layers=hidden_layers,
-            options=options,
-        )
-
-    else:
-        if not hasattr(head, "in_features") or not hasattr(
-            head,
-            "out_features",
-        ):
+    if head is not None:
+        if not hasattr(head, "in_features") or not hasattr(head, "out_features"):
             raise TypeError(
                 "`head` must expose `in_features` and `out_features`."
             )
@@ -273,14 +312,22 @@ def RepresentationModel(
         n_out = int(head.out_features)
 
     pre_head, post_head = _make_reducers(
-        representation=representation,
-        mode=mode,
-        selected_atom_indices=selected_atom_indices,
-        pooling=pooling,
-        n_out=n_out,
+        representation,
+        mode,
+        selected_atom_indices,
+        pooling,
+        n_out,
     )
 
-    if int(head.in_features) != pre_head.out_features:
+    if head is None:
+        head = TaskHead(
+            in_features=pre_head.out_features,
+            n_out=n_out,
+            hidden_layers=hidden_layers,
+            options=options,
+        )
+
+    elif int(head.in_features) != pre_head.out_features:
         raise ValueError(
             "`head.in_features` does not match the representation/reducer output: "
             f"expected {pre_head.out_features}, found {head.in_features}."
@@ -296,8 +343,7 @@ def RepresentationModel(
 
     if not isinstance(representation, GraphRepresentation):
         raise TypeError(
-            "Graph representations must derive from `GraphRepresentation` so "
-            "deployment metadata are available."
+            "Graph representations must derive from `GraphRepresentation`."
         )
 
     return _GraphRepresentationModel(

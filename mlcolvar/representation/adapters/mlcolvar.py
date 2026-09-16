@@ -18,26 +18,18 @@ __all__ = ["MLColvarRepresentation"]
 
 
 def _infer_model_output_dimension(model: nn.Module) -> int:
-    internal_model = getattr(model, "nn", None)
-    if internal_model is None:
-        internal_model = model
+    """Infer the latent output dimension of an mlcolvar model."""
+    internal_model = getattr(model, "nn", model)
 
-    out_features = getattr(internal_model, "out_features", None)
-    if out_features is not None:
-        return as_positive_int(out_features, "out_features")
-
-    n_out = getattr(internal_model, "n_out", None)
-    if n_out is not None:
-        return as_positive_int(n_out, "n_out")
+    for name in ("out_features", "n_out"):
+        value = getattr(internal_model, name, None)
+        if value is not None:
+            return as_positive_int(value, name)
 
     raise ValueError(
         "Cannot infer the representation dimension from "
         f"{model.__class__.__name__}; pass `out_features` explicitly."
     )
-
-
-def _is_graph_model(model: nn.Module) -> bool:
-    return isinstance(getattr(model, "nn", None), BaseGNN)
 
 
 class _FrozenModelMixin:
@@ -50,25 +42,25 @@ class _FrozenModelMixin:
         )
         self._freeze_module(model)
 
-    def _keep_frozen_modules_in_eval(self) -> None:
-        self.model.eval()
-
     def _apply_preprocessing(self, data, cell=None):
         preprocessing = getattr(self.model, "preprocessing", None)
 
         if preprocessing is None:
             return data
 
-        if cell is None:
-            return preprocessing(data)
-
-        return preprocessing(data, cell=cell)
+        return (
+            preprocessing(data)
+            if cell is None
+            else preprocessing(data, cell=cell)
+        )
 
 
 class _TensorMLColvarRepresentation(
     _FrozenModelMixin,
     TensorRepresentation,
 ):
+    """Representation adapter for tensor-based mlcolvar models."""
+
     __constants__ = ["mode"]
 
     def __init__(
@@ -85,9 +77,7 @@ class _TensorMLColvarRepresentation(
             )
 
         if mode == "latent":
-            latent = getattr(model, "nn", None)
-
-            if latent is None:
+            if getattr(model, "nn", None) is None:
                 raise TypeError(
                     f"{model.__class__.__name__} does not expose "
                     "an `.nn` latent encoder."
@@ -96,30 +86,16 @@ class _TensorMLColvarRepresentation(
             resolved_out = (
                 _infer_model_output_dimension(model)
                 if out_features is None
-                else as_positive_int(
-                    out_features,
-                    "out_features",
-                )
+                else as_positive_int(out_features, "out_features")
             )
 
-        elif mode == "output":
+        else:
             if out_features is not None:
                 raise ValueError(
                     "`out_features` is only valid with mode='latent'."
                 )
 
-            resolved_out = as_positive_int(
-                model.out_features,
-                "model.out_features",
-            )
-
-        elif mode == "forward":
-            if out_features is not None:
-                raise ValueError(
-                    "`out_features` is only valid with mode='latent'."
-                )
-
-            if not hasattr(model, "forward_cv"):
+            if mode == "forward" and not hasattr(model, "forward_cv"):
                 raise TypeError(
                     f"{model.__class__.__name__} does not implement "
                     "`forward_cv()`."
@@ -128,11 +104,6 @@ class _TensorMLColvarRepresentation(
             resolved_out = as_positive_int(
                 model.out_features,
                 "model.out_features",
-            )
-
-        else:
-            raise ValueError(
-                "`mode` must be 'latent', 'output', or 'forward'."
             )
 
         TensorRepresentation.__init__(
@@ -186,9 +157,11 @@ class _TensorMLColvarRepresentation(
         x, cell = self._cast_input(x, cell)
 
         if self.mode == "output":
-            if cell is None:
-                return self.model(x)
-            return self.model(x, cell=cell)
+            return (
+                self.model(x)
+                if cell is None
+                else self.model(x, cell=cell)
+            )
 
         x = self._apply_preprocessing(x, cell)
 
@@ -214,6 +187,8 @@ class _GraphMLColvarRepresentation(
     _FrozenModelMixin,
     GraphRepresentation,
 ):
+    """Representation adapter for graph-based mlcolvar models."""
+
     def __init__(
         self,
         model: nn.Module,
@@ -235,16 +210,9 @@ class _GraphMLColvarRepresentation(
                 "encoder with `pooling_operation` enabled."
             )
 
-        resolved_out = (
-            as_positive_int(
-                encoder.out_features,
-                "encoder.out_features",
-            )
-            if out_features is None
-            else as_positive_int(
-                out_features,
-                "out_features",
-            )
+        resolved_out = as_positive_int(
+            encoder.out_features if out_features is None else out_features,
+            "encoder.out_features" if out_features is None else "out_features",
         )
 
         GraphRepresentation.__init__(
@@ -276,8 +244,8 @@ class _GraphMLColvarRepresentation(
 
             if value.is_floating_point() or value.is_complex():
                 output[key] = value.to(
-                    dtype=self._model_reference.dtype,
                     device=self._model_reference.device,
+                    dtype=self._model_reference.dtype,
                 )
             else:
                 output[key] = value.to(
@@ -295,8 +263,8 @@ class _GraphMLColvarRepresentation(
 
         if cell is not None:
             cell = cell.to(
-                dtype=self._model_reference.dtype,
                 device=self._model_reference.device,
+                dtype=self._model_reference.dtype,
             )
 
         data = self._apply_preprocessing(data, cell)
@@ -325,8 +293,20 @@ def MLColvarRepresentation(
     out_features: Optional[int] = None,
     freeze: bool = True,
 ) -> Representation:
-    """Adapt a pretrained mlcolvar CV to the unified representation API."""
+    """Wrap a pretrained mlcolvar model as a reusable representation.
 
+    Parameters
+    ----------
+    model
+        Pretrained mlcolvar model.
+    mode
+        ``"latent"`` uses ``model.nn``, ``"output"`` uses the complete model,
+        and ``"forward"`` uses ``model.forward_cv``.
+    out_features
+        Optional latent dimension override for ``mode="latent"``.
+    freeze
+        If True, keep the pretrained model frozen and in evaluation mode.
+    """
     if not isinstance(model, nn.Module):
         raise TypeError(
             "`model` must be a torch.nn.Module."
@@ -339,7 +319,7 @@ def MLColvarRepresentation(
             "`mode` must be 'latent', 'output', or 'forward'."
         )
 
-    if _is_graph_model(model):
+    if isinstance(getattr(model, "nn", None), BaseGNN):
         if mode != "latent":
             raise ValueError(
                 "Graph-based pretrained CVs support only mode='latent'."

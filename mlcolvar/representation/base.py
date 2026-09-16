@@ -335,14 +335,10 @@ class GraphRepresentation(Representation):
         full_neighbor_list: bool = True,
         freeze: bool = True,
     ) -> None:
-        atomic_numbers = [int(number) for number in atomic_numbers]
-
-        if not atomic_numbers:
-            raise ValueError("`atomic_numbers` cannot be empty.")
-        if len(set(atomic_numbers)) != len(atomic_numbers):
-            raise ValueError("`atomic_numbers` must not contain duplicates.")
-        if any(number <= 0 for number in atomic_numbers):
-            raise ValueError("`atomic_numbers` must contain positive integers.")
+        atomic_numbers = _as_atomic_number_list(
+            atomic_numbers,
+            "representation",
+        )
         if cutoff <= 0.0:
             raise ValueError("`cutoff` must be positive.")
         if buffer < 0.0:
