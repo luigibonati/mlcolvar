@@ -4,6 +4,7 @@ import pytest
 import torch
 from torch import nn
 
+
 metatensor_torch = pytest.importorskip("metatensor.torch")
 metatomic_torch = pytest.importorskip("metatomic.torch")
 
@@ -17,8 +18,8 @@ System = metatomic_torch.System
 
 from mlcolvar.representation import (  # noqa: E402
     PETRepresentation,
-    PoolReducer,
     RepresentationModel,
+    pool_representation,
 )
 
 
@@ -69,7 +70,9 @@ class DummyPET(nn.Module):
         sample_rows: List[List[int]] = []
 
         for system_index, system in enumerate(systems):
-            _ = system.get_neighbor_list(self._neighbor_options)
+            _ = system.get_neighbor_list(
+                self._neighbor_options
+            )
 
             positions = system.positions
             self.last_position_dtype = positions.dtype
@@ -94,14 +97,21 @@ class DummyPET(nn.Module):
                 dim=1,
             )
 
-            values_list.append(features * self.scale)
+            values_list.append(
+                features * self.scale
+            )
 
-            for atom_index in range(positions.size(0)):
+            for atom_index in range(
+                positions.size(0)
+            ):
                 sample_rows.append(
                     [system_index, atom_index]
                 )
 
-        values = torch.cat(values_list, dim=0)
+        values = torch.cat(
+            values_list,
+            dim=0,
+        )
 
         samples = Labels(
             names=["system", "atom"],
@@ -139,7 +149,10 @@ class DummyPET(nn.Module):
 class DummyPETWrapper(nn.Module):
     """Minimal wrapper exposing the native PET model through `.model`."""
 
-    def __init__(self, model: nn.Module) -> None:
+    def __init__(
+        self,
+        model: nn.Module,
+    ) -> None:
         super().__init__()
         self.model = model
 
@@ -274,6 +287,7 @@ def test_pet_neighbor_list_conversion() -> None:
         neighbors.samples.values.cpu(),
         expected_samples,
     )
+
     torch.testing.assert_close(
         neighbors.values.squeeze(-1),
         expected_vectors,
@@ -281,7 +295,9 @@ def test_pet_neighbor_list_conversion() -> None:
 
 
 def test_pet_forward_preserves_external_dtype() -> None:
-    data = make_data(dtype=torch.float64)
+    data = make_data(
+        dtype=torch.float64
+    )
     native_pet = DummyPET()
 
     representation = PETRepresentation(
@@ -304,14 +320,20 @@ def test_pet_forward_preserves_external_dtype() -> None:
 
     assert output.shape == (4, 8)
     assert output.dtype == torch.float64
-    torch.testing.assert_close(output, expected)
+
+    torch.testing.assert_close(
+        output,
+        expected,
+    )
 
     assert native_pet.scale.dtype == torch.float32
     assert native_pet.last_position_dtype == torch.float32
 
 
 def test_pet_representation_preserves_coordinate_gradients() -> None:
-    data = make_data(dtype=torch.float64)
+    data = make_data(
+        dtype=torch.float64
+    )
     data["positions"].requires_grad_(True)
 
     representation = make_representation()
@@ -320,6 +342,7 @@ def test_pet_representation_preserves_coordinate_gradients() -> None:
     output.sum().backward()
 
     gradient = data["positions"].grad
+
     assert gradient is not None
     assert gradient.shape == data["positions"].shape
     assert torch.isfinite(gradient).all()
@@ -331,38 +354,66 @@ def test_pet_representation_preserves_coordinate_gradients() -> None:
     )
 
     representation.train()
+
     assert not representation.training
     assert not representation.model.training
 
 
 def test_pet_mean_pooling() -> None:
-    data = make_data(dtype=torch.float64)
-    representation = make_representation()
+    data = make_data(
+        dtype=torch.float64
+    )
 
-    reducer = PoolReducer(
-        in_features=representation.out_features,
+    representation = pool_representation(
+        make_representation(),
         pooling="mean",
     )
 
-    output = reducer(
-        representation(data),
-        data,
-    )
+    output = representation(data)
 
     expected = torch.tensor(
         [
-            [0.5, 0.0, 0.0, 4.5, 0.5, 0.0, 0.0, 4.5],
-            [0.0, 1.0, 0.0, 4.5, 0.0, 1.0, 0.0, 4.5],
+            [
+                0.5,
+                0.0,
+                0.0,
+                4.5,
+                0.5,
+                0.0,
+                0.0,
+                4.5,
+            ],
+            [
+                0.0,
+                1.0,
+                0.0,
+                4.5,
+                0.0,
+                1.0,
+                0.0,
+                4.5,
+            ],
         ],
         dtype=torch.float64,
     )
 
+    assert representation.output_kind == "system"
+    assert representation.out_features == 8
     assert output.shape == (2, 8)
-    torch.testing.assert_close(output, expected)
+
+    torch.testing.assert_close(
+        output,
+        expected,
+    )
 
 
-def test_pet_representation_model_default_pooling() -> None:
-    representation = make_representation()
+def test_pet_representation_model_with_pooling() -> None:
+    atom_representation = make_representation()
+
+    representation = pool_representation(
+        atom_representation,
+        pooling="mean",
+    )
 
     model = RepresentationModel(
         representation,
@@ -370,16 +421,18 @@ def test_pet_representation_model_default_pooling() -> None:
         hidden_layers=(),
     )
 
-    output = model(make_data())
+    output = model(
+        make_data()
+    )
 
     assert model.representation is representation
-    assert isinstance(model.pre_head, PoolReducer)
     assert output.shape == (2, 1)
 
     assert all(
         not parameter.requires_grad
         for parameter in representation.parameters()
     )
+
     assert any(
         parameter.requires_grad
         for parameter in model.head.parameters()

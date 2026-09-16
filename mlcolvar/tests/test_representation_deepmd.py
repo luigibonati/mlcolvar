@@ -4,15 +4,17 @@ import pytest
 import torch
 from torch import nn
 
+
 pytest.importorskip("ase")
 pytest.importorskip("deepmd.pt.utils.nlist")
 
 import mlcolvar.representation.adapters.deepmd as deepmd_module  # noqa: E402
 from mlcolvar.representation import (  # noqa: E402
     DeepMDRepresentation,
-    PoolReducer,
     RepresentationModel,
+    pool_representation,
 )
+
 
 class DummyDeepMDDescriptor(nn.Module):
     """Minimal DeePMD-like descriptor using float32 internally."""
@@ -47,11 +49,26 @@ class DummyDeepMDDescriptor(nn.Module):
 
         self.last_coord_dtype = extended_coord.dtype
         if extended_coord.dtype != self.scale.dtype:
-            raise RuntimeError("Descriptor input dtype does not match its parameters.")
+            raise RuntimeError(
+                "Descriptor input dtype does not match its parameters."
+            )
 
-        type_feature = extended_atype.to(extended_coord.dtype).unsqueeze(-1)
-        features = torch.cat([extended_coord, type_feature], dim=-1)
-        return (features * self.scale, None, None, None, None)
+        type_feature = extended_atype.to(
+            extended_coord.dtype
+        ).unsqueeze(-1)
+
+        features = torch.cat(
+            [extended_coord, type_feature],
+            dim=-1,
+        )
+
+        return (
+            features * self.scale,
+            None,
+            None,
+            None,
+            None,
+        )
 
 
 class DummyDeepMDModel(nn.Module):
@@ -69,7 +86,9 @@ class DummyDeepMDModel(nn.Module):
 
 
 @pytest.fixture
-def fake_neighbor_builder(monkeypatch: pytest.MonkeyPatch):
+def fake_neighbor_builder(
+    monkeypatch: pytest.MonkeyPatch,
+):
     calls = []
 
     def build(
@@ -91,23 +110,38 @@ def fake_neighbor_builder(monkeypatch: pytest.MonkeyPatch):
         )
 
         n_frames, n_atoms = coord.shape[:2]
+
         mapping = torch.arange(
             n_atoms,
             device=coord.device,
             dtype=torch.long,
-        ).reshape(1, n_atoms).expand(n_frames, n_atoms)
+        ).reshape(
+            1,
+            n_atoms,
+        ).expand(
+            n_frames,
+            n_atoms,
+        )
+
         neighbor_list = torch.zeros(
             (n_frames, n_atoms, 1),
             device=coord.device,
             dtype=torch.long,
         )
-        return coord, atype, mapping, neighbor_list
+
+        return (
+            coord,
+            atype,
+            mapping,
+            neighbor_list,
+        )
 
     monkeypatch.setattr(
         deepmd_module,
         "extend_input_and_build_neighbor_list",
         build,
     )
+
     return calls
 
 
@@ -124,6 +158,7 @@ def make_data(
         ],
         dtype=dtype,
     )
+
     node_attrs = torch.tensor(
         [
             [1.0, 0.0],
@@ -135,17 +170,41 @@ def make_data(
     )
 
     if periodic:
-        cell = torch.eye(3, dtype=dtype).repeat(2, 1, 1) * 10.0
-        pbc = torch.ones((2, 3), dtype=torch.bool)
+        cell = torch.eye(
+            3,
+            dtype=dtype,
+        ).repeat(
+            2,
+            1,
+            1,
+        ) * 10.0
+
+        pbc = torch.ones(
+            (2, 3),
+            dtype=torch.bool,
+        )
     else:
-        cell = torch.zeros((2, 3, 3), dtype=dtype)
-        pbc = torch.zeros((2, 3), dtype=torch.bool)
+        cell = torch.zeros(
+            (2, 3, 3),
+            dtype=dtype,
+        )
+
+        pbc = torch.zeros(
+            (2, 3),
+            dtype=torch.bool,
+        )
 
     return {
         "positions": positions,
         "node_attrs": node_attrs,
-        "batch": torch.tensor([0, 0, 1, 1], dtype=torch.long),
-        "ptr": torch.tensor([0, 2, 4], dtype=torch.long),
+        "batch": torch.tensor(
+            [0, 0, 1, 1],
+            dtype=torch.long,
+        ),
+        "ptr": torch.tensor(
+            [0, 2, 4],
+            dtype=torch.long,
+        ),
         "cell": cell,
         "pbc": pbc,
     }
@@ -153,7 +212,9 @@ def make_data(
 
 def test_deepmd_representation_metadata() -> None:
     model = DummyDeepMDModel()
-    representation = DeepMDRepresentation(model=model)
+    representation = DeepMDRepresentation(
+        model=model
+    )
 
     assert representation.model is model
     assert representation.input_kind == "graph"
@@ -166,15 +227,24 @@ def test_deepmd_representation_metadata() -> None:
     assert representation.mixed_types
     assert not representation.full_neighbor_list
     assert representation.freeze
-    assert representation._descriptor_dtype_reference.dtype == torch.float32
+    assert (
+        representation._descriptor_dtype_reference.dtype
+        == torch.float32
+    )
 
 
 def test_deepmd_forward_preserves_external_dtype(
     fake_neighbor_builder,
 ) -> None:
-    data = make_data(dtype=torch.float64)
+    data = make_data(
+        dtype=torch.float64
+    )
+
     model = DummyDeepMDModel()
-    representation = DeepMDRepresentation(model=model)
+
+    representation = DeepMDRepresentation(
+        model=model
+    )
 
     representation.double()
     output = representation(data)
@@ -191,7 +261,10 @@ def test_deepmd_forward_preserves_external_dtype(
 
     assert output.shape == (4, 4)
     assert output.dtype == torch.float64
-    assert torch.allclose(output, expected)
+    assert torch.allclose(
+        output,
+        expected,
+    )
     assert model.descriptor.scale.dtype == torch.float32
     assert model.descriptor.last_coord_dtype == torch.float32
     assert len(fake_neighbor_builder) == 2
@@ -207,15 +280,23 @@ def test_periodic_neighbor_list_uses_deepmd_precision(
         torch.float64,
     )
 
-    data = make_data(dtype=torch.float32, periodic=True)
+    data = make_data(
+        dtype=torch.float32,
+        periodic=True,
+    )
+
     model = DummyDeepMDModel()
-    representation = DeepMDRepresentation(model=model)
+
+    representation = DeepMDRepresentation(
+        model=model
+    )
 
     output = representation(data)
 
     assert output.dtype == torch.float32
     assert model.descriptor.last_coord_dtype == torch.float32
     assert len(fake_neighbor_builder) == 2
+
     for call in fake_neighbor_builder:
         assert call["coord_dtype"] == torch.float64
         assert call["box_dtype"] == torch.float64
@@ -224,58 +305,85 @@ def test_periodic_neighbor_list_uses_deepmd_precision(
 def test_deepmd_mean_pooling_and_gradients(
     fake_neighbor_builder,
 ) -> None:
-    data = make_data(dtype=torch.float64)
-    data["positions"].requires_grad_(True)
+    data = make_data(
+        dtype=torch.float64
+    )
+    data["positions"].requires_grad_(
+        True
+    )
 
-    representation = DeepMDRepresentation(
+    atom_representation = DeepMDRepresentation(
         model=DummyDeepMDModel(),
         freeze=True,
     )
-    reducer = PoolReducer(
-        in_features=representation.out_features,
+
+    representation = pool_representation(
+        atom_representation,
         pooling="mean",
     )
 
-    output = reducer(
-        representation(data),
-        data,
-    )
+    output = representation(data)
 
     expected = torch.tensor(
-        [[1.0, 0.0, 0.0, 1.0], [0.0, 2.0, 0.0, 1.0]],
+        [
+            [1.0, 0.0, 0.0, 1.0],
+            [0.0, 2.0, 0.0, 1.0],
+        ],
         dtype=torch.float64,
     )
 
+    assert representation.output_kind == "system"
+    assert representation.out_features == 4
     assert output.shape == (2, 4)
-    assert torch.allclose(output, expected)
+    assert torch.allclose(
+        output,
+        expected,
+    )
 
     output.sum().backward()
+
     assert data["positions"].grad is not None
-    assert torch.isfinite(data["positions"].grad).all()
+    assert torch.isfinite(
+        data["positions"].grad
+    ).all()
+
     assert all(
         not parameter.requires_grad
         for parameter in representation.parameters()
     )
 
     representation.train()
+
     assert not representation.training
-    assert not representation.descriptor.training
+    assert not atom_representation.training
+    assert not atom_representation.descriptor.training
 
 
-def test_deepmd_representation_model_default_pooling(
+def test_deepmd_representation_model_with_pooling(
     fake_neighbor_builder,
 ) -> None:
-    representation = DeepMDRepresentation(
+    atom_representation = DeepMDRepresentation(
         model=DummyDeepMDModel(),
         freeze=True,
     )
+
+    representation = pool_representation(
+        atom_representation,
+        pooling="mean",
+    )
+
     model = RepresentationModel(
         representation,
         n_out=1,
         hidden_layers=(),
     )
 
-    output = model(make_data(dtype=torch.float64))
+    output = model(
+        make_data(
+            dtype=torch.float64
+        )
+    )
+
     assert output.shape == (2, 1)
     assert model.representation is representation
 

@@ -6,9 +6,10 @@ from torch import nn
 
 from mlcolvar.representation import (
     MACERepresentation,
-    PoolReducer,
     RepresentationModel,
+    pool_representation,
 )
+
 
 class DummyMACE(nn.Module):
     """Minimal MACE-like model used for unit testing."""
@@ -326,24 +327,15 @@ def test_mace_representation_preserves_input_gradients(
 def test_mace_mean_pooling(
     mace_test_data: Dict[str, torch.Tensor],
 ) -> None:
-    """Pool atom-level MACE representations using the generic reducer."""
+    """Pool atom-level MACE representations to system-level features."""
 
-    representation = make_representation()
-
-    reducer = PoolReducer(
-        in_features=(
-            representation.out_features
-        ),
+    representation = pool_representation(
+        make_representation(),
         pooling="mean",
     )
 
-    atom_features = representation(
+    output = representation(
         mace_test_data
-    )
-
-    output = reducer(
-        atom_features,
-        mace_test_data,
     )
 
     expected = torch.tensor(
@@ -352,6 +344,11 @@ def test_mace_mean_pooling(
             [3.0, 5.0, 7.0, 9.0],
         ],
         dtype=torch.float64,
+    )
+
+    assert (
+        representation.output_kind
+        == "system"
     )
 
     assert output.shape == (
@@ -368,22 +365,15 @@ def test_mace_mean_pooling(
 def test_mace_sum_pooling(
     mace_test_data: Dict[str, torch.Tensor],
 ) -> None:
-    """Support sum pooling through the generic reducer."""
+    """Support sum pooling in the final representation."""
 
-    representation = make_representation()
-
-    reducer = PoolReducer(
-        in_features=(
-            representation.out_features
-        ),
+    representation = pool_representation(
+        make_representation(),
         pooling="sum",
     )
 
-    output = reducer(
-        representation(
-            mace_test_data
-        ),
-        mace_test_data,
+    output = representation(
+        mace_test_data
     )
 
     expected = torch.tensor(
@@ -405,25 +395,30 @@ def test_mace_sum_pooling(
     )
 
 
-def test_pool_reducer_rejects_invalid_pooling() -> None:
-    """Reject unsupported generic pooling operations."""
+def test_pool_representation_rejects_invalid_pooling() -> None:
+    """Reject unsupported pooling operations."""
 
     with pytest.raises(
         ValueError,
         match="`pooling` must be 'mean' or 'sum'",
     ):
-        PoolReducer(
-            in_features=4,
+        pool_representation(
+            make_representation(),
             pooling="max",
         )
 
 
-def test_mace_representation_model_default_pooling(
+def test_mace_representation_model_with_pooling(
     mace_test_data: Dict[str, torch.Tensor],
 ) -> None:
-    """Atom-level representations are pooled before the task head."""
+    """Apply a task head to a pooled MACE representation."""
 
-    representation = make_representation()
+    atom_representation = make_representation()
+
+    representation = pool_representation(
+        atom_representation,
+        pooling="mean",
+    )
 
     model = RepresentationModel(
         representation,
@@ -440,17 +435,11 @@ def test_mace_representation_model_default_pooling(
         is representation
     )
 
-    assert isinstance(
-        model.pre_head,
-        PoolReducer,
-    )
-
     assert output.shape == (
         2,
         2,
     )
 
-    # Only the downstream task head should remain trainable.
     assert all(
         not parameter.requires_grad
         for parameter
@@ -481,7 +470,12 @@ def test_mace_representation_model_preserves_input_gradients(
         "node_feats": node_features,
     }
 
-    representation = make_representation()
+    atom_representation = make_representation()
+
+    representation = pool_representation(
+        atom_representation,
+        pooling="mean",
+    )
 
     model = RepresentationModel(
         representation,
@@ -516,7 +510,7 @@ def test_mace_representation_model_preserves_input_gradients(
     )
 
     assert (
-        representation
+        atom_representation
         .model
         .weight
         .grad
@@ -533,30 +527,26 @@ def test_mace_representation_model_preserves_input_gradients(
 def test_mace_representation_model_sum_pooling(
     mace_test_data: Dict[str, torch.Tensor],
 ) -> None:
-    """Allow RepresentationModel to explicitly select sum pooling."""
+    """Apply the task head to a sum-pooled MACE representation."""
 
-    representation = make_representation()
+    representation = pool_representation(
+        make_representation(),
+        pooling="sum",
+    )
 
     model = RepresentationModel(
         representation,
         n_out=2,
         hidden_layers=(),
-        mode="pooled",
-        pooling="sum",
-    )
-
-    assert isinstance(
-        model.pre_head,
-        PoolReducer,
-    )
-
-    assert (
-        model.pre_head.pooling
-        == "sum"
     )
 
     output = model(
         mace_test_data
+    )
+
+    assert (
+        representation.output_kind
+        == "system"
     )
 
     assert output.shape == (
@@ -568,14 +558,17 @@ def test_mace_representation_model_sum_pooling(
 def test_mace_representation_model_trace(
     mace_test_data: Dict[str, torch.Tensor],
 ) -> None:
-    """Trace representation + reducer + task head."""
+    """Trace representation + pooling + task head."""
+
+    representation = pool_representation(
+        make_representation(),
+        pooling="sum",
+    )
 
     model = RepresentationModel(
-        make_representation(),
+        representation,
         n_out=2,
         hidden_layers=(),
-        mode="pooled",
-        pooling="sum",
     ).eval()
 
     expected = model(

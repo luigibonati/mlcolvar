@@ -6,13 +6,15 @@ from torch import nn
 
 from mlcolvar.data import DictDataset
 from mlcolvar.representation import (
-    CachedRepresentationDerivatives,
-    IdentityDescriptorDerivatives,
     MLColvarRepresentation,
     RepresentationModel,
     TaskHead,
     export_representation_torchscript,
     precompute_committor_cache,
+)
+from mlcolvar.representation.cache import (
+    CachedRepresentationDerivatives,
+    IdentityDescriptorDerivatives,
 )
 
 

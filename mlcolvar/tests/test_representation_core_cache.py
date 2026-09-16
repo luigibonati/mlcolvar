@@ -10,14 +10,16 @@ from mlcolvar.core import BaseGNN
 from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
 from mlcolvar.data import DictDataset
 from mlcolvar.representation import (
-    CachedRepresentationDerivatives,
-    ConcatReducer,
     GraphRepresentation,
-    PoolReducer,
     RepresentationModel,
     TaskHead,
     TensorRepresentation,
+    concat_representation,
+    pool_representation,
     precompute_representation_cache,
+)
+from mlcolvar.representation.cache import (
+    CachedRepresentationDerivatives,
 )
 
 
@@ -140,7 +142,7 @@ def make_graph() -> Dict[str, torch.Tensor]:
     }
 
 
-def test_tensor_representation_model_direct() -> None:
+def test_tensor_representation_model() -> None:
     representation = DummyTensorRepresentation()
 
     head = TaskHead(
@@ -178,12 +180,19 @@ def test_tensor_representation_model_direct() -> None:
     )
 
     output.sum().backward()
+
     assert x.grad is not None
     assert torch.isfinite(x.grad).all()
 
 
-def test_atom_representation_default_is_pooled() -> None:
-    representation = DummyAtomRepresentation()
+def test_pooled_graph_representation_model() -> None:
+    representation = pool_representation(
+        DummyAtomRepresentation(),
+        pooling="mean",
+    )
+
+    assert representation.output_kind == "system"
+    assert representation.out_features == 2
 
     model = RepresentationModel(
         representation,
@@ -195,10 +204,6 @@ def test_atom_representation_default_is_pooled() -> None:
         model,
         BaseGNN,
     )
-    assert isinstance(
-        model.pre_head,
-        PoolReducer,
-    )
 
     output = model(
         make_graph()
@@ -207,24 +212,24 @@ def test_atom_representation_default_is_pooled() -> None:
     assert output.shape == (2, 1)
 
 
-def test_atom_representation_concat() -> None:
-    representation = DummyAtomRepresentation()
-
-    model = RepresentationModel(
-        representation,
-        n_out=1,
-        hidden_layers=(),
-        mode="concat",
-        selected_atom_indices=[
+def test_concat_graph_representation_model() -> None:
+    representation = concat_representation(
+        DummyAtomRepresentation(),
+        atom_indices=[
             0,
             1,
         ],
     )
 
-    assert isinstance(
-        model.pre_head,
-        ConcatReducer,
+    assert representation.output_kind == "system"
+    assert representation.out_features == 4
+
+    model = RepresentationModel(
+        representation,
+        n_out=1,
+        hidden_layers=(),
     )
+
     assert model.head.in_features == 4
 
     output = model(
@@ -232,19 +237,6 @@ def test_atom_representation_concat() -> None:
     )
 
     assert output.shape == (2, 1)
-
-
-def test_system_representation_rejects_atom_modes() -> None:
-    representation = DummyTensorRepresentation()
-
-    with pytest.raises(
-        ValueError,
-        match="atom-level",
-    ):
-        RepresentationModel(
-            representation,
-            mode="pooled",
-        )
 
 
 def test_generic_cache_has_no_task_dependency() -> None:

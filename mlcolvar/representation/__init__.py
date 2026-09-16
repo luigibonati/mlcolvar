@@ -2,18 +2,21 @@ from .base import (
     GraphRepresentation,
     Representation,
     TensorRepresentation,
-    align_node_attrs,
 )
 from .cache import (
-    CachedRepresentationDerivatives,
     IdentityDescriptorDerivatives,
-    RepresentationCache,
     precompute_committor_cache,
     precompute_representation_cache,
 )
 from .model import RepresentationModel, TaskHead
-from .export import RepresentationInferenceModel, export_representation_torchscript
-from .reducers import ConcatReducer, IdentityReducer, PoolReducer
+from .export import (
+    RepresentationInferenceModel,
+    export_representation_torchscript,
+)
+from .reducers import (
+    concat_representation,
+    pool_representation,
+)
 from .adapters import (
     DeepMDRepresentation,
     MACERepresentation,
@@ -28,17 +31,13 @@ __all__ = [
     "GraphRepresentation",
     "RepresentationModel",
     "TaskHead",
-    "RepresentationInferenceModel",
-    "export_representation_torchscript",
-    "IdentityReducer",
-    "PoolReducer",
-    "ConcatReducer",
-    "RepresentationCache",
-    "IdentityDescriptorDerivatives",
-    "CachedRepresentationDerivatives",
+    "pool_representation",
+    "concat_representation",
     "precompute_representation_cache",
     "precompute_committor_cache",
-    "align_node_attrs",
+    "IdentityDescriptorDerivatives",
+    "RepresentationInferenceModel",
+    "export_representation_torchscript",
     "MLColvarRepresentation",
     "MACERepresentation",
     "PETRepresentation",
@@ -46,7 +45,6 @@ __all__ = [
 ]
 
 
-# Optional Metatomic deployment API.
 try:
     from .metatomic import (
         CVInferenceModel,
@@ -57,11 +55,9 @@ try:
 except ImportError:
     pass
 else:
-    __all__.extend(
-        [
-            "CVInferenceModel",
-            "MetatomicCVWrapper",
-            "create_metatomic_model",
-            "export_metatomic_model",
-        ]
-    )
+    __all__ += [
+        "CVInferenceModel",
+        "MetatomicCVWrapper",
+        "create_metatomic_model",
+        "export_metatomic_model",
+    ]
