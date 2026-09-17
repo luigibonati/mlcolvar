@@ -9,7 +9,6 @@ from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
 from mlcolvar.data import DictDataset
 
 from .base import GraphRepresentation, Representation, TensorRepresentation
-from .reducers import Reducer
 
 
 __all__ = [
@@ -87,30 +86,21 @@ def _references(n, selected, device):
     return refs
 
 
-def _reduce(reducer, features, data):
-    return features if reducer is None else reducer(features, data)
+def _prepare(representation, device):
+    state = (_device(representation), representation.training)
+    representation.to(device).eval()
+    return state
 
 
-def _prepare(representation, reducer, device):
-    modules = [representation] + ([] if reducer is None else [reducer])
-    state = [(_device(m), m.training) for m in modules]
-
-    for module in modules:
-        module.to(device).eval()
-
-    return modules, state
-
-
-def _restore(modules, state):
-    for module, (device, training) in zip(modules, state):
-        module.to(device).train(training)
+def _restore(representation, state):
+    device, training = state
+    representation.to(device).train(training)
 
 
 def _cache_tensor(
     representation,
     dataset,
     *,
-    reducer,
     descriptor_derivatives,
     jacobian_indices,
     source_ref_idx,
@@ -133,7 +123,7 @@ def _cache_tensor(
     device = torch.device(device or _device(representation))
     output_device = torch.device(output_device)
 
-    modules, state = _prepare(representation, reducer, device)
+    state = _prepare(representation, device)
 
     try:
         parts = []
@@ -144,12 +134,8 @@ def _cache_tensor(
                 xb = x[start:stop].to(device)
                 cb = None if cell is None else cell[start:stop].to(device)
 
-                h = _reduce(
-                    reducer,
-                    representation(xb, cell=cb),
-                    xb,
-                )
-
+                h = representation(xb, cell=cb)
+                
                 parts.append(
                     h.reshape(len(xb), -1).detach().to(output_device)
                 )
@@ -191,10 +177,9 @@ def _cache_tensor(
 
                 refs = source_ref_idx[idx].to(device)
 
-                h = _reduce(
-                    reducer,
-                    representation(xb, cell=cb),
+                h = representation(
                     xb,
+                    cell=cb,
                 ).reshape(len(xb), -1)
 
                 grads = []
@@ -221,14 +206,13 @@ def _cache_tensor(
         )
 
     finally:
-        _restore(modules, state)
+        _restore(representation, state)
 
 
 def _cache_graph(
     representation,
     dataset,
     *,
-    reducer,
     jacobian_indices,
     batch_size,
     device,
@@ -247,7 +231,7 @@ def _cache_graph(
     device = torch.device(device or _device(representation))
     output_device = torch.device(output_device)
 
-    modules, state = _prepare(representation, reducer, device)
+    state = _prepare(representation, device)
 
     try:
         loader = GraphDataLoader(dataset, batch_size=batch_size, shuffle=False)
@@ -286,11 +270,7 @@ def _cache_graph(
                 graph.positions = graph.positions.detach().requires_grad_(True)
 
             with torch.enable_grad() if need_grad else torch.no_grad():
-                h = _reduce(
-                    reducer,
-                    representation(graph),
-                    graph,
-                )
+                h = representation(graph)
 
                 if h.ndim != 2 or h.shape[0] != n_graphs:
                     raise ValueError(
@@ -336,14 +316,13 @@ def _cache_graph(
         )
 
     finally:
-        _restore(modules, state)
+        _restore(representation, state)
 
 
 def precompute_representation_cache(
     representation: Representation,
     dataset: DictDataset,
     *,
-    reducer: Optional[Reducer] = None,
     descriptor_derivatives: Optional[SmartDerivatives] = None,
     jacobian_indices: Optional[torch.Tensor] = None,
     source_ref_idx: Optional[torch.Tensor] = None,
@@ -353,7 +332,6 @@ def precompute_representation_cache(
     compute_jacobian=True,
 ):
     common = dict(
-        reducer=reducer,
         jacobian_indices=jacobian_indices,
         device=device,
         output_device=output_device,
@@ -408,7 +386,6 @@ def precompute_committor_cache(
     device=None,
     output_device="cpu",
     separate_boundary_dataset=True,
-    reducer: Optional[Reducer] = None,
 ):
     output_device = torch.device(output_device)
 
@@ -439,7 +416,6 @@ def precompute_committor_cache(
     cache = precompute_representation_cache(
         representation,
         dataset,
-        reducer=reducer,
         descriptor_derivatives=descriptor_derivatives,
         jacobian_indices=indices,
         source_ref_idx=refs,

@@ -8,14 +8,15 @@ from .cache import (
     precompute_committor_cache,
     precompute_representation_cache,
 )
-from .model import RepresentationModel, TaskHead
+from .model import (
+    RepresentationModel,
+    TaskHead,
+    concat_representation,
+    pool_representation,
+)
 from .export import (
     RepresentationInferenceModel,
     export_representation_torchscript,
-)
-from .reducers import (
-    concat_representation,
-    pool_representation,
 )
 from .adapters import (
     DeepMDRepresentation,
