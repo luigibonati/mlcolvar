@@ -8,7 +8,7 @@ from mlcolvar.core import BaseGNN
 from ..base import (
     GraphRepresentation,
     Representation,
-    TensorRepresentation,
+    VectorRepresentation,
     as_positive_int,
     module_reference_tensor,
 )
@@ -55,11 +55,11 @@ class _FrozenModelMixin:
         )
 
 
-class _TensorMLColvarRepresentation(
+class _VectorMLColvarRepresentation(
     _FrozenModelMixin,
-    TensorRepresentation,
+    VectorRepresentation,
 ):
-    """Representation adapter for tensor-based mlcolvar models."""
+    """Representation adapter for vector-based mlcolvar models."""
 
     __constants__ = ["mode"]
 
@@ -106,7 +106,7 @@ class _TensorMLColvarRepresentation(
                 "model.out_features",
             )
 
-        TensorRepresentation.__init__(
+        VectorRepresentation.__init__(
             self,
             in_features=as_positive_int(
                 model.in_features,
@@ -271,7 +271,7 @@ class _GraphMLColvarRepresentation(
 
         if getattr(self.model, "norm_in", None) is not None:
             raise ValueError(
-                "Tensor input normalization cannot be applied "
+                "Input normalization cannot be applied "
                 "directly to graph dictionaries."
             )
 
@@ -331,7 +331,7 @@ def MLColvarRepresentation(
             freeze=freeze,
         )
 
-    return _TensorMLColvarRepresentation(
+    return _VectorMLColvarRepresentation(
         model=model,
         mode=mode,
         out_features=out_features,

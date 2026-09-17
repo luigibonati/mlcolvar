@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Optional
 
 import pytest
@@ -14,8 +16,8 @@ from mlcolvar.representation import (
 )
 from mlcolvar.representation.cache import (
     CachedRepresentationDerivatives,
-    IdentityDescriptorDerivatives,
 )
+from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
 
 
 class AddCellPreprocessing(nn.Module):
@@ -105,6 +107,19 @@ class DummyDescriptorCV(nn.Module):
         return self.forward_cv(x)
 
 
+class IdentityDescriptorDerivatives(SmartDerivatives):
+    def __init__(self) -> None:
+        nn.Module.__init__(self)
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        ref_idx: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        del ref_idx
+        return x.unsqueeze(1)
+
+
 def make_descriptor_input(
     dtype: torch.dtype = torch.float64,
 ) -> torch.Tensor:
@@ -158,7 +173,7 @@ def expected_cv_output(
     )
 
 
-def test_mlcolvar_tensor_modes() -> None:
+def test_mlcolvar_vector_modes() -> None:
     x = make_descriptor_input()
     cell = torch.tensor(
         0.5,
@@ -232,7 +247,7 @@ def test_mlcolvar_tensor_modes() -> None:
     )
 
 
-def test_frozen_mlcolvar_tensor_representation_preserves_gradients() -> None:
+def test_frozen_mlcolvar_vector_representation_preserves_gradients() -> None:
     pretrained = DummyDescriptorCV()
 
     representation = MLColvarRepresentation(
@@ -267,7 +282,7 @@ def test_frozen_mlcolvar_tensor_representation_preserves_gradients() -> None:
     assert not pretrained.training
 
 
-def test_unfrozen_mlcolvar_tensor_representation_is_trainable() -> None:
+def test_unfrozen_mlcolvar_vector_representation_is_trainable() -> None:
     pretrained = DummyDescriptorCV()
 
     representation = MLColvarRepresentation(
@@ -286,7 +301,7 @@ def test_unfrozen_mlcolvar_tensor_representation_is_trainable() -> None:
     assert pretrained.training
 
 
-def test_mlcolvar_tensor_state_dict_contains_model_not_reference() -> None:
+def test_mlcolvar_vector_state_dict_contains_model_not_reference() -> None:
     representation = MLColvarRepresentation(
         DummyDescriptorCV(),
         mode="latent",
@@ -413,7 +428,7 @@ def test_task_head_rejects_invalid_hidden_layers(
         )
 
 
-def test_mlcolvar_tensor_adapter_validates_interfaces() -> None:
+def test_mlcolvar_vector_adapter_validates_interfaces() -> None:
     class MissingInputDimension(nn.Module):
         def __init__(self) -> None:
             super().__init__()
@@ -476,7 +491,7 @@ def test_mlcolvar_tensor_adapter_validates_interfaces() -> None:
         )
 
 
-def test_tensor_committor_cache_matches_direct_representation() -> None:
+def test_vector_committor_cache_matches_direct_representation() -> None:
     x = make_descriptor_input(
         dtype=torch.float32,
     )
@@ -552,7 +567,7 @@ def test_tensor_committor_cache_matches_direct_representation() -> None:
     )
 
 
-def test_tensor_representation_torchscript_roundtrip(
+def test_vector_representation_torchscript_roundtrip(
     tmp_path,
 ) -> None:
     representation = MLColvarRepresentation(
@@ -573,7 +588,7 @@ def test_tensor_representation_torchscript_roundtrip(
     ).eval()
 
     postprocessing = nn.Sigmoid()
-    path = tmp_path / "tensor_representation.ptc"
+    path = tmp_path / "vector_representation.ptc"
 
     export_representation_torchscript(
         model=model,

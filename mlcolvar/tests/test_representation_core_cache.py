@@ -13,7 +13,7 @@ from mlcolvar.representation import (
     GraphRepresentation,
     RepresentationModel,
     TaskHead,
-    TensorRepresentation,
+    VectorRepresentation,
     concat_representation,
     pool_representation,
     precompute_representation_cache,
@@ -23,7 +23,7 @@ from mlcolvar.representation.cache import (
 )
 
 
-class DummyTensorRepresentation(TensorRepresentation):
+class DummyVectorRepresentation(VectorRepresentation):
     def __init__(self, freeze: bool = True) -> None:
         super().__init__(
             in_features=3,
@@ -142,8 +142,8 @@ def make_graph() -> Dict[str, torch.Tensor]:
     }
 
 
-def test_tensor_representation_model() -> None:
-    representation = DummyTensorRepresentation()
+def test_vector_representation_model() -> None:
+    representation = DummyVectorRepresentation()
 
     head = TaskHead(
         2,
@@ -240,7 +240,7 @@ def test_concat_graph_representation_model() -> None:
 
 
 def test_generic_cache_has_no_task_dependency() -> None:
-    representation = DummyTensorRepresentation()
+    representation = DummyVectorRepresentation()
 
     dataset = DictDataset(
         {
@@ -267,7 +267,7 @@ def test_generic_cache_has_no_task_dependency() -> None:
 
 
 def test_generic_selective_jacobian_cache() -> None:
-    representation = DummyTensorRepresentation()
+    representation = DummyVectorRepresentation()
 
     dataset = DictDataset(
         {

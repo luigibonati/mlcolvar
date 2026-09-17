@@ -1,7 +1,7 @@
 from .base import (
     GraphRepresentation,
     Representation,
-    TensorRepresentation,
+    VectorRepresentation,
 )
 from .cache import (
     IdentityDescriptorDerivatives,
@@ -28,7 +28,7 @@ from .adapters import (
 
 __all__ = [
     "Representation",
-    "TensorRepresentation",
+    "VectorRepresentation",
     "GraphRepresentation",
     "RepresentationModel",
     "TaskHead",

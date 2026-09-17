@@ -8,6 +8,7 @@ from mlcolvar.core import BaseGNN, FeedForward
 from .base import (
     GraphRepresentation,
     Representation,
+    VectorRepresentation,
     infer_num_graphs,
     module_reference_tensor,
 )
@@ -318,7 +319,7 @@ class _VectorRepresentationModel(
     def __init__(
         self,
         *,
-        representation: Representation,
+        representation: VectorRepresentation,
         head: nn.Module,
     ) -> None:
         nn.Module.__init__(self)
@@ -466,25 +467,18 @@ def RepresentationModel(
                 f"found {head.in_features}."
             )
 
-    if representation.input_kind == "tensor":
+    if isinstance(representation, VectorRepresentation):
         return _VectorRepresentationModel(
             representation=representation,
             head=head,
         )
 
-    if representation.input_kind != "graph":
-        raise ValueError(
-            f"Unsupported representation input kind: "
-            f"{representation.input_kind!r}."
+    if isinstance(representation, GraphRepresentation):
+        return _GraphRepresentationModel(
+            representation=representation,
+            head=head,
         )
 
-    if not isinstance(representation, GraphRepresentation):
-        raise TypeError(
-            "Graph representations must derive from "
-            "`GraphRepresentation`."
-        )
-
-    return _GraphRepresentationModel(
-        representation=representation,
-        head=head,
+    raise TypeError(
+        "Unsupported representation type."
     )

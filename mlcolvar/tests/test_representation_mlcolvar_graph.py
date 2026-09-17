@@ -15,6 +15,7 @@ from mlcolvar.representation import (
     precompute_committor_cache,
 )
 
+
 class GraphShiftPreprocessing(nn.Module):
     def forward(
         self,
@@ -135,9 +136,10 @@ class DummyGraphCV(nn.Module):
         )
 
 
-class DummyTensorCV(nn.Module):
+class DummyVectorCV(nn.Module):
     def __init__(self) -> None:
         super().__init__()
+
         self.in_features = 3
         self.out_features = 2
         self.nn = nn.Linear(3, 2)
@@ -413,7 +415,7 @@ def test_graph_representation_requires_graph_level_pooling() -> None:
         )
 
 
-def test_graph_representation_rejects_tensor_norm_in() -> None:
+def test_graph_representation_rejects_vector_norm_in() -> None:
     representation = MLColvarRepresentation(
         DummyGraphCV(
             use_norm_in=True,
@@ -423,16 +425,16 @@ def test_graph_representation_rejects_tensor_norm_in() -> None:
 
     with pytest.raises(
         ValueError,
-        match="Tensor input normalization",
+        match="Input normalization",
     ):
         representation(
             make_graph()
         )
 
 
-def test_mlcolvar_representation_factory_distinguishes_tensor_and_graph() -> None:
-    tensor_rep = MLColvarRepresentation(
-        DummyTensorCV(),
+def test_mlcolvar_representation_factory_distinguishes_vector_and_graph() -> None:
+    vector_rep = MLColvarRepresentation(
+        DummyVectorCV(),
         mode="latent",
     )
     graph_rep = MLColvarRepresentation(
@@ -440,7 +442,7 @@ def test_mlcolvar_representation_factory_distinguishes_tensor_and_graph() -> Non
         mode="latent",
     )
 
-    assert tensor_rep.input_kind == "tensor"
+    assert vector_rep.input_kind == "vector"
     assert graph_rep.input_kind == "graph"
 
     with pytest.raises(

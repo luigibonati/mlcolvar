@@ -8,7 +8,7 @@ from torch_geometric.loader import DataLoader as GraphDataLoader
 from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
 from mlcolvar.data import DictDataset
 
-from .base import GraphRepresentation, Representation, TensorRepresentation
+from .base import GraphRepresentation, Representation, VectorRepresentation
 
 
 __all__ = [
@@ -97,7 +97,7 @@ def _restore(representation, state):
     representation.to(device).train(training)
 
 
-def _cache_tensor(
+def _cache_vector(
     representation,
     dataset,
     *,
@@ -114,7 +114,7 @@ def _cache_tensor(
 
     keys = _keys(dataset)
     if "data" not in keys:
-        raise KeyError("Tensor caching requires `data`.")
+        raise KeyError("Vector caching requires `data`.")
 
     x = dataset["data"]
     cell = dataset["cell"] if "cell" in keys else None
@@ -338,8 +338,8 @@ def precompute_representation_cache(
         compute_jacobian=compute_jacobian,
     )
 
-    if isinstance(representation, TensorRepresentation):
-        return _cache_tensor(
+    if isinstance(representation, VectorRepresentation):
+        return _cache_vector(
             representation,
             dataset,
             descriptor_derivatives=descriptor_derivatives,
@@ -351,9 +351,9 @@ def precompute_representation_cache(
     if isinstance(representation, GraphRepresentation):
         if descriptor_derivatives is not None or source_ref_idx is not None:
             raise ValueError(
-                "Descriptor derivatives and source indices are tensor-only."
+                "Descriptor derivatives and source indices are vector-only."
             )
-
+            
         return _cache_graph(
             representation,
             dataset,
@@ -389,7 +389,7 @@ def precompute_committor_cache(
 ):
     output_device = torch.device(output_device)
 
-    if isinstance(representation, TensorRepresentation):
+    if isinstance(representation, VectorRepresentation):
         keys = _keys(dataset)
         required = ("data", "labels", "weights", "ref_idx")
 
@@ -425,7 +425,7 @@ def precompute_committor_cache(
         compute_jacobian=True,
     )
 
-    if isinstance(representation, TensorRepresentation):
+    if isinstance(representation, VectorRepresentation):
         data = {
             key: value.to(output_device) if torch.is_tensor(value) else value
             for key, value in ((key, dataset[key]) for key in keys)

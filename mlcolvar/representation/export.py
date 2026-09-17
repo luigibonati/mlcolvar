@@ -47,7 +47,7 @@ def _enable_lightning_jit(module: nn.Module) -> None:
             child._jit_is_scripting = True
 
 
-def _prepare_tensor_example(
+def _prepare_vector_example(
     model: nn.Module,
     example_input: Optional[torch.Tensor],
     dtype: torch.dtype,
@@ -56,7 +56,7 @@ def _prepare_tensor_example(
     if example_input is None:
         return torch.zeros(1, input_dim, dtype=dtype)
     if not torch.is_tensor(example_input):
-        raise TypeError("Tensor models require a tensor `example_input`.")
+        raise TypeError("Vector models require a tensor `example_input`.")
 
     example_input = example_input.detach().cpu().to(dtype=dtype)
     if example_input.ndim < 2 or example_input.shape[-1] != input_dim:
@@ -106,7 +106,7 @@ def export_representation_torchscript(
     prepared = (
         _prepare_graph_example(example_input, dtype)
         if is_graph
-        else _prepare_tensor_example(model, example_input, dtype)
+        else _prepare_vector_example(model, example_input, dtype)
     )
 
     inference = RepresentationInferenceModel(

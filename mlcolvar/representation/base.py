@@ -6,7 +6,7 @@ from torch import nn
 
 __all__ = [
     "Representation",
-    "TensorRepresentation",
+    "VectorRepresentation",
     "GraphRepresentation",
     "as_positive_int",
     "module_reference_tensor",
@@ -234,14 +234,13 @@ def align_node_attrs(
 class Representation(nn.Module):
     """Base class for reusable frozen or trainable representations.
 
-    A representation maps raw model input to a latent tensor.  It deliberately
-    contains no task-specific readout.
+    A representation maps raw model input to reusable latent features.
+    It deliberately contains no task-specific readout.
     """
 
     __constants__ = [
         "input_kind",
         "output_kind",
-        "sample_kind",
         "out_features",
         "freeze",
     ]
@@ -256,8 +255,8 @@ class Representation(nn.Module):
     ) -> None:
         super().__init__()
 
-        if input_kind not in {"tensor", "graph"}:
-            raise ValueError("`input_kind` must be 'tensor' or 'graph'.")
+        if input_kind not in {"vector", "graph"}:
+            raise ValueError("`input_kind` must be 'vector' or 'graph'.")
         if output_kind not in {"atom", "system"}:
             raise ValueError("`output_kind` must be 'atom' or 'system'.")
 
@@ -265,7 +264,6 @@ class Representation(nn.Module):
         self.input_kind = input_kind
         self.output_kind = output_kind
         # Temporary alias for code/tests written against the old atomistic API.
-        self.sample_kind = output_kind
         self.freeze = bool(freeze)
 
     def _freeze_module(self, module: nn.Module) -> None:
@@ -296,8 +294,8 @@ class Representation(nn.Module):
             child.eval()
 
 
-class TensorRepresentation(Representation):
-    """Base representation accepting dense tensor inputs."""
+class VectorRepresentation(Representation):
+    """Base representation accepting dense feature vectors."""
 
     __constants__ = ["in_features"]
 
@@ -311,7 +309,7 @@ class TensorRepresentation(Representation):
     ) -> None:
         super().__init__(
             out_features=out_features,
-            input_kind="tensor",
+            input_kind="vector",
             output_kind=output_kind,
             freeze=freeze,
         )
