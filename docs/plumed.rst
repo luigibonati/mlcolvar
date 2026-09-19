@@ -41,6 +41,94 @@ compilation.
 AOT compilation produces a compiled model package that can be loaded directly
 from C++, avoiding the TorchScript runtime representation.
 
+For graph-based CVs, AOT compilation can be particularly useful because GNN
+evaluation is performed repeatedly during molecular dynamics simulations and
+can introduce a non-negligible runtime overhead. By compiling the model ahead
+of time, AOT can reduce runtime overhead and improve the overall simulation
+throughput.
+
+
+GNN benchmark
+~~~~~~~~~~~~~
+
+To compare TorchScript and AOT deployment, we benchmarked two SchNet-based
+DeepTDA collective variables with different graph sizes and model
+complexities.
+
+For Ala2, the graph contains the 10 heavy atoms of the molecule, with edges
+constructed using a 10 Å cutoff. No additional long-range graph is used.
+The SchNet model contains two interaction layers, 16 radial basis functions,
+16 filters, and 16 hidden channels.
+
+For chignolin, all protein heavy atoms form the short-range graph using a
+4 Å cutoff. In addition, the C-alpha atoms form a long-range subsystem graph
+using an 18 Å cutoff. The SchNet model contains three interaction layers,
+16 radial basis functions, 32 filters, and 32 hidden channels.
+
+.. plot::
+   :include-source: false
+   :align: center
+
+   import matplotlib.pyplot as plt
+   import numpy as np
+
+   labels = [
+       "Ala2 CPU",
+       "Ala2 CUDA",
+       "Chignolin CPU",
+       "Chignolin CUDA",
+   ]
+
+   aot = [132.795, 180.209, 60.604, 53.603]
+   torchscript = [89.993, 69.557, 22.089, 43.752]
+
+   x = np.arange(len(labels))
+   width = 0.36
+
+   fig, ax = plt.subplots(figsize=(8, 5))
+
+   bars_aot = ax.bar(
+       x - width / 2,
+       aot,
+       width,
+       label="AOT",
+   )
+
+   bars_ts = ax.bar(
+       x + width / 2,
+       torchscript,
+       width,
+       label="TorchScript",
+   )
+
+   ax.set_ylabel("Simulation throughput (ns/day)")
+   ax.set_xticks(x)
+   ax.set_xticklabels(labels)
+   ax.legend()
+
+   for bars in (bars_aot, bars_ts):
+       for bar in bars:
+           height = bar.get_height()
+           ax.text(
+               bar.get_x() + bar.get_width() / 2,
+               height,
+               f"{height:.1f}",
+               ha="center",
+               va="bottom",
+               fontsize=8,
+           )
+
+   ax.set_ylim(0, max(aot + torchscript) * 1.15)
+
+   fig.tight_layout()
+   plt.show()
+
+AOT achieves higher simulation throughput than TorchScript in all tested
+configurations.
+
+AOT models are device- and precision-specific, whereas TorchScript models can
+select the execution device at runtime
+
 Models can be exported using the utilities in ``mlcolvar.utils.aot``. For
 example:
 
