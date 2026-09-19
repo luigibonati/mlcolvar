@@ -51,9 +51,10 @@ extensions = [
     'sphinx.ext.extlinks',
     'sphinx.ext.doctest',
     'sphinx_copybutton',
-    'nbsphinx',  # Integrate Jupyter Notebooks and Sphinx
-    'IPython.sphinxext.ipython_console_highlighting' ,
-    #'sphinx_autodoc_typehints', # Automatically document param types (less noise in class signature)
+    'nbsphinx',
+    'IPython.sphinxext.ipython_console_highlighting',
+    'matplotlib.sphinxext.plot_directive',
+    #'sphinx_autodoc_typehints',
 ]
 
 autosummary_generate = True
