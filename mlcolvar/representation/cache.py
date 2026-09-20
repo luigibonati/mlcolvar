@@ -68,15 +68,38 @@ def _device(module):
 
 def _indices(n, indices=None):
     if indices is None:
-        return torch.arange(n)
+        return torch.arange(n, dtype=torch.long)
 
     indices = torch.as_tensor(indices).cpu()
+
     if indices.dtype == torch.bool:
-        indices = torch.nonzero(indices.reshape(-1)).reshape(-1)
+        indices = indices.reshape(-1)
+
+        if len(indices) != n:
+            raise ValueError(
+                "Boolean `jacobian_indices` must have "
+                "the same length as the dataset."
+            )
+
+        indices = torch.nonzero(
+            indices,
+            as_tuple=False,
+        ).reshape(-1)
+
     else:
         indices = indices.reshape(-1).long()
 
-    return torch.unique(indices, sorted=True)
+    indices = torch.unique(
+        indices,
+        sorted=True,
+    )
+
+    if torch.any(indices < 0) or torch.any(indices >= n):
+        raise IndexError(
+            "`jacobian_indices` contains out-of-range indices."
+        )
+
+    return indices
 
 
 def _references(n, selected, device):
@@ -329,7 +352,7 @@ def precompute_representation_cache(
     batch_size: Optional[int] = None,
     device=None,
     output_device="cpu",
-    compute_jacobian=True,
+    compute_jacobian: bool = False,
 ):
     common = dict(
         jacobian_indices=jacobian_indices,
