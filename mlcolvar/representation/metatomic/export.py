@@ -83,26 +83,30 @@ def _get_neighbor_options(
 def _prepare_network(
     network: torch.nn.Module,
 ) -> torch.nn.Module:
-    """Prepare backend-specific modules for TorchScript export."""
+    """Prepare representation modules for TorchScript export."""
 
     network = copy.deepcopy(network).eval()
 
-    representation = getattr(network, "representation", None)
-    if representation is None:
-        return network
+    # A backend-specific representation can be nested inside
+    # representation transforms such as pooling or concatenation.
+    # Traverse the complete module hierarchy and call any available
+    # TorchScript preparation hooks.
+    for module in list(network.modules()):
+        prepare = getattr(
+            module,
+            "prepare_for_torchscript",
+            None,
+        )
 
-    prepare = getattr(
-        representation,
-        "prepare_for_torchscript",
-        None,
-    )
+        if prepare is None:
+            continue
 
-    if prepare is not None:
         try:
             prepare()
         except Exception as exc:
             raise RuntimeError(
-                "Failed to prepare the representation "
+                "Failed to prepare "
+                f"{module.__class__.__name__} "
                 "for TorchScript export."
             ) from exc
 
