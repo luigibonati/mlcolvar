@@ -19,10 +19,8 @@ from .export import (
     export_representation_torchscript,
 )
 from .adapters import (
-    DeepMDRepresentation,
     MACERepresentation,
     MLColvarRepresentation,
-    PETRepresentation,
 )
 
 
@@ -41,8 +39,6 @@ __all__ = [
     "export_representation_torchscript",
     "MLColvarRepresentation",
     "MACERepresentation",
-    "PETRepresentation",
-    "DeepMDRepresentation",
 ]
 
 
