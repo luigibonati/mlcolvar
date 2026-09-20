@@ -16,7 +16,6 @@ __all__ = [
     "IdentityDescriptorDerivatives",
     "CachedRepresentationDerivatives",
     "precompute_representation_cache",
-    "precompute_committor_cache",
 ]
 
 
@@ -45,12 +44,14 @@ class CachedRepresentationDerivatives(SmartDerivatives):
             raise ValueError("`ref_idx` is required.")
 
         ref_idx = ref_idx.reshape(-1).to(self.jacobian.device, dtype=torch.long)
+
         if torch.any(ref_idx < 0) or torch.any(ref_idx >= len(self.jacobian)):
             raise IndexError("Invalid cached derivative index.")
 
-        jacobian = self.jacobian[ref_idx]
-        gradient_latent = gradient_latent.to(jacobian)
-
+        jacobian = self.jacobian[ref_idx].to(
+            device=gradient_latent.device,
+            dtype=gradient_latent.dtype,
+        )
         return torch.einsum("bl,b...l->b...", gradient_latent, jacobian)
 
 
@@ -74,30 +75,18 @@ def _indices(n, indices=None):
 
     if indices.dtype == torch.bool:
         indices = indices.reshape(-1)
-
         if len(indices) != n:
             raise ValueError(
-                "Boolean `jacobian_indices` must have "
-                "the same length as the dataset."
+                "Boolean `jacobian_indices` must have the same length as the dataset."
             )
-
-        indices = torch.nonzero(
-            indices,
-            as_tuple=False,
-        ).reshape(-1)
-
+        indices = torch.nonzero(indices, as_tuple=False).reshape(-1)
     else:
         indices = indices.reshape(-1).long()
 
-    indices = torch.unique(
-        indices,
-        sorted=True,
-    )
+    indices = torch.unique(indices, sorted=True)
 
     if torch.any(indices < 0) or torch.any(indices >= n):
-        raise IndexError(
-            "`jacobian_indices` contains out-of-range indices."
-        )
+        raise IndexError("`jacobian_indices` contains out-of-range indices.")
 
     return indices
 
@@ -145,11 +134,10 @@ def _cache_vector(
 
     device = torch.device(device or _device(representation))
     output_device = torch.device(output_device)
-
     state = _prepare(representation, device)
 
     try:
-        parts = []
+        features = []
 
         with torch.no_grad():
             for start in range(0, n, batch_size):
@@ -158,12 +146,11 @@ def _cache_vector(
                 cb = None if cell is None else cell[start:stop].to(device)
 
                 h = representation(xb, cell=cb)
-                
-                parts.append(
+                features.append(
                     h.reshape(len(xb), -1).detach().to(output_device)
                 )
 
-        features = torch.cat(parts)
+        features = torch.cat(features)
 
         if not compute_jacobian:
             return RepresentationCache(features)
@@ -174,10 +161,15 @@ def _cache_vector(
         descriptor_derivatives.to(device)
         selected = _indices(n, jacobian_indices)
 
+        if selected.numel() == 0:
+            raise ValueError("No samples selected for Jacobian caching.")
+
         if source_ref_idx is None:
             source_ref_idx = torch.arange(n)
         else:
-            source_ref_idx = torch.as_tensor(source_ref_idx).reshape(-1).long().cpu()
+            source_ref_idx = (
+                torch.as_tensor(source_ref_idx).reshape(-1).long().cpu()
+            )
 
         jacobians = []
 
@@ -191,20 +183,14 @@ def _cache_vector(
                     .detach()
                     .requires_grad_(True)
                 )
-
                 cb = (
                     None
                     if cell is None
                     else cell[idx.to(cell.device)].to(device)
                 )
-
                 refs = source_ref_idx[idx].to(device)
 
-                h = representation(
-                    xb,
-                    cell=cb,
-                ).reshape(len(xb), -1)
-
+                h = representation(xb, cell=cb).reshape(len(xb), -1)
                 grads = []
 
                 for i in range(h.shape[-1]):
@@ -213,10 +199,7 @@ def _cache_vector(
                         xb,
                         retain_graph=i + 1 < h.shape[-1],
                     )[0]
-
-                    grads.append(
-                        descriptor_derivatives(dh, refs)
-                    )
+                    grads.append(descriptor_derivatives(dh, refs))
 
                 jacobians.append(
                     torch.stack(grads, dim=-1).detach().to(output_device)
@@ -251,9 +234,11 @@ def _cache_graph(
     n = len(dataset)
     selected = _indices(n, jacobian_indices) if compute_jacobian else None
 
+    if compute_jacobian and selected.numel() == 0:
+        raise ValueError("No samples selected for Jacobian caching.")
+
     device = torch.device(device or _device(representation))
     output_device = torch.device(output_device)
-
     state = _prepare(representation, device)
 
     try:
@@ -274,7 +259,6 @@ def _cache_graph(
                 if compute_jacobian
                 else torch.empty(0, dtype=torch.long)
             )
-
             need_grad = compute_jacobian and len(local) > 0
 
             if need_grad:
@@ -319,9 +303,7 @@ def _cache_graph(
                         )
 
                     jacobians.append(
-                        torch.stack(grads, dim=-1)
-                        .detach()
-                        .to(output_device)
+                        torch.stack(grads, dim=-1).detach().to(output_device)
                     )
 
             features.append(h.detach().to(output_device))
@@ -376,7 +358,7 @@ def precompute_representation_cache(
             raise ValueError(
                 "Descriptor derivatives and source indices are vector-only."
             )
-            
+
         return _cache_graph(
             representation,
             dataset,
@@ -385,86 +367,3 @@ def precompute_representation_cache(
         )
 
     raise TypeError("Unsupported representation type.")
-
-
-def _graph_field(dataset, field):
-    values = []
-
-    for graph in dataset["data_list"]:
-        if not hasattr(graph, field):
-            raise KeyError(f"Graph does not define `{field}`.")
-
-        values.append(
-            torch.as_tensor(getattr(graph, field)).reshape(-1).cpu()
-        )
-
-    return torch.cat(values)
-
-
-def precompute_committor_cache(
-    representation: Representation,
-    dataset: DictDataset,
-    descriptor_derivatives: Optional[SmartDerivatives] = None,
-    batch_size=None,
-    device=None,
-    output_device="cpu",
-    separate_boundary_dataset=True,
-):
-    output_device = torch.device(output_device)
-
-    if isinstance(representation, VectorRepresentation):
-        keys = _keys(dataset)
-        required = ("data", "labels", "weights", "ref_idx")
-
-        missing = [key for key in required if key not in keys]
-        if missing:
-            raise KeyError(f"Missing keys: {missing}")
-
-        labels = dataset["labels"].reshape(-1)
-        refs = dataset["ref_idx"].reshape(-1).long()
-
-    elif isinstance(representation, GraphRepresentation):
-        labels = _graph_field(dataset, "graph_labels")
-        refs = None
-
-    else:
-        raise TypeError("Unsupported representation type.")
-
-    indices = (
-        torch.nonzero(labels > 1).reshape(-1)
-        if separate_boundary_dataset
-        else torch.arange(len(labels))
-    )
-
-    cache = precompute_representation_cache(
-        representation,
-        dataset,
-        descriptor_derivatives=descriptor_derivatives,
-        jacobian_indices=indices,
-        source_ref_idx=refs,
-        batch_size=batch_size,
-        device=device,
-        output_device=output_device,
-        compute_jacobian=True,
-    )
-
-    if isinstance(representation, VectorRepresentation):
-        data = {
-            key: value.to(output_device) if torch.is_tensor(value) else value
-            for key, value in ((key, dataset[key]) for key in keys)
-        }
-        data["data"] = cache.features
-        data["ref_idx"] = cache.reference_indices
-
-    else:
-        data = {
-            "data": cache.features,
-            "labels": labels.to(output_device),
-            "weights": _graph_field(dataset, "weight").to(output_device),
-            "ref_idx": cache.reference_indices,
-        }
-
-    return (
-        DictDataset(data),
-        CachedRepresentationDerivatives(cache.jacobian),
-    )

@@ -5,29 +5,18 @@ from torch import nn
 
 from mlcolvar.core import BaseGNN, FeedForward
 
-from .base import (
-    GraphRepresentation,
-    Representation,
-    VectorRepresentation,
-    infer_num_graphs,
-    module_reference_tensor,
-)
+from .base import GraphRepresentation, Representation, VectorRepresentation
+from ._utils import infer_num_graphs, module_reference_tensor
 
 
 __all__ = [
     "TaskHead",
     "RepresentationModel",
-    "pool_representation",
-    "concat_representation",
 ]
 
 
-def _graph_metadata(
-    representation: GraphRepresentation,
-    out_features: int,
-) -> Dict[str, Any]:
+def _graph_metadata(representation: GraphRepresentation, out_features: int):
     """Reuse graph metadata for a transformed representation."""
-
     return {
         "out_features": int(out_features),
         "atomic_numbers": representation.atomic_numbers.detach().cpu().tolist(),
@@ -42,6 +31,13 @@ def _graph_metadata(
     }
 
 
+def _check_atom_representation(representation):
+    if representation.output_kind != "atom":
+        raise ValueError(
+            "`representation` must produce atom-level features."
+        )
+
+
 class _PooledGraphRepresentation(GraphRepresentation):
     """Pool atom-level features to one vector per system."""
 
@@ -52,15 +48,10 @@ class _PooledGraphRepresentation(GraphRepresentation):
         representation: GraphRepresentation,
         pooling: str = "mean",
     ) -> None:
-        if representation.output_kind != "atom":
-            raise ValueError(
-                "`representation` must produce atom-level features."
-            )
+        _check_atom_representation(representation)
 
         if pooling not in {"mean", "sum"}:
-            raise ValueError(
-                "`pooling` must be 'mean' or 'sum'."
-            )
+            raise ValueError("`pooling` must be 'mean' or 'sum'.")
 
         super().__init__(
             **_graph_metadata(
@@ -68,7 +59,6 @@ class _PooledGraphRepresentation(GraphRepresentation):
                 representation.out_features,
             )
         )
-
         self.representation = representation
         self.pooling = pooling
 
@@ -107,7 +97,6 @@ class _PooledGraphRepresentation(GraphRepresentation):
 
         counts = features.new_zeros(n_systems, 1)
         counts.index_add_(0, batch, mask)
-
         return output / counts.clamp_min(1)
 
 
@@ -124,23 +113,15 @@ class _ConcatGraphRepresentation(GraphRepresentation):
         representation: GraphRepresentation,
         atom_indices: Sequence[int],
     ) -> None:
-        if representation.output_kind != "atom":
-            raise ValueError(
-                "`representation` must produce atom-level features."
-            )
+        _check_atom_representation(representation)
 
         indices = [int(index) for index in atom_indices]
-
         if not indices:
-            raise ValueError(
-                "`atom_indices` cannot be empty."
-            )
-
+            raise ValueError("`atom_indices` cannot be empty.")
         if any(index < 0 for index in indices):
             raise ValueError(
                 "`atom_indices` must contain non-negative indices."
             )
-
         if len(indices) != len(set(indices)):
             raise ValueError(
                 "`atom_indices` must not contain duplicates."
@@ -157,7 +138,6 @@ class _ConcatGraphRepresentation(GraphRepresentation):
         )
 
         self.representation = representation
-
         self.register_buffer(
             "atom_indices",
             torch.tensor(indices, dtype=torch.long),
@@ -180,7 +160,6 @@ class _ConcatGraphRepresentation(GraphRepresentation):
             device=features.device,
             dtype=torch.long,
         )
-
         atoms_per_graph = ptr[1:] - ptr[:-1]
 
         if torch.any(
@@ -191,10 +170,7 @@ class _ConcatGraphRepresentation(GraphRepresentation):
                 "of atoms in at least one system."
             )
 
-        atom_indices = self.atom_indices.to(
-            device=features.device
-        )
-
+        atom_indices = self.atom_indices.to(features.device)
         global_indices = (
             ptr[:-1].unsqueeze(1)
             + atom_indices.unsqueeze(0)
@@ -204,7 +180,6 @@ class _ConcatGraphRepresentation(GraphRepresentation):
             0,
             global_indices.reshape(-1),
         )
-
         return selected.reshape(
             ptr.numel() - 1,
             self.out_features,
@@ -216,7 +191,6 @@ def pool_representation(
     pooling: str = "mean",
 ) -> GraphRepresentation:
     """Pool atom-level features into a system-level representation."""
-
     return _PooledGraphRepresentation(
         representation,
         pooling=pooling,
@@ -227,8 +201,7 @@ def concat_representation(
     representation: GraphRepresentation,
     atom_indices: Sequence[int],
 ) -> GraphRepresentation:
-    """Concatenate selected atoms into a system-level representation."""
-
+    """Concatenate selected atom features into a system-level representation."""
     return _ConcatGraphRepresentation(
         representation,
         atom_indices=atom_indices,
@@ -250,26 +223,16 @@ class TaskHead(FeedForward):
         hidden_layers = tuple(int(size) for size in hidden_layers)
 
         if in_features <= 0:
-            raise ValueError(
-                "`in_features` must be positive."
-            )
-
+            raise ValueError("`in_features` must be positive.")
         if n_out <= 0:
-            raise ValueError(
-                "`n_out` must be positive."
-            )
-
+            raise ValueError("`n_out` must be positive.")
         if any(size <= 0 for size in hidden_layers):
             raise ValueError(
                 "`hidden_layers` must contain positive integers."
             )
 
         super().__init__(
-            layers=[
-                in_features,
-                *hidden_layers,
-                n_out,
-            ],
+            layers=[in_features, *hidden_layers, n_out],
             **({} if options is None else dict(options)),
         )
 
@@ -279,18 +242,23 @@ class _RepresentationPipelineMixin:
 
     def _init_pipeline(
         self,
-        *,
         representation: Representation,
         head: nn.Module,
     ) -> None:
         self.representation = representation
         self.head = head
-
         self.register_buffer(
             "_head_reference",
             module_reference_tensor(head),
             persistent=False,
         )
+
+    def _apply_head(self, features):
+        features = features.to(
+            device=self._head_reference.device,
+            dtype=self._head_reference.dtype,
+        )
+        return self.head(features)
 
     @torch.jit.unused
     def cache(
@@ -315,16 +283,11 @@ class _VectorRepresentationModel(
 
     def __init__(
         self,
-        *,
         representation: VectorRepresentation,
         head: nn.Module,
     ) -> None:
         nn.Module.__init__(self)
-
-        self._init_pipeline(
-            representation=representation,
-            head=head,
-        )
+        self._init_pipeline(representation, head)
 
         self.in_features = int(representation.in_features)
         self.out_features = int(head.out_features)
@@ -338,24 +301,15 @@ class _VectorRepresentationModel(
             raise ValueError(
                 "`x` must include a batch dimension."
             )
-
         if x.shape[-1] != self.in_features:
             raise ValueError(
                 f"Expected {self.in_features} input features, "
                 f"found {x.shape[-1]}."
             )
 
-        features = self.representation(
-            x,
-            cell=cell,
+        return self._apply_head(
+            self.representation(x, cell=cell)
         )
-
-        features = features.to(
-            device=self._head_reference.device,
-            dtype=self._head_reference.dtype,
-        )
-
-        return self.head(features)
 
 
 class _GraphRepresentationModel(
@@ -366,7 +320,6 @@ class _GraphRepresentationModel(
 
     def __init__(
         self,
-        *,
         representation: GraphRepresentation,
         head: nn.Module,
     ) -> None:
@@ -391,28 +344,16 @@ class _GraphRepresentationModel(
 
         # Representation adapters construct their own neighborhood features.
         self._modules.pop("_radial_embedding", None)
-
-        self._init_pipeline(
-            representation=representation,
-            head=head,
-        )
+        self._init_pipeline(representation, head)
 
     def forward(
         self,
         data: Dict[str, torch.Tensor],
         cell: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        features = self.representation(
-            data,
-            cell=cell,
+        return self._apply_head(
+            self.representation(data, cell=cell)
         )
-
-        features = features.to(
-            device=self._head_reference.device,
-            dtype=self._head_reference.dtype,
-        )
-
-        return self.head(features)
 
 
 def RepresentationModel(
@@ -436,13 +377,13 @@ def RepresentationModel(
     ):
         raise ValueError(
             "Graph representations passed to `RepresentationModel` "
-            "must produce system-level features. Use "
-            "`pool_representation` or `concat_representation` first."
+            "must produce system-level features. "
+            "Use `.pool()` or `.concat_atoms()` first."
         )
 
     if head is None:
         head = TaskHead(
-            in_features=representation.out_features,
+            representation.out_features,
             n_out=n_out,
             hidden_layers=hidden_layers,
             options=options,
@@ -466,16 +407,14 @@ def RepresentationModel(
 
     if isinstance(representation, VectorRepresentation):
         return _VectorRepresentationModel(
-            representation=representation,
-            head=head,
+            representation,
+            head,
         )
 
     if isinstance(representation, GraphRepresentation):
         return _GraphRepresentationModel(
-            representation=representation,
-            head=head,
+            representation,
+            head,
         )
 
-    raise TypeError(
-        "Unsupported representation type."
-    )
+    raise TypeError("Unsupported representation type.")

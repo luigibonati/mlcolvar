@@ -1,17 +1,13 @@
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional
 
 import torch
 from torch import nn
 
 from mlcolvar.core import BaseGNN
 
-from ..base import (
-    GraphRepresentation,
-    Representation,
-    VectorRepresentation,
-    as_positive_int,
-    module_reference_tensor,
-)
+from ..base import GraphRepresentation, Representation, VectorRepresentation
+from .._utils import as_positive_int, module_reference_tensor
+from ._utils import to_float, to_int_list
 
 
 __all__ = ["MLColvarRepresentation"]
@@ -19,10 +15,10 @@ __all__ = ["MLColvarRepresentation"]
 
 def _infer_model_output_dimension(model: nn.Module) -> int:
     """Infer the latent output dimension of an mlcolvar model."""
-    internal_model = getattr(model, "nn", model)
+    internal = getattr(model, "nn", model)
 
     for name in ("out_features", "n_out"):
-        value = getattr(internal_model, name, None)
+        value = getattr(internal, name, None)
         if value is not None:
             return as_positive_int(value, name)
 
@@ -44,15 +40,17 @@ class _FrozenModelMixin:
 
     def _apply_preprocessing(self, data, cell=None):
         preprocessing = getattr(self.model, "preprocessing", None)
-
         if preprocessing is None:
             return data
+        return preprocessing(data) if cell is None else preprocessing(data, cell=cell)
 
-        return (
-            preprocessing(data)
-            if cell is None
-            else preprocessing(data, cell=cell)
-        )
+    def _validate_output(self, output):
+        if output.shape[-1] != self.out_features:
+            raise ValueError(
+                f"Expected {self.out_features} latent features, "
+                f"found {output.shape[-1]}."
+            )
+        return output
 
 
 class _VectorMLColvarRepresentation(
@@ -72,9 +70,7 @@ class _VectorMLColvarRepresentation(
         freeze: bool,
     ) -> None:
         if getattr(model, "in_features", None) is None:
-            raise TypeError(
-                f"{model.__class__.__name__} is graph-based."
-            )
+            raise TypeError(f"{model.__class__.__name__} is graph-based.")
 
         if mode == "latent":
             if getattr(model, "nn", None) is None:
@@ -82,25 +78,21 @@ class _VectorMLColvarRepresentation(
                     f"{model.__class__.__name__} does not expose "
                     "an `.nn` latent encoder."
                 )
-
             resolved_out = (
                 _infer_model_output_dimension(model)
                 if out_features is None
                 else as_positive_int(out_features, "out_features")
             )
-
         else:
             if out_features is not None:
                 raise ValueError(
                     "`out_features` is only valid with mode='latent'."
                 )
-
             if mode == "forward" and not hasattr(model, "forward_cv"):
                 raise TypeError(
                     f"{model.__class__.__name__} does not implement "
                     "`forward_cv()`."
                 )
-
             resolved_out = as_positive_int(
                 model.out_features,
                 "model.out_features",
@@ -120,48 +112,25 @@ class _VectorMLColvarRepresentation(
         self.mode = mode
         self._init_model(model)
 
-    def _cast_input(
-        self,
-        x: torch.Tensor,
-        cell: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        x = x.to(
-            device=self._model_reference.device,
-            dtype=self._model_reference.dtype,
-        )
-
-        if cell is not None:
-            cell = cell.to(
-                device=self._model_reference.device,
-                dtype=self._model_reference.dtype,
-            )
-
-        return x, cell
-
     def forward(
         self,
         x: torch.Tensor,
         cell: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         if x.ndim < 2:
-            raise ValueError(
-                "`x` must include a batch dimension."
-            )
-
+            raise ValueError("`x` must include a batch dimension.")
         if x.shape[-1] != self.in_features:
             raise ValueError(
                 f"Expected {self.in_features} input features, "
                 f"found {x.shape[-1]}."
             )
 
-        x, cell = self._cast_input(x, cell)
+        x = x.to(self._model_reference)
+        if cell is not None:
+            cell = cell.to(self._model_reference)
 
         if self.mode == "output":
-            return (
-                self.model(x)
-                if cell is None
-                else self.model(x, cell=cell)
-            )
+            return self.model(x) if cell is None else self.model(x, cell=cell)
 
         x = self._apply_preprocessing(x, cell)
 
@@ -172,15 +141,7 @@ class _VectorMLColvarRepresentation(
         if norm_in is not None:
             x = norm_in(x)
 
-        output = self.model.nn(x)
-
-        if output.shape[-1] != self.out_features:
-            raise ValueError(
-                f"Expected {self.out_features} latent features, "
-                f"found {output.shape[-1]}."
-            )
-
-        return output
+        return self._validate_output(self.model.nn(x))
 
 
 class _GraphMLColvarRepresentation(
@@ -218,12 +179,22 @@ class _GraphMLColvarRepresentation(
         GraphRepresentation.__init__(
             self,
             out_features=resolved_out,
-            atomic_numbers=encoder.atomic_numbers.detach().cpu().tolist(),
-            cutoff=float(encoder.cutoff.detach().cpu().item()),
+            atomic_numbers=to_int_list(
+                encoder.atomic_numbers,
+                name="encoder.atomic_numbers",
+            ),
+            cutoff=to_float(
+                encoder.cutoff,
+                name="encoder.cutoff",
+            ),
             output_kind="system",
-            buffer=float(encoder.buffer.detach().cpu().item()),
-            long_range_cutoff=float(
-                encoder.long_range_cutoff.detach().cpu().item()
+            buffer=to_float(
+                encoder.buffer,
+                name="encoder.buffer",
+            ),
+            long_range_cutoff=to_float(
+                encoder.long_range_cutoff,
+                name="encoder.long_range_cutoff",
             ),
             full_neighbor_list=True,
             freeze=freeze,
@@ -242,15 +213,11 @@ class _GraphMLColvarRepresentation(
             if not torch.is_tensor(value):
                 continue
 
-            if value.is_floating_point() or value.is_complex():
-                output[key] = value.to(
-                    device=self._model_reference.device,
-                    dtype=self._model_reference.dtype,
-                )
-            else:
-                output[key] = value.to(
-                    device=self._model_reference.device,
-                )
+            output[key] = (
+                value.to(self._model_reference)
+                if value.is_floating_point() or value.is_complex()
+                else value.to(self._model_reference.device)
+            )
 
         return output
 
@@ -262,10 +229,7 @@ class _GraphMLColvarRepresentation(
         data = self._cast_graph(data)
 
         if cell is not None:
-            cell = cell.to(
-                device=self._model_reference.device,
-                dtype=self._model_reference.dtype,
-            )
+            cell = cell.to(self._model_reference)
 
         data = self._apply_preprocessing(data, cell)
 
@@ -275,15 +239,7 @@ class _GraphMLColvarRepresentation(
                 "directly to graph dictionaries."
             )
 
-        output = self.model.nn(data)
-
-        if output.shape[-1] != self.out_features:
-            raise ValueError(
-                f"Expected {self.out_features} latent features, "
-                f"found {output.shape[-1]}."
-            )
-
-        return output
+        return self._validate_output(self.model.nn(data))
 
 
 def MLColvarRepresentation(
@@ -308,12 +264,9 @@ def MLColvarRepresentation(
         If True, keep the pretrained model frozen and in evaluation mode.
     """
     if not isinstance(model, nn.Module):
-        raise TypeError(
-            "`model` must be a torch.nn.Module."
-        )
+        raise TypeError("`model` must be a torch.nn.Module.")
 
     mode = mode.lower()
-
     if mode not in {"latent", "output", "forward"}:
         raise ValueError(
             "`mode` must be 'latent', 'output', or 'forward'."
@@ -324,7 +277,6 @@ def MLColvarRepresentation(
             raise ValueError(
                 "Graph-based pretrained CVs support only mode='latent'."
             )
-
         return _GraphMLColvarRepresentation(
             model=model,
             out_features=out_features,
