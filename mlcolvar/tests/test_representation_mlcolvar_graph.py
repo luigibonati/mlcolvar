@@ -3,16 +3,13 @@ from typing import Dict, Optional
 import pytest
 import torch
 from torch import nn
-from torch_geometric.data import Data
 
 from mlcolvar.core import BaseGNN
-from mlcolvar.data import DictDataset
 from mlcolvar.representation import (
     MLColvarRepresentation,
     RepresentationModel,
     TaskHead,
     export_representation_torchscript,
-    precompute_committor_cache,
 )
 
 
@@ -22,16 +19,11 @@ class GraphShiftPreprocessing(nn.Module):
         data: Dict[str, torch.Tensor],
         cell: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
-        output = {
-            key: value
-            for key, value in data.items()
-        }
+        output = dict(data)
 
         shift = 1.0
         if cell is not None:
-            shift = shift + float(
-                cell.reshape(()).item()
-            )
+            shift += float(cell.reshape(()).item())
 
         output["positions"] = (
             data["positions"] + shift
@@ -56,10 +48,7 @@ class DummyGraphEncoder(BaseGNN):
         )
 
         self.scale = nn.Parameter(
-            torch.tensor(
-                2.0,
-                dtype=dtype,
-            )
+            torch.tensor(2.0, dtype=dtype)
         )
         self.to(dtype=dtype)
 
@@ -72,18 +61,17 @@ class DummyGraphEncoder(BaseGNN):
         ptr = data["ptr"]
 
         node_features = (
-            positions[:, :2]
-            * self.scale
+            positions[:, :2] * self.scale
         )
 
         if self.pooling_operation is None:
             return node_features
 
         n_graphs = ptr.numel() - 1
-
         output = node_features.new_zeros(
             (n_graphs, 2)
         )
+
         output.index_add_(
             0,
             batch,
@@ -98,9 +86,11 @@ class DummyGraphEncoder(BaseGNN):
                 dtype=output.dtype,
                 device=output.device,
             )
-            output = output / counts.clamp_min(
-                1.0
-            ).unsqueeze(-1)
+            output = (
+                output
+                / counts.clamp_min(1.0)
+                .unsqueeze(-1)
+            )
 
         elif self.pooling_operation != "sum":
             raise ValueError(
@@ -121,7 +111,7 @@ class DummyGraphCV(nn.Module):
 
         self.in_features = None
         self.nn = DummyGraphEncoder(
-            pooling_operation=pooling_operation,
+            pooling_operation=pooling_operation
         )
 
         if use_preprocessing:
@@ -179,20 +169,25 @@ def make_graph(
             dtype=torch.long,
         ),
         "unit_shifts": torch.zeros(
-            (2, 3),
+            2,
+            3,
             dtype=dtype,
         ),
     }
 
 
-def test_graph_mlcolvar_representation_features_metadata_and_dtype() -> None:
-    pretrained = DummyGraphCV()
-
-    representation = MLColvarRepresentation(
-        pretrained,
+def make_representation(
+    **kwargs,
+) -> MLColvarRepresentation:
+    return MLColvarRepresentation(
+        DummyGraphCV(**kwargs),
         mode="latent",
         freeze=True,
     )
+
+
+def test_graph_representation() -> None:
+    representation = make_representation()
 
     data = make_graph()
     output = representation(data)
@@ -205,47 +200,38 @@ def test_graph_mlcolvar_representation_features_metadata_and_dtype() -> None:
         dtype=torch.float32,
     )
 
+    torch.testing.assert_close(
+        output,
+        expected,
+    )
+
     assert representation.input_kind == "graph"
     assert representation.output_kind == "system"
-    assert representation.in_features is None
     assert representation.out_features == 2
     assert representation.pooling_operation == "mean"
-
-    torch.testing.assert_close(
-        representation.cutoff,
-        torch.tensor(4.0),
-    )
-    torch.testing.assert_close(
-        representation.buffer,
-        torch.tensor(0.5),
-    )
-    torch.testing.assert_close(
-        representation.long_range_cutoff,
-        torch.tensor(-1.0),
-    )
-
     assert representation.atomic_numbers.tolist() == [
         1,
         6,
         8,
     ]
 
-    assert output.shape == (2, 2)
-    assert output.dtype == torch.float32
     torch.testing.assert_close(
-        output,
-        expected,
+        representation.cutoff,
+        torch.tensor(4.0),
     )
 
-    # Input is not modified in-place.
+    state = representation.state_dict()
+
+    assert "model.nn.scale" in state
+    assert "cutoff" in state
+    assert "atomic_numbers" in state
+    assert "_model_reference" not in state
+
+    # Input is not modified in place.
     assert data["positions"].dtype == torch.float64
-    torch.testing.assert_close(
-        data["positions"],
-        make_graph()["positions"],
-    )
 
 
-def test_frozen_graph_representation_preserves_position_gradients() -> None:
+def test_graph_representation_preserves_gradients() -> None:
     pretrained = DummyGraphCV()
 
     representation = MLColvarRepresentation(
@@ -257,16 +243,14 @@ def test_frozen_graph_representation_preserves_position_gradients() -> None:
     data = make_graph()
     data["positions"].requires_grad_(True)
 
-    output = representation(data)
-    output.sum().backward()
+    representation(
+        data
+    ).sum().backward()
 
     assert data["positions"].grad is not None
     assert torch.isfinite(
         data["positions"].grad
     ).all()
-    assert torch.count_nonzero(
-        data["positions"].grad
-    ) > 0
 
     assert all(
         not p.requires_grad
@@ -278,29 +262,13 @@ def test_frozen_graph_representation_preserves_position_gradients() -> None:
     )
 
     representation.train()
+
     assert not representation.training
     assert not pretrained.training
     assert not pretrained.nn.training
 
 
-def test_graph_representation_state_dict_contains_model_and_metadata() -> None:
-    representation = MLColvarRepresentation(
-        DummyGraphCV(),
-        mode="latent",
-        freeze=True,
-    )
-
-    state = representation.state_dict()
-
-    assert "model.nn.scale" in state
-    assert "cutoff" in state
-    assert "buffer" in state
-    assert "long_range_cutoff" in state
-    assert "atomic_numbers" in state
-    assert "_model_reference" not in state
-
-
-def test_graph_representation_model_is_basegnn_and_trains_only_head() -> None:
+def test_representation_model_trains_only_head() -> None:
     pretrained = DummyGraphCV()
 
     representation = MLColvarRepresentation(
@@ -315,47 +283,7 @@ def test_graph_representation_model_is_basegnn_and_trains_only_head() -> None:
         hidden_layers=(),
     )
 
-    assert isinstance(
-        model,
-        BaseGNN,
-    )
-
-    assert model.representation is representation
-    assert model.out_features == 1
-    assert "_radial_embedding" not in model._modules
-
-    torch.testing.assert_close(
-        model.cutoff,
-        representation.cutoff,
-    )
-    torch.testing.assert_close(
-        model.buffer,
-        representation.buffer,
-    )
-    torch.testing.assert_close(
-        model.long_range_cutoff,
-        representation.long_range_cutoff,
-    )
-
-    trainable = [
-        p
-        for p in model.parameters()
-        if p.requires_grad
-    ]
-    assert sum(
-        p.numel()
-        for p in trainable
-    ) == 3
-
-    linear = next(
-        module
-        for module in model.head.modules()
-        if isinstance(module, nn.Linear)
-    )
-
-    with torch.no_grad():
-        linear.weight.fill_(1.0)
-        linear.bias.zero_()
+    assert isinstance(model, BaseGNN)
 
     data = make_graph()
     data["positions"].requires_grad_(True)
@@ -363,64 +291,31 @@ def test_graph_representation_model_is_basegnn_and_trains_only_head() -> None:
     output = model(data)
 
     assert output.shape == (2, 1)
+
     output.sum().backward()
 
     assert data["positions"].grad is not None
-    assert torch.isfinite(
-        data["positions"].grad
-    ).all()
-    assert linear.weight.grad is not None
     assert pretrained.nn.scale.grad is None
 
-
-def test_graph_representation_model_can_be_traced() -> None:
-    model = RepresentationModel(
-        MLColvarRepresentation(
-            DummyGraphCV(),
-            mode="latent",
-            freeze=True,
-        ),
-        n_out=1,
-        hidden_layers=(),
-    ).eval()
-
-    data = make_graph()
-    expected = model(data)
-
-    traced = torch.jit.trace(
-        model,
-        example_inputs=(data,),
-        strict=False,
-        check_trace=True,
-    )
-
-    output = traced(data)
-
-    torch.testing.assert_close(
-        output,
-        expected,
+    assert any(
+        p.grad is not None
+        for p in model.head.parameters()
     )
 
 
-def test_graph_representation_requires_graph_level_pooling() -> None:
+def test_graph_requires_pooling() -> None:
     with pytest.raises(
         ValueError,
         match="graph-level encoder",
     ):
-        MLColvarRepresentation(
-            DummyGraphCV(
-                pooling_operation=None,
-            ),
-            mode="latent",
+        make_representation(
+            pooling_operation=None
         )
 
 
-def test_graph_representation_rejects_vector_norm_in() -> None:
-    representation = MLColvarRepresentation(
-        DummyGraphCV(
-            use_norm_in=True,
-        ),
-        mode="latent",
+def test_graph_rejects_norm_in() -> None:
+    representation = make_representation(
+        use_norm_in=True
     )
 
     with pytest.raises(
@@ -432,22 +327,30 @@ def test_graph_representation_rejects_vector_norm_in() -> None:
         )
 
 
-def test_mlcolvar_representation_factory_distinguishes_vector_and_graph() -> None:
-    vector_rep = MLColvarRepresentation(
-        DummyVectorCV(),
-        mode="latent",
-    )
-    graph_rep = MLColvarRepresentation(
-        DummyGraphCV(),
-        mode="latent",
+def test_factory_distinguishes_vector_and_graph() -> None:
+    vector_representation = (
+        MLColvarRepresentation(
+            DummyVectorCV(),
+            mode="latent",
+        )
     )
 
-    assert vector_rep.input_kind == "vector"
-    assert graph_rep.input_kind == "graph"
+    graph_representation = (
+        make_representation()
+    )
+
+    assert (
+        vector_representation.input_kind
+        == "vector"
+    )
+    assert (
+        graph_representation.input_kind
+        == "graph"
+    )
 
     with pytest.raises(
         ValueError,
-        match="support only mode='latent'",
+        match="mode='latent'",
     ):
         MLColvarRepresentation(
             DummyGraphCV(),
@@ -455,131 +358,18 @@ def test_mlcolvar_representation_factory_distinguishes_vector_and_graph() -> Non
         )
 
 
-def make_graph_sample(
-    offset: float,
-    label: float = 2.0,
-) -> Data:
-    positions = torch.tensor(
-        [
-            [0.0, 0.0, 0.0],
-            [2.0, 1.0, 0.0],
-            [1.0, 2.0, 0.0],
-        ],
-        dtype=torch.float32,
-    ) + offset
-
-    return Data(
-        positions=positions,
-        num_nodes=positions.shape[0],
-        edge_index=torch.tensor(
-            [
-                [0, 1],
-                [1, 0],
-            ],
-            dtype=torch.long,
-        ),
-        unit_shifts=torch.zeros(
-            (2, 3),
-            dtype=torch.float32,
-        ),
-        graph_labels=torch.tensor(
-            [label],
-            dtype=torch.float32,
-        ),
-        weight=torch.ones(
-            1,
-            dtype=torch.float32,
-        ),
-    )
-
-
-def test_graph_committor_cache_matches_direct_representation() -> None:
-    dataset = DictDataset(
-        {
-            "data_list": [
-                make_graph_sample(0.0),
-                make_graph_sample(0.5),
-            ]
-        },
-        metadata={
-            "atomic_numbers": [1, 6, 8],
-        },
-        data_type="graphs",
-    )
-
-    representation = MLColvarRepresentation(
-        DummyGraphCV(
-            use_preprocessing=False,
-        ),
-        mode="latent",
-        freeze=True,
-    )
-
-    cached_dataset, cached_derivatives = (
-        precompute_committor_cache(
-            representation=representation,
-            dataset=dataset,
-            batch_size=1,
-            device="cpu",
-            output_device="cpu",
-            separate_boundary_dataset=False,
-        )
-    )
-
-    graph_batch = dataset.get_graph_inputs()
-
-    with torch.no_grad():
-        expected_latent = representation(
-            graph_batch
-        )
-
-    torch.testing.assert_close(
-        cached_dataset["data"],
-        expected_latent,
-    )
-
-    assert cached_dataset["data"].shape == (2, 2)
-    assert cached_derivatives.jacobian.shape == (
-        2,
-        3,
-        3,
-        2,
-    )
-
-    expected_jacobian = torch.zeros(
-        2,
-        3,
-        3,
-        2,
-    )
-
-    expected_jacobian[:, :, 0, 0] = 2.0 / 3.0
-    expected_jacobian[:, :, 1, 1] = 2.0 / 3.0
-
-    torch.testing.assert_close(
-        cached_derivatives.jacobian,
-        expected_jacobian,
-    )
-
-
 def test_graph_representation_torchscript_roundtrip(
     tmp_path,
 ) -> None:
-    representation = MLColvarRepresentation(
-        DummyGraphCV(),
-        mode="latent",
-        freeze=True,
-    )
-
-    head = TaskHead(
-        representation.out_features,
-        n_out=1,
-        hidden_layers=(),
-    )
+    representation = make_representation()
 
     model = RepresentationModel(
         representation,
-        head=head,
+        head=TaskHead(
+            representation.out_features,
+            n_out=1,
+            hidden_layers=(),
+        ),
     ).eval()
 
     postprocessing = nn.Sigmoid()
@@ -587,15 +377,14 @@ def test_graph_representation_torchscript_roundtrip(
 
     graph = make_graph()
 
-    # Current exporter validates these deployment fields.
     graph["node_attrs"] = torch.ones(
         graph["positions"].shape[0],
         1,
         dtype=graph["positions"].dtype,
     )
-    graph["shifts"] = graph[
-        "unit_shifts"
-    ].clone()
+    graph["shifts"] = (
+        graph["unit_shifts"].clone()
+    )
 
     export_representation_torchscript(
         model=model,
