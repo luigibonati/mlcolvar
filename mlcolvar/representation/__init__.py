@@ -6,7 +6,6 @@ from .base import (
 from .cache import (
     IdentityDescriptorDerivatives,
     precompute_committor_cache,
-    precompute_representation_cache,
 )
 from .model import (
     RepresentationModel,
@@ -34,7 +33,6 @@ __all__ = [
     "TaskHead",
     "pool_representation",
     "concat_representation",
-    "precompute_representation_cache",
     "precompute_committor_cache",
     "IdentityDescriptorDerivatives",
     "RepresentationInferenceModel",

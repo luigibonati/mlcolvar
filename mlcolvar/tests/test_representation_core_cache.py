@@ -16,7 +16,6 @@ from mlcolvar.representation import (
     VectorRepresentation,
     concat_representation,
     pool_representation,
-    precompute_representation_cache,
 )
 from mlcolvar.representation.cache import (
     CachedRepresentationDerivatives,
@@ -239,7 +238,7 @@ def test_concat_graph_representation_model() -> None:
     assert output.shape == (2, 1)
 
 
-def test_generic_cache_has_no_task_dependency() -> None:
+def test_representation_cache_has_no_task_dependency() -> None:
     representation = DummyVectorRepresentation()
 
     dataset = DictDataset(
@@ -251,10 +250,8 @@ def test_generic_cache_has_no_task_dependency() -> None:
         }
     )
 
-    cache = precompute_representation_cache(
-        representation,
+    cache = representation.cache(
         dataset,
-        compute_jacobian=False,
         batch_size=2,
     )
 
@@ -266,7 +263,41 @@ def test_generic_cache_has_no_task_dependency() -> None:
     assert cache.reference_indices is None
 
 
-def test_generic_selective_jacobian_cache() -> None:
+def test_model_cache_delegates_to_representation() -> None:
+    representation = DummyVectorRepresentation()
+
+    model = RepresentationModel(
+        representation,
+        n_out=1,
+        hidden_layers=(),
+    )
+
+    dataset = DictDataset(
+        {
+            "data": torch.randn(
+                4,
+                3,
+            )
+        }
+    )
+
+    cache = model.cache(
+        dataset,
+        batch_size=2,
+    )
+
+    expected = representation.cache(
+        dataset,
+        batch_size=2,
+    )
+
+    torch.testing.assert_close(
+        cache.features,
+        expected.features,
+    )
+
+
+def test_representation_selective_jacobian_cache() -> None:
     representation = DummyVectorRepresentation()
 
     dataset = DictDataset(
@@ -278,9 +309,9 @@ def test_generic_selective_jacobian_cache() -> None:
         }
     )
 
-    cache = precompute_representation_cache(
-        representation,
+    cache = representation.cache(
         dataset,
+        jacobian=True,
         descriptor_derivatives=(
             IdentityDescriptorDerivatives()
         ),
@@ -303,6 +334,29 @@ def test_generic_selective_jacobian_cache() -> None:
             [-1, 0, -1, 1]
         ),
     )
+
+
+def test_representation_cache_requires_frozen_representation() -> None:
+    representation = DummyVectorRepresentation(
+        freeze=False
+    )
+
+    dataset = DictDataset(
+        {
+            "data": torch.randn(
+                4,
+                3,
+            )
+        }
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="frozen representation",
+    ):
+        representation.cache(
+            dataset,
+        )
 
 
 def test_cached_representation_derivatives_require_ref_idx() -> None:

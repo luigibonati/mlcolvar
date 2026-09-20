@@ -300,12 +300,9 @@ class _RepresentationPipelineMixin:
         jacobian: bool = False,
         **kwargs,
     ):
-        from .cache import precompute_representation_cache
-
-        return precompute_representation_cache(
-            self.representation,
+        return self.representation.cache(
             dataset,
-            compute_jacobian=jacobian,
+            jacobian=jacobian,
             **kwargs,
         )
 

@@ -292,6 +292,46 @@ class Representation(nn.Module):
         """Keep registered pretrained children in eval mode when frozen."""
         for child in self.children():
             child.eval()
+            
+    @torch.jit.unused
+    def cache(
+        self,
+        dataset,
+        *,
+        jacobian: bool = False,
+        **kwargs,
+    ):
+        """Precompute and cache representation features.
+
+        Parameters
+        ----------
+        dataset
+            Dataset used to evaluate the representation.
+        jacobian
+            If True, also cache derivatives of the representation.
+        **kwargs
+            Additional arguments forwarded to the cache implementation.
+
+        Returns
+        -------
+        RepresentationCache
+            Cached representation features and, optionally, Jacobians.
+        """
+        if not self.freeze:
+            raise RuntimeError(
+                "Caching requires a frozen representation."
+            )
+
+        # Local import avoids a circular dependency:
+        # cache.py imports Representation.
+        from .cache import precompute_representation_cache
+
+        return precompute_representation_cache(
+            self,
+            dataset,
+            compute_jacobian=jacobian,
+            **kwargs,
+        )
 
 
 class VectorRepresentation(Representation):
