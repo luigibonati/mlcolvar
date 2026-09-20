@@ -244,13 +244,17 @@ def _infer_metadata(
 def _prepare_network(
     network: torch.nn.Module,
 ) -> torch.nn.Module:
-    """Prepare nested representations for TorchScript export."""
+    """Prepare representation modules for TorchScript export."""
 
     network = copy.deepcopy(
         network
     ).eval()
 
-    for module in network.modules():
+    # A backend-specific representation can be nested inside
+    # representation transforms such as pooling or concatenation.
+    # Traverse the complete module hierarchy and call any available
+    # TorchScript preparation hooks.
+    for module in list(network.modules()):
         prepare = getattr(
             module,
             "prepare_for_torchscript",

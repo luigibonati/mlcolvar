@@ -19,14 +19,6 @@ def to_float(value: Any, *, name: str) -> float:
     return float(value)
 
 
-def to_bool(value: Any, *, name: str) -> bool:
-    if isinstance(value, torch.Tensor):
-        if value.numel() != 1:
-            raise ValueError(f"`{name}` must be scalar.")
-        value = value.detach().cpu().item()
-    return bool(value)
-
-
 def to_int_list(value: Any, *, name: str) -> list[int]:
     try:
         values = torch.as_tensor(value, dtype=torch.long).detach().cpu().reshape(-1)
