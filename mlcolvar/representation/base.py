@@ -420,4 +420,34 @@ class GraphRepresentation(Representation):
 
     @torch.jit.unused
     def align_dataset(self, dataset):
-        return align_node_attrs(dataset, self.atomic_numbers)
+        """Align dataset atomic species with the representation."""
+        return align_node_attrs(
+            dataset,
+            self.atomic_numbers,
+        )
+
+    @torch.jit.unused
+    def pool(
+        self,
+        pooling: str = "mean",
+    ) -> "GraphRepresentation":
+        """Pool atom-level features into system-level features."""
+        from .model import pool_representation
+
+        return pool_representation(
+            self,
+            pooling=pooling,
+        )
+
+    @torch.jit.unused
+    def concat_atoms(
+        self,
+        atom_indices: Sequence[int],
+    ) -> "GraphRepresentation":
+        """Concatenate features from selected atoms."""
+        from .model import concat_representation
+
+        return concat_representation(
+            self,
+            atom_indices=atom_indices,
+        )

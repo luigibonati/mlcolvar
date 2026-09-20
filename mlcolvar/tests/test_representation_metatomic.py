@@ -18,7 +18,10 @@ from mlcolvar.representation.metatomic import (  # noqa: E402
 )
 from mlcolvar.representation.metatomic.export import (  # noqa: E402
     _get_neighbor_options,
+    _infer_metadata,
+    _prepare_network,
 )
+
 
 class DummyGraphNetwork(nn.Module):
     """Minimal graph model accepting an mlcolvar graph dictionary."""
@@ -31,29 +34,101 @@ class DummyGraphNetwork(nn.Module):
         batch = data["batch"]
 
         if batch.numel() == 0:
-            return positions.new_zeros((0, 1))
+            return positions.new_zeros(
+                (0, 1)
+            )
 
-        n_systems = int(batch.max().item()) + 1
+        n_systems = (
+            int(batch.max().item()) + 1
+        )
 
         output = positions.new_zeros(
             (n_systems, 1)
         )
+
         output.index_add_(
             0,
             batch,
             positions[:, :1],
         )
+
         return output
 
 
+class DummyRepresentation(nn.Module):
+    """Minimal representation exposing export metadata."""
+
+    def __init__(self) -> None:
+        super().__init__()
+
+        self.register_buffer(
+            "atomic_numbers",
+            torch.tensor(
+                [1, 6, 8],
+                dtype=torch.long,
+            ),
+        )
+
+        self.register_buffer(
+            "cutoff",
+            torch.tensor(
+                5.0,
+                dtype=torch.float64,
+            ),
+        )
+
+        self.length_unit = "angstrom"
+
+
+class DummyRepresentationNetwork(nn.Module):
+    """Minimal mlcolvar-like representation network."""
+
+    def __init__(self) -> None:
+        super().__init__()
+
+        self.representation = (
+            DummyRepresentation()
+        )
+
+        self.out_features = 2
+
+        self.weight = nn.Parameter(
+            torch.ones(
+                1,
+                dtype=torch.float64,
+            )
+        )
+
+
+class DummyCVModel(nn.Module):
+    """Minimal mlcolvar-like CV model."""
+
+    def __init__(self) -> None:
+        super().__init__()
+
+        self.nn = (
+            DummyRepresentationNetwork()
+        )
+
+        self.n_cvs = 2
+
+
 class _FakeSamples:
-    def __init__(self, values: torch.Tensor) -> None:
+    def __init__(
+        self,
+        values: torch.Tensor,
+    ) -> None:
         self.values = values
 
 
 class _FakeNeighborList:
-    def __init__(self, samples: torch.Tensor) -> None:
-        self.samples = _FakeSamples(samples)
+    def __init__(
+        self,
+        samples: torch.Tensor,
+    ) -> None:
+        self.samples = _FakeSamples(
+            samples
+        )
 
 
 class _FakeSystem:
@@ -71,9 +146,15 @@ class _FakeSystem:
         self.positions = positions
         self.cell = cell
         self.pbc = pbc
-        self._neighbor_list = _FakeNeighborList(neighbors)
+        self._neighbor_list = (
+            _FakeNeighborList(
+                neighbors
+            )
+        )
 
-    def __len__(self) -> int:
+    def __len__(
+        self,
+    ) -> int:
         return self.positions.shape[0]
 
     def get_neighbor_list(
@@ -103,7 +184,9 @@ def test_systems_to_graph() -> None:
             [1, 8],
             dtype=torch.long,
         ),
-        neighbor_options=_neighbor_options(),
+        neighbor_options=(
+            _neighbor_options()
+        ),
     )
 
     system_0 = _FakeSystem(
@@ -141,7 +224,9 @@ def test_systems_to_graph() -> None:
             dtype=torch.long,
         ),
         positions=torch.tensor(
-            [[2.0, 0.0, 0.0]],
+            [
+                [2.0, 0.0, 0.0],
+            ],
             dtype=torch.float64,
         ),
         cell=torch.eye(
@@ -159,7 +244,10 @@ def test_systems_to_graph() -> None:
     )
 
     graph = model._systems_to_graph(
-        [system_0, system_1]
+        [
+            system_0,
+            system_1,
+        ]
     )
 
     torch.testing.assert_close(
@@ -221,11 +309,24 @@ def test_systems_to_graph() -> None:
         ),
     )
 
-    assert graph["cell"].shape == (2, 3, 3)
-    assert graph["cell"].dtype == torch.float64
+    assert graph["cell"].shape == (
+        2,
+        3,
+        3,
+    )
+    assert (
+        graph["cell"].dtype
+        == torch.float64
+    )
 
-    assert graph["pbc"].shape == (2, 3)
-    assert graph["pbc"].dtype == torch.bool
+    assert graph["pbc"].shape == (
+        2,
+        3,
+    )
+    assert (
+        graph["pbc"].dtype
+        == torch.bool
+    )
 
 
 def test_neighbor_options_resolution_prefers_representation_request() -> None:
@@ -233,11 +334,17 @@ def test_neighbor_options_resolution_prefers_representation_request() -> None:
         cutoff=4.5
     )
 
-    class RepresentationWithRequest(nn.Module):
+    class RepresentationWithRequest(
+        nn.Module
+    ):
         def requested_neighbor_lists(
             self,
-        ) -> List[NeighborListOptions]:
-            return [requested]
+        ) -> List[
+            NeighborListOptions
+        ]:
+            return [
+                requested
+            ]
 
     class Network(nn.Module):
         def __init__(
@@ -245,22 +352,29 @@ def test_neighbor_options_resolution_prefers_representation_request() -> None:
             representation: nn.Module,
         ) -> None:
             super().__init__()
-            self.representation = representation
+            self.representation = (
+                representation
+            )
 
-    resolved = _get_neighbor_options(
-        network=Network(
-            RepresentationWithRequest()
-        ),
-        interaction_range=8.0,
+    resolved = (
+        _get_neighbor_options(
+            network=Network(
+                RepresentationWithRequest()
+            ),
+            interaction_range=8.0,
+        )
     )
 
     assert resolved is requested
 
 
 def test_neighbor_options_resolution_uses_cutoff_fallback() -> None:
-    class RepresentationWithCutoff(nn.Module):
+    class RepresentationWithCutoff(
+        nn.Module
+    ):
         def __init__(self) -> None:
             super().__init__()
+
             self.register_buffer(
                 "cutoff",
                 torch.tensor(
@@ -268,6 +382,7 @@ def test_neighbor_options_resolution_uses_cutoff_fallback() -> None:
                     dtype=torch.float64,
                 ),
             )
+
             self.full_neighbor_list = True
 
     class Network(nn.Module):
@@ -276,20 +391,129 @@ def test_neighbor_options_resolution_uses_cutoff_fallback() -> None:
             representation: nn.Module,
         ) -> None:
             super().__init__()
-            self.representation = representation
 
-    fallback = _get_neighbor_options(
-        network=Network(
-            RepresentationWithCutoff()
-        ),
-        interaction_range=8.0,
+            self.representation = (
+                representation
+            )
+
+    fallback = (
+        _get_neighbor_options(
+            network=Network(
+                RepresentationWithCutoff()
+            ),
+            interaction_range=8.0,
+        )
     )
 
-    assert fallback.cutoff == pytest.approx(
-        5.5
+    assert fallback.cutoff == (
+        pytest.approx(
+            5.5
+        )
     )
+
     assert fallback.full_list
     assert fallback.strict
+
+
+def test_metatomic_metadata_is_inferred() -> None:
+    model = DummyCVModel()
+
+    metadata = _infer_metadata(
+        model
+    )
+
+    assert metadata[
+        "out_features"
+    ] == 2
+
+    assert metadata[
+        "atomic_types"
+    ] == [
+        1,
+        6,
+        8,
+    ]
+
+    assert metadata[
+        "interaction_range"
+    ] == pytest.approx(
+        5.0
+    )
+
+    assert metadata[
+        "dtype"
+    ] == "float64"
+
+    assert metadata[
+        "length_unit"
+    ] == "angstrom"
+
+
+def test_prepare_network_finds_nested_representation() -> None:
+    class PreparedRepresentation(
+        nn.Module
+    ):
+        def __init__(
+            self,
+        ) -> None:
+            super().__init__()
+
+            self.register_buffer(
+                "prepared",
+                torch.tensor(
+                    False
+                ),
+            )
+
+        def prepare_for_torchscript(
+            self,
+        ) -> None:
+            self.prepared.fill_(
+                True
+            )
+
+    class Wrapper(nn.Module):
+        def __init__(
+            self,
+        ) -> None:
+            super().__init__()
+
+            self.representation = (
+                PreparedRepresentation()
+            )
+
+    class Network(nn.Module):
+        def __init__(
+            self,
+        ) -> None:
+            super().__init__()
+
+            self.representation = (
+                Wrapper()
+            )
+
+    network = Network()
+
+    prepared = _prepare_network(
+        network
+    )
+
+    assert bool(
+        prepared
+        .representation
+        .representation
+        .prepared
+        .item()
+    )
+
+    # The original network must remain unchanged.
+    assert not bool(
+        network
+        .representation
+        .representation
+        .prepared
+        .item()
+    )
 
 
 def test_metatomic_wrapper_empty_system() -> None:
@@ -300,7 +524,9 @@ def test_metatomic_wrapper_empty_system() -> None:
             [1, 8],
             dtype=torch.long,
         ),
-        neighbor_options=_neighbor_options(),
+        neighbor_options=(
+            _neighbor_options()
+        ),
     )
 
     wrapper = MetatomicCVWrapper(
@@ -332,7 +558,9 @@ def test_metatomic_wrapper_empty_system() -> None:
     )
 
     result = wrapper(
-        systems=[empty_system],
+        systems=[
+            empty_system
+        ],
         outputs={
             "feature": ModelOutput(
                 sample_kind="system"
@@ -343,13 +571,29 @@ def test_metatomic_wrapper_empty_system() -> None:
 
     assert "feature" in result
 
-    block = result["feature"].block()
+    block = result[
+        "feature"
+    ].block()
 
-    assert block.values.shape == (0, 2)
-    assert block.values.dtype == torch.float64
+    assert block.values.shape == (
+        0,
+        2,
+    )
 
-    assert len(block.samples) == 0
-    assert len(block.properties) == 2
+    assert (
+        block.values.dtype
+        == torch.float64
+    )
+
+    assert (
+        len(block.samples)
+        == 0
+    )
+
+    assert (
+        len(block.properties)
+        == 2
+    )
 
 
 def test_inference_model_is_torchscript_compatible() -> None:
@@ -360,7 +604,9 @@ def test_inference_model_is_torchscript_compatible() -> None:
             [1, 8],
             dtype=torch.long,
         ),
-        neighbor_options=_neighbor_options(),
+        neighbor_options=(
+            _neighbor_options()
+        ),
     ).eval()
 
     scripted = torch.jit.script(

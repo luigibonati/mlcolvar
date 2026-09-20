@@ -23,7 +23,8 @@ __all__ = [
 def _as_float(value) -> float:
     """Convert a scalar or scalar tensor to float."""
     if isinstance(value, torch.Tensor):
-        return float(value.detach().cpu().item())
+        value = value.detach().cpu().item()
+
     return float(value)
 
 
@@ -31,16 +32,29 @@ def _get_neighbor_options(
     network: torch.nn.Module,
     interaction_range: float,
 ) -> NeighborListOptions:
-    """Resolve the neighbor-list options required by the representation."""
+    """Resolve neighbor-list options required by the representation."""
 
-    representation = getattr(network, "representation", None)
-    candidates = [representation, network]
+    representation = getattr(
+        network,
+        "representation",
+        None,
+    )
+
+    candidates = [
+        representation,
+        network,
+    ]
 
     for module in candidates:
         if module is None:
             continue
 
-        request = getattr(module, "requested_neighbor_lists", None)
+        request = getattr(
+            module,
+            "requested_neighbor_lists",
+            None,
+        )
+
         if request is not None:
             options = request()
 
@@ -57,7 +71,12 @@ def _get_neighbor_options(
         if module is None:
             continue
 
-        options = getattr(module, "neighbor_options", None)
+        options = getattr(
+            module,
+            "neighbor_options",
+            None,
+        )
+
         if options is not None:
             return options
 
@@ -67,9 +86,16 @@ def _get_neighbor_options(
         if module is None:
             continue
 
-        module_cutoff = getattr(module, "cutoff", None)
+        module_cutoff = getattr(
+            module,
+            "cutoff",
+            None,
+        )
+
         if module_cutoff is not None:
-            cutoff = _as_float(module_cutoff)
+            cutoff = _as_float(
+                module_cutoff
+            )
             break
 
     return NeighborListOptions(
@@ -80,29 +106,166 @@ def _get_neighbor_options(
     )
 
 
-def _prepare_network(
-    network: torch.nn.Module,
-) -> torch.nn.Module:
-    """Prepare backend-specific modules for TorchScript export."""
+def _infer_metadata(
+    model: torch.nn.Module,
+) -> dict:
+    """Infer Metatomic metadata from a representation model."""
 
-    network = copy.deepcopy(network).eval()
-
-    representation = getattr(network, "representation", None)
-    if representation is None:
-        return network
-
-    prepare = getattr(
-        representation,
-        "prepare_for_torchscript",
+    network = getattr(
+        model,
+        "nn",
         None,
     )
 
-    if prepare is not None:
+    if network is None:
+        raise ValueError(
+            "The supplied model must expose "
+            "its network through `nn`."
+        )
+
+    representation = getattr(
+        network,
+        "representation",
+        None,
+    )
+
+    if representation is None:
+        raise ValueError(
+            "Metatomic export requires "
+            "`model.nn.representation`."
+        )
+
+    out_features = getattr(
+        model,
+        "n_cvs",
+        None,
+    )
+
+    if out_features is None:
+        out_features = getattr(
+            network,
+            "out_features",
+            None,
+        )
+
+    if out_features is None:
+        raise ValueError(
+            "Could not infer `out_features`."
+        )
+
+    atomic_numbers = getattr(
+        representation,
+        "atomic_numbers",
+        None,
+    )
+
+    if atomic_numbers is None:
+        raise ValueError(
+            "Could not infer `atomic_types`."
+        )
+
+    if isinstance(
+        atomic_numbers,
+        torch.Tensor,
+    ):
+        atomic_types = (
+            atomic_numbers
+            .detach()
+            .cpu()
+            .reshape(-1)
+            .tolist()
+        )
+    else:
+        atomic_types = list(
+            atomic_numbers
+        )
+
+    cutoff = getattr(
+        representation,
+        "cutoff",
+        None,
+    )
+
+    if cutoff is None:
+        raise ValueError(
+            "Could not infer `interaction_range`."
+        )
+
+    neighbor_options = _get_neighbor_options(
+        network,
+        _as_float(cutoff),
+    )
+
+    reference = next(
+        (
+            tensor
+            for tensor in model.parameters()
+            if tensor.is_floating_point()
+        ),
+        None,
+    )
+
+    if reference is None:
+        reference = next(
+            (
+                tensor
+                for tensor in model.buffers()
+                if tensor.is_floating_point()
+            ),
+            None,
+        )
+
+    if (
+        reference is not None
+        and reference.dtype == torch.float64
+    ):
+        dtype = "float64"
+    else:
+        dtype = "float32"
+
+    return {
+        "out_features": int(out_features),
+        "atomic_types": [
+            int(value)
+            for value in atomic_types
+        ],
+        "interaction_range": _as_float(
+            neighbor_options.cutoff
+        ),
+        "dtype": dtype,
+        "length_unit": getattr(
+            representation,
+            "length_unit",
+            "angstrom",
+        ),
+    }
+
+
+def _prepare_network(
+    network: torch.nn.Module,
+) -> torch.nn.Module:
+    """Prepare nested representations for TorchScript export."""
+
+    network = copy.deepcopy(
+        network
+    ).eval()
+
+    for module in network.modules():
+        prepare = getattr(
+            module,
+            "prepare_for_torchscript",
+            None,
+        )
+
+        if prepare is None:
+            continue
+
         try:
             prepare()
         except Exception as exc:
             raise RuntimeError(
-                "Failed to prepare the representation "
+                "Failed to prepare "
+                f"{module.__class__.__name__} "
                 "for TorchScript export."
             ) from exc
 
@@ -116,23 +279,39 @@ def _make_inference_model(
     """Build the inference-only model used for Metatomic export."""
 
     model = model.eval()
-    network = getattr(model, "nn", None)
+
+    network = getattr(
+        model,
+        "nn",
+        None,
+    )
 
     if network is None:
         raise ValueError(
-            "The supplied model does not expose its network through `nn`."
+            "The supplied model does not expose "
+            "its network through `nn`."
         )
 
-    if getattr(model, "preprocessing", None) is not None:
+    if getattr(
+        model,
+        "preprocessing",
+        None,
+    ) is not None:
         raise ValueError(
-            "Metatomic export requires preprocessing to be contained "
-            "inside model.nn."
+            "Metatomic export requires preprocessing "
+            "to be contained inside model.nn."
         )
 
-    representation = getattr(network, "representation", None)
+    representation = getattr(
+        network,
+        "representation",
+        None,
+    )
+
     if representation is None:
         raise ValueError(
-            "Metatomic export requires model.nn.representation."
+            "Metatomic export requires "
+            "model.nn.representation."
         )
 
     atomic_numbers = getattr(
@@ -143,11 +322,17 @@ def _make_inference_model(
 
     if atomic_numbers is None:
         raise ValueError(
-            "The representation must expose `atomic_numbers`."
+            "The representation must expose "
+            "`atomic_numbers`."
         )
 
     atomic_numbers = (
-        atomic_numbers.detach().cpu().to(torch.long)
+        torch.as_tensor(
+            atomic_numbers,
+            dtype=torch.long,
+        )
+        .detach()
+        .cpu()
     )
 
     neighbor_options = _get_neighbor_options(
@@ -155,7 +340,9 @@ def _make_inference_model(
         interaction_range,
     )
 
-    network = _prepare_network(network)
+    network = _prepare_network(
+        network
+    )
 
     postprocessing = getattr(
         model,
@@ -164,7 +351,9 @@ def _make_inference_model(
     )
 
     if postprocessing is None:
-        postprocessing = torch.nn.Identity()
+        postprocessing = (
+            torch.nn.Identity()
+        )
 
     inference_model = CVInferenceModel(
         network=network,
@@ -173,43 +362,95 @@ def _make_inference_model(
         neighbor_options=neighbor_options,
     ).eval()
 
-    for parameter in inference_model.parameters():
-        parameter.requires_grad_(False)
+    for parameter in (
+        inference_model.parameters()
+    ):
+        parameter.requires_grad_(
+            False
+        )
 
     return inference_model
 
 
 def create_metatomic_model(
     model: torch.nn.Module,
-    out_features: int,
-    atomic_types: Sequence[int],
-    interaction_range: float,
+    out_features: Optional[int] = None,
+    atomic_types: Optional[
+        Sequence[int]
+    ] = None,
+    interaction_range: Optional[
+        float
+    ] = None,
     *,
-    length_unit: str = "angstrom",
-    dtype: str = "float64",
-    supported_devices: Optional[Sequence[str]] = None,
+    length_unit: Optional[str] = None,
+    dtype: Optional[str] = None,
+    supported_devices: Optional[
+        Sequence[str]
+    ] = None,
     name: str = "mlcolvar collective variable",
     description: str = (
         "Collective variable combining a pretrained atomistic "
         "representation with an mlcolvar readout."
     ),
-    authors: Optional[Sequence[str]] = None,
+    authors: Optional[
+        Sequence[str]
+    ] = None,
 ) -> MetatomicAtomisticModel:
     """Create an exportable Metatomic model."""
 
+    inferred = _infer_metadata(
+        model
+    )
+
+    if out_features is None:
+        out_features = inferred[
+            "out_features"
+        ]
+
+    if atomic_types is None:
+        atomic_types = inferred[
+            "atomic_types"
+        ]
+
+    if interaction_range is None:
+        interaction_range = inferred[
+            "interaction_range"
+        ]
+
+    if dtype is None:
+        dtype = inferred[
+            "dtype"
+        ]
+
+    if length_unit is None:
+        length_unit = inferred[
+            "length_unit"
+        ]
+
+    if out_features <= 0:
+        raise ValueError(
+            "`out_features` must be positive."
+        )
+
     if not atomic_types:
         raise ValueError(
-            "`atomic_types` must contain at least one atomic type."
+            "`atomic_types` must contain "
+            "at least one atomic type."
         )
 
     if interaction_range < 0:
         raise ValueError(
-            "`interaction_range` must be non-negative."
+            "`interaction_range` must be "
+            "non-negative."
         )
 
-    if dtype not in ("float32", "float64"):
+    if dtype not in (
+        "float32",
+        "float64",
+    ):
         raise ValueError(
-            "`dtype` must be 'float32' or 'float64'."
+            "`dtype` must be "
+            "'float32' or 'float64'."
         )
 
     supported_devices = (
@@ -218,16 +459,24 @@ def create_metatomic_model(
         else supported_devices
     )
 
-    authors = () if authors is None else authors
+    authors = (
+        ()
+        if authors is None
+        else authors
+    )
 
-    inference_model = _make_inference_model(
-        model,
-        interaction_range,
+    inference_model = (
+        _make_inference_model(
+            model,
+            interaction_range,
+        )
     )
 
     wrapper = MetatomicCVWrapper(
         model=inference_model,
-        out_features=out_features,
+        out_features=int(
+            out_features
+        ),
     ).eval()
 
     metadata = ModelMetadata(
@@ -247,8 +496,12 @@ def create_metatomic_model(
             int(value)
             for value in atomic_types
         ],
-        interaction_range=float(interaction_range),
-        supported_devices=list(supported_devices),
+        interaction_range=float(
+            interaction_range
+        ),
+        supported_devices=list(
+            supported_devices
+        ),
         dtype=dtype,
     )
 
@@ -262,20 +515,30 @@ def create_metatomic_model(
 def export_metatomic_model(
     model: torch.nn.Module,
     path: Union[str, Path],
-    out_features: int,
-    atomic_types: Sequence[int],
-    interaction_range: float,
+    out_features: Optional[int] = None,
+    atomic_types: Optional[
+        Sequence[int]
+    ] = None,
+    interaction_range: Optional[
+        float
+    ] = None,
     *,
-    length_unit: str = "angstrom",
-    dtype: str = "float64",
-    supported_devices: Optional[Sequence[str]] = None,
+    length_unit: Optional[str] = None,
+    dtype: Optional[str] = None,
+    supported_devices: Optional[
+        Sequence[str]
+    ] = None,
     name: str = "mlcolvar collective variable",
     description: str = (
         "Collective variable combining a pretrained atomistic "
         "representation with an mlcolvar readout."
     ),
-    authors: Optional[Sequence[str]] = None,
-    collect_extensions: Optional[Union[str, Path]] = None,
+    authors: Optional[
+        Sequence[str]
+    ] = None,
+    collect_extensions: Optional[
+        Union[str, Path]
+    ] = None,
 ) -> Path:
     """Create and save a Metatomic model."""
 
@@ -283,7 +546,8 @@ def export_metatomic_model(
 
     if path.suffix != ".pt":
         raise ValueError(
-            "The exported Metatomic model must use the '.pt' extension."
+            "The exported Metatomic model "
+            "must use the '.pt' extension."
         )
 
     path.parent.mkdir(
@@ -291,23 +555,31 @@ def export_metatomic_model(
         exist_ok=True,
     )
 
-    metatomic_model = create_metatomic_model(
-        model=model,
-        out_features=out_features,
-        atomic_types=atomic_types,
-        interaction_range=interaction_range,
-        length_unit=length_unit,
-        dtype=dtype,
-        supported_devices=supported_devices,
-        name=name,
-        description=description,
-        authors=authors,
+    metatomic_model = (
+        create_metatomic_model(
+            model=model,
+            out_features=out_features,
+            atomic_types=atomic_types,
+            interaction_range=interaction_range,
+            length_unit=length_unit,
+            dtype=dtype,
+            supported_devices=supported_devices,
+            name=name,
+            description=description,
+            authors=authors,
+        )
     )
 
     if collect_extensions is None:
-        metatomic_model.save(str(path))
+        metatomic_model.save(
+            str(path)
+        )
+
     else:
-        extensions = Path(collect_extensions)
+        extensions = Path(
+            collect_extensions
+        )
+
         extensions.mkdir(
             parents=True,
             exist_ok=True,
@@ -315,7 +587,9 @@ def export_metatomic_model(
 
         metatomic_model.save(
             str(path),
-            collect_extensions=str(extensions),
+            collect_extensions=str(
+                extensions
+            ),
         )
 
     return path

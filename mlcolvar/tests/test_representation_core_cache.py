@@ -14,8 +14,6 @@ from mlcolvar.representation import (
     RepresentationModel,
     TaskHead,
     VectorRepresentation,
-    concat_representation,
-    pool_representation,
 )
 from mlcolvar.representation.cache import (
     CachedRepresentationDerivatives,
@@ -185,9 +183,9 @@ def test_vector_representation_model() -> None:
 
 
 def test_pooled_graph_representation_model() -> None:
-    representation = pool_representation(
-        DummyAtomRepresentation(),
-        pooling="mean",
+    representation = (
+        DummyAtomRepresentation()
+        .pool("mean")
     )
 
     assert representation.output_kind == "system"
@@ -212,12 +210,9 @@ def test_pooled_graph_representation_model() -> None:
 
 
 def test_concat_graph_representation_model() -> None:
-    representation = concat_representation(
-        DummyAtomRepresentation(),
-        atom_indices=[
-            0,
-            1,
-        ],
+    representation = (
+        DummyAtomRepresentation()
+        .concat_atoms([0, 1])
     )
 
     assert representation.output_kind == "system"
