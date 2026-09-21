@@ -29,4 +29,3 @@ This module contains the classes used for handling and creating graphs.
    AtomicNumberTable
    Configuration
    get_neighborhood
-   create_dataset_from_configurations
