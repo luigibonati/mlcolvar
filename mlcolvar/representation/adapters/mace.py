@@ -88,7 +88,23 @@ def _resolve_descriptor_layout(
 
 
 class MACERepresentation(GraphRepresentation):
-    """Extract invariant atom-level features from a pretrained MACE model."""
+    """Extract invariant atom-level features from a pretrained MACE model.
+
+    Notes
+    -----
+    This adapter targets the standard ``mace-torch`` model interface.
+    Compatible models are expected to expose ``atomic_numbers``,
+    ``r_max``, and ``num_interactions``, and to return ``node_feats``
+    from their forward pass.
+
+    Automatic descriptor-layout inference additionally relies on
+    ``model.products[0].linear.irreps_out``. If a MACE version or custom
+    model does not expose this structure, ``num_features`` and ``l_max``
+    must be provided explicitly.
+
+    Compatibility is defined by this model interface rather than by a
+    strict ``mace-torch`` version pin.
+    """
 
     __constants__ = [
         "num_layers",

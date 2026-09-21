@@ -50,6 +50,43 @@ def precompute_committor_cache(
     output_device="cpu",
     separate_boundary_dataset=True,
 ):
+    """Precompute representation features and Jacobians for committor training.
+
+    The representation must be frozen. For vector representations,
+    ``descriptor_derivatives`` maps descriptor gradients to coordinate
+    derivatives. Graph representations compute coordinate Jacobians
+    directly from atomic positions.
+
+    Parameters
+    ----------
+    representation
+        Frozen vector or graph representation.
+    dataset
+        Dataset used for committor training.
+    descriptor_derivatives
+        Descriptor derivative model required for vector representations.
+    batch_size
+        Batch size used during caching.
+    device
+        Device used to evaluate the representation.
+    output_device
+        Device where cached tensors are stored.
+    separate_boundary_dataset
+        If True, cache Jacobians only for samples with labels greater
+        than one.
+
+    Returns
+    -------
+    cached_dataset
+        Dataset containing cached representation features.
+    derivatives
+        Derivative model backed by the cached representation Jacobians.
+
+    Notes
+    -----
+    Graph Jacobian caching currently requires all selected graphs to
+    contain the same number of atoms.
+    """
     output_device = torch.device(
         output_device
     )

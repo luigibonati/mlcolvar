@@ -112,6 +112,14 @@ class Representation(nn.Module):
         -------
         RepresentationCache
             Cached representation features and, optionally, Jacobians.
+
+        Notes
+        -----
+        Feature-only caching supports variable-size graph systems.
+
+        When ``jacobian=True`` for a graph representation, all selected
+        graphs must contain the same number of atoms because coordinate
+        Jacobians are stored in a dense tensor.
         """
         if not self.freeze:
             raise RuntimeError(

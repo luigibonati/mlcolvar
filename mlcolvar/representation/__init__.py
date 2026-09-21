@@ -7,11 +7,12 @@ from .model import (
     RepresentationModel,
     TaskHead,
 )
-from .export import export_representation_torchscript
 from .adapters import (
     MACERepresentation,
     MLColvarRepresentation,
 )
+from .committor_cache import precompute_committor_cache
+from .export import export_representation_torchscript
 
 
 __all__ = [
@@ -22,5 +23,6 @@ __all__ = [
     "TaskHead",
     "MACERepresentation",
     "MLColvarRepresentation",
+    "precompute_committor_cache",
     "export_representation_torchscript",
 ]
