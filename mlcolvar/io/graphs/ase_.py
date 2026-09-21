@@ -1,21 +1,23 @@
-from typing import List, Any, Union
-import numpy as np
+from typing import Any, List, Union
 from warnings import warn
 
-from mlcolvar.data import DictDataset
-from mlcolvar.io.graphs._utils import *
-from mlcolvar.data.graph.atomic import Configuration, Configurations
-from mlcolvar.data.graph.utils import create_dataset_from_configurations
-from mlcolvar.io.graphs._utils import _to_torch_tensor
-
 import ase
-from ase.io import read, write
+import numpy as np
 from ase import Atoms
+from ase.io import read, write
 
-__all__ = ["create_pdb_from_xyz", 
-           "load_traj_with_ase",
-           "dataset_from_ase_trajectories",
-           "_configurations_from_ase_trajectory"]
+from mlcolvar.data.graph.atomic import Configuration, Configurations
+from mlcolvar.io.graphs._utils import (
+    _format_labels,
+    _to_torch_tensor,
+    _update_atomic_numbers_from_configurations,
+)
+
+
+__all__ = [
+    "create_pdb_from_xyz",
+    "load_traj_with_ase",
+]
 
 def _prepare_configurations_from_ase_trajectories(
     trajectories: Union[
@@ -34,42 +36,45 @@ def _prepare_configurations_from_ase_trajectories(
 
     Parameters
     ----------
-    trajectories : List[ase.Atoms] or List[List[ase.Atoms]]
+    trajectories : list[ase.Atoms] or list[list[ase.Atoms]]
         ASE trajectory objects to convert.
     graph_labels : list, optional
         Frame-level graph labels for each trajectory.
     node_labels : list, optional
         Node-level labels for each trajectory.
     system_selection : optional
-        Atom selection defining the system atoms. See Notes for supported formats.
+        Atom selection defining the system atoms.
     environment_selection : optional
-        Atom selection defining the environment atoms. See Notes for supported formats.
+        Atom selection defining the environment atoms.
     subsystem_selection : optional
-        Atom selection defining the subsystem atoms. See Notes for supported formats.
+        Atom selection defining the subsystem atoms.
     lengths_conversion : float, optional
-        Length conversion factor, by default 1.0 because ASE uses Angstroms.
+        Length conversion factor. ASE coordinates are already in Angstroms,
+        so the default is 1.0.
     atom_names : list, optional
-        Optional names for system atoms. If not provided, names are
-        inferred from the ASE Atoms objects.
+        Names of system atoms. If not provided, they are inferred from
+        the ASE Atoms objects.
 
     Returns
     -------
     configurations : Configurations
         Atomic configurations generated from all trajectory frames.
     atomic_numbers : AtomicNumberTable
-        Atomic number table containing all species found in the trajectories.
+        Atomic number table containing all species.
     atom_names : list
-        Names of the selected system atoms, either provided explicitly or
-        inferred from the ASE Atoms objects.
+        Names of the selected system atoms.
     """
-
-    if isinstance(trajectories, list):
-        if isinstance(trajectories[0], ase.Atoms):
-            trajectories = [trajectories]
-    else:
+    if not isinstance(trajectories, list):
         raise TypeError(
-            "Trajectories must be a list of ase.Atoms or a list of lists!"
+            "`trajectories` must be a list of ase.Atoms "
+            "or a list of trajectory lists."
         )
+
+    if not trajectories:
+        raise ValueError("`trajectories` cannot be empty.")
+
+    if isinstance(trajectories[0], ase.Atoms):
+        trajectories = [trajectories]
 
     graph_labels = _format_labels(
         trajectories=trajectories,
@@ -83,9 +88,9 @@ def _prepare_configurations_from_ase_trajectories(
     configurations = []
     atomic_numbers = []
 
-    for i in range(len(trajectories)):
+    for i, trajectory in enumerate(trajectories):
         configuration = _configurations_from_ase_trajectory(
-            trajectory=trajectories[i],
+            trajectory=trajectory,
             graph_labels=graph_labels[i],
             node_labels=node_labels[i],
             system_selection=system_selection,
@@ -110,125 +115,24 @@ def _prepare_configurations_from_ase_trajectories(
     return configurations, atomic_numbers, atom_names
 
 
-def dataset_from_ase_trajectories(
-    trajectories: Union[
-        List[ase.Atoms],
-        List[List[ase.Atoms]],
-    ],
-    cutoff: float,
-    graph_labels: Union[list, List[list]] = None,
-    node_labels: Union[list, List[list]] = None,
-    system_selection=None,
-    environment_selection=None,
-    subsystem_selection=None,
-    lengths_conversion: float = 1.0,
-    buffer: float = 0.0,
-    long_range_cutoff: float = -1.0,
-    atom_names: List = None,
-    remove_isolated_nodes: bool = True,
-    show_progress: bool = False,
-) -> DictDataset:
-    """Create a graph dataset from ASE trajectories.
-
-    Parameters
-    ----------
-    trajectories : List[ase.Atoms] or List[List[ase.Atoms]]
-        List of ASE trajectory frame sequences.
-    cutoff : float
-        Cutoff distance for graph edge construction in Angstroms.
-    graph_labels : list, optional
-        Frame-level graph labels for each trajectory.
-    node_labels : list, optional
-        Node-level labels for each trajectory.
-    system_selection : optional
-        ASE-style atom selection defining the system atoms.
-    environment_selection : optional
-        ASE-style atom selection defining the environment atoms.
-    subsystem_selection : optional
-        ASE-style atom selection defining the subsystem atoms.
-    lengths_conversion : float, optional
-        Length conversion factor, by default 1.0 because ASE uses Angstroms.
-    buffer : float, optional
-        Buffer used when selecting environment atoms.
-    long_range_cutoff : float, optional
-        Cutoff radius for long-range subsystem edges. If negative,
-        long-range edges are not constructed.
-    atom_names : list, optional
-        Optional names for system atoms. If not provided, names are
-        inferred from the ASE Atoms objects.
-    remove_isolated_nodes : bool, optional
-        Whether to remove isolated graph nodes.
-    show_progress : bool, optional
-        Whether to display graph-construction progress.
-
-    Returns
-    -------
-    DictDataset
-        Graph dataset created from the ASE trajectories.
-        
-    Notes
-    -----
-    Atom selection supports the following formats:
-
-    - ``None``: select all atoms.
-    - ``list``, ``tuple``, or ``np.ndarray`` of atom indices.
-    - Boolean mask array-like.
-    - ``callable(atoms)`` returning atom indices or a boolean mask.
-    """
-
-    _check_atom_selection(
-        system_selection=system_selection,
-        environment_selection=environment_selection,
-        subsystem_selection=subsystem_selection,
-        buffer=buffer,
-        long_range_cutoff=long_range_cutoff,
-    )
-
-    (
-        configurations,
-        atomic_numbers,
-        atom_names,
-    ) = _prepare_configurations_from_ase_trajectories(
-        trajectories=trajectories,
-        graph_labels=graph_labels,
-        node_labels=node_labels,
-        system_selection=system_selection,
-        environment_selection=environment_selection,
-        subsystem_selection=subsystem_selection,
-        lengths_conversion=lengths_conversion,
-        atom_names=atom_names,
-    )
-    
-
-    return create_dataset_from_configurations(
-        config=configurations,
-        atomic_numbers=atomic_numbers,
-        cutoff=cutoff,
-        buffer=buffer,
-        long_range_cutoff=long_range_cutoff,
-        atom_names=atom_names,
-        remove_isolated_nodes=remove_isolated_nodes,
-        show_progress=show_progress,
-    )
-
-
-def load_traj_with_ase(trajectory: str,
-                       start: int = 0,
-                       stop: int = None,
-                       stride: int = 1) -> List[ase.Atoms]:
-    """
-    Load a trajectory using ASE.
+def load_traj_with_ase(
+    trajectory: str,
+    start: int = 0,
+    stop: int = None,
+    stride: int = 1,
+) -> List[ase.Atoms]:
+    """Load a trajectory using ASE.
 
     Parameters
     ----------
     trajectory : str
         Path to the trajectory file.
     start : int, optional
-            Starting frame index, by default 0
+        Starting frame index, by default 0.
     stop : int, optional
-        Stopping frame index, by default None (load until the end)
+        Stopping frame index, by default None.
     stride : int, optional
-        Stride for frame selection, by default 1 (load all frames)    
+        Stride for frame selection, by default 1.
 
     Returns
     -------
@@ -236,14 +140,10 @@ def load_traj_with_ase(trajectory: str,
         Loaded ASE trajectory frames.
     """
     if stop is None:
-        stop = ''
-    frame_selection = f'{start}:{stop}:{stride}'
-    
-    # read trajectory with ASE
-    traj = read(trajectory, index=frame_selection)
-    
-    
-    return traj
+        stop = ""
+
+    frame_selection = f"{start}:{stop}:{stride}"
+    return read(trajectory, index=frame_selection)
 
 
 def _selection_to_indices(selection, atoms):
@@ -268,134 +168,160 @@ def _selection_to_indices(selection, atoms):
     return indices.tolist()
 
 
-def _configurations_from_ase_trajectory(trajectory: List[ase.Atoms],
-                                        graph_labels: list = None,
-                                        node_labels: list = None,
-                                        system_selection: Any = None,
-                                        environment_selection: Any = None,
-                                        subsystem_selection: Any = None,
-                                        lengths_conversion: float = 1.0,
-                                       ) -> Configurations:
-    """Create configurations from one ASE trajectory frame sequence.
+def _configurations_from_ase_trajectory(
+    trajectory: List[ase.Atoms],
+    graph_labels: list = None,
+    node_labels: list = None,
+    system_selection: Any = None,
+    environment_selection: Any = None,
+    subsystem_selection: Any = None,
+    lengths_conversion: float = 1.0,
+) -> Configurations:
+    """Create configurations from one ASE trajectory."""
 
-    Parameters
-    ----------
-    trajectory : ase.Atoms
-        The ASE atoms object
-    graph_labels : List, optional
-        Frame-level graph labels for selected frames of this trajectory, by default None
-    node_labels : List, optional
-        Node-level graph labels for selected frames of this trajectory, by default None
-    system_selection : Any, optional
-        ASE style atom selection (see notes) of the system atoms, by default None. 
-        If given, only selected atoms will be loaded from the trajectories into the configurations
-        If not provided, all the atoms will be loaded.
-    environment_selection : Any, optional
-        ASE style atom selection (see notes) of the environment atoms, by default None. 
-        If given, only the system atoms and the environment atoms will be included in the configuration.
-    subsystem_selection : Any, optional
-        ASE style atom selection (see notes) of the subsystem atoms for long-range interactions, by default None. 
-    lengths_conversion : float, optional
-        Conversion factor for length units, by default 1.
-        The default corresponds to Angstroms which are already used by ASE.
-
-    Returns
-    -------
-    Configurations
-        List of the Configuration objects loaded from the trajectory
-
-    Notes
-    -------
-    Atom selection can be done as in ASE. Supported formats are:
-        - None: keep all atoms
-        - list/tuple/np.ndarray of indices
-        - boolean mask array-like
-        - callable(atoms) -> indices
-    """
     if isinstance(trajectory, Atoms):
         trajectory = [trajectory]
 
-    # as we basically do the same for each selection, we use a dictionary initialized to the general case
-    selected_atoms = {}
-    selected_atoms['system'] = [i for i in range(len(trajectory[0]))]
-    selected_atoms['environment'] = []
-    selected_atoms['subsystem'] = None
-    
-    # here we only check if the selections are effective, compatibility has been checked above already
-    for name, selection in {'system': system_selection, 
-                            'environment': environment_selection, 
-                            'subsystem': subsystem_selection}.items():
-        if selection is not None:
-            selected_atoms[name] = _selection_to_indices(selection, trajectory[0])
-            if not len(selected_atoms[name]) > 0:
-                raise ValueError(f"No atoms will be selected with selection {name}_selection: {selection}!")
+    selected_atoms = {
+        "system": list(range(len(trajectory[0]))),
+        "environment": [],
+        "subsystem": None,
+    }
+
+    selections = {
+        "system": system_selection,
+        "environment": environment_selection,
+        "subsystem": subsystem_selection,
+    }
+
+    for name, selection in selections.items():
+        if selection is None:
+            continue
+
+        selected_atoms[name] = _selection_to_indices(
+            selection,
+            trajectory[0],
+        )
+
+        if not selected_atoms[name]:
+            raise ValueError(
+                f"No atoms will be selected with "
+                f"{name}_selection: {selection}!"
+            )
 
     if subsystem_selection is not None:
-        if not set(selected_atoms['subsystem']).issubset(set(selected_atoms['system'])):
-            raise ValueError("Only atoms in `system_selection` can be selected by `subsystem_selection`!")
+        if not set(selected_atoms["subsystem"]).issubset(
+            selected_atoms["system"]
+        ):
+            raise ValueError(
+                "Only atoms in `system_selection` can be selected "
+                "by `subsystem_selection`!"
+            )
 
+    system_indices = selected_atoms["system"]
+    environment_indices = selected_atoms["environment"]
+    subsystem_indices = selected_atoms["subsystem"]
 
-    # get the indeces of the required atoms
-    selected_atoms['required'] = selected_atoms['system'] + selected_atoms['environment']
-    
-    # select the required atoms from the trajectory
-    sliced_trajectory = []
-    for frame in trajectory:
-        sliced_trajectory.append(frame[selected_atoms['required']])
-        
-    # as we sliced the trajectory, we have to readjust the indeces to match the new order
-    selected_atoms['system'] = np.arange(len(selected_atoms['system'])).tolist()
-    selected_atoms['environment'] = (np.max(selected_atoms['system']) + 1 + np.arange(len(selected_atoms['environment'])) ).tolist()
+    required_indices = system_indices + environment_indices
 
-    
-    # get the list of the atomic numbers for the selected atoms
-    atomic_numbers = sliced_trajectory[0].get_atomic_numbers().tolist()
+    sliced_trajectory = [
+        frame[required_indices]
+        for frame in trajectory
+    ]
+
+    system_index_map = {
+        original: new
+        for new, original in enumerate(system_indices)
+    }
+
+    selected_atoms["system"] = list(
+        range(len(system_indices))
+    )
+
+    selected_atoms["environment"] = list(
+        range(
+            len(system_indices),
+            len(system_indices) + len(environment_indices),
+        )
+    )
+
+    if subsystem_indices is not None:
+        selected_atoms["subsystem"] = [
+            system_index_map[index]
+            for index in subsystem_indices
+        ]
+
+    atomic_numbers = (
+        sliced_trajectory[0]
+        .get_atomic_numbers()
+        .tolist()
+    )
 
     pbc = sliced_trajectory[0].get_pbc().tolist()
 
     if any(pbc):
-        frame_cells = [frame.get_cell() for frame in sliced_trajectory]
+        frame_cells = [
+            frame.get_cell()
+            for frame in sliced_trajectory
+        ]
     else:
         frame_cells = [None] * len(sliced_trajectory)
 
-
-    # create configurations
     configurations = []
-    for i in range(len(sliced_trajectory)):
-        
-        label_i = _to_torch_tensor(graph_labels[i]).reshape(-1, 1) if graph_labels is not None else None
-        node_i = _to_torch_tensor(node_labels[i]).reshape(-1, 1) if node_labels is not None else None
 
-        configuration = Configuration(atomic_numbers=atomic_numbers,
-                                      positions=sliced_trajectory[i].get_positions() * lengths_conversion,
-                                      cell=frame_cells[i] * lengths_conversion if frame_cells[i] is not None else None,
-                                      pbc=pbc,
-                                      graph_labels=label_i,
-                                      node_labels=node_i,
-                                      system=selected_atoms['system'],
-                                      environment=selected_atoms['environment'],
-                                      subsystem=selected_atoms['subsystem'],
+    for i, frame in enumerate(sliced_trajectory):
+        label_i = (
+            _to_torch_tensor(graph_labels[i]).reshape(-1, 1)
+            if graph_labels is not None
+            else None
         )
-        configurations.append(configuration)
 
+        node_i = (
+            _to_torch_tensor(node_labels[i]).reshape(-1, 1)
+            if node_labels is not None
+            else None
+        )
+
+        cell_i = (
+            frame_cells[i] * lengths_conversion
+            if frame_cells[i] is not None
+            else None
+        )
+
+        configurations.append(
+            Configuration(
+                atomic_numbers=atomic_numbers,
+                positions=frame.get_positions() * lengths_conversion,
+                cell=cell_i,
+                pbc=pbc,
+                graph_labels=label_i,
+                node_labels=node_i,
+                system=selected_atoms["system"],
+                environment=selected_atoms["environment"],
+                subsystem=selected_atoms["subsystem"],
+            )
+        )
 
     return configurations
 
 
 def _names_from_ase_atoms(
-    ase_atoms_list: List[ase.Atoms],
+    ase_atoms_list,
     system_selection: Any,
 ) -> List[str]:
-    """Create atomic names from a list of ASE Atoms objects."""
-    try:
-        indices = _selection_to_indices(system_selection, ase_atoms_list[0])
-        names = ase_atoms_list[0][indices].get_chemical_symbols()
-        
-    except (AttributeError, TypeError):
-        indices = _selection_to_indices(system_selection, ase_atoms_list[0][0])
-        names = ase_atoms_list[0][0][indices].get_chemical_symbols()
+    """Return atom names for the selected system atoms."""
 
-    return names
+    first = ase_atoms_list[0]
+
+    if isinstance(first, (list, tuple)):
+        first = first[0]
+
+    indices = _selection_to_indices(
+        system_selection,
+        first,
+    )
+
+    return first[indices].get_chemical_symbols()
 
 
 def create_pdb_from_xyz(input_filename: str, output_filename: str) -> str:

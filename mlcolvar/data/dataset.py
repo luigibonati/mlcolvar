@@ -1,106 +1,112 @@
+import numpy as np
 import torch
 import torch_geometric
-import numpy as np
 
 from typing import List, Union
-from mlcolvar.core.transform.utils import Statistics
 from torch.utils.data import Dataset
+
+from mlcolvar.core.transform.utils import Statistics
+
 
 __all__ = ["DictDataset"]
 
 
 class DictDataset(Dataset):
-    """Define a torch dataset from a dictionary of lists/array/tensors and names.
+    """Define a torch dataset from a dictionary of arrays or tensors.
 
-    E.g. { 'data' : torch.Tensor([1,2,3,4]),
-           'labels' : [0,0,1,1],
-           'weights' : np.asarray([0.5,1.5,1.5,0.5]) }
+    Examples
+    --------
+    ``{"data": torch.Tensor(...), "labels": ..., "weights": ...}``
     """
 
-    def __init__(self, 
-                 dictionary: dict=None, 
-                 feature_names = None, 
-                 metadata: dict = None, 
-                 data_type : str = 'descriptors', 
-                 create_ref_idx : bool = False, 
-                 **kwargs):
-        """Create a Dataset from a dictionary or from a list of kwargs.
+    def __init__(
+        self,
+        dictionary: dict = None,
+        feature_names=None,
+        metadata: dict = None,
+        data_type: str = "descriptors",
+        create_ref_idx: bool = False,
+        **kwargs,
+    ):
+        """Create a dataset from a dictionary or keyword arguments.
 
         Parameters
         ----------
-        dictionary : dict
-            Dictionary with names and tensors
-        feature_names : array-like
-            List or numpy array with feature names
-        metadata : dict
-            Dictionary with metadata quantities shared across the whole dataset.
-        data_type : str
-            Type of data stored in the dataset, either 'descriptors' or 'graphs', by default 'descriptors'.
-            This will be stored in the dataset.metadata dictionary.
-
-
+        dictionary : dict, optional
+            Dictionary containing dataset fields.
+        feature_names : array-like, optional
+            Feature names associated with descriptor data.
+        metadata : dict, optional
+            Metadata shared across the whole dataset.
+        data_type : {"descriptors", "graphs"}, optional
+            Type of data stored in the dataset.
+        create_ref_idx : bool, optional
+            Whether to add reference indices to the dataset.
+        **kwargs
+            Additional dataset fields.
         """
-        # assert type dict
-        if (dictionary is not None) and (not isinstance(dictionary, dict)):
+        if dictionary is not None and not isinstance(dictionary, dict):
             raise TypeError(
-                f"DictDataset requires a dictionary , not {type(dictionary)}."
+                f"DictDataset requires a dictionary, not {type(dictionary)}."
             )
-        
-        if (metadata is not None) and (not isinstance(metadata, dict)):
+
+        if metadata is not None and not isinstance(metadata, dict):
             raise TypeError(
-                f"DictDataset metadata requires a dictionary , not {type(metadata)}."
+                f"DictDataset metadata requires a dictionary, not {type(metadata)}."
             )
-        
-        # assert data_type is 'descriptors' or 'graphs'
-        if not data_type in ['descriptors', 'graphs']:
+
+        if data_type not in {"descriptors", "graphs"}:
             raise TypeError(
-                f"data_type expected to be either 'descriptors' or 'graph', found {data_type}"
+                "data_type must be either 'descriptors' or 'graphs', "
+                f"found {data_type!r}."
             )
-        
-        # Add kwargs to dict
+
         if dictionary is None:
             dictionary = {}
+
         dictionary = {**dictionary, **kwargs}
-        if len(dictionary) == 0:
+
+        if not dictionary:
             raise ValueError("Empty datasets are not supported")
 
-        # initialize metadata as dict
         if metadata is None:
             metadata = {}
-        
-        if 'data_type' in metadata.keys():
-            if not metadata['data_type'] == data_type:
-                raise ValueError(f"Two different data_type specified. Found {metadata['data_type']} in metadata and {data_type} as keyword")
+
+        if "data_type" in metadata:
+            if metadata["data_type"] != data_type:
+                raise ValueError(
+                    "Two different data_type values specified. "
+                    f"Found {metadata['data_type']!r} in metadata and "
+                    f"{data_type!r} as keyword."
+                )
         else:
-            metadata['data_type'] = data_type
+            metadata["data_type"] = data_type
 
-        # convert to torch.Tensors
-        for key, val in dictionary.items():
-            if not isinstance(val, torch.Tensor):
-                if key in ["data_list", "data_list_lag"]:
-                    dictionary[key] = val
+        for key, value in dictionary.items():
+            if not isinstance(value, torch.Tensor):
+                if key in {"data_list", "data_list_lag"}:
+                    dictionary[key] = value
                 else:
-                    dictionary[key] = torch.Tensor(val)
+                    dictionary[key] = torch.Tensor(value)
 
-        # save dictionary
         self._dictionary = dictionary
-
-        # save feature names
         self.feature_names = feature_names
-
-        # save metadata
         self.metadata = metadata
 
-        # check that all elements of dict have same length
-        it = iter(dictionary.values())
-        self.length = len(next(it))
-        if not all([len(l) == self.length for l in it]):
-            raise ValueError("not all arrays in dictionary have same length!")
-        
-        # add indexing of entries for shuffling and slicing reference
-        if create_ref_idx and "ref_idx" not in self._dictionary.keys():
-            dictionary['ref_idx'] = torch.arange(len(self), dtype=torch.int)
-            
+        values = iter(dictionary.values())
+        self.length = len(next(values))
+
+        if not all(len(value) == self.length for value in values):
+            raise ValueError(
+                "Not all arrays in dictionary have the same length."
+            )
+
+        if create_ref_idx and "ref_idx" not in self._dictionary:
+            self._dictionary["ref_idx"] = torch.arange(
+                len(self),
+                dtype=torch.int,
+            )
+
     @classmethod
     def from_colvars(
         cls,
@@ -122,28 +128,35 @@ class DictDataset(Dataset):
 
         Parameters
         ----------
-        file_names
+        file_names : str or list[str]
             File name or list of file names.
-        folder
-            Optional common folder containing the files.
-        create_labels
+        folder : str, optional
+            Common folder containing the files.
+        create_labels : bool, optional
             Whether to assign one label to each input file.
-        load_args
+        load_args : list[dict], optional
             Per-file loading arguments.
-        filter_args
-            Arguments passed to ``DataFrame.filter`` to select descriptors.
-        modifier_function
-            Optional function applied to the descriptor dataframe.
-        return_dataframe
-            If True, also return the loaded pandas DataFrame.
-        verbose
-            Print information about the loaded data.
-        start, stop, stride
+        filter_args : dict, optional
+            Arguments passed to ``DataFrame.filter``.
+        modifier_function : callable, optional
+            Function applied to the descriptor dataframe.
+        return_dataframe : bool, optional
+            If True, also return the loaded dataframe.
+        verbose : bool, optional
+            Whether to print information about the loaded data.
+        start, stop, stride : int, optional
             Global slicing options.
-        delete_download
-            Delete temporary downloaded files after loading.
-        read_csv_kwargs
+        delete_download : bool, optional
+            Whether to delete temporary downloaded files after loading.
+        read_csv_kwargs : dict, optional
             Additional arguments passed to ``pandas.read_csv``.
+
+        Returns
+        -------
+        DictDataset
+            Dataset constructed from the input files.
+        tuple[DictDataset, pandas.DataFrame]
+            Dataset and dataframe when ``return_dataframe=True``.
         """
         from mlcolvar.io.colvar import _prepare_dataset_from_files
 
@@ -169,7 +182,6 @@ class DictDataset(Dataset):
 
         return dataset
 
-
     @classmethod
     def graph_from_configurations(
         cls,
@@ -189,23 +201,20 @@ class DictDataset(Dataset):
         config
             Atomic configurations used to construct the graph dataset.
         atomic_numbers
-            Atomic number table defining the chemical species present in the
-            configurations.
+            Atomic number table defining the chemical species.
         cutoff : float
             Cutoff distance used to construct graph edges.
         buffer : float, optional
-            Buffer distance used when selecting environment atoms, by default 0.0.
+            Buffer distance used when selecting environment atoms.
         long_range_cutoff : float, optional
-            Cutoff distance used for long-range subsystem edges. If negative,
-            long-range edges are not constructed, by default -1.0.
+            Cutoff distance for long-range subsystem edges. If negative,
+            long-range edges are not constructed.
         atom_names : list, optional
-            Names of the system atoms, by default None.
+            Names of the system atoms.
         remove_isolated_nodes : bool, optional
-            Whether to remove isolated nodes from the generated graphs,
-            by default False.
+            Whether to remove isolated nodes from the generated graphs.
         show_progress : bool, optional
-            Whether to display progress while constructing the graphs,
-            by default True.
+            Whether to display graph-construction progress.
 
         Returns
         -------
@@ -229,7 +238,6 @@ class DictDataset(Dataset):
 
         return cls(**dataset_kwargs)
 
-
     @classmethod
     def graph_from_trajectories(
         cls,
@@ -241,10 +249,10 @@ class DictDataset(Dataset):
         trajectory_labels: list = None,
         graph_labels: list = None,
         node_labels: list = None,
-        system_selection: str = None,
-        environment_selection: str = None,
+        system_selection=None,
+        environment_selection=None,
         buffer: float = 0.0,
-        subsystem_selection: str = None,
+        subsystem_selection=None,
         long_range_cutoff: float = -1.0,
         return_trajectories: bool = False,
         remove_isolated_nodes: bool = True,
@@ -261,111 +269,159 @@ class DictDataset(Dataset):
         trajectories : str or list[str]
             Path or paths to trajectory files.
         cutoff : float
-            Cutoff distance used to construct graph edges, in Angstroms.
+            Cutoff distance used to construct graph edges in Angstroms.
         topologies : str or list[str], optional
-            Topology file or files required by the selected backend,
-            by default None.
+            Topology file or files used by the MDTraj backend.
         load_args : list[dict], optional
-            Per-trajectory loading options such as ``start``, ``stop``,
-            and ``stride``, by default None.
+            Per-trajectory loading options containing ``start``, ``stop``,
+            and ``stride``.
         folder : str, optional
-            Common directory containing trajectory and topology files,
-            by default None.
+            Common directory containing trajectory and topology files.
         trajectory_labels : list, optional
-            Labels assigned to entire trajectories and broadcast to their
-            selected frames, by default None.
+            Labels assigned to trajectories and broadcast to selected frames.
         graph_labels : list, optional
-            Frame-level graph labels, by default None.
+            Frame-level graph labels.
         node_labels : list, optional
-            Node-level labels, by default None.
-        system_selection : str, optional
-            Backend-specific atom selection defining the system atoms,
-            by default None.
-        environment_selection : str, optional
-            Backend-specific atom selection defining environment atoms,
-            by default None.
+            Node-level labels.
+        system_selection : optional
+            Backend-specific selection defining system atoms.
+        environment_selection : optional
+            Backend-specific selection defining environment atoms.
         buffer : float, optional
-            Buffer distance used when selecting environment atoms,
-            by default 0.0.
-        subsystem_selection : str, optional
-            Backend-specific atom selection defining atoms used for
-            long-range edges, by default None.
+            Buffer distance used when selecting environment atoms.
+        subsystem_selection : optional
+            Backend-specific selection defining atoms used for long-range
+            edges.
         long_range_cutoff : float, optional
-            Cutoff distance used for long-range subsystem edges. If negative,
-            long-range edges are not constructed, by default -1.0.
+            Cutoff distance for long-range subsystem edges. If negative,
+            long-range edges are not constructed.
         return_trajectories : bool, optional
-            If True, also return the loaded trajectory objects,
-            by default False.
+            If True, also return the loaded trajectory objects.
         remove_isolated_nodes : bool, optional
-            Whether to remove isolated nodes from the generated graphs,
-            by default True.
+            Whether to remove isolated nodes from the generated graphs.
         show_progress : bool, optional
-            Whether to display progress while constructing the graphs,
-            by default False.
+            Whether to display graph-construction progress.
         atom_names : list, optional
             Names of the system atoms. If not provided, they are inferred
-            when possible, by default None.
+            when possible.
         lengths_conversion : float, optional
             Conversion factor applied to trajectory coordinates. If None,
-            the default is selected according to the backend, by default None.
+            the backend default is used.
         delete_download : bool, optional
-            Whether temporary downloaded files are deleted after loading,
-            by default True.
+            Whether temporary downloaded files are deleted after loading.
         backend : {"mdtraj", "ase"}, optional
-            Backend used to load trajectory files, by default "mdtraj".
+            Backend used to load trajectory files.
 
         Returns
         -------
         DictDataset
             Graph dataset constructed from the trajectories.
         tuple[DictDataset, list]
-            Dataset and loaded trajectory objects when
+            Dataset and loaded trajectories when
             ``return_trajectories=True``.
         """
-        from mlcolvar.io.graphs.common import (
-            _prepare_dataset_from_trajectories,
+        from mlcolvar.io.graphs._utils import (
+            _check_atom_selection,
+            _normalize_graph_target_inputs,
         )
+        from mlcolvar.io.graphs.common import _load_trajectories
 
-        dataset_kwargs, loaded_trajectories = (
-            _prepare_dataset_from_trajectories(
-                trajectories=trajectories,
-                cutoff=cutoff,
-                topologies=topologies,
-                load_args=load_args,
-                folder=folder,
-                trajectory_labels=trajectory_labels,
-                graph_labels=graph_labels,
-                node_labels=node_labels,
-                system_selection=system_selection,
-                environment_selection=environment_selection,
-                buffer=buffer,
-                subsystem_selection=subsystem_selection,
-                long_range_cutoff=long_range_cutoff,
-                remove_isolated_nodes=remove_isolated_nodes,
-                show_progress=show_progress,
-                atom_names=atom_names,
-                lengths_conversion=lengths_conversion,
-                delete_download=delete_download,
-                backend=backend,
+        if backend not in {"mdtraj", "ase"}:
+            raise ValueError(
+                f"Unknown backend {backend!r}. Expected 'mdtraj' or 'ase'."
             )
+
+        if trajectory_labels is not None and graph_labels is not None:
+            raise ValueError(
+                "Only one of `trajectory_labels` or `graph_labels` "
+                "can be provided."
+            )
+
+        _check_atom_selection(
+            system_selection=system_selection,
+            environment_selection=environment_selection,
+            subsystem_selection=subsystem_selection,
+            buffer=buffer,
+            long_range_cutoff=long_range_cutoff,
         )
 
-        dataset = cls(**dataset_kwargs)
+        loaded_trajectories = _load_trajectories(
+            trajectories=trajectories,
+            topologies=topologies,
+            load_args=load_args,
+            folder=folder,
+            delete_download=delete_download,
+            backend=backend,
+        )
+
+        graph_labels, node_labels = _normalize_graph_target_inputs(
+            trajectories=loaded_trajectories,
+            trajectory_labels=trajectory_labels,
+            graph_labels=graph_labels,
+            node_labels=node_labels,
+        )
+
+        if lengths_conversion is None:
+            lengths_conversion = 10 if backend == "mdtraj" else 1
+
+        if backend == "mdtraj":
+            from mlcolvar.io.graphs.mdtraj_ import (
+                _prepare_configurations_from_mdtraj_trajectories,
+            )
+
+            configurations, atomic_numbers, atom_names = (
+                _prepare_configurations_from_mdtraj_trajectories(
+                    trajectories=loaded_trajectories,
+                    graph_labels=graph_labels,
+                    node_labels=node_labels,
+                    system_selection=system_selection,
+                    environment_selection=environment_selection,
+                    subsystem_selection=subsystem_selection,
+                    lengths_conversion=lengths_conversion,
+                    atom_names=atom_names,
+                )
+            )
+
+        else:
+            from mlcolvar.io.graphs.ase_ import (
+                _prepare_configurations_from_ase_trajectories,
+            )
+
+            configurations, atomic_numbers, atom_names = (
+                _prepare_configurations_from_ase_trajectories(
+                    trajectories=loaded_trajectories,
+                    graph_labels=graph_labels,
+                    node_labels=node_labels,
+                    system_selection=system_selection,
+                    environment_selection=environment_selection,
+                    subsystem_selection=subsystem_selection,
+                    lengths_conversion=lengths_conversion,
+                    atom_names=atom_names,
+                )
+            )
+
+        dataset = cls.graph_from_configurations(
+            config=configurations,
+            atomic_numbers=atomic_numbers,
+            cutoff=cutoff,
+            buffer=buffer,
+            long_range_cutoff=long_range_cutoff,
+            atom_names=atom_names,
+            remove_isolated_nodes=remove_isolated_nodes,
+            show_progress=show_progress,
+        )
 
         if return_trajectories:
             return dataset, loaded_trajectories
 
         return dataset
-        
 
     def __getitem__(self, index):
         """Return a field, one sample, or a sliced DictDataset."""
 
-        # Access one complete field.
         if isinstance(index, str):
             return self._dictionary[index]
 
-        # Scalar indexing returns one sample as a dictionary.
         is_scalar = (
             isinstance(index, (int, np.integer))
             or (
@@ -383,7 +439,6 @@ class DictDataset(Dataset):
                 for key, value in self._dictionary.items()
             }
 
-        # Slicing can be applied directly to all supported containers.
         if isinstance(index, slice):
             sliced = {
                 key: value[index]
@@ -391,7 +446,6 @@ class DictDataset(Dataset):
             }
 
         else:
-            # Convert advanced indexing to a Python list of integer indices.
             if isinstance(index, torch.Tensor):
                 indices = (
                     torch.where(index)[0].tolist()
@@ -409,7 +463,6 @@ class DictDataset(Dataset):
             else:
                 indices = list(index)
 
-                # Python boolean mask.
                 if indices and all(
                     isinstance(item, (bool, np.bool_))
                     for item in indices
@@ -438,57 +491,75 @@ class DictDataset(Dataset):
 
     def __setitem__(self, index, value):
         if isinstance(index, str):
-            # check lengths
             if len(value) != len(self):
                 raise ValueError(
-                    f"length of value ({len(value)}) != length of dataset ({len(self)})."
+                    f"length of value ({len(value)}) != "
+                    f"length of dataset ({len(self)})."
                 )
+
             self._dictionary[index] = value
-        else:
-            raise NotImplementedError(
-                f"Only string indexes can be set, {type(index)} is not supported."
-            )
+            return
+
+        raise NotImplementedError(
+            f"Only string indexes can be set, {type(index)} is not supported."
+        )
 
     def __len__(self):
         value = next(iter(self._dictionary.values()))
         return len(value)
 
     def get_stats(self):
-        """Compute statistics ('mean','Std','Min','Max') of the dataset.
+        """Compute statistics of the dataset.
 
         Returns
         -------
-        stats
-            dictionary of dictionaries with statistics
+        dict
+            Dictionary containing statistics for each dataset field.
         """
-        if self.metadata == 'graph':
-            raise ValueError (
-                "Method get_stats not supported for graph-based dataset!"
+        if self.metadata.get("data_type") == "graphs":
+            raise ValueError(
+                "Method get_stats is not supported for graph-based datasets."
             )
+
         stats = {}
-        for k in self.keys:
-            print("KEY: ", k, end="\n\n\n")
-            if k != "ref_idx":
-                stats[k] = Statistics(self._dictionary[k]).to_dict()
+
+        for key in self.keys:
+            print("KEY: ", key, end="\n\n\n")
+
+            if key != "ref_idx":
+                stats[key] = Statistics(
+                    self._dictionary[key]
+                ).to_dict()
+
         return stats
 
     def __repr__(self) -> str:
         parts = ["DictDataset("]
-        for key, val in self._dictionary.items():
-            if key in ["data_list", "data_list_lag"]:
-                parts.append(f' "{key}": {len(val)},')
+
+        for key, value in self._dictionary.items():
+            if key in {"data_list", "data_list_lag"}:
+                parts.append(f' "{key}": {len(value)},')
             else:
-                parts.append(f' "{key}": {list(val.shape)},')
+                parts.append(f' "{key}": {list(value.shape)},')
+
         if self.metadata:
             parts.append("\n\t    metadata={")
-            for key, val in self.metadata.items():
-                parts.append(f'"{key}": {val},\n\t\t      ')
+
+            for key, value in self.metadata.items():
+                parts.append(
+                    f'"{key}": {value},\n\t\t      '
+                )
+
             if parts[-1].endswith(",\n\t\t      "):
                 parts[-1] = parts[-1][:-10]
+
             parts.append(" },")
+
         if parts[-1].endswith(","):
             parts[-1] = parts[-1][:-1]
+
         parts.append(" )")
+
         return "".join(parts)
 
     @property
@@ -503,15 +574,21 @@ class DictDataset(Dataset):
     @feature_names.setter
     def feature_names(self, value):
         self._feature_names = (
-            np.asarray(value, dtype=str) if value is not None else value
+            np.asarray(value, dtype=str)
+            if value is not None
+            else None
         )
 
     def get_graph_inputs(self):
-        """Generate and input suitable for graph models. Returns the whole dataset as a single batch not shuffled"""
-        assert self.metadata['data_type'] == 'graphs', (
-            'Graph inputs can only be generated for graph-based datasets'
+        """Return the complete graph dataset as a single batch."""
+        assert self.metadata["data_type"] == "graphs", (
+            "Graph inputs can only be generated for graph-based datasets"
         )
-        loader = torch_geometric.loader.DataLoader(self, 
-                                                   batch_size=len(self), 
-                                                   shuffle=False )
-        return next(iter(loader))['data_list']
+
+        loader = torch_geometric.loader.DataLoader(
+            self,
+            batch_size=len(self),
+            shuffle=False,
+        )
+
+        return next(iter(loader))["data_list"]

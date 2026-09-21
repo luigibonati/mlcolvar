@@ -1,44 +1,48 @@
 
 from typing import List, Union
-
-import mdtraj
 from warnings import warn
 
-from mlcolvar.data import DictDataset
-from mlcolvar.io.graphs._utils import *
-from mlcolvar.io.graphs.ase_ import _get_cell_with_ase
-from mlcolvar.data.graph.atomic import AtomicNumberTable, Configuration, Configurations
-from mlcolvar.data.graph.utils import create_dataset_from_configurations
+import mdtraj
 
-__all__ = ["load_traj_with_mdtraj", 
-           "dataset_from_mdtraj_trajectories",
-           "_atomic_numbers_from_top",
-           "_names_from_top"]
+from mlcolvar.data.graph.atomic import (
+    AtomicNumberTable,
+    Configuration,
+    Configurations,
+)
+from mlcolvar.io.graphs._utils import (
+    _format_labels,
+    _update_atomic_numbers_from_configurations,
+)
+from mlcolvar.io.graphs.ase_ import _get_cell_with_ase
+
+
+__all__ = [
+    "load_traj_with_mdtraj",
+    "_atomic_numbers_from_top",
+    "_names_from_top",
+]
 
 
 def _prepare_configurations_from_mdtraj_trajectories(
-    trajectories: Union[
-        List[mdtraj.Trajectory],
-        List[List[mdtraj.Trajectory]],
-    ],
-    graph_labels: Union[list, List[list]] = None,
-    node_labels: Union[list, List[list]] = None,
+    trajectories: List[mdtraj.Trajectory],
+    graph_labels: list = None,
+    node_labels: list = None,
     system_selection: str = None,
     environment_selection: str = None,
     subsystem_selection: str = None,
-    lengths_conversion: float = 10,
+    lengths_conversion: float = 10.0,
     atom_names: List = None,
 ):
     """Convert MDTraj trajectories into atomic configurations.
 
     Parameters
     ----------
-    trajectories : List[mdtraj.Trajectory] or List[List[mdtraj.Trajectory]]
+    trajectories : list[mdtraj.Trajectory]
         MDTraj trajectory objects to convert.
     graph_labels : list, optional
-        Frame-level graph labels for the selected frames.
+        Frame-level graph labels.
     node_labels : list, optional
-        Node-level labels for the selected frames.
+        Node-level labels.
     system_selection : str, optional
         MDTraj-style atom selection defining the system atoms.
     environment_selection : str, optional
@@ -46,22 +50,21 @@ def _prepare_configurations_from_mdtraj_trajectories(
     subsystem_selection : str, optional
         MDTraj-style atom selection defining atoms used for long-range edges.
     lengths_conversion : float, optional
-        Length conversion factor, by default 10 to convert MDTraj
-        coordinates from nanometers to Angstroms.
+        Length conversion factor, by default 10 to convert nanometers
+        to Angstroms.
     atom_names : list, optional
-        Optional names for system atoms. If not provided, names are
-        inferred from the MDTraj topologies
+        Names of system atoms. If not provided, they are inferred from
+        the MDTraj topologies.
 
     Returns
     -------
     configurations : Configurations
         Atomic configurations generated from all trajectory frames.
     atomic_numbers : AtomicNumberTable
-        Atomic number table containing all species found in the trajectories.
+        Atomic number table containing all species.
     atom_names : list
-        Names of the selected system atoms inferred from the MDTraj topologies.
+        Names of the selected system atoms.
     """
-
     graph_labels = _format_labels(
         trajectories=trajectories,
         labels=graph_labels,
@@ -74,9 +77,9 @@ def _prepare_configurations_from_mdtraj_trajectories(
     configurations = []
     atomic_numbers = []
 
-    for i in range(len(trajectories)):
+    for i, trajectory in enumerate(trajectories):
         configuration = _configurations_from_mdtraj_trajectory(
-            trajectory=trajectories[i],
+            trajectory=trajectory,
             graph_labels=graph_labels[i],
             node_labels=node_labels[i],
             system_selection=system_selection,
@@ -86,12 +89,11 @@ def _prepare_configurations_from_mdtraj_trajectories(
         )
 
         configurations.extend(configuration)
-
         atomic_numbers = _update_atomic_numbers_from_configurations(
             configurations=configuration,
             atomic_numbers=atomic_numbers,
         )
-    
+
     if atom_names is None:
         atom_names = _names_from_top(
             top=[trajectory.topology for trajectory in trajectories],
@@ -101,152 +103,61 @@ def _prepare_configurations_from_mdtraj_trajectories(
     return configurations, atomic_numbers, atom_names
 
 
-def dataset_from_mdtraj_trajectories(
-    trajectories: Union[
-        List[mdtraj.Trajectory],
-        List[List[mdtraj.Trajectory]],
-    ],
-    cutoff: float,
-    graph_labels: Union[list, List[list]] = None,
-    node_labels: Union[list, List[list]] = None,
-    system_selection: str = None,
-    environment_selection: str = None,
-    subsystem_selection: str = None,
-    lengths_conversion: float = 10,
-    buffer: float = 0.0,
-    long_range_cutoff: float = -1.0,
-    atom_names: List = None,
-    remove_isolated_nodes: bool = True,
-    show_progress: bool = False,
-) -> DictDataset:
-    """Create a graph dataset from MDTraj trajectories.
+def load_traj_with_mdtraj(
+    trajectory: str,
+    topology: str = None,
+    start: int = 0,
+    stop: int = None,
+    stride: int = 1,
+) -> mdtraj.Trajectory:
+    """Load a trajectory using MDTraj.
 
     Parameters
     ----------
-    trajectories : List[mdtraj.Trajectory] or List[List[mdtraj.Trajectory]]
-        MDTraj trajectory objects to convert.
-    cutoff : float
-        Cutoff distance for graph edge construction in Angstroms.
-    graph_labels : list, optional
-        Frame-level graph labels for each trajectory.
-    node_labels : list, optional
-        Node-level labels for each trajectory.
-    system_selection : str, optional
-        MDTraj-style atom selection defining the system atoms.
-    environment_selection : str, optional
-        MDTraj-style atom selection defining the environment atoms.
-    subsystem_selection : str, optional
-        MDTraj-style atom selection defining the subsystem atoms.
-    lengths_conversion : float, optional
-        Length conversion factor, by default 10 to convert MDTraj
-        coordinates from nanometers to Angstroms.
-    buffer : float, optional
-        Buffer used when selecting environment atoms.
-    long_range_cutoff : float, optional
-        Cutoff radius for long-range subsystem edges. If negative,
-        long-range edges are not constructed.
-    atom_names : list, optional
-        Optional names for system atoms. If not provided, names are
-        inferred from the MDTraj topology.
-    remove_isolated_nodes : bool, optional
-        Whether to remove isolated graph nodes.
-    show_progress : bool, optional
-        Whether to display graph-construction progress.
+    trajectory : str
+        Path to the trajectory file.
+    topology : str
+        Path to the topology file.
+    start : int, optional
+        Starting frame index.
+    stop : int, optional
+        Stopping frame index. If None, load until the end.
+    stride : int, optional
+        Stride for frame selection.
 
     Returns
     -------
-    DictDataset
-        Graph dataset created from the MDTraj trajectories.
+    mdtraj.Trajectory
+        Loaded and sliced MDTraj trajectory.
     """
+    if not topology:
+        raise ValueError(
+            "MDTraj requires topology file(s) to load trajectories. "
+            "For XYZ trajectories, create_pdb_from_xyz can be used "
+            "to generate a topology file with ASE."
+        )
 
-    _check_atom_selection(
-        system_selection=system_selection,
-        environment_selection=environment_selection,
-        subsystem_selection=subsystem_selection,
-        buffer=buffer,
-        long_range_cutoff=long_range_cutoff,
-    )
+    traj = mdtraj.load(trajectory, top=topology)
+    traj.top = mdtraj.core.trajectory.load_topology(topology)
 
-    (
-        configurations,
-        atomic_numbers,
-        atom_names,
-    ) = _prepare_configurations_from_mdtraj_trajectories(
-        trajectories=trajectories,
-        graph_labels=graph_labels,
-        node_labels=node_labels,
-        system_selection=system_selection,
-        environment_selection=environment_selection,
-        subsystem_selection=subsystem_selection,
-        lengths_conversion=lengths_conversion,
-        atom_names=atom_names,
-    )
+    if traj.unitcell_vectors is None:
+        warn(
+            f"Trajectory {trajectory} does not contain cell information "
+            "that can be loaded by MDTraj. Trying ASE instead."
+        )
+        traj.unitcell_vectors = _get_cell_with_ase(trajectory)
 
-    return create_dataset_from_configurations(
-        config=configurations,
-        atomic_numbers=atomic_numbers,
-        cutoff=cutoff,
-        buffer=buffer,
-        long_range_cutoff=long_range_cutoff,
-        atom_names=atom_names,
-        remove_isolated_nodes=remove_isolated_nodes,
-        show_progress=show_progress,
-    )
-
-
-def load_traj_with_mdtraj(trajectory: str, 
-                          topology: str = None,
-                          start: int = 0,
-                          stop: int = None,
-                          stride: int = 1, 
-                          ) -> List[mdtraj.Trajectory]:
-        """
-        Load a trajectory using MDtraj.
-
-        Parameters
-        ----------
-        trajectory : str
-            Path to the trajectory file.
-        topology : str
-            Path to the topology file.
-        start : int, optional
-            Starting frame index, by default 0
-        stop : int, optional
-            Stopping frame index, by default None (load until the end)
-        stride : int, optional
-            Stride for frame selection, by default 1 (load all frames)
-       
-        Returns
-        -------
-        List[mdtraj.Trajectory]
-            Loaded MDtraj trajectory frames.
-        """
-        if topology is None:
-            raise ValueError("Mdtraj requires topolgy file(s) to load trajectories. " 
-                             "If the traj is in xyz format, the mlcolvar.io.graph.ase_create_pdb_from_xyz "
-                             "can be used to generate a topology file with ase.")
-
-        # load trajectory with mdtraj
-        traj = mdtraj.load(trajectory, top=topology)
-        traj.top = mdtraj.core.trajectory.load_topology(topology)
-        
-        # mdtraj does not load cell info from certain file types
-        # so we try use ASE and add it
         if traj.unitcell_vectors is None:
-            warn (f"Trajectory {trajectory} does not contain cell information that can be loaded by MDtraj. Trying to load cell information with ASE...", )
-            traj.unitcell_vectors = _get_cell_with_ase(trajectory)
-            if traj.unitcell_vectors is None:
-                raise ValueError("Could not load cell information with neither MDtraj nor ASE from this file format. " + 
-                                 "Check if the file contains cell information and if the file format is supported by ASE.")
-        
-        # slice the trajectory frames
-        if stop is None:
-            stop = len(traj)
+            raise ValueError(
+                "Could not load cell information with either MDTraj or ASE. "
+                "Check that the file contains cell information and that the "
+                "format is supported by ASE."
+            )
 
-        frame_indices = list(range(start, stop, stride))
-        traj = traj[frame_indices]
+    if stop is None:
+        stop = len(traj)
 
-        return traj
+    return traj[list(range(start, stop, stride))]
 
 def _configurations_from_mdtraj_trajectory(trajectory: mdtraj.Trajectory,
                                            graph_labels: list = None,
@@ -333,16 +244,23 @@ def _configurations_from_mdtraj_trajectory(trajectory: mdtraj.Trajectory,
         label_i = graph_labels[i].reshape(-1, 1) if graph_labels is not None else None
         node_i = node_labels[i].reshape(-1, 1) if node_labels is not None else None
 
-        configuration = Configuration(atomic_numbers=atomic_numbers,
-                                      positions=trajectory.xyz[i] * lengths_conversion,
-                                      cell=cell[i] * lengths_conversion,
-                                      pbc=pbc,
-                                      graph_labels=label_i,
-                                      node_labels=node_i,
-                                      system=selected_atoms['system'],
-                                      environment=selected_atoms['environment'],
-                                      subsystem=selected_atoms['subsystem'],
-                                    )
+        cell_i = (
+            cell[i] * lengths_conversion
+            if cell[i] is not None
+            else None
+        )
+
+        configuration = Configuration(
+            atomic_numbers=atomic_numbers,
+            positions=trajectory.xyz[i] * lengths_conversion,
+            cell=cell_i,
+            pbc=pbc,
+            graph_labels=label_i,
+            node_labels=node_i,
+            system=selected_atoms["system"],
+            environment=selected_atoms["environment"],
+            subsystem=selected_atoms["subsystem"],
+        )
         
         configurations.append(configuration)
 

@@ -175,8 +175,31 @@ def test_from_colvars():
         )
 
     assert isinstance(dataset, CustomDataset)
+    assert isinstance(dataset[:2], CustomDataset)
     assert len(dataset) == 5
     assert dataset["data"].shape == (5, 2)
+    
+    
+def test_from_colvars_with_labels_and_dataframe():
+    with data_dir() as folder:
+        dataset, dataframe = DictDataset.from_colvars(
+            file_names=[
+                "state_A.dat",
+                "state_B.dat",
+            ],
+            folder=str(folder),
+            create_labels=True,
+            filter_args={"regex": "n|o"},
+            start=0,
+            stop=5,
+            return_dataframe=True,
+            verbose=False,
+        )
+
+    assert isinstance(dataset, DictDataset)
+    assert len(dataset) == 10
+    assert len(dataframe) == 10
+    assert "labels" in dataset.keys
 
 
 def test_graph_from_configurations():
