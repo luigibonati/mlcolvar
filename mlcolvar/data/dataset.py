@@ -182,7 +182,36 @@ class DictDataset(Dataset):
         remove_isolated_nodes: bool = False,
         show_progress: bool = True,
     ):
-        """Create a graph dataset from atomic configurations."""
+        """Create a graph dataset from atomic configurations.
+
+        Parameters
+        ----------
+        config
+            Atomic configurations used to construct the graph dataset.
+        atomic_numbers
+            Atomic number table defining the chemical species present in the
+            configurations.
+        cutoff : float
+            Cutoff distance used to construct graph edges.
+        buffer : float, optional
+            Buffer distance used when selecting environment atoms, by default 0.0.
+        long_range_cutoff : float, optional
+            Cutoff distance used for long-range subsystem edges. If negative,
+            long-range edges are not constructed, by default -1.0.
+        atom_names : list, optional
+            Names of the system atoms, by default None.
+        remove_isolated_nodes : bool, optional
+            Whether to remove isolated nodes from the generated graphs,
+            by default False.
+        show_progress : bool, optional
+            Whether to display progress while constructing the graphs,
+            by default True.
+
+        Returns
+        -------
+        DictDataset
+            Graph dataset constructed from the configurations.
+        """
         from mlcolvar.data.graph.utils import (
             _prepare_dataset_from_configurations,
         )
@@ -225,7 +254,74 @@ class DictDataset(Dataset):
         delete_download: bool = True,
         backend: str = "mdtraj",
     ):
-        """Create a graph dataset from trajectory files."""
+        """Create a graph dataset directly from trajectory files.
+
+        Parameters
+        ----------
+        trajectories : str or list[str]
+            Path or paths to trajectory files.
+        cutoff : float
+            Cutoff distance used to construct graph edges, in Angstroms.
+        topologies : str or list[str], optional
+            Topology file or files required by the selected backend,
+            by default None.
+        load_args : list[dict], optional
+            Per-trajectory loading options such as ``start``, ``stop``,
+            and ``stride``, by default None.
+        folder : str, optional
+            Common directory containing trajectory and topology files,
+            by default None.
+        trajectory_labels : list, optional
+            Labels assigned to entire trajectories and broadcast to their
+            selected frames, by default None.
+        graph_labels : list, optional
+            Frame-level graph labels, by default None.
+        node_labels : list, optional
+            Node-level labels, by default None.
+        system_selection : str, optional
+            Backend-specific atom selection defining the system atoms,
+            by default None.
+        environment_selection : str, optional
+            Backend-specific atom selection defining environment atoms,
+            by default None.
+        buffer : float, optional
+            Buffer distance used when selecting environment atoms,
+            by default 0.0.
+        subsystem_selection : str, optional
+            Backend-specific atom selection defining atoms used for
+            long-range edges, by default None.
+        long_range_cutoff : float, optional
+            Cutoff distance used for long-range subsystem edges. If negative,
+            long-range edges are not constructed, by default -1.0.
+        return_trajectories : bool, optional
+            If True, also return the loaded trajectory objects,
+            by default False.
+        remove_isolated_nodes : bool, optional
+            Whether to remove isolated nodes from the generated graphs,
+            by default True.
+        show_progress : bool, optional
+            Whether to display progress while constructing the graphs,
+            by default False.
+        atom_names : list, optional
+            Names of the system atoms. If not provided, they are inferred
+            when possible, by default None.
+        lengths_conversion : float, optional
+            Conversion factor applied to trajectory coordinates. If None,
+            the default is selected according to the backend, by default None.
+        delete_download : bool, optional
+            Whether temporary downloaded files are deleted after loading,
+            by default True.
+        backend : {"mdtraj", "ase"}, optional
+            Backend used to load trajectory files, by default "mdtraj".
+
+        Returns
+        -------
+        DictDataset
+            Graph dataset constructed from the trajectories.
+        tuple[DictDataset, list]
+            Dataset and loaded trajectory objects when
+            ``return_trajectories=True``.
+        """
         from mlcolvar.io.graphs.common import (
             _prepare_dataset_from_trajectories,
         )
