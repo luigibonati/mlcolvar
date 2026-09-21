@@ -1125,8 +1125,12 @@ void PytorchKolmogorovBiasGNN::calculate()
     input.insert("edge_masks_lr", edge_masks_lr);
   }
   else {
-    auto edge_masks_lr = torch::zeros({n_edges, 1}, torch::dtype(torch::kBool));
-    input.insert("edge_masks_lr", edge_masks_lr);
+      auto edge_masks_lr = torch::zeros(
+          {n_edges, 1},
+          torch::dtype(torch::kBool)
+      );
+      edge_masks_lr = edge_masks_lr.to(device);
+      input.insert("edge_masks_lr", edge_masks_lr);
   }
 
   // TODO: figure out how to enable virials. Maybe we could port MACE's python
