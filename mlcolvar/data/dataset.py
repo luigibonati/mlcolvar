@@ -158,9 +158,9 @@ class DictDataset(Dataset):
         tuple[DictDataset, pandas.DataFrame]
             Dataset and dataframe when ``return_dataframe=True``.
         """
-        from mlcolvar.io.colvar import _prepare_dataset_from_files
+        from mlcolvar.io.colvar import _prepare_dataset_from_colvars
 
-        dataset_kwargs, dataframe = _prepare_dataset_from_files(
+        dataset_kwargs, dataframe = _prepare_dataset_from_colvars(
             file_names=file_names,
             folder=folder,
             create_labels=create_labels,

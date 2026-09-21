@@ -190,7 +190,7 @@ def load_dataframe(file_names: Union[str, list],
     return df
 
 
-def _prepare_dataset_from_files(
+def _prepare_dataset_from_colvars(
     file_names: Union[list, str],
     folder: str = None,
     create_labels: bool = None,
