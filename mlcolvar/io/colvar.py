@@ -318,7 +318,7 @@ def _prepare_dataset_from_colvars(
     dictionary = {"data": torch.Tensor(df_data.values)}
 
     if create_labels:
-        dictionary["labels"] = torch.as_tensor(
+        dictionary["labels"] = torch.Tensor(
             df["labels"].to_numpy(copy=True)
         )
 
