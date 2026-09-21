@@ -165,11 +165,17 @@ class _GraphMLColvarRepresentation(
                 "expected `.nn` to be BaseGNN."
             )
 
-        if getattr(encoder, "pooling_operation", None) is None:
-            raise ValueError(
-                "Graph representation transfer requires a graph-level "
-                "encoder with `pooling_operation` enabled."
-            )
+        pooling_operation = getattr(
+            encoder,
+            "pooling_operation",
+            None,
+        )
+
+        output_kind = (
+            "atom"
+            if pooling_operation is None
+            else "system"
+        )
 
         resolved_out = as_positive_int(
             encoder.out_features if out_features is None else out_features,
@@ -187,7 +193,7 @@ class _GraphMLColvarRepresentation(
                 encoder.cutoff,
                 name="encoder.cutoff",
             ),
-            output_kind="system",
+            output_kind=output_kind,
             buffer=to_float(
                 encoder.buffer,
                 name="encoder.buffer",
@@ -200,7 +206,7 @@ class _GraphMLColvarRepresentation(
             freeze=freeze,
         )
 
-        self.pooling_operation = encoder.pooling_operation
+        self.pooling_operation = pooling_operation
         self._init_model(model)
 
     def _cast_graph(
@@ -239,7 +245,9 @@ class _GraphMLColvarRepresentation(
                 "directly to graph dictionaries."
             )
 
-        return self._validate_output(self.model.nn(data))
+        return self._validate_output(
+            self.model.nn(data)
+        )
 
 
 def MLColvarRepresentation(

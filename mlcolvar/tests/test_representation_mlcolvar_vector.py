@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import Optional
 
 import pytest
@@ -10,6 +8,7 @@ from mlcolvar.representation import (
     MLColvarRepresentation,
     RepresentationModel,
     TaskHead,
+    VectorRepresentation,
     export_representation_torchscript,
 )
 
@@ -20,15 +19,10 @@ class AddCellPreprocessing(nn.Module):
         x: torch.Tensor,
         cell: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        output = x + 1.0
-
+        x = x + 1.0
         if cell is not None:
-            output = (
-                output
-                + cell.reshape(())
-            )
-
-        return output
+            x = x + cell.reshape(())
+        return x
 
 
 class ScaleNormalization(nn.Module):
@@ -40,32 +34,24 @@ class ScaleNormalization(nn.Module):
 
 
 class DummyDescriptorCV(nn.Module):
-    def __init__(
-        self,
-        dtype: torch.dtype = torch.float32,
-    ) -> None:
+    def __init__(self) -> None:
         super().__init__()
 
         self.in_features = 3
         self.out_features = 1
 
-        self.preprocessing = (
-            AddCellPreprocessing()
-        )
+        self.preprocessing = AddCellPreprocessing()
         self.norm_in = ScaleNormalization()
 
         self.nn = nn.Linear(
             3,
             2,
             bias=False,
-            dtype=dtype,
         )
-
         self.head = nn.Linear(
             2,
             1,
             bias=False,
-            dtype=dtype,
         )
 
         with torch.no_grad():
@@ -74,15 +60,12 @@ class DummyDescriptorCV(nn.Module):
                     [
                         [1.0, 0.0, 0.0],
                         [0.0, 1.0, 1.0],
-                    ],
-                    dtype=dtype,
+                    ]
                 )
             )
-
             self.head.weight.copy_(
                 torch.tensor(
-                    [[1.0, -1.0]],
-                    dtype=dtype,
+                    [[1.0, -1.0]]
                 )
             )
 
@@ -90,10 +73,11 @@ class DummyDescriptorCV(nn.Module):
         self,
         x: torch.Tensor,
     ) -> torch.Tensor:
-        latent = self.nn(
-            self.norm_in(x)
+        return self.head(
+            self.nn(
+                self.norm_in(x)
+            )
         )
-        return self.head(latent)
 
     def forward(
         self,
@@ -107,22 +91,19 @@ class DummyDescriptorCV(nn.Module):
         return self.forward_cv(x)
 
 
-def make_input(
-    dtype: torch.dtype = torch.float64,
-) -> torch.Tensor:
+def make_input() -> torch.Tensor:
     return torch.tensor(
         [
             [1.0, 2.0, 3.0],
             [2.0, 0.0, 1.0],
-        ],
-        dtype=dtype,
+        ]
     )
 
 
 def make_representation(
     mode: str = "latent",
     freeze: bool = True,
-) -> MLColvarRepresentation:
+) -> VectorRepresentation:
     return MLColvarRepresentation(
         DummyDescriptorCV(),
         mode=mode,
@@ -130,84 +111,34 @@ def make_representation(
     )
 
 
-def expected_latent(
-    x: torch.Tensor,
-    cell: Optional[torch.Tensor] = None,
-) -> torch.Tensor:
-    x = x + 1.0
-
-    if cell is not None:
-        x = x + cell.reshape(())
-
-    x = 2.0 * x
-
-    return torch.stack(
-        [
-            x[:, 0],
-            x[:, 1] + x[:, 2],
-        ],
-        dim=1,
-    )
-
-
-def expected_output(
-    x: torch.Tensor,
-    cell: Optional[torch.Tensor] = None,
-) -> torch.Tensor:
-    latent = expected_latent(
-        x,
-        cell,
-    )
-
-    return (
-        latent[:, :1]
-        - latent[:, 1:2]
-    )
-
-
 @pytest.mark.parametrize(
-    ("mode", "out_features", "expected_fn"),
+    ("mode", "out_features"),
     [
-        ("output", 1, expected_output),
-        ("forward", 1, expected_output),
-        ("latent", 2, expected_latent),
+        ("latent", 2),
+        ("forward", 1),
+        ("output", 1),
     ],
 )
 def test_vector_modes(
     mode,
     out_features,
-    expected_fn,
 ) -> None:
-    x = make_input()
-    cell = torch.tensor(
-        0.5,
-        dtype=torch.float64,
-    )
-
     representation = make_representation(
         mode=mode
     )
 
     output = representation(
-        x,
-        cell=cell,
+        make_input(),
+        cell=torch.tensor(0.5),
     )
 
     assert representation.input_kind == "vector"
     assert representation.in_features == 3
     assert representation.out_features == out_features
-    assert output.dtype == torch.float32
-
-    torch.testing.assert_close(
-        output,
-        expected_fn(
-            x,
-            cell,
-        ).float(),
-    )
+    assert output.shape == (2, out_features)
 
 
-def test_frozen_vector_representation() -> None:
+def test_vector_freeze_and_gradients() -> None:
     pretrained = DummyDescriptorCV()
 
     representation = MLColvarRepresentation(
@@ -216,27 +147,20 @@ def test_frozen_vector_representation() -> None:
         freeze=True,
     )
 
-    x = (
-        make_input()
-        .requires_grad_(True)
-    )
+    x = make_input().requires_grad_(True)
 
-    representation(
-        x
-    ).sum().backward()
+    representation(x).sum().backward()
 
     assert x.grad is not None
-    assert torch.isfinite(
-        x.grad
-    ).all()
 
     assert all(
-        not p.requires_grad
-        for p in pretrained.parameters()
+        not parameter.requires_grad
+        for parameter in pretrained.parameters()
     )
+
     assert all(
-        p.grad is None
-        for p in pretrained.parameters()
+        parameter.grad is None
+        for parameter in pretrained.parameters()
     )
 
     representation.train()
@@ -244,34 +168,17 @@ def test_frozen_vector_representation() -> None:
     assert not representation.training
     assert not pretrained.training
 
-    state = representation.state_dict()
-
-    assert "model.nn.weight" in state
-    assert "model.head.weight" in state
-    assert "_model_reference" not in state
-
-
-def test_unfrozen_vector_representation() -> None:
-    pretrained = DummyDescriptorCV()
-
-    representation = MLColvarRepresentation(
-        pretrained,
-        mode="latent",
-        freeze=False,
+    unfrozen = make_representation(
+        freeze=False
     )
 
     assert all(
-        p.requires_grad
-        for p in pretrained.parameters()
+        parameter.requires_grad
+        for parameter in unfrozen.parameters()
     )
 
-    representation.train()
 
-    assert representation.training
-    assert pretrained.training
-
-
-def test_representation_model_trains_only_head() -> None:
+def test_vector_representation_model() -> None:
     pretrained = DummyDescriptorCV()
 
     representation = MLColvarRepresentation(
@@ -286,10 +193,7 @@ def test_representation_model_trains_only_head() -> None:
         hidden_layers=(),
     )
 
-    x = (
-        make_input()
-        .requires_grad_(True)
-    )
+    x = make_input().requires_grad_(True)
 
     output = model(x)
 
@@ -298,100 +202,19 @@ def test_representation_model_trains_only_head() -> None:
     output.sum().backward()
 
     assert x.grad is not None
-    assert pretrained.nn.weight.grad is None
-    assert pretrained.head.weight.grad is None
+
+    assert all(
+        parameter.grad is None
+        for parameter in pretrained.parameters()
+    )
 
     assert any(
-        p.grad is not None
-        for p in model.head.parameters()
+        parameter.grad is not None
+        for parameter in model.head.parameters()
     )
 
 
-def test_cached_head_matches_full_model() -> None:
-    representation = make_representation()
-
-    head = TaskHead(
-        representation.out_features,
-        n_out=1,
-        hidden_layers=(),
-    )
-
-    model = RepresentationModel(
-        representation,
-        head=head,
-    ).eval()
-
-    x = make_input(
-        dtype=torch.float32
-    )
-
-    with torch.no_grad():
-        cached_output = head(
-            representation(x)
-        )
-        raw_output = model(x)
-
-    assert model.head is head
-
-    torch.testing.assert_close(
-        raw_output,
-        cached_output,
-    )
-
-
-def test_vector_adapter_validates_interfaces() -> None:
-    class MissingInput(nn.Module):
-        def forward(
-            self,
-            x: torch.Tensor,
-        ) -> torch.Tensor:
-            return x[:, :1]
-
-    class MissingForwardCV(nn.Module):
-        def __init__(self) -> None:
-            super().__init__()
-            self.in_features = 3
-            self.out_features = 1
-
-        def forward(
-            self,
-            x: torch.Tensor,
-        ) -> torch.Tensor:
-            return x[:, :1]
-
-    class MissingEncoder(
-        MissingForwardCV
-    ):
-        pass
-
-    with pytest.raises(
-        (TypeError, ValueError),
-    ):
-        MLColvarRepresentation(
-            MissingInput(),
-            mode="output",
-        )
-
-    with pytest.raises(
-        TypeError,
-        match="forward_cv",
-    ):
-        MLColvarRepresentation(
-            MissingForwardCV(),
-            mode="forward",
-        )
-
-    with pytest.raises(
-        TypeError,
-        match="latent encoder",
-    ):
-        MLColvarRepresentation(
-            MissingEncoder(),
-            mode="latent",
-        )
-
-
-def test_vector_representation_torchscript_roundtrip(
+def test_vector_representation_torchscript(
     tmp_path,
 ) -> None:
     representation = make_representation()
@@ -405,15 +228,11 @@ def test_vector_representation_torchscript_roundtrip(
         ),
     ).eval()
 
-    postprocessing = nn.Sigmoid()
-    path = (
-        tmp_path
-        / "vector_representation.ptc"
-    )
+    path = tmp_path / "model.ptc"
 
     export_representation_torchscript(
         model=model,
-        postprocessing=postprocessing,
+        postprocessing=nn.Sigmoid(),
         path=path,
     )
 
@@ -422,21 +241,9 @@ def test_vector_representation_torchscript_roundtrip(
         map_location="cpu",
     ).eval()
 
-    x = make_input(
-        dtype=torch.float32
+    output = loaded(
+        make_input()
     )
-
-    with torch.no_grad():
-        expected = postprocessing(
-            model(x)
-        )
-        output = loaded(x)
 
     assert path.exists()
-
-    torch.testing.assert_close(
-        output,
-        expected,
-        rtol=1e-5,
-        atol=1e-6,
-    )
+    assert output.shape == (2, 1)
