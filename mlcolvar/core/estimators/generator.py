@@ -8,7 +8,7 @@ from mlcolvar.core.estimators import Estimator
 
 from typing import Union, Tuple
 from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
-from mlcolvar.data import DictDataset, DictLoader
+from mlcolvar.data import DictLoader
 from mlcolvar.core.estimators.utils_generator import compute_eigenfunctions
 
 
@@ -133,22 +133,3 @@ class Generator(Estimator):
         """
 
         return torch.matmul(x, self.evecs)
-def test_generator():
-    from mlcolvar.data import DictDataset, DictModule
-
-    in_features = 2
-    X = torch.rand(100, in_features) * 100
-
-    w = torch.rand(len(X))
-
-    # Compute generator
-    generator = Generator(in_features, out_features=2)
-    dataset = DictDataset({"data": X, "weights": w})
-    datamodule = DictModule(dataset, lengths=[0.8,0.2])
-    datamodule.setup()
-
-    generator.compute(datamodule.train_dataloader(), eta=0.1, friction=torch.Tensor([1.0, 1.0]), tikhonov_reg=1e-4,n_dim=1, softmax_postproc=False)
-    s = generator(X)
-    print(X.shape, "-->", s.shape)
-    print("eigvals", generator.evals)
-
