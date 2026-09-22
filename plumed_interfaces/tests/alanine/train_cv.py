@@ -6,12 +6,7 @@ from lightning import Trainer
 from mlcolvar.core.nn.graph.schnet import SchNetModel
 from mlcolvar.core.nn.utils import Custom_Sigmoid
 from mlcolvar.cvs import DeepTDA
-from mlcolvar.data import DictModule
-from mlcolvar.io import (
-    create_dataset_from_files,
-    create_dataset_from_trajectories,
-)
-
+from mlcolvar.data import DictDataset, DictModule
 
 class DeepTDAForKBiasAOT(DeepTDA):
     """DeepTDA adapter for AOT Kolmogorov-bias models."""
@@ -76,7 +71,7 @@ if mode in [
     ]
 
     # load dataset
-    dataset = create_dataset_from_files(
+    dataset = DictDataset.from_colvars(
         file_names=filenames,
         filter_args={
             "regex": "x",
@@ -135,7 +130,7 @@ elif mode in [
     ]
 
     # load dataset
-    dataset = create_dataset_from_trajectories(
+    dataset = DictDataset.graph_from_trajectories(
         trajectories=filenames,
         topologies=topology,
         cutoff=10.0,

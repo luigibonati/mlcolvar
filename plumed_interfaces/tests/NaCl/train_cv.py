@@ -2,8 +2,7 @@ import torch
 import sys
 from lightning import Trainer
 
-from mlcolvar.data import DictModule
-from mlcolvar.io import create_dataset_from_files, create_dataset_from_trajectories
+from mlcolvar.data import DictDataset, DictModule
 from mlcolvar.core.nn.graph.schnet import SchNetModel
 from mlcolvar.cvs import DeepTDA
 
@@ -31,7 +30,7 @@ if mode in ["gnn", "gnn-kbias", "gnn-lr", "gnn-lr-kbias"]:
                 {'start' : 0, 'stop' : 10, 'stride' : 1}]
 
     # load dataset
-    dataset = create_dataset_from_trajectories(trajectories=filenames,
+    dataset = DictDataset.graph_from_trajectories(trajectories=filenames,
                                                topologies=topology, 
                                                cutoff=4.0,  
                                                buffer=3.0,

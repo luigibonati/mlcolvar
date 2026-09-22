@@ -1,34 +1,15 @@
+import tempfile
+from pathlib import Path
+
+import numpy as np
 import pytest
-import urllib
+import torch
+
+from mlcolvar.data import DictDataset
 from mlcolvar.tests import data_dir
-from mlcolvar.io.colvar import load_dataframe
-from mlcolvar.io.colvar import test_datasetFromFile, test_load_dataframe
-from mlcolvar.io.graphs.common import test_datasesetFromTrajectories
-from mlcolvar.io.graphs.common import test_create_dataset_from_trajectories
-from mlcolvar.io.graphs.common import test_dataset_from_xyz
-from mlcolvar.io.graphs.common import test_graph_and_node_labels_syntax
 
 
-@pytest.mark.parametrize("file_type", ["str", "list", "url"])
-def test_loadDataframe(file_type):
-    with data_dir() as test_data:
-        example_files = {
-            "str": str(test_data / "state_A.dat"),
-            "list": [str(test_data / "state_A.dat"), str(test_data / "state_B.dat")],
-            "url": "https://raw.githubusercontent.com/luigibonati/mlcolvar/main/mlcolvar/tests/data/2d_model/COLVAR_stateA",
-        }
-        filename = example_files[file_type]
-        if file_type == "url":
-            # disable test if connection is not available
-            try:
-                urllib.request.urlopen(filename)
-            except urllib.error.URLError:
-                pytest.skip("internet not available")
-
-        df = load_dataframe(filename, start=0, stop=10, stride=1)
-
-
-inputs = ["""
+PDB_TEXT = """
 CRYST1    2.000    2.000    2.000  90.00  90.00  90.00 P 1           1
 ATOM      1  OH2 TIP3W   1       0.000   0.000   0.000  1.00  0.00      WT1  O
 ATOM      2  H1  TIP3W   1       0.700   0.700   0.000  1.00  0.00      WT1  H
@@ -38,58 +19,145 @@ ATOM      1  OH2 TIP3W   1       0.000   0.000   0.000  1.00  0.00      WT1  O
 ATOM      2  H1  TIP3W   1       0.700   0.700   0.000  1.00  0.00      WT1  H
 ATOM      3  H2  TIP3W   1       0.700  -0.700   0.000  1.00  0.00      WT1  H
 END
-""",
 """
-CRYST1    2.000    2.000    2.000  90.00  90.00  90.00 P 1           1
-ATOM      1  OH2 TIP3W   1       0.000   0.000   0.000  1.00  0.00      WT1  O
-ATOM      2  H1  TIP3W   1       0.700   0.700   0.000  1.00  0.00      WT1  H
-ATOM      3  H2  TIP3W   1       0.700  -0.700   0.000  1.00  0.00      WT1  H
-ATOM      4  OH2 XXXXW   2       0.000   0.000   0.000  1.00  0.00      WT1  O
-ATOM      5  H1  XXXXW   2       0.300   0.300   0.000  1.00  0.00      WT1  H
-ATOM      6  H2  XXXXW   2       0.300  -0.300   0.000  1.00  0.00      WT1  H
-ENDMODEL
-ATOM      1  OH2 TIP3W   1       0.000   0.000   0.000  1.00  0.00      WT1  O
-ATOM      2  H1  TIP3W   1       0.700   0.700   0.000  1.00  0.00      WT1  H
-ATOM      3  H2  TIP3W   1       0.700  -0.700   0.000  1.00  0.00      WT1  H
-ATOM      4  OH2 XXXXW   2       0.000   0.000   0.000  1.00  0.00      WT1  O
-ATOM      5  H1  XXXXW   2       0.300   0.300   0.000  1.00  0.00      WT1  H
-ATOM      6  H2  XXXXW   2       0.300  -0.300   0.000  1.00  0.00      WT1  H
-END
-""",
-"""
-CRYST1    2.000    2.000    2.000  90.00  90.00  90.00 P 1           1
-ATOM      1  OH2 XXXXW   1       0.000   0.000   0.000  1.00  0.00      WT1  O
-ATOM      2  OH2 TIP3W   2       0.000   0.000   0.000  1.00  0.00      WT1  O
-ATOM      3  H1  XXXXW   1       0.300   0.300   0.000  1.00  0.00      WT1  H
-ATOM      4  H1  TIP3W   2       0.700   0.700   0.000  1.00  0.00      WT1  H
-ATOM      5  H2  XXXXW   1       0.300  -0.300   0.000  1.00  0.00      WT1  H
-ATOM      6  H2  TIP3W   2       0.700  -0.700   0.000  1.00  0.00      WT1  H
-ENDMODEL
-ATOM      1  OH2 XXXXW   1       0.000   0.000   0.000  1.00  0.00      WT1  O
-ATOM      2  OH2 TIP3W   2       0.000   0.000   0.000  1.00  0.00      WT1  O
-ATOM      3  H1  XXXXW   1       0.300   0.300   0.000  1.00  0.00      WT1  H
-ATOM      4  H1  TIP3W   2       0.700   0.700   0.000  1.00  0.00      WT1  H
-ATOM      5  H2  XXXXW   1       0.300  -0.300   0.000  1.00  0.00      WT1  H
-ATOM      6  H2  TIP3W   2       0.700  -0.700   0.000  1.00  0.00      WT1  H
-END
-"""
-]
-
-@pytest.mark.parametrize("text,selection", 
-                         [(inputs[0], None),
-                          (inputs[1], 'not resname XXXX'),
-                          (inputs[2], 'not resname XXXX')
-                          ]
-                        )
-# @pytest.mark.parametrize("text", inputs)
-def test_dataset_from_trajectories(text, selection):
-    print(selection)
-    test_create_dataset_from_trajectories(text, selection)
 
 
-if __name__ == "__main__":
-    test_dataset_from_xyz()
-    test_datasetFromFile()
-    test_datasesetFromTrajectories()    
-    test_load_dataframe()
-    test_graph_and_node_labels_syntax()
+def _write_pdb(tmpdir):
+    path = Path(tmpdir) / "test.pdb"
+    path.write_text(PDB_TEXT)
+    return str(path)
+
+
+def test_graph_from_trajectories():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = _write_pdb(tmpdir)
+
+        dataset, trajectories = DictDataset.graph_from_trajectories(
+            trajectories=[path, path, path],
+            topologies=path,
+            cutoff=1.0,
+            return_trajectories=True,
+            show_progress=False,
+        )
+
+    assert len(dataset) == 6
+    assert len(trajectories) == 3
+    assert dataset.metadata["cutoff"] == 1.0
+    assert dataset.metadata["atomic_numbers"] == [1, 8]
+
+    expected = [0, 0, 1, 1, 2, 2]
+    for data, label in zip(dataset, expected):
+        torch.testing.assert_close(
+            data["data_list"]["graph_labels"],
+            torch.tensor([[float(label)]]),
+        )
+
+
+def test_trajectory_and_graph_labels():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = _write_pdb(tmpdir)
+
+        dataset = DictDataset.graph_from_trajectories(
+            trajectories=[path, path],
+            topologies=path,
+            cutoff=1.0,
+            trajectory_labels=[10, 20],
+            show_progress=False,
+        )
+
+        expected = [10, 10, 20, 20]
+        for data, label in zip(dataset, expected):
+            torch.testing.assert_close(
+                data["data_list"]["graph_labels"],
+                torch.tensor([[float(label)]]),
+            )
+
+        dataset = DictDataset.graph_from_trajectories(
+            trajectories=[path],
+            topologies=path,
+            cutoff=1.0,
+            graph_labels=np.array([1.0, 2.0]),
+            show_progress=False,
+        )
+
+        torch.testing.assert_close(
+            dataset[0]["data_list"]["graph_labels"],
+            torch.tensor([[1.0]]),
+        )
+        torch.testing.assert_close(
+            dataset[1]["data_list"]["graph_labels"],
+            torch.tensor([[2.0]]),
+        )
+
+
+def test_node_labels_and_invalid_labels():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = _write_pdb(tmpdir)
+
+        dataset = DictDataset.graph_from_trajectories(
+            trajectories=[path],
+            topologies=path,
+            cutoff=1.0,
+            node_labels=torch.tensor(
+                [
+                    [0.0, 1.0, 2.0],
+                    [3.0, 4.0, 5.0],
+                ]
+            ),
+            show_progress=False,
+        )
+
+        torch.testing.assert_close(
+            dataset[0]["data_list"]["node_labels"],
+            torch.tensor([[0.0], [1.0], [2.0]]),
+        )
+
+        with pytest.raises(ValueError):
+            DictDataset.graph_from_trajectories(
+                trajectories=[path],
+                topologies=path,
+                cutoff=1.0,
+                graph_labels=[1.0, 2.0, 3.0],
+                show_progress=False,
+            )
+
+
+@pytest.mark.parametrize("backend", ["mdtraj", "ase"])
+def test_graph_from_xyz(backend):
+    with data_dir() as folder:
+        dataset = DictDataset.graph_from_trajectories(
+            trajectories="Cu.xyz",
+            folder=str(folder),
+            cutoff=3.5,
+            load_args=[
+                {
+                    "start": 0,
+                    "stop": 2,
+                    "stride": 1,
+                }
+            ],
+            backend=backend,
+            show_progress=False,
+        )
+
+    assert isinstance(dataset, DictDataset)
+    assert len(dataset) == 2
+
+
+def test_graph_from_dcd():
+    with data_dir() as folder:
+        dataset = DictDataset.graph_from_trajectories(
+            trajectories=["r.dcd", "p.dcd"],
+            topologies=["r.pdb", "p.pdb"],
+            folder=str(folder),
+            cutoff=8.0,
+            trajectory_labels=[0, 1],
+            system_selection="all and not type H",
+            load_args=[
+                {"start": 0, "stop": 10, "stride": 1},
+                {"start": 6, "stop": 10, "stride": 2},
+            ],
+            show_progress=False,
+        )
+
+    assert len(dataset) == 12

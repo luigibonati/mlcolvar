@@ -17,8 +17,11 @@
    .. autosummary::
    
       ~DictDataset.__init__
+      ~DictDataset.from_colvars
       ~DictDataset.get_graph_inputs
       ~DictDataset.get_stats
+      ~DictDataset.graph_from_configurations
+      ~DictDataset.graph_from_trajectories
    
    
 

@@ -2,11 +2,8 @@ import sys
 
 import torch
 
-from mlcolvar.io import (
-    create_dataset_from_files,
-    create_dataset_from_trajectories,
-    load_dataframe,
-)
+from mlcolvar.data import DictDataset
+from mlcolvar.io import load_dataframe
 
 
 # get mode from command line
@@ -24,7 +21,7 @@ if mode in [
     filename = "COLVAR"
 
     # load dataset and COLVAR
-    dataset, colvar = create_dataset_from_files(
+    dataset, colvar = DictDataset.from_colvars(
         filename,
         filter_args={
             "regex": "x",
@@ -58,7 +55,7 @@ elif mode in [
     topology = "ref.pdb"
 
     # load graph dataset
-    dataset = create_dataset_from_trajectories(
+    dataset = DictDataset.graph_from_trajectories(
         trajectories=trajectory,
         topologies=topology,
         cutoff=10.0,
