@@ -217,4 +217,3 @@ class Committor(BaseCV):
             "loss_bound_A": loss_bound_A,
             "loss_bound_B": loss_bound_B,
         }
-        

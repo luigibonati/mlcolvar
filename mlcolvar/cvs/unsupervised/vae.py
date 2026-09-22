@@ -256,6 +256,11 @@ class VariationalAutoEncoderCV(BaseCV):
             "loss": loss,
             "reconstruction_loss": reconstruction_loss,
             "kl_loss": kl_loss,
+            "beta": torch.as_tensor(
+                self.beta,
+                device=loss.device,
+                dtype=loss.dtype,
+            ),
         }
 
     def get_decoder(self, return_normalization=False):

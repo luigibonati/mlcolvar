@@ -1,5 +1,5 @@
 import torch
-import lightning
+
 from mlcolvar.cvs import BaseCV
 from mlcolvar.core import FeedForward, Normalization
 from mlcolvar.core.transform.utils import Inverse
@@ -120,6 +120,37 @@ class AutoEncoderCV(BaseCV):
             x = self.norm_in.inverse(x)
         return x
 
+    def _evaluate_reconstruction(
+        self,
+        batch,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Compute latent representation, reconstruction, and reconstruction loss."""
+        x = batch["data"]
+
+        # Encode only once
+        z = self.forward_cv(x)
+
+        # Decode the latent representation
+        x_hat = self._apply_module(self.decoder, z)
+        if self.norm_in is not None:
+            x_hat = self.norm_in.inverse(x_hat)
+
+        # Reference output
+        x_ref = batch["target"] if "target" in batch else x
+
+        loss_kwargs = {}
+        if "weights" in batch:
+            loss_kwargs["weights"] = batch["weights"]
+
+        # Reconstruction loss
+        loss = self.loss_fn(
+            x_hat,
+            x_ref,
+            **loss_kwargs,
+        )
+
+        return z, x_hat, loss
+
     def evaluate_loss(
         self,
         batch,
@@ -127,21 +158,8 @@ class AutoEncoderCV(BaseCV):
         update_state: bool = False,
     ) -> dict[str, torch.Tensor]:
         """Compute the autoencoder reconstruction loss."""
-        # ================= get data =================
-        x = batch["data"]
-        loss_kwargs = {}
-        if "weights" in batch:
-            loss_kwargs["weights"] = batch["weights"]
-        # ================= forward ==================
-        x_hat = self.encode_decode(x)
-        # ================= reference ================
-        x_ref = batch["target"] if "target" in batch else x
-        # ================== loss ====================
-        loss = self.loss_fn(
-            x_hat,
-            x_ref,
-            **loss_kwargs,
-        )
+        _, _, loss = self._evaluate_reconstruction(batch)
+
         return {
             "loss": loss,
         }

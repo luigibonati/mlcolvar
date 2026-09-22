@@ -323,4 +323,3 @@ class SelfTICA(BaseCV):
             }
         )
         return output
-        
