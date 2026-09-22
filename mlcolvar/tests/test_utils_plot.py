@@ -7,7 +7,6 @@ import torch
 
 from mlcolvar.data.dataset import DictDataset
 from mlcolvar.utils import plot as plot_utils
-from mlcolvar.utils.plot import test_utils_plot
 
 
 def _make_dataset(with_labels: bool = True) -> DictDataset:
@@ -129,5 +128,24 @@ def test_feature_distribution():
     plt.close(fig)
 
 
-if __name__ == "__main__":
-    test_utils_plot()
+def test_utils_plot():
+    x = np.linspace(-1.5, 1.5)
+    y = np.linspace(-0.5, 2.5)
+
+    mp = plot_utils.muller_brown_potential(x, y)
+    mp = plot_utils.muller_brown_potential_three_states(x, y)
+
+    pal = plot_utils.paletteFessa
+    pal = plot_utils.paletteCortina
+
+    cmap = matplotlib.colors.Colormap("fessa", 2)
+    cmap = matplotlib.colors.Colormap("fessa_r", 2)
+    cmap = matplotlib.colors.Colormap("cortina80", 2)
+    cmap = matplotlib.colors.Colormap("cortina80_r", 2)
+
+    import time
+    for i in plot_utils.pbar(range(15), "Computing: ", 40):
+        time.sleep(0.1)
+
+    for i in plot_utils.pbar(range(15), "Computing: ", 40, use_unicode=False):
+        time.sleep(0.1)
