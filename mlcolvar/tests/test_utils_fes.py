@@ -1,13 +1,120 @@
 import matplotlib
+
 matplotlib.use("Agg")
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
 from mlcolvar.utils import plot as _plot_utils  # register fessa colormap/colors
-from mlcolvar.utils.fes import SKLEARN_IS_INSTALLED, test_compute_fes, test_compute_deltaG, compute_deltaG, compute_fes
+from mlcolvar.utils.fes import (
+    SKLEARN_IS_INSTALLED,
+    compute_deltaG,
+    compute_fes,
+)
 
 
+def test_compute_fes():
+    X = np.linspace(1, 11, 100)
+    fes, bins, bounds, error_ = compute_fes(
+        X=X,
+        weights=np.ones_like(X),
+        kbt=1,
+        bandwidth=0.02,
+        num_samples=1000,
+        bounds=(0, 10),
+        fes_to_zero=25,
+        scale_by="range",
+        blocks=2,
+        backend="KDEpy",
+    )
+
+    Y = np.random.rand(2, 100)
+
+    if SKLEARN_IS_INSTALLED:  # TODO: change to use pytest functionalities?
+        fes, bins, bounds, error_ = compute_fes(
+            X=[Y[0], Y[1]],
+            temp=300,
+            units="kJ/mol",
+            weights=np.ones_like(X),
+            bandwidth=0.02,
+            num_samples=50,
+            bounds=None,
+            fes_to_zero=None,
+            scale_by="std",
+            blocks=2,
+            backend="sklearn",
+        )
+
+def test_compute_deltaG():
+    np.random.seed(42)
+    
+    # test 1D
+    # make two fake states with gaussian distribution, to have deltaG=0
+    X_a = np.random.rand(200) - 5
+    X_b = np.random.rand(200) + 5
+    
+    X = np.concatenate((X_a, X_b))
+    X = np.random.permutation(X)
+
+    time = np.arange(len(X))
+    weights = np.random.rand(len(X))
+
+    # test vanilla
+    grid, deltaG = compute_deltaG(X=X,
+                                  stateA_bounds=[-6, -4],
+                                  stateB_bounds=[4, 6], 
+                                  kbt=1,
+                                  intervals=10, 
+                                  weights=None,
+                                  reverse=False,
+                                  time=None,
+                                  plot=False,
+                                  plot_color="fessa6",
+                                  ax=None,
+                                  )
+    assert np.allclose(deltaG[-1], 0, atol=0.5)
+
+    # test keywords
+    grid, deltaG = compute_deltaG(X=X,
+                                  stateA_bounds=[-6, -4],
+                                  stateB_bounds=[4, 6], 
+                                  kbt=1,
+                                  intervals=10, 
+                                  weights=weights,
+                                  reverse=True,
+                                  time=time,
+                                  plot=False,
+                                  plot_color="fessa6",
+                                  ax=None,
+                                  )
+    assert np.allclose(deltaG[-1], 0, atol=0.5)
+
+    # test 2D
+    # make two fake states with gaussian distribution, to have deltaG=0
+    X_a = np.random.rand(200, 2) - 5
+    X_b = np.random.rand(200, 2) + 5
+    
+    X = np.concatenate((X_a, X_b), axis=0)
+    X = np.random.permutation(X)
+
+    time = np.arange(len(X))
+    weights = np.random.rand(len(X))
+    grid, deltaG = compute_deltaG(X=X,
+                                  stateA_bounds=[[-6, -4], [-6, -4]],
+                                  stateB_bounds=[[4, 6], [4, 6]], 
+                                  kbt=1,
+                                  intervals=10, 
+                                  weights=weights,
+                                  reverse=True,
+                                  time=time,
+                                  plot=False,
+                                  plot_color="fessa6",
+                                  ax=None,
+                                  )
+    assert np.allclose(deltaG[-1], 0, atol=0.5)
+    
+    
 def test_fes():
     # Case 1: 1D FES with plotting enabled and block errors shown as fill_between.
     x = np.linspace(0.0, 1.0, 120)
@@ -278,8 +385,3 @@ def test_funnel_delta_g():
     expected_delta_g = -np.log((p_bound / p_unbound) * volume_correction)
 
     np.testing.assert_allclose(delta_g_w[-1], expected_delta_g)
-
-if __name__ == "__main__":
-    test_fes()
-    test_delta_g()
-    test_funnel_delta_g()

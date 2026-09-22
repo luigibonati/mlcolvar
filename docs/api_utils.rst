@@ -13,8 +13,6 @@ Helper functions for loading dataframes (including PLUMED files) and directly cr
    :template: custom-class-template.rst
 
    load_dataframe
-   create_dataset_from_files
-   create_dataset_from_trajectories
 
 
 Time-lagged datasets

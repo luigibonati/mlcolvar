@@ -401,27 +401,3 @@ def pbar(
         if ((i % interval) == 0 or i in [0, (count - 1)]):
             show(i + 1)
     print(flush=True, file=file)
-
-def test_utils_plot():
-    import matplotlib
-
-    x = np.linspace(-1.5, 1.5)
-    y = np.linspace(-0.5, 2.5)
-
-    mp = muller_brown_potential(x, y)
-    mp = muller_brown_potential_three_states(x, y)
-
-    pal = paletteFessa
-    pal = paletteCortina
-
-    cmap = matplotlib.colors.Colormap("fessa", 2)
-    cmap = matplotlib.colors.Colormap("fessa_r", 2)
-    cmap = matplotlib.colors.Colormap("cortina80", 2)
-    cmap = matplotlib.colors.Colormap("cortina80_r", 2)
-
-    import time    
-    for i in pbar(range(15), "Computing: ", 40):
-        time.sleep(0.1)
-
-    for i in pbar(range(15), "Computing: ", 40, use_unicode=False):
-        time.sleep(0.1)

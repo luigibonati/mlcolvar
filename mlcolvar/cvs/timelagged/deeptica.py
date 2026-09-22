@@ -1,5 +1,4 @@
 import torch
-import lightning
 from mlcolvar.cvs import BaseCV
 from mlcolvar.core import FeedForward, BaseGNN, Normalization
 from mlcolvar.core.estimators import TICA
@@ -169,17 +168,21 @@ class DeepTICA(BaseCV):
             )
             w_t = x_t["weight"]
             w_lag = x_lag["weight"]
+
         # ================= forward ==================
         f_t = self.forward_nn(x_t)
         f_lag = self.forward_nn(x_lag)
+
         # ================== TICA ====================
         eigvals, _ = self.tica.compute(
             data=[f_t, f_lag],
             weights=[w_t, w_lag],
             save_params=update_state,
         )
+
         # ================== loss ====================
         loss = self.loss_fn(eigvals)
+
         # ================= metrics ==================
         output = {
             "loss": loss,
@@ -191,88 +194,3 @@ class DeepTICA(BaseCV):
             }
         )
         return output
-
-
-def test_deep_tica():
-    # tests
-    import numpy as np
-    from mlcolvar.data import DictModule
-    from mlcolvar.utils.timelagged import create_timelagged_dataset
-
-    # create dataset
-    X = torch.randn((10000, 2))
-    dataset = create_timelagged_dataset(X, lag_time=1)
-    datamodule = DictModule(dataset, batch_size=10000)
-
-    # create cv
-    print()
-    print('NORMAL')
-    print()
-    layers = [2, 10, 10, 2]
-    model = DeepTICA(layers, n_cvs=1)
-
-    # change loss options
-    model.loss_fn.mode = "sum2"
-
-    # create trainer and fit
-    trainer = lightning.Trainer(
-        max_epochs=1, log_every_n_steps=2, logger=None, enable_checkpointing=False
-    )
-    trainer.fit(model, datamodule)
-
-    model.eval()
-    with torch.no_grad():
-        s = model(X).numpy()
-    print(X.shape, "-->", s.shape)
-
-
-    print()
-    print('EXTERNAL')
-    print()
-    ff_model = FeedForward(layers=layers)
-    model = DeepTICA(ff_model, n_cvs=1)
-
-    # change loss options
-    model.loss_fn.mode = "sum2"
-
-    # create trainer and fit
-    trainer = lightning.Trainer(
-        max_epochs=1, log_every_n_steps=2, logger=None, enable_checkpointing=False
-    )
-    trainer.fit(model, datamodule)
-
-    model.eval()
-    with torch.no_grad():
-        s = model(X).numpy()
-    print(X.shape, "-->", s.shape)
-
-    
-    # gnn external
-    print()
-    print('GNN')
-    print()
-    from mlcolvar.core.nn.graph.schnet import SchNetModel
-    from mlcolvar.data.graph.utils import create_test_graph_input
-    gnn_model = SchNetModel(n_out=2, cutoff=0.1, atomic_numbers=[1, 8])
-    model = DeepTICA(gnn_model, n_cvs=1)
-
-    # change loss options
-    model.loss_fn.mode = "sum2"
-
-    # create trainer and fit
-    trainer = lightning.Trainer(
-        max_epochs=1, log_every_n_steps=2, logger=False, enable_checkpointing=False, enable_model_summary=False,
-    )
-
-    dataset = create_test_graph_input(output_type='dataset', n_samples=200, n_states=2)
-    lagged_dataset = create_timelagged_dataset(dataset, logweights=torch.randn(len(dataset)))
-    
-    datamodule = DictModule(dataset=lagged_dataset)
-    trainer.fit(model, datamodule)
-
-    model.eval()
-    with torch.no_grad():
-        example_input_graph_test = create_test_graph_input(output_type='example', n_atoms=4, n_samples=3, n_states=2)
-        s = model(example_input_graph_test).numpy()
-    print(X.shape, "-->", s.shape)
-

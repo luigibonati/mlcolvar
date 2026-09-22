@@ -1,6 +1,7 @@
 import torch
 import sys
-from mlcolvar.io import create_dataset_from_files, create_dataset_from_trajectories, load_dataframe
+from mlcolvar.data import DictDataset
+from mlcolvar.io import load_dataframe  
 
 # get arguments
 mode = sys.argv[1]
@@ -22,14 +23,14 @@ if mode in ["gnn", "gnn-kbias", "gnn-lr", "gnn-lr-kbias"]:
 
     # load dataset
     # load dataset
-    dataset = create_dataset_from_trajectories(trajectories=trajectory,
-                                               topologies=topology, 
-                                               cutoff=4.0,  
-                                               buffer=3.0,
-                                               system_selection='type Na or type Cl',
-                                               environment_selection='type O',
-                                               subsystem_selection='type Na or type Cl' if long_range else None,
-                                               long_range_cutoff=10 if long_range else -1,
+    dataset = DictDataset.graph_from_trajectories(trajectories=trajectory,
+                                                   topologies=topology, 
+                                                   cutoff=4.0,  
+                                                   buffer=3.0,
+                                                   system_selection='type Na or type Cl',
+                                                   environment_selection='type O',
+                                                   subsystem_selection='type Na or type Cl' if long_range else None,
+                                                   long_range_cutoff=10 if long_range else -1,
                                                lengths_conversion=10.0,
                                                )
     

@@ -75,7 +75,7 @@ def compute_committor_weights(dataset : DictDataset,
     ----------
     dataset : 
         Labeled dataset containig data from different simulations, the labels must identify each of them. 
-        For example, it can be created using `mlcolvar.io.create_dataset_from_files(filenames=[file1, ..., fileN], ... , create_labels=True)`
+        For example, it can be created using `mlcolvar.data.DictDataset.from_colvars(file_names=[file1, ..., fileN], ... , create_labels=True)`
     bias : torch.Tensor
         Bias values for the data in the dataset, usually it should be the committor-based bias
     data_groups : List[int]
@@ -157,67 +157,3 @@ def initialize_committor_masses(atom_types: list, masses: list):
     atomic_masses = torch.Tensor(atomic_masses)
 
     return atomic_masses
-
-def test_Kolmogorov_bias():
-    # test on feed forward
-    from mlcolvar import DeepTDA
-    model = DeepTDA(n_states=2, 
-                    n_cvs=1, 
-                    target_centers=[-1,1], 
-                    target_sigmas=[0.1, 0.1],
-                    model=[4,2,1])
-    inp = torch.randn((10, 4))
-    model_bias = KolmogorovBias(input_model=model, beta=1.0)
-    model_bias(inp)
-
-    # test on GNN
-    from mlcolvar.core.nn.graph import SchNetModel
-    from mlcolvar.data.graph.utils import create_test_graph_input
-
-    dataset = create_test_graph_input('dataset')
-    inp = dataset.get_graph_inputs()
-
-    gnn_model = SchNetModel(n_out=1, 
-                        cutoff=0.1, 
-                        atomic_numbers=[1,8])
-
-    model = DeepTDA(n_states=2, 
-                    n_cvs=1, 
-                    target_centers=[-1,1], 
-                    target_sigmas=[0.1, 0.1],
-                    model=gnn_model)
-
-    model_bias = KolmogorovBias(input_model=model, beta=1.0)
-    model_bias(inp)
-
-
-def test_compute_committor_weights():
-    # descriptors
-    # create dataset
-    samples = 50
-    X = torch.randn((3*samples, 6))
-    
-    # create labels, bias and weights
-    y = torch.zeros(X.shape[0])
-    y[samples:] += 1
-    y[int(2*samples):] += 1
-    bias = torch.zeros(X.shape[0])
-    w = torch.zeros(X.shape[0])
-
-    # create and edit dataset
-    dataset = DictDataset({"data": X, "labels": y, "weights": w})
-    dataset = compute_committor_weights(dataset=dataset, bias=bias, data_groups=[0,1,2], beta=1.0)
-    print(dataset)
-    assert (torch.allclose(dataset['weights'], torch.ones(X.shape[0])))
-    
-
-    # graphs
-    # create dataset
-    from mlcolvar.data.graph.utils import create_test_graph_input
-    dataset = create_test_graph_input('dataset', n_states=4, random_weights=True)
-    bias = torch.zeros(len(dataset))
-    dataset = compute_committor_weights(dataset=dataset, bias=bias, data_groups=[0,1,2,3], beta=1)
-    aux = []
-    for i in range(len(dataset)):    
-            aux.append(dataset['data_list'][i]['weight'])
-    assert (torch.allclose(torch.ones(len(dataset)), torch.Tensor(aux)))
