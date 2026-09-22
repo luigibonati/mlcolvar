@@ -216,13 +216,10 @@ class DeepGenerator(BaseCV):
         update_state: bool = False,
     ) -> dict[str, torch.Tensor]:
         """Compute the generator loss and associated metrics."""
-        # Generator loss requires derivatives with respect to the inputs.
+        # The loss requires derivatives with respect to the inputs.
         with torch.enable_grad():
-            # ================= get data =================
             if isinstance(self.nn, FeedForward):
-                x = batch["data"]
-                # Ensure shape (n_data, -1)
-                x = x.reshape((x.shape[0], -1))
+                x = batch["data"].reshape((batch["data"].shape[0], -1))
                 x.requires_grad_(True)
                 weights = batch["weights"]
             elif isinstance(self.nn, BaseGNN):
@@ -231,26 +228,9 @@ class DeepGenerator(BaseCV):
 
             ref_idx = batch.get("ref_idx", None)
             cell = self._get_batch_cell(batch)
-
-            # ================= forward ==================
-            # Use forward_nn to include preprocessing when present.
-            z = self.forward_nn(
-                x,
-                cell=cell,
-            )
-
-            if self.postprocessing is not None:
-                q = self.postprocessing(z)
-            else:
-                q = z
-
-            # ================== loss ====================
-            loss, loss_ef, loss_ortho = self.loss_fn(
-                x,
-                q,
-                weights,
-                ref_idx,
-            )
+            z = self.forward_nn(x, cell=cell)
+            q = self.postprocessing(z) if self.postprocessing is not None else z
+            loss, loss_ef, loss_ortho = self.loss_fn(x, q, weights, ref_idx)
 
         return {
             "loss": loss,

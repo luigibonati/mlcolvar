@@ -158,7 +158,6 @@ class DeepLDA(BaseCV):
         update_state: bool = False,
     ) -> dict[str, torch.Tensor]:
         """Compute the Deep-LDA loss and associated metrics."""
-        # ================= get data =================
         if isinstance(self.nn, FeedForward):
             x = batch["data"]
             labels = batch["labels"]
@@ -166,36 +165,19 @@ class DeepLDA(BaseCV):
             x = self._setup_graph_data(batch)
             labels = x["graph_labels"].squeeze()
 
-        # ================= forward ==================
         h = self.forward_nn(x)
-
-        # =================== LDA ====================
-        eigvals, _ = self.lda.compute(
-            h,
-            labels,
-            save_params=update_state,
-        )
-
-        # ================== loss ====================
+        eigvals, _ = self.lda.compute(h, labels, save_params=update_state)
         loss = self.loss_fn(eigvals)
 
-        # Keep this metric always defined, also when regularization is disabled.
+        # Keep this metric defined when regularization is disabled.
         lorentzian_reg = torch.zeros_like(loss)
-
         if self.lorentzian_reg > 0:
             s = self.lda(h)
             lorentzian_reg = self.regularization_lorentzian(s)
             loss = loss + lorentzian_reg
 
-        # ================= metrics ==================
-        output = {
-            "loss": loss,
-            "lorentzian_reg": lorentzian_reg,
-        }
+        output = {"loss": loss, "lorentzian_reg": lorentzian_reg}
         output.update(
-            {
-                f"eigval_{i + 1}": eigval
-                for i, eigval in enumerate(eigvals)
-            }
+            {f"eigval_{i + 1}": eigval for i, eigval in enumerate(eigvals)}
         )
         return output

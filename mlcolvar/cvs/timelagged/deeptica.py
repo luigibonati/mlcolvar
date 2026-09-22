@@ -146,51 +146,29 @@ class DeepTICA(BaseCV):
         batch_idx: int,
         update_state: bool = False,
     ) -> dict[str, torch.Tensor]:
-        """Compute and return the training loss and record metrics.
-        1) Calculate the NN output
-        2) Remove average (inside forward_nn)
-        3) Compute TICA
-        """
-        # ================= get data =================
+        """Compute the Deep-TICA loss and associated metrics."""
         if isinstance(self.nn, FeedForward):
             x_t = batch["data"]
             x_lag = batch["data_lag"]
             w_t = batch["weights"]
             w_lag = batch["weights_lag"]
         elif isinstance(self.nn, BaseGNN):
-            x_t = self._setup_graph_data(
-                batch,
-                key="data_list",
-            )
-            x_lag = self._setup_graph_data(
-                batch,
-                key="data_list_lag",
-            )
+            x_t = self._setup_graph_data(batch, key="data_list")
+            x_lag = self._setup_graph_data(batch, key="data_list_lag")
             w_t = x_t["weight"]
             w_lag = x_lag["weight"]
 
-        # ================= forward ==================
         f_t = self.forward_nn(x_t)
         f_lag = self.forward_nn(x_lag)
-
-        # ================== TICA ====================
         eigvals, _ = self.tica.compute(
             data=[f_t, f_lag],
             weights=[w_t, w_lag],
             save_params=update_state,
         )
-
-        # ================== loss ====================
         loss = self.loss_fn(eigvals)
 
-        # ================= metrics ==================
-        output = {
-            "loss": loss,
-        }
+        output = {"loss": loss}
         output.update(
-            {
-                f"eigval_{i + 1}": eigval
-                for i, eigval in enumerate(eigvals)
-            }
+            {f"eigval_{i + 1}": eigval for i, eigval in enumerate(eigvals)}
         )
         return output

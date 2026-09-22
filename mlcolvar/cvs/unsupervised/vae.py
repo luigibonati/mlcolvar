@@ -233,16 +233,13 @@ class VariationalAutoEncoderCV(BaseCV):
         update_state: bool = False,
     ) -> dict[str, torch.Tensor]:
         """Compute the variational autoencoder loss and associated metrics."""
-        # ================= get data =================
         x = batch["data"]
         loss_kwargs = {}
         if "weights" in batch:
             loss_kwargs["weights"] = batch["weights"]
-        # =============== encode/decode =============
+
         mean, log_variance, x_hat = self.encode_decode(x)
-        # ================= reference ================
         x_ref = batch["target"] if "target" in batch else x
-        # ================== loss ====================
         loss, reconstruction_loss, kl_loss = self.loss_fn(
             target=x_ref,
             output=x_hat,
@@ -262,7 +259,6 @@ class VariationalAutoEncoderCV(BaseCV):
                 dtype=loss.dtype,
             ),
         }
-
     def get_decoder(self, return_normalization=False):
         """Return a torch model with the decoder and optionally the normalization inverse"""
         if return_normalization:
@@ -276,3 +272,4 @@ class VariationalAutoEncoderCV(BaseCV):
         else:
             decoder_model = self.decoder
         return decoder_model
+

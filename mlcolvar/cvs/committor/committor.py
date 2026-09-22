@@ -170,14 +170,10 @@ class Committor(BaseCV):
         update_state: bool = False,
     ) -> dict[str, torch.Tensor]:
         """Compute the committor loss and associated metrics."""
-        # The variational committor loss may require derivatives
-        # with respect to the input coordinates.
+        # The loss may require derivatives with respect to the inputs.
         with torch.enable_grad():
-            # ================= get data =================
             if isinstance(self.nn, FeedForward):
-                x = batch["data"]
-                # Ensure shape (n_data, -1)
-                x = x.reshape((x.shape[0], -1))
+                x = batch["data"].reshape((batch["data"].shape[0], -1))
                 x.requires_grad_(True)
                 labels = batch["labels"]
                 weights = batch["weights"]
@@ -188,26 +184,10 @@ class Committor(BaseCV):
 
             ref_idx = batch.get("ref_idx", None)
             cell = self._get_batch_cell(batch)
-
-            # ================= forward ==================
-            z = self.forward_nn(
-                x,
-                cell=cell,
-            )
-
-            if self.sigmoid is not None:
-                q = self.sigmoid(z)
-            else:
-                q = z
-
-            # ================== loss ====================
+            z = self.forward_nn(x, cell=cell)
+            q = self.sigmoid(z) if self.sigmoid is not None else z
             loss, loss_var, loss_bound_A, loss_bound_B = self.loss_fn(
-                x,
-                z,
-                q,
-                labels,
-                weights,
-                ref_idx,
+                x, z, q, labels, weights, ref_idx
             )
 
         return {

@@ -93,7 +93,6 @@ class RegressionCV(BaseCV):
         update_state: bool = False,
     ) -> dict[str, torch.Tensor]:
         """Compute the regression loss and associated metrics."""
-        # ================= get data =================
         loss_kwargs = {}
         if isinstance(self.nn, FeedForward):
             x = batch["data"]
@@ -110,26 +109,17 @@ class RegressionCV(BaseCV):
             labels = x[self.graph_target_key]
             if self.graph_target_key == "graph_labels" and "weight" in x:
                 loss_kwargs["weights"] = x["weight"]
-        # ================= forward ==================
+
         y = self.forward_cv(x)
-        # Keep compatibility with scalar targets stored with extra singleton dims.
         y, labels = self._align_regression_tensors(y, labels)
-        # ================== loss ====================
         try:
-            loss = self.loss_fn(
-                y,
-                labels,
-                **loss_kwargs,
-            )
+            loss = self.loss_fn(y, labels, **loss_kwargs)
         except TypeError as e:
             if "unexpected keyword argument 'weights'" in str(e):
                 loss = self.loss_fn(y, labels)
             else:
                 raise
-        return {
-            "loss": loss,
-        }
-
+        return {"loss": loss}
     @staticmethod
     def _squeeze_trailing_singletons(x: torch.Tensor) -> torch.Tensor:
         """Remove trailing singleton dimensions, preserving multi-target tensors."""
@@ -152,3 +142,4 @@ class RegressionCV(BaseCV):
             )
 
         return y, labels
+

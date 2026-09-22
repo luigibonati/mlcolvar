@@ -270,38 +270,24 @@ class SelfTICA(BaseCV):
         update_state: bool = False,
     ) -> dict[str, torch.Tensor]:
         """Compute the SelfTICA loss and associated metrics."""
-        # ================= get data =================
         if isinstance(self.nn, FeedForward):
             x_t = batch["data"]
             x_lag = batch["data_lag"]
             w_t = batch["weights"]
             w_lag = batch["weights_lag"]
         elif isinstance(self.nn, BaseGNN):
-            x_t = self._setup_graph_data(
-                batch,
-                key="data_list",
-            )
-            x_lag = self._setup_graph_data(
-                batch,
-                key="data_list_lag",
-            )
+            x_t = self._setup_graph_data(batch, key="data_list")
+            x_lag = self._setup_graph_data(batch, key="data_list_lag")
             w_t = x_t["weight"]
             w_lag = x_lag["weight"]
-        # ================= forward ==================
+
         z_t = self.forward_nn(x_t)
         z_t_pred = self.predictor(z_t)
         z_lag = self.forward_nn(x_lag)
-        # ================== loss ====================
-        loss = self.loss_fn(
-            z_t_pred,
-            z_lag,
-        )
-        # ============== monitoring =================
+        loss = self.loss_fn(z_t_pred, z_lag)
+
         with torch.no_grad():
-            loss_noreg = self.loss_fn.noreg(
-                z_t_pred,
-                z_lag,
-            )
+            loss_noreg = self.loss_fn.noreg(z_t_pred, z_lag)
             eigvals, _ = self.tica.compute(
                 data=[z_t, z_lag],
                 weights=[w_t, w_lag],
@@ -311,15 +297,8 @@ class SelfTICA(BaseCV):
                 self.current_evecs.copy_(self.tica.evecs)
                 self.current_means.copy_(self.tica.mean)
 
-        # ================= metrics ==================
-        output = {
-            "loss": loss,
-            "loss_noreg": loss_noreg,
-        }
+        output = {"loss": loss, "loss_noreg": loss_noreg}
         output.update(
-            {
-                f"eigval_{i + 1}": eigval
-                for i, eigval in enumerate(eigvals)
-            }
+            {f"eigval_{i + 1}": eigval for i, eigval in enumerate(eigvals)}
         )
         return output

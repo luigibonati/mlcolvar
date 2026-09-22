@@ -127,7 +127,6 @@ class DeepTDA(BaseCV):
         update_state: bool = False,
     ) -> dict[str, torch.Tensor]:
         """Compute the Deep-TDA loss and associated metrics."""
-        # ================= get data =================
         if isinstance(self.nn, FeedForward):
             x = batch["data"]
             labels = batch["labels"]
@@ -135,16 +134,10 @@ class DeepTDA(BaseCV):
             x = self._setup_graph_data(batch)
             labels = x["graph_labels"].squeeze()
 
-        # ================= forward ==================
         z = self.forward_cv(x)
-
-        # ================== loss ====================
         loss, loss_centers, loss_sigmas = self.loss_fn(
-            z,
-            labels,
-            return_loss_terms=True,
+            z, labels, return_loss_terms=True
         )
-
         return {
             "loss": loss,
             "loss_centers": loss_centers,

@@ -125,52 +125,33 @@ class MultiTaskCV:
         update_state: bool = False,
     ) -> dict[str, torch.Tensor]:
         """Compute the main and auxiliary losses for multi-task training."""
-        # ================= main loss =================
         main_output = super().evaluate_loss(
-            batch["dataset0"],
-            batch_idx,
-            update_state=update_state,
+            batch["dataset0"], batch_idx, update_state=update_state
         )
         main_loss = main_output["loss"]
         total_loss = main_loss
-        # Preserve metrics returned by the main CV.
-        output = {
-            key: value
-            for key, value in main_output.items()
-            if key != "loss"
-        }
+        output = {key: value for key, value in main_output.items() if key != "loss"}
         output["main_loss"] = main_loss
-        # ============== auxiliary losses ============
+
         for loss_idx, aux_loss_fn in enumerate(self.auxiliary_loss_fns):
             dataset_batch = batch[f"dataset{loss_idx + 1}"]
-            # Prepare keyword arguments for the auxiliary loss.
             aux_loss_kwargs = {
                 key: value
                 for key, value in dataset_batch.items()
                 if not key.startswith("data")
             }
-            # Forward current data.
             cv = self.forward_cv(dataset_batch["data"])
-            # Forward lagged data when present.
             if "data_lag" in dataset_batch:
                 cv_lag = self.forward_cv(dataset_batch["data_lag"])
-                aux_loss = aux_loss_fn(
-                    cv,
-                    cv_lag,
-                    **aux_loss_kwargs,
-                )
+                aux_loss = aux_loss_fn(cv, cv_lag, **aux_loss_kwargs)
             else:
-                aux_loss = aux_loss_fn(
-                    cv,
-                    **aux_loss_kwargs,
-                )
-            # Keep the unscaled auxiliary loss as a metric.
+                aux_loss = aux_loss_fn(cv, **aux_loss_kwargs)
+
             output[f"aux_loss_{loss_idx}"] = aux_loss
-            # Apply coefficient only to the optimization objective.
             if self.loss_coefficients is not None:
                 aux_loss = self.loss_coefficients[loss_idx] * aux_loss
             total_loss = total_loss + aux_loss
-        # `loss` is always the quantity optimized by Lightning.
+
         output["total_loss"] = total_loss
         output["loss"] = total_loss
         return output

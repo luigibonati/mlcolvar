@@ -126,29 +126,18 @@ class AutoEncoderCV(BaseCV):
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Compute latent representation, reconstruction, and reconstruction loss."""
         x = batch["data"]
-
-        # Encode only once
         z = self.forward_cv(x)
 
-        # Decode the latent representation
         x_hat = self._apply_module(self.decoder, z)
         if self.norm_in is not None:
             x_hat = self.norm_in.inverse(x_hat)
 
-        # Reference output
         x_ref = batch["target"] if "target" in batch else x
-
         loss_kwargs = {}
         if "weights" in batch:
             loss_kwargs["weights"] = batch["weights"]
 
-        # Reconstruction loss
-        loss = self.loss_fn(
-            x_hat,
-            x_ref,
-            **loss_kwargs,
-        )
-
+        loss = self.loss_fn(x_hat, x_ref, **loss_kwargs)
         return z, x_hat, loss
 
     def evaluate_loss(
@@ -159,11 +148,7 @@ class AutoEncoderCV(BaseCV):
     ) -> dict[str, torch.Tensor]:
         """Compute the autoencoder reconstruction loss."""
         _, _, loss = self._evaluate_reconstruction(batch)
-
-        return {
-            "loss": loss,
-        }
-
+        return {"loss": loss}
     def get_decoder(self, return_normalization=False):
         """Return a torch model with the decoder and optionally the normalization inverse"""
         if return_normalization:
@@ -177,3 +162,4 @@ class AutoEncoderCV(BaseCV):
         else:
             decoder_model = self.decoder
         return decoder_model
+
