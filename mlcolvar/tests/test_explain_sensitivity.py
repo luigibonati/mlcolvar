@@ -1,3 +1,4 @@
+import lightning
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -5,9 +6,19 @@ import numpy as np
 import pytest
 import torch
 
-from mlcolvar.data import DictDataset
-from mlcolvar.explain.sensitivity import plot_sensitivity, sensitivity_analysis, test_sensitivity_analysis
-from mlcolvar.explain.graph_sensitivity import test_graph_sensitivity, test_get_cv_values_graph
+from mlcolvar.core.nn.graph import SchNetModel
+from mlcolvar.cvs import DeepLDA, DeepTDA
+from mlcolvar.data import DictDataset, DictModule
+from mlcolvar.data.graph.utils import create_test_graph_input
+from mlcolvar.explain.graph_sensitivity import (
+    get_dataset_cv_values,
+    graph_node_sensitivity,
+)
+from mlcolvar.explain.sensitivity import (
+    plot_sensitivity,
+    sensitivity_analysis,
+)
+
 
 def _sensitivity_dataset(with_labels: bool = True) -> DictDataset:
     random_generator = np.random.default_rng(10)
@@ -107,7 +118,93 @@ def test_plot_sensitivity():
     with pytest.raises(KeyError):
         plot_sensitivity(dataset_only_results, mode="barh", per_class=True)
 
-if __name__ == "__main__":
-    test_sensitivity_analysis()
-    test_graph_sensitivity()
-    test_get_cv_values_graph()
+
+def test_sensitivity_analysis_deeplda():
+    n_states = 2
+    in_features, out_features = 2, n_states - 1
+    layers = [in_features, 5, 5, out_features]
+
+    # create dataset
+    samples = 10
+    X = torch.randn((samples * n_states, 2))
+
+    # create labels
+    y = torch.zeros(X.shape[0])
+    for i in range(1, n_states):
+        y[samples * i :] += 1
+
+    dataset = DictDataset({"data": X, "labels": y})
+
+    # define CV
+    opts = {
+        "nn": {"activation": "shifted_softplus"},
+    }
+    model = DeepLDA(layers, n_states, options=opts)
+
+    # feature importances
+    for per_class in [True, False, None]:
+        for names in [None, ["x", "y"], np.asarray(["x", "y"])]:
+            results = sensitivity_analysis(
+                model, dataset, feature_names=names, per_class=per_class, plot_mode=None
+            )
+
+
+def test_get_cv_values_graph():
+    # create data, we need the dataset for sensitivity analysis later
+    dataset = create_test_graph_input(output_type='dataset', n_samples=50, n_states=2, n_atoms=3)
+    datamodule = DictModule(dataset=dataset, lengths=[0.8, 0.2], shuffle=[1, 0])
+
+    # create model
+    gnn_model = SchNetModel(n_out=1, cutoff=0.1, atomic_numbers=[8, 1])
+    model = DeepTDA(
+        n_states=2,
+        n_cvs=1,
+        target_centers=[-5, 5],
+        target_sigmas=[0.2, 0.2],
+        model=gnn_model
+    )
+
+    # train model
+    trainer = lightning.Trainer(
+        accelerator="cpu", max_epochs=2, logger=False, enable_checkpointing=False, enable_model_summary=False
+    )
+    trainer.fit(model, datamodule)
+
+    # do analysis
+    cv_values = get_dataset_cv_values(model=model, dataset=dataset, batch_size=0)
+
+    # print results
+    print(cv_values)
+
+    assert (torch.allclose(model(dataset.get_graph_inputs()), torch.Tensor(cv_values)))
+
+
+def test_graph_sensitivity():
+    for environment in [False, True]:
+        # create data, we need the dataset for sensitivity analysis later
+        dataset = create_test_graph_input(output_type='dataset', n_samples=100, n_states=2, n_atoms=3, environment=environment)
+        datamodule = DictModule(dataset=dataset, lengths=[0.8, 0.2], shuffle=[1, 0])
+
+        # create model
+        gnn_model = SchNetModel(n_out=1, cutoff=0.1, atomic_numbers=[8, 1])
+        model = DeepTDA(
+            n_states=2,
+            n_cvs=1,
+            target_centers=[-5, 5],
+            target_sigmas=[0.2, 0.2],
+            model=gnn_model
+        )
+
+        # train model
+        trainer = lightning.Trainer(
+            accelerator="cpu", max_epochs=2, logger=False, enable_checkpointing=False, enable_model_summary=False
+        )
+        trainer.fit(model, datamodule)
+
+        # do analysis
+        test_sensitivity = graph_node_sensitivity(model=model,
+                                        dataset=dataset,
+                                        batch_size=0)
+
+        # print results
+        print(test_sensitivity)

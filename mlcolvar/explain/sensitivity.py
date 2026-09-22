@@ -289,35 +289,3 @@ def plot_sensitivity(results, mode="violin", per_class=None, max_features = 100,
     else:
         ax.axvline(0,color='grey')
     ax.set_ylim(-1, in_num[-1] + 1)
-
-def test_sensitivity_analysis():
-    from mlcolvar.data import DictDataset
-    from mlcolvar.cvs import DeepLDA
-
-    n_states = 2
-    in_features, out_features = 2, n_states - 1
-    layers = [in_features, 5, 5, out_features]
-
-    # create dataset
-    samples = 10
-    X = torch.randn((samples * n_states, 2))
-
-    # create labels
-    y = torch.zeros(X.shape[0])
-    for i in range(1, n_states):
-        y[samples * i :] += 1
-
-    dataset = DictDataset({"data": X, "labels": y})
-
-    # define CV
-    opts = {
-        "nn": {"activation": "shifted_softplus"},
-    }
-    model = DeepLDA(layers, n_states, options=opts)
-
-    # feature importances
-    for per_class in [True, False, None]:
-        for names in [None, ["x", "y"], np.asarray(["x", "y"])]:
-            results = sensitivity_analysis(
-                model, dataset, feature_names=names, per_class=per_class, plot_mode=None
-            )
