@@ -1,184 +1,164 @@
 
-import numpy as np
-import os
-from typing import  List, Union
-import mdtraj
-
+from typing import List, Union
 from warnings import warn
 
-from mlcolvar.data import DictDataset
-from mlcolvar.io.graphs._utils import *
+import mdtraj
+
+from mlcolvar.data.graph.atomic import (
+    AtomicNumberTable,
+    Configuration,
+    Configurations,
+)
+from mlcolvar.io.graphs._utils import (
+    _format_labels,
+    _update_atomic_numbers_from_configurations,
+)
 from mlcolvar.io.graphs.ase_ import _get_cell_with_ase
-from mlcolvar.data.graph.atomic import AtomicNumberTable, Configuration, Configurations
-from mlcolvar.data.graph.utils import create_dataset_from_configurations
-
-__all__ = ["load_traj_with_mdtraj", 
-           "dataset_from_mdtraj_trajectories",
-           "_atomic_numbers_from_top",
-           "_names_from_top"]
 
 
-def dataset_from_mdtraj_trajectories(trajectories: Union[List[mdtraj.Trajectory], List[List[mdtraj.Trajectory]]],
-                                     cutoff: float,
-                                     graph_labels: Union[list, List[list]] = None,
-                                     node_labels: Union[list, List[list]] = None,
-                                     system_selection: str = None,
-                                     environment_selection: str = None,
-                                     subsystem_selection: str = None,
-                                     lengths_conversion : float = 10,
-                                     buffer: float = 0.0,
-                                     long_range_cutoff: float = -1.0,
-                                     atom_names: List = None,
-                                     remove_isolated_nodes: bool = True,
-                                     show_progress: bool = False,
-                                     ) -> DictDataset:
-    """    
-    Create a graph dataset from MDtraj trajectories.
+__all__ = [
+    "load_traj_with_mdtraj",
+    "_atomic_numbers_from_top",
+    "_names_from_top",
+]
 
+
+def _prepare_configurations_from_mdtraj_trajectories(
+    trajectories: List[mdtraj.Trajectory],
+    graph_labels: list = None,
+    node_labels: list = None,
+    system_selection: str = None,
+    environment_selection: str = None,
+    subsystem_selection: str = None,
+    lengths_conversion: float = 10.0,
+    atom_names: List = None,
+):
+    """Convert MDTraj trajectories into atomic configurations.
 
     Parameters
     ----------
-    trajectories : List[mdtraj.Trajectory] or List[List[mdtraj.Trajectory]]
-        List of MDtraj trajectory frame sequences loaded with MDtraj.
-    cutoff : float
-        Cutoff distance for graph edge construction (Angstroms).
-    graph_labels : List
-        Frame-level graph labels for each trajectory, by default None.
-    node_labels : List
-        Node-level labels for each trajectory, by default None.
+    trajectories : list[mdtraj.Trajectory]
+        MDTraj trajectory objects to convert.
+    graph_labels : list, optional
+        Frame-level graph labels.
+    node_labels : list, optional
+        Node-level labels.
     system_selection : str, optional
-        MDtraj style atom selection for the system atoms, by default None
+        MDTraj-style atom selection defining the system atoms.
     environment_selection : str, optional
-        MDtraj style atom selection for the environment atoms, by default None
+        MDTraj-style atom selection defining the environment atoms.
     subsystem_selection : str, optional
-        MDtraj style atom selection for the subsystem atoms, by default None
+        MDTraj-style atom selection defining atoms used for long-range edges.
     lengths_conversion : float, optional
-        Length unit conversion factor, by default 10 for MDtraj nanometers to Angstroms
-    buffer : float, optional
-        Buffer size for truncated graph construction.
-    long_range_cutoff : float, optional
-        Long-range edge cutoff radius, by default -1.0 (no long-range edges). 
-        If negative, long-range edges will not be constructed
-    atom_names : List, optional
-        Optional atom names used by the dataset constructor, by default None
-        If not provided, atomic names will be infered from the MDtraj Topology objects
-    remove_isolated_nodes : bool, optional
-        Whether to remove isolated nodes from the final dataset, by default True
-    show_progress : bool, optional
-        Whether to show progress while building the dataset, by default False
+        Length conversion factor, by default 10 to convert nanometers
+        to Angstroms.
+    atom_names : list, optional
+        Names of system atoms. If not provided, they are inferred from
+        the MDTraj topologies.
 
     Returns
     -------
-    DictDataset
-         The graph dataset created from the MDtraj trajectories.
+    configurations : Configurations
+        Atomic configurations generated from all trajectory frames.
+    atomic_numbers : AtomicNumberTable
+        Atomic number table containing all species.
+    atom_names : list
+        Names of the selected system atoms.
     """
-    
-    graph_labels = _format_labels(trajectories=trajectories, labels=graph_labels)
-    node_labels = _format_labels(trajectories=trajectories, labels=node_labels)
+    graph_labels = _format_labels(
+        trajectories=trajectories,
+        labels=graph_labels,
+    )
+    node_labels = _format_labels(
+        trajectories=trajectories,
+        labels=node_labels,
+    )
 
-    # Check compatibility of selection keywords combinations. NOTE: This doesn't check if the selection is correct.
-    _check_atom_selection(system_selection=system_selection,
-                          environment_selection=environment_selection,
-                          subsystem_selection=subsystem_selection,
-                          buffer=buffer,
-                          long_range_cutoff=long_range_cutoff)
-
-    # create configurations objects from trajectories
     configurations = []
     atomic_numbers = []
-    for i in range(len(trajectories)):
 
-        # TODO maybe this can be a single function with a backend argument
-        # create configurations for this trajectory
-        configuration = _configurations_from_mdtraj_trajectory(trajectory=trajectories[i],
-                                                                graph_labels=graph_labels[i],
-                                                                node_labels=node_labels[i],
-                                                                system_selection=system_selection,
-                                                                environment_selection=environment_selection,
-                                                                subsystem_selection=subsystem_selection,
-                                                                lengths_conversion=lengths_conversion,
-                                                            )
+    for i, trajectory in enumerate(trajectories):
+        configuration = _configurations_from_mdtraj_trajectory(
+            trajectory=trajectory,
+            graph_labels=graph_labels[i],
+            node_labels=node_labels[i],
+            system_selection=system_selection,
+            environment_selection=environment_selection,
+            subsystem_selection=subsystem_selection,
+            lengths_conversion=lengths_conversion,
+        )
+
         configurations.extend(configuration)
-
-        # check if new atomic species have been discovered
-        atomic_numbers = _update_atomic_numbers_from_configurations(configurations=configuration,
-                                                                    atomic_numbers=atomic_numbers)
+        atomic_numbers = _update_atomic_numbers_from_configurations(
+            configurations=configuration,
+            atomic_numbers=atomic_numbers,
+        )
 
     if atom_names is None:
-        atom_names = _names_from_top(top= [trajectory.topology for trajectory in trajectories],
-                                     system_selection=system_selection)
+        atom_names = _names_from_top(
+            top=[trajectory.topology for trajectory in trajectories],
+            system_selection=system_selection,
+        )
 
-    
-
-    # create dataset from configurations list
-    dataset = create_dataset_from_configurations(config=configurations,
-                                                 atomic_numbers=atomic_numbers,
-                                                 cutoff=cutoff,
-                                                 buffer=buffer,
-                                                 long_range_cutoff=long_range_cutoff,
-                                                 atom_names=atom_names,
-                                                 remove_isolated_nodes=remove_isolated_nodes,
-                                                 show_progress=show_progress
-                                               )
-    
-    return dataset
+    return configurations, atomic_numbers, atom_names
 
 
-def load_traj_with_mdtraj(trajectory: str, 
-                          topology: str = None,
-                          start: int = 0,
-                          stop: int = None,
-                          stride: int = 1, 
-                          ) -> List[mdtraj.Trajectory]:
-        """
-        Load a trajectory using MDtraj.
+def load_traj_with_mdtraj(
+    trajectory: str,
+    topology: str = None,
+    start: int = 0,
+    stop: int = None,
+    stride: int = 1,
+) -> mdtraj.Trajectory:
+    """Load a trajectory using MDTraj.
 
-        Parameters
-        ----------
-        trajectory : str
-            Path to the trajectory file.
-        topology : str
-            Path to the topology file.
-        start : int, optional
-            Starting frame index, by default 0
-        stop : int, optional
-            Stopping frame index, by default None (load until the end)
-        stride : int, optional
-            Stride for frame selection, by default 1 (load all frames)
-       
-        Returns
-        -------
-        List[mdtraj.Trajectory]
-            Loaded MDtraj trajectory frames.
-        """
-        if topology is None:
-            raise ValueError("Mdtraj requires topolgy file(s) to load trajectories. " 
-                             "If the traj is in xyz format, the mlcolvar.io.graph.ase_create_pdb_from_xyz "
-                             "can be used to generate a topology file with ase.")
+    Parameters
+    ----------
+    trajectory : str
+        Path to the trajectory file.
+    topology : str
+        Path to the topology file.
+    start : int, optional
+        Starting frame index.
+    stop : int, optional
+        Stopping frame index. If None, load until the end.
+    stride : int, optional
+        Stride for frame selection.
 
-        # load trajectory with mdtraj
-        traj = mdtraj.load(trajectory, top=topology)
-        traj.top = mdtraj.core.trajectory.load_topology(topology)
-        
-        # mdtraj does not load cell info from certain file types
-        # so we try use ASE and add it
+    Returns
+    -------
+    mdtraj.Trajectory
+        Loaded and sliced MDTraj trajectory.
+    """
+    if not topology:
+        raise ValueError(
+            "MDTraj requires topology file(s) to load trajectories. "
+            "For XYZ trajectories, create_pdb_from_xyz can be used "
+            "to generate a topology file with ASE."
+        )
+
+    traj = mdtraj.load(trajectory, top=topology)
+    traj.top = mdtraj.core.trajectory.load_topology(topology)
+
+    if traj.unitcell_vectors is None:
+        warn(
+            f"Trajectory {trajectory} does not contain cell information "
+            "that can be loaded by MDTraj. Trying ASE instead."
+        )
+        traj.unitcell_vectors = _get_cell_with_ase(trajectory)
+
         if traj.unitcell_vectors is None:
-            warn (f"Trajectory {trajectory} does not contain cell information that can be loaded by MDtraj. Trying to load cell information with ASE...", )
-            traj.unitcell_vectors = _get_cell_with_ase(trajectory)
-            if traj.unitcell_vectors is None:
-                raise ValueError("Could not load cell information with neither MDtraj nor ASE from this file format. " + 
-                                 "Check if the file contains cell information and if the file format is supported by ASE.")
-        
-        # slice the trajectory frames
-        if stop is None:
-            stop = len(traj)
+            raise ValueError(
+                "Could not load cell information with either MDTraj or ASE. "
+                "Check that the file contains cell information and that the "
+                "format is supported by ASE."
+            )
 
-        frame_indices = list(range(start, stop, stride))
-        traj = traj[frame_indices]
+    if stop is None:
+        stop = len(traj)
 
-        return traj
+    return traj[list(range(start, stop, stride))]
 
-# TODO maybe also this can framed into a shared function
 def _configurations_from_mdtraj_trajectory(trajectory: mdtraj.Trajectory,
                                            graph_labels: list = None,
                                            node_labels: list = None,
@@ -195,7 +175,8 @@ def _configurations_from_mdtraj_trajectory(trajectory: mdtraj.Trajectory,
         The MDTraj Trajectory object.
     graph_labels: np.ndarray
         Frame-level graph labels for selected frames of this trajectory.
-    nodel_labels: np.nda
+    node_labels : list, optional
+        Node-level labels for selected frames of this trajectory.
     system_selection: str
         MDTraj style atom selection of the system atoms. If given, only
         selected atoms will be loaded from the trajectories. 
@@ -236,7 +217,6 @@ def _configurations_from_mdtraj_trajectory(trajectory: mdtraj.Trajectory,
                             'environment': environment_selection, 
                             'subsystem': subsystem_selection}.items():
         if selection is not None:
-            # TODO maybe also this can framed into a shared function
             selected_atoms[name] = trajectory.top.select(selection)
             if not len(selected_atoms[name]) > 0:
                 raise ValueError(f"No atoms will be selected with selection {name}_selection: {selection}!")
@@ -264,16 +244,23 @@ def _configurations_from_mdtraj_trajectory(trajectory: mdtraj.Trajectory,
         label_i = graph_labels[i].reshape(-1, 1) if graph_labels is not None else None
         node_i = node_labels[i].reshape(-1, 1) if node_labels is not None else None
 
-        configuration = Configuration(atomic_numbers=atomic_numbers,
-                                      positions=trajectory.xyz[i] * lengths_conversion,
-                                      cell=cell[i] * lengths_conversion,
-                                      pbc=pbc,
-                                      graph_labels=label_i,
-                                      node_labels=node_i,
-                                      system=selected_atoms['system'],
-                                      environment=selected_atoms['environment'],
-                                      subsystem=selected_atoms['subsystem'],
-                                    )
+        cell_i = (
+            cell[i] * lengths_conversion
+            if cell[i] is not None
+            else None
+        )
+
+        configuration = Configuration(
+            atomic_numbers=atomic_numbers,
+            positions=trajectory.xyz[i] * lengths_conversion,
+            cell=cell_i,
+            pbc=pbc,
+            graph_labels=label_i,
+            node_labels=node_i,
+            system=selected_atoms["system"],
+            environment=selected_atoms["environment"],
+            subsystem=selected_atoms["subsystem"],
+        )
         
         configurations.append(configuration)
 

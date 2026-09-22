@@ -1,7 +1,6 @@
-__all__ = ["create_dataset_from_trajectories",
-           "create_pdb_from_xyz"]
+from .ase_ import create_pdb_from_xyz
 
-# not imported by default as they depend on optional libraries (pandas, scikit-learn or KDEpy)
-from .common import *
-from .mdtraj_ import *
-from .ase_ import *
+
+__all__ = [
+    "create_pdb_from_xyz",
+]

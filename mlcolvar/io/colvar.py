@@ -13,9 +13,12 @@ from typing import Union, List
 
 
 from mlcolvar.io._utils import _download_temp_file
-from mlcolvar.data import DictDataset
 
-__all__ = ["load_dataframe", "plumed_to_pandas", "create_dataset_from_files"]
+
+__all__ = [
+    "load_dataframe",
+    "plumed_to_pandas",
+]
 
 
 def is_plumed_file(filename):
@@ -187,244 +190,142 @@ def load_dataframe(file_names: Union[str, list],
     return df
 
 
-def create_dataset_from_files(
+def _prepare_dataset_from_colvars(
     file_names: Union[list, str],
     folder: str = None,
     create_labels: bool = None,
     load_args: List[dict] = None,
     filter_args: dict = None,
     modifier_function=None,
-    return_dataframe: bool = False,
     verbose: bool = True,
-    **kwargs,
+    start: int = 0,
+    stop: int = None,
+    stride: int = 1,
+    delete_download: bool = True,
+    read_csv_kwargs: dict = None,
 ):
-    """
-    Initialize a dataset from (a list of) files. Suitable for supervised/unsupervised tasks.
+    """Load and preprocess COLVAR-like files for dataset construction.
+
+    This internal helper performs all file loading and preprocessing steps
+    required to construct a descriptor-based dataset, but does not instantiate
+    a ``DictDataset``.
 
     Parameters
     ----------
-    file_names : list
-        Names of files from which import the data
+    file_names : str or list[str]
+        File name or list of file names to load.
     folder : str, optional
-        Common path for the files to be imported, by default None. If set, filenames become 'folder/file_name'.
-    create_labels: bool, optional
-        Assign a label to each file, default True if more than a file is given, otherwise False
-    load_args: list[dict], optional
-        List of dictionaries with the arguments passed to load_dataframe function for each file (keys: start,stop,stride and pandas.read_csv options), by default None
-    filter_args: dict, optional
-        Dictionary of arguments which are passed to df.filter() to select descriptors (keys: items, like, regex), by default None
-        Note that 'time' and '*.bias' columns are always discarded.
-    return_dataframe : bool, optional
-        Return also the imported Pandas dataframe for convenience, by default False
-    modifier_function : function, optional
-        Function to be applied to the input data, by default None.
+        Common directory containing the input files.
+    create_labels : bool, optional
+        Assign one integer label to each input file. If None, labels are
+        created automatically when more than one file is provided.
+    load_args : list[dict], optional
+        Per-file loading arguments. Each dictionary can contain ``start``,
+        ``stop``, ``stride``, and arguments forwarded to ``pandas.read_csv``.
+    filter_args : dict, optional
+        Arguments passed to ``DataFrame.filter`` to select descriptors.
+    modifier_function : callable, optional
+        Function applied to the descriptor dataframe.
     verbose : bool, optional
-        Print info on the datasets, by default True
-    kwargs : optional
-        args passed to mlcolvar.io.load_dataframe
+        Whether to print information about the loaded data.
+    start, stop, stride : int, optional
+        Global slicing parameters used when ``load_args`` is not provided.
+    delete_download : bool, optional
+        Whether to delete temporary files downloaded from URLs after loading.
+    read_csv_kwargs : dict, optional
+        Global keyword arguments forwarded to ``pandas.read_csv``.
 
     Returns
     -------
-    torch.Dataset
-        Torch labeled dataset of the given data
-    optional, pandas.Dataframe
-        Pandas dataframe of the given data #TODO improve
-
-    See also
-    --------
-    mlcolvar.io.load_dataframe
-        Function that is used to load the files
-
+    dataset_kwargs : dict
+        Keyword arguments required to instantiate a descriptor-based
+        ``DictDataset`` or compatible subclass.
+    dataframe : pandas.DataFrame
+        Full loaded dataframe before descriptor-only filtering.
     """
     if isinstance(file_names, str):
         file_names = [file_names]
+    elif not isinstance(file_names, list):
+        raise TypeError(
+            f"file_names must be a string or list of strings, not {type(file_names)}."
+        )
 
     num_files = len(file_names)
 
-    # set file paths
     if folder is not None:
         file_names = [os.path.join(folder, fname) for fname in file_names]
 
-    # check if per file args are given, otherwise set to {}
+    if read_csv_kwargs is None:
+        read_csv_kwargs = {}
+
     if load_args is None:
-        load_args = [{} for _ in file_names]
+        load_args = [
+            {"start": start, "stop": stop, "stride": stride}
+            for _ in file_names
+        ]
     else:
-        if (not isinstance(load_args, list)) or (len(file_names) != len(load_args)):
-            raise TypeError(
-                "load_args should be a list of dictionaries of arguments of same length as file_names. If you want to use the same args for all file pass them directly as **kwargs."
+        if start != 0 or stop is not None or stride != 1:
+            raise ValueError(
+                "Both global and per-file loading parameters have been "
+                "specified. Use either `load_args` or `start`, `stop`, "
+                "and `stride`."
             )
 
-    # check if create_labels if given, otherwise set it to True if more than one file is given
-    if create_labels is None:
-        create_labels = False if len(file_names) == 1 else True
+        if not isinstance(load_args, list) or len(load_args) != num_files:
+            raise TypeError(
+                "load_args must be a list of dictionaries with the "
+                "same length as file_names."
+            )
 
-    # initialize pandas dataframe
+    if create_labels is None:
+        create_labels = num_files > 1
+
     df = pd.DataFrame()
 
-    # load data
-    for i in range(num_files):
-        df_tmp = load_dataframe(file_names[i], **load_args[i], **kwargs)
+    for i, filename in enumerate(file_names):
+        file_load_args = {**read_csv_kwargs, **load_args[i]}
+        df_tmp = load_dataframe(
+            filename,
+            delete_download=delete_download,
+            **file_load_args,
+        )
 
-        # add label in the dataframe
         if create_labels:
             df_tmp["labels"] = i
+
         if verbose:
             print(f"Class {i} dataframe shape: ", np.shape(df_tmp))
 
-        # update collective dataframe
         df = pd.concat([df, df_tmp], ignore_index=True)
 
-    # filter inputs
-    df_data = df.filter(**filter_args) if filter_args is not None else df.copy()
-    df_data = df_data.filter(regex="^(?!.*labels)^(?!.*time)^(?!.*bias)^(?!.*walker)")
+    df_data = (
+        df.filter(**filter_args)
+        if filter_args is not None
+        else df.copy()
+    )
+
+    df_data = df_data.filter(
+        regex="^(?!.*labels)^(?!.*time)^(?!.*bias)^(?!.*walker)"
+    )
 
     if verbose:
         print(f"\n - Loaded dataframe {df.shape}:", list(df.columns))
         print(f" - Descriptors {df_data.shape}:", list(df_data.columns))
 
-    # apply transformation
     if modifier_function is not None:
         df_data = df_data.apply(modifier_function)
 
-    # create DictDataset
     dictionary = {"data": torch.Tensor(df_data.values)}
+
     if create_labels:
-        dictionary["labels"] = torch.Tensor(df["labels"].values)
-    dataset = DictDataset(dictionary, feature_names=df_data.columns.values, data_type='descriptors')
-
-    if return_dataframe:
-        return dataset, df
-    else:
-        return dataset
-
-
-# =================================================================================================
-# ============================================= TESTS =============================================
-# =================================================================================================
-
-def test_datasetFromFile():
-    from mlcolvar.tests import data_dir
-
-    with data_dir() as data_folder:
-        data_folder = str(data_folder)
-        # Test with unlabeled dataset
-        torch_dataset, pd_dataframe = create_dataset_from_files(
-            file_names=["state_A.dat", "state_B.dat", "state_C.dat"],
-            folder=data_folder,
-            create_labels=False,
-            load_args=None,
-            filter_args=None,
-            return_dataframe=True,
-            start=0,  # kwargs to load_dataframe
-            stop=5,
-            stride=1,
+        dictionary["labels"] = torch.Tensor(
+            df["labels"].to_numpy(copy=True)
         )
 
-        # Test no regex on two states
-        create_dataset_from_files(
-            file_names=["state_A.dat", "state_B.dat"],
-            folder=data_folder,
-            create_labels=True,
-            load_args=None,
-            filter_args=None,
-            return_dataframe=True,
-            start=0,  # kwargs to load_dataframe
-            stop=5,
-            stride=1,
-        )
+    dataset_kwargs = {
+        "dictionary": dictionary,
+        "feature_names": df_data.columns.values,
+        "data_type": "descriptors",
+    }
 
-        # Test with filter regex on two states
-        dataset = create_dataset_from_files(
-            file_names=["state_A.dat", "state_B.dat"],
-            folder=data_folder,
-            create_labels=True,
-            load_args=None,
-            filter_args={"regex": "n|o"},
-            return_dataframe=False,
-            start=0,  # kwargs to load_dataframe
-            stop=5,
-            stride=1,
-        )
-
-        def test_modifier(x):
-            return x**2
-
-        # Test with filter regex on two states with modifier
-        create_dataset_from_files(
-            file_names=["state_A.dat", "state_B.dat"],
-            folder=data_folder,
-            create_labels=True,
-            load_args=None,
-            filter_args={"regex": "n|o"},
-            modifier_function=test_modifier,
-            return_dataframe=True,
-            start=0,  # kwargs to load_dataframe
-            stop=5,
-            stride=1,
-        )
-
-def test_load_dataframe():
-    from mlcolvar.tests import data_dir
-
-    with data_dir() as data_folder:
-        data_folder = str(data_folder)
-        # Test naive single file
-        pd_dataframe = load_dataframe(file_names="state_A.dat",
-                                      folder=data_folder,
-                                      start=0, 
-                                      stop=5,
-                                      stride=1,
-                                    )
-        assert(len(pd_dataframe) == 5)
-
-        # Test with global loading parameters
-        pd_dataframe = load_dataframe(file_names=["state_A.dat", "state_B.dat", "state_C.dat"],
-                                      folder=data_folder,
-                                      start=0, 
-                                      stop=5,
-                                      stride=1,
-                                    )
-        assert(len(pd_dataframe) == 15)
-
-        # Test with per-file loading parameters
-        load_args = [{"start": 0, "stop": 5, "stride": 1},
-                     {"start": 0, "stop": 5, "stride": 1},
-                     {"start": 0, "stop": 5, "stride": 1}]
-        pd_dataframe = load_dataframe(file_names=["state_A.dat", "state_B.dat", "state_C.dat"],
-                                      folder=data_folder,
-                                      load_args=load_args,
-                                    )
-        assert(len(pd_dataframe) == 15)
-
-        # Test with per-file loading parameters with default fallback
-        load_args = [{"start": 0, "stop": 6, "stride": 2},
-                     {"start": 0, "stop": 6, "stride": 2},
-                     {"start": 0, "stop": 6}] # this should fall back to default
-        pd_dataframe = load_dataframe(file_names=["state_A.dat", "state_B.dat", "state_C.dat"],
-                                      folder=data_folder,
-                                      load_args=load_args,
-                                    )
-        assert(len(pd_dataframe) == 12)
-
-        # test wrong length error
-        try:
-            load_args = [{"start": 0, "stop": 6, "stride": 2},
-                     {"start": 0, "stop": 6}] # this should fall back to default
-            pd_dataframe = load_dataframe(file_names=["state_A.dat", "state_B.dat", "state_C.dat"],
-                                      folder=data_folder,
-                                      load_args=load_args,
-                                    )
-        except TypeError as e:
-            print("[TEST LOG] Checked this error: ", e)
-
-        # test load_args and global key conflict error
-        try:
-            load_args = [{"start": 0, "stop": 6, "stride": 2},
-                     {"start": 0, "stop": 6}] # this should fall back to default
-            pd_dataframe = load_dataframe(file_names=["state_A.dat", "state_B.dat", "state_C.dat"],
-                                      folder=data_folder,
-                                      load_args=load_args,
-                                      start=10,
-                                    )
-        except ValueError as e:
-            print("[TEST LOG] Checked this error: ", e)
+    return dataset_kwargs, df

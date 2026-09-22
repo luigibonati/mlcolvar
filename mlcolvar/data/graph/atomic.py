@@ -153,20 +153,3 @@ class Configuration:
 
 Configurations = List[Configuration]
 
-
-def test_atomic_number_table() -> None:
-    table = AtomicNumberTable([1, 6, 7, 8])
-
-    numbers = np.array([1, 7, 6, 8])
-    assert (
-        table.zs_to_indices(numbers) == np.array([0, 2, 1, 3], dtype=int)
-    ).all()
-
-    numbers = np.array([1, 1, 1, 6, 8, 1])
-    assert (
-        table.zs_to_indices(numbers) == np.array([0, 0, 0, 1, 3, 0], dtype=int)
-    ).all()
-
-    table_1 = AtomicNumberTable.from_zs([6] * 3 + [1] * 10 + [7] * 3 + [8] * 2)
-    assert table_1.zs == table.zs
-
