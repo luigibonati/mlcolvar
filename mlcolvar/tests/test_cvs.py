@@ -219,7 +219,3 @@ def test_trace_graph_based():
                                                 environment=check_environment,
                                                 long_range=long_range)
                 assert torch.allclose(model(x), example(x))
-
-if __name__=="__main__":
-    test_trace_descriptor_based()
-    test_trace_graph_based()
