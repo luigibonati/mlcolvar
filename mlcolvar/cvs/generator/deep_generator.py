@@ -1,5 +1,4 @@
 import torch
-import lightning
 from typing import Union, Tuple,List
 from mlcolvar.cvs import BaseCV
 from mlcolvar.core import FeedForward, BaseGNN

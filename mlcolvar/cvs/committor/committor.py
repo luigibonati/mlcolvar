@@ -1,5 +1,4 @@
 import torch
-import lightning
 from mlcolvar.cvs import BaseCV
 from mlcolvar.core import FeedForward, Normalization, BaseGNN
 from mlcolvar.core.loss import CommittorLoss
