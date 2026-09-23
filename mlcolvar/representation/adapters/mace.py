@@ -188,12 +188,28 @@ class MACERepresentation(GraphRepresentation):
         node_features: torch.Tensor,
     ) -> torch.Tensor:
         """Extract scalar features from selected MACE layers."""
+        if node_features.dim() != 2:
+            raise RuntimeError(
+                "MACE `node_feats` must be a rank-two tensor."
+            )
+
+        if node_features.size(1) < self.required_input_features:
+            raise RuntimeError(
+                "MACE `node_feats` is incompatible with the configured "
+                "descriptor layout: expected at least "
+                f"{self.required_input_features} features, found "
+                f"{node_features.size(1)}."
+            )
+
         blocks = torch.jit.annotate(List[torch.Tensor], [])
 
         for i in range(self.num_layers):
             start = i * self.layer_size
             blocks.append(
-                node_features[:, start : start + self.num_features]
+                node_features[
+                    :,
+                    start : start + self.num_features,
+                ]
             )
 
         return torch.cat(blocks, dim=-1)

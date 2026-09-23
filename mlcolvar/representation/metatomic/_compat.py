@@ -1,10 +1,14 @@
-"""Optional Metatomic imports and Torch indexing compatibility."""
-
 import torch
 
 
 def _restore_native_torch_indexing() -> None:
-    """Undo the global PyG HashTensor indexing monkey-patch."""
+    """Restore native PyTorch indexing functions before importing Metatomic.
+
+    PyTorch Geometric may replace ``torch.index_select`` and ``torch.select``
+    when HashTensor support is imported. Metatensor/Metatomic expects the
+    native PyTorch implementations, so restore them before importing the
+    optional Metatomic dependencies.
+    """
     try:
         import torch_geometric.hash_tensor as hash_tensor
     except ImportError:
@@ -22,8 +26,8 @@ def _restore_native_torch_indexing() -> None:
     )
 
 
-# This must run before importing metatensor/metatomic.
 _restore_native_torch_indexing()
+
 
 try:
     from metatensor.torch import Labels, TensorBlock, TensorMap
@@ -39,7 +43,7 @@ except ImportError as exc:
     raise ImportError(
         "Atomistic Metatomic export requires both 'metatensor-torch' and "
         "'metatomic-torch'. Install these optional dependencies before "
-        "importing mlcolvar.integrations.atomistic.metatomic."
+        "importing mlcolvar.representation.metatomic."
     ) from exc
 
 

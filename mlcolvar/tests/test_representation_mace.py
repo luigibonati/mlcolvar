@@ -201,3 +201,19 @@ def test_mace_representation_trace():
         output,
         expected,
     )
+    
+def test_mace_representation_invalid_node_features():
+    representation = make_representation()
+
+    data = make_data()
+    data["node_feats"] = torch.zeros(
+        4,
+        9,
+        dtype=torch.float64,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="incompatible with the configured descriptor layout",
+    ):
+        representation(data)

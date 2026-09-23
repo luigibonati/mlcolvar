@@ -117,6 +117,11 @@ class Representation(nn.Module):
         -----
         Feature-only caching supports variable-size graph systems.
 
+        Graph caching expects one system-level feature vector per graph.
+        Atom-level graph representations should first be transformed with
+        :meth:`GraphRepresentation.pool` or
+        :meth:`GraphRepresentation.concat_atoms`.
+
         When ``jacobian=True`` for a graph representation, all selected
         graphs must contain the same number of atoms because coordinate
         Jacobians are stored in a dense tensor.
@@ -257,7 +262,12 @@ class GraphRepresentation(Representation):
         self,
         dataset,
     ):
-        """Align dataset atomic species with the representation."""
+        """Align dataset atomic species with the representation.
+
+        The graph ``node_attrs`` and ``atomic_numbers`` metadata are updated
+        in place to match the atomic-number ordering expected by the
+        representation. The input dataset is returned for convenience.
+        """
         return align_node_attrs(
             dataset,
             self.atomic_numbers,
@@ -281,7 +291,20 @@ class GraphRepresentation(Representation):
         self,
         atom_indices: Sequence[int],
     ) -> "GraphRepresentation":
-        """Concatenate features from selected atoms."""
+        """Concatenate features from selected atoms.
+
+        Parameters
+        ----------
+        atom_indices
+            Zero-based atom indices local to each graph. The same atom
+            indices are selected independently from every graph in the batch.
+
+        Returns
+        -------
+        GraphRepresentation
+            System-level representation obtained by concatenating the
+            selected atom features.
+        """
         from .model import concat_representation
 
         return concat_representation(

@@ -5,6 +5,8 @@ Customizing CVs
    :maxdepth: 1
 
    notebooks/tutorials/adv_multitask.ipynb
+   notebooks/tutorials/adv_transfer.ipynb
+   notebooks/tutorials/adv_atomistic_model.ipynb
    notebooks/tutorials/adv_infinitesimal_generator.ipynb
    notebooks/tutorials/adv_newcv_scratch.ipynb
    notebooks/tutorials/adv_newcv_subclass.ipynb
