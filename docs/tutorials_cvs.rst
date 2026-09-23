@@ -22,6 +22,12 @@ Methods for CVs optimization
    notebooks/tutorials/cvs_SelfTICA.ipynb
 
 .. toctree::
+   :caption: Generator-based setting
+   :maxdepth: 1
+
+   notebooks/tutorials/cvs_infinitesimal_generator.ipynb
+
+.. toctree::
    :caption: Committor-based setting
    :maxdepth: 1
 
