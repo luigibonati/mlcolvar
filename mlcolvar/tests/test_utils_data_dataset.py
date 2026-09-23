@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 import torch
+from ase import Atoms
 
 from mlcolvar.data import DictDataset
 from mlcolvar.data.graph.atomic import AtomicNumberTable
@@ -245,3 +246,44 @@ def test_graph_from_trajectories():
     assert isinstance(dataset, DictDataset)
     assert len(dataset) == 2
     assert dataset.metadata["data_type"] == "graphs"
+    
+def test_graph_from_ase_roundtrip():
+    atoms = [
+        Atoms(
+            numbers=[8, 1, 1],
+            positions=[
+                [0.0, 0.0, 0.0],
+                [0.9, 0.0, 0.0],
+                [0.0, 0.9, 0.0],
+            ],
+            cell=[10.0, 11.0, 12.0],
+            pbc=[True, False, True],
+        )
+    ]
+
+    dataset = DictDataset.graph_from_ase(
+        atoms=atoms,
+        cutoff=2.0,
+        show_progress=False,
+    )
+
+    atoms_back = dataset.to_ase()
+
+    assert isinstance(dataset, DictDataset)
+    assert len(atoms_back) == 1
+    np.testing.assert_array_equal(
+        atoms_back[0].numbers,
+        atoms[0].numbers,
+    )
+    np.testing.assert_allclose(
+        atoms_back[0].positions,
+        atoms[0].positions,
+    )
+    np.testing.assert_allclose(
+        atoms_back[0].cell.array,
+        atoms[0].cell.array,
+    )
+    np.testing.assert_array_equal(
+        atoms_back[0].pbc,
+        atoms[0].pbc,
+    )
