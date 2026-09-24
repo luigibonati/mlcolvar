@@ -8,10 +8,8 @@ from mlcolvar.core.estimators.utils import (
     correlation_matrix,
     cholesky_eigh,
     compute_average,
-    reduced_rank_eig,
 )
 from mlcolvar.core.transform.tools.utils import batch_reshape
-import warnings
 
 
 class TICA(Estimator):
