@@ -25,7 +25,7 @@ classifiers = [
     "Topic :: Scientific/Engineering",
     "Natural Language :: English",
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 # Declare any run-time dependencies that should be installed with the package.
 dependencies = [
     "lightning",

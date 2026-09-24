@@ -15,22 +15,19 @@ implementation path from the start. Then
 
 1. `Create a fork <https://help.github.com/articles/fork-a-repo>`_ of this repository on GitHub.
 2. `Clone <https://help.github.com/articles/cloning-a-repository>`_ your fork of the repository on your local machine.
-3. Install the package locally (preferably in a `virtual environment <installation.rst#create-a-virtual-environment>`_
-   from the cloned source in editable mode so that your changes will be automatically installed.
+3. Install the package locally (preferably in a
+   `virtual environment <installation.rst#create-a-virtual-environment>`_)
+   from the cloned source in editable mode, together with the dependencies
+   required for testing and building the documentation:
 
    .. code-block:: bash
 
-      # Activate here your Python virtual environment (e.g., with venv or conda).
+      # Activate your Python virtual environment (e.g., with venv or conda).
+
       cd mlcolvar
-      pip install -e .
+      pip install -e ".[doc,test]"
 
-4. In order to perform the regtests and build the documentation you need to install additional packages:
-
-    .. code-block:: bash
-
-      pip install mlcolvar[docs,test]
-
-Once your environment is set up you are ready to implement your changes.
+Once your environment is set up, you are ready to implement your changes.
 
 
 Overview of the GitHub workflow
@@ -46,27 +43,27 @@ Regardless of the type of contribution, the workflow on GitHub is the same.
 3. When you're ready to be considered for merging, check the "Ready to go" box on the PR page to let the mlcolvar devs
    know that the changes are complete.
 4. A developer will review your changes and eventually make suggestions for modifications.
-5. Once a developer mark the PR as "approved" for merging and the continuous integration tests pass, the PR will be merged
+5. Once a developer marks the PR as "approved" for merging and the continuous integration tests pass, the PR will be merged
    in the main codebase.
 
 
 Contributing bugfixes and new features
 --------------------------------------
 
-* If you are implementing a new CV, the documentation have guides on how to implement one `from scratch <https://mlcolvar.readthedocs.io/en/latest/notebooks/tutorials/adv_newcv_scratch.html>`_
+* If you are implementing a new CV, the documentation has guides on how to implement one `from scratch <https://mlcolvar.readthedocs.io/en/latest/notebooks/tutorials/adv_newcv_scratch.html>`_
   or by `subclassing an existing one <https://mlcolvar.readthedocs.io/en/latest/notebooks/tutorials/adv_newcv_subclass.html>`_.
 * Stick to the `coding style guidelines <contributing.rst#Coding-style-guidelines>`_ when possible.
-* `Add tests <contributing.rst#Writing-tests>`_ for your new code! If are contributing a bugfix, chances are our current test suite
-  does not cover this case, adn a test should be written to avoid future regressions. If you are contributing a new feature,
+* `Add tests <contributing.rst#Writing-tests>`_ for your new code! If you are contributing a bugfix, chances are our current test suite
+  does not cover this case, and a test should be written to avoid future regressions. If you are contributing a new feature,
   your tests should make sure it is working as expected.
-* If you are writing a new features or changing the behavior of the library, `add/modify the docstrings <contributing.rst#Contributing-documentation>`_
+* If you are writing a new feature or changing the behavior of the library, `add/modify the docstrings <contributing.rst#Contributing-documentation>`_
   describing the behavior of your code.
 
 
 Contributing documentation
 --------------------------
 
-The main documentation of ``mlcolvar`` is inside the ``docs/`` folder. It is written using using the `reStructuredText markup syntax <https://docutils.sourceforge.io/rst.html>`_
+The main documentation of ``mlcolvar`` is inside the ``docs/`` folder. It is written using the `reStructuredText markup syntax <https://docutils.sourceforge.io/rst.html>`_
 and automatically built in html format using `Sphinx <https://sphinx-rtd-tutorial.readthedocs.io/en/latest/index.html>`_ and
 pushed on `readthedocs.io <https://mlcolvar.readthedocs.io/en/latest/>`_.
 
@@ -77,7 +74,7 @@ Writing short working examples of code usage in the docstring is usually tremend
 docstrings, these are written in the `Examples section <https://numpydoc.readthedocs.io/en/latest/format.html#examples>`_.
 Moreover, if the example is written as a Python `doctest <https://docs.python.org/3/library/doctest.html>`_ (roughly, just
 start each line of code in your example with ``>>>``), this will be automatically run by the continuous integration, ensuring
-that the example will not go out-of-date in future code changes. To make sure your doctest run smoothly, add at the bottom
+that the example will not go out-of-date in future code changes. To make sure your doctests run smoothly, add at the bottom
 of the ``myfile.py`` file including the docstring
 
 .. code-block:: python
@@ -99,11 +96,11 @@ documentation to check the result. To do this you will need to install these add
 
     pip install furo nbsphinx sphinx-copybutton
 
-or more simply using:
+or more simply:
 
 .. code-block:: bash
 
-    pip install mlcolvar[doc]
+    pip install ".[doc]"
 
 Then, you can build the docs via the command
 
@@ -127,12 +124,12 @@ Contributing tutorials
 Writing tests
 -------------
 
-``mlcolvar`` uses `pytest <https://docs.pytest.org/en/7.3.x/>`_ for automatic testing. We highly recommend installing
-``pytest`` and run your tests locally before submitting the PR. You can install pytest with
+``mlcolvar`` uses `pytest <https://docs.pytest.org/en/7.3.x/>`_ for automatic testing. We highly recommend running
+the tests locally before submitting a PR. You can install the test dependencies with
 
 .. code-block:: bash
 
-      pip install pytest
+      pip install ".[test]"
 
 If you are writing tests for code in the file ``mlcolvar/example/folder/file.py``, then your tests should be implemented
 as functions whose name start with ``test_``, and they should be placed in ``mlcolvar/tests/test_example_folder_file.py``.
@@ -176,7 +173,7 @@ If you want to format Jupyter notebooks, install it with the command
 
 .. code-block:: bash
 
-    pip install black[jupyter]
+    pip install "black[jupyter]"
 
 Then run ``black`` on the file you are editing.
 
