@@ -15,9 +15,7 @@ class SelfTICA(BaseCV):
 
     SelfTICA learns dynamical representations from time-lagged configurations
     using contrastive learning and subsequently applies TICA to the learned
-    latent space to extract slow collective variables. The method is described
-    in Ref. [1]_, and its connection to self-supervised evolution-operator
-    learning is discussed in Ref. [2]_.
+    latent space to extract slow collective variables.
 
     The model supports both descriptor-based and graph-based encoders.
 
@@ -42,14 +40,14 @@ class SelfTICA(BaseCV):
 
     References
     ----------
-    .. [1] Zhu, K., Zhang, J., Novelli, P., Hou, T., & Bonati, L.
-       "Contrastive Learning of Dynamical Representations for Enhanced
-       Molecular Sampling." arXiv:2606.15495 (2026).
+    Zhu, K., Zhang, J., Novelli, P., Hou, T., & Bonati, L.
+    "Contrastive Learning of Dynamical Representations for Enhanced
+    Molecular Sampling." arXiv:2606.15495 (2026).
 
-    .. [2] Turri, G., Bonati, L., Zhu, K., Pontil, M., & Novelli, P.
-       "Self-Supervised Evolution Operator Learning for High-Dimensional
-       Dynamical Systems." International Conference on Learning
-       Representations (ICLR), 2026.
+    Turri, G., Bonati, L., Zhu, K., Pontil, M., & Novelli, P.
+    "Self-Supervised Evolution Operator Learning for High-Dimensional
+    Dynamical Systems." International Conference on Learning
+    Representations (ICLR), 2026.
 
     See Also
     --------
@@ -65,37 +63,40 @@ class SelfTICA(BaseCV):
     MODEL_BLOCKS = ["nn", "predictor", "tica"]
 
     def __init__(
-        self, 
+        self,
         model: Union[List[int], FeedForward, BaseGNN],
         n_cvs: int = 1,
         regularization: float = 1e-5,
         predictor_depth: int = 2,
-        options: dict = None, 
+        options: dict = None,
         **kwargs,
-        ):
+    ):
         """
-        Define a Self-TICA CV, composed of a neural network encoder, a predictor and a TICA object.
-
-        By default a module standardizing the inputs is also used. 
+        Initialize a SelfTICA model.
 
         Parameters
         ----------
-        encoder_layers : list
-            A list of integers specifying the number of neurons in each layer of the encoder network.
-        n_cvs : int,
-            Number of cvs to optimize, by default 1
+        model : list[int] or FeedForward or BaseGNN
+            Neural-network architecture used as the encoder. If a list is
+            provided, it defines the layer sizes of a ``FeedForward`` model.
+            A ``FeedForward`` or ``BaseGNN`` instance can also be provided
+            directly.
+        n_cvs : int, optional
+            Number of collective variables, by default 1.
         regularization : float, optional
-            L2 regularization strength used in the loss function, by default: 1e-5.
+            L2 regularization strength used in the contrastive loss,
+            by default 1e-5.
         predictor_depth : int, optional
-            Length of the layer-size list used to build the predictor network.
-            A value of 2 corresponds to a linear predictor, i.e.,
-            ``FeedForward([d, d])`` where ``d`` is the latent dimension.
-            Values larger than 2 add hidden layers of width ``d`` and therefore
-            define a nonlinear predictor, by default 2.
-        options : dict[str, Any], optional
-            Options for the building blocks of the model, by default {}. 
-            Available blocks: ['norm_in', 'encoder', 'predictor', 'tica'].
-            Set 'block_name' = None or False to turn off that block.
+            Number of layers in the predictor. A value of 2 corresponds to a
+            linear predictor, ``FeedForward([d, d])``, where ``d`` is the
+            latent dimension. Larger values add hidden layers of width ``d``,
+            by default 2.
+        options : dict, optional
+            Options for the model blocks. Available blocks are ``norm_in``,
+            ``nn``, ``predictor``, and ``tica``. Set a block to ``None`` or
+            ``False`` to disable it where supported.
+        **kwargs
+            Additional keyword arguments passed to ``BaseCV``.
         """
         super().__init__(model, **kwargs)      
         
@@ -153,22 +154,30 @@ class SelfTICA(BaseCV):
         self.register_buffer('optimal_lag_time', torch.tensor(-1.0))
 
     def compute_tica(
-            self,
-            datamodule: lightning.LightningDataModule,
-            lag_time: float=None,
-            update_optimal: bool = False,
+        self,
+        datamodule: lightning.LightningDataModule,
+        lag_time: float = None,
+        update_optimal: bool = False,
     ):
         """
-        Compute TICA features with specified lag time (without updating model parameters).
+        Compute TICA components from the learned representations.
 
         Parameters
         ----------
-        dataloader : DataLoader
-            DataLoader containing time-lagged data pairs
+        datamodule : lightning.LightningDataModule
+            Data module containing time-lagged configuration pairs.
         lag_time : float, optional
-            Lag time for analysis (None uses original training lag time)
-        update_optimal : bool
-            Whether to set these parameters as optimal for interfence
+            Lag time associated with the analysis.
+        update_optimal : bool, optional
+            Whether to store the computed TICA parameters for inference,
+            by default False.
+
+        Returns
+        -------
+        eigenvalues : numpy.ndarray
+            TICA eigenvalues.
+        eigenvectors : numpy.ndarray
+            TICA eigenvectors.
         """
         self.eval()
 
@@ -253,13 +262,15 @@ class SelfTICA(BaseCV):
         return x_enc
 
     def set_regularization(self, c0_reg=1e-6):
-        """ 
-        Add identity matrix multiplied by `c0_reg` to correlation matrix c(0) to avoid instabilities in performin Cholesky and .
+        """
+        Set the regularization of the instantaneous correlation matrix.
 
         Parameters
         ----------
-        c0_reg : float 
-            Regularization value for C_0
+        c0_reg : float, optional
+            Regularization added to the diagonal of the instantaneous
+            correlation matrix to improve numerical stability during the
+            Cholesky decomposition, by default 1e-6.
         """
         self.tica.reg_C_0 = c0_reg
     
@@ -269,7 +280,22 @@ class SelfTICA(BaseCV):
         batch_idx: int,
         update_state: bool = False,
     ) -> dict[str, torch.Tensor]:
-        """Compute the SelfTICA loss and associated metrics."""
+        """Evaluate the SelfTICA loss and TICA monitoring metrics.
+
+        Parameters
+        ----------
+        batch : dict
+            Batch of time-lagged configurations.
+        batch_idx : int
+            Batch index.
+        update_state : bool, optional
+            Whether to update the stored TICA parameters, by default False.
+
+        Returns
+        -------
+        dict[str, torch.Tensor]
+            Losses and TICA eigenvalues.
+        """
         if isinstance(self.nn, FeedForward):
             x_t = batch["data"]
             x_lag = batch["data_lag"]
