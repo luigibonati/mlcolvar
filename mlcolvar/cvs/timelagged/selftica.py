@@ -280,21 +280,9 @@ class SelfTICA(BaseCV):
         batch_idx: int,
         update_state: bool = False,
     ) -> dict[str, torch.Tensor]:
-        """Evaluate the SelfTICA loss and TICA monitoring metrics.
+        """Evaluate the SelfTICA contrastive loss.
 
-        Parameters
-        ----------
-        batch : dict
-            Batch of time-lagged configurations.
-        batch_idx : int
-            Batch index.
-        update_state : bool, optional
-            Whether to update the stored TICA parameters, by default False.
-
-        Returns
-        -------
-        dict[str, torch.Tensor]
-            Losses and TICA eigenvalues.
+        Returns the unregularized loss and TICA eigenvalues as metrics.
         """
         if isinstance(self.nn, FeedForward):
             x_t = batch["data"]

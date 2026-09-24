@@ -157,7 +157,10 @@ class DeepLDA(BaseCV):
         batch_idx: int,
         update_state: bool = False,
     ) -> dict[str, torch.Tensor]:
-        """Compute the Deep-LDA loss and associated metrics."""
+        """Evaluate the Deep-LDA loss.
+
+        Returns the LDA eigenvalues and Lorentzian regularization as metrics.
+        """
         if isinstance(self.nn, FeedForward):
             x = batch["data"]
             labels = batch["labels"]

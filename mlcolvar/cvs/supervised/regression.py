@@ -92,7 +92,7 @@ class RegressionCV(BaseCV):
         batch_idx: int,
         update_state: bool = False,
     ) -> dict[str, torch.Tensor]:
-        """Compute the regression loss and associated metrics."""
+        """Evaluate the regression loss."""
         loss_kwargs = {}
         if isinstance(self.nn, FeedForward):
             x = batch["data"]

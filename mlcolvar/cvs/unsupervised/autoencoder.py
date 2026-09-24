@@ -146,7 +146,7 @@ class AutoEncoderCV(BaseCV):
         batch_idx: int,
         update_state: bool = False,
     ) -> dict[str, torch.Tensor]:
-        """Compute the autoencoder reconstruction loss."""
+        """Evaluate the autoencoder reconstruction loss."""
         _, _, loss = self._evaluate_reconstruction(batch)
         return {"loss": loss}
     def get_decoder(self, return_normalization=False):

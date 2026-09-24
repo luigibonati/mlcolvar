@@ -124,7 +124,10 @@ class MultiTaskCV:
         batch_idx: int,
         update_state: bool = False,
     ) -> dict[str, torch.Tensor]:
-        """Compute the main and auxiliary losses for multi-task training."""
+        """Evaluate the main and auxiliary task losses.
+
+        Returns the combined loss together with the individual task losses.
+        """
         main_output = super().evaluate_loss(
             batch["dataset0"], batch_idx, update_state=update_state
         )

@@ -219,25 +219,25 @@ class BaseCV(lightning.LightningModule):
         batch_idx: int,
         update_state: bool = False,
     ) -> Dict[str, torch.Tensor]:
-        """Compute the loss and associated metrics for a batch.
+        """Evaluate the loss and metrics for a batch.
 
-        This method should be implemented by subclasses and return a
-        dictionary containing at least the ``loss`` key.
+        Subclasses must return a dictionary containing at least ``"loss"``.
+        Additional entries are automatically logged as metrics.
 
         Parameters
         ----------
         batch
             Input batch.
         batch_idx : int
-            Index of the current batch.
+            Batch index.
         update_state : bool, optional
-            Whether internal estimators or buffers should be updated.
-            This is normally True only during training.
+            Whether stateful estimators or buffers may be updated. This is
+            enabled during training and disabled during validation and testing.
 
         Returns
         -------
         Dict[str, torch.Tensor]
-            Dictionary containing the loss and optional additional metrics.
+            Loss and optional metrics.
         """
         raise NotImplementedError(
             f"{self.__class__.__name__} must implement evaluate_loss()."

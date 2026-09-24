@@ -146,7 +146,10 @@ class DeepTICA(BaseCV):
         batch_idx: int,
         update_state: bool = False,
     ) -> dict[str, torch.Tensor]:
-        """Compute the Deep-TICA loss and associated metrics."""
+        """Evaluate the Deep-TICA loss.
+
+        Returns the TICA eigenvalues as additional metrics.
+        """
         if isinstance(self.nn, FeedForward):
             x_t = batch["data"]
             x_lag = batch["data_lag"]
