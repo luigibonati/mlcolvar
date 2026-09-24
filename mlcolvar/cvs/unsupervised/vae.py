@@ -232,7 +232,10 @@ class VariationalAutoEncoderCV(BaseCV):
         batch_idx: int,
         update_state: bool = False,
     ) -> dict[str, torch.Tensor]:
-        """Compute the variational autoencoder loss and associated metrics."""
+        """Evaluate the variational autoencoder loss.
+
+        Returns the reconstruction loss, KL loss, and beta as metrics.
+        """
         x = batch["data"]
         loss_kwargs = {}
         if "weights" in batch:

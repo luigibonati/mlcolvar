@@ -126,7 +126,10 @@ class DeepTDA(BaseCV):
         batch_idx: int,
         update_state: bool = False,
     ) -> dict[str, torch.Tensor]:
-        """Compute the Deep-TDA loss and associated metrics."""
+        """Evaluate the Deep-TDA loss.
+
+        Returns the center and standard-deviation loss terms as metrics.
+        """
         if isinstance(self.nn, FeedForward):
             x = batch["data"]
             labels = batch["labels"]

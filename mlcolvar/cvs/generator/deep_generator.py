@@ -215,7 +215,10 @@ class DeepGenerator(BaseCV):
         batch_idx: int,
         update_state: bool = False,
     ) -> dict[str, torch.Tensor]:
-        """Compute the generator loss and associated metrics."""
+        """Evaluate the generator loss.
+
+        Returns the variational and orthonormalization loss terms as metrics.
+        """
         # The loss requires derivatives with respect to the inputs.
         with torch.enable_grad():
             if isinstance(self.nn, FeedForward):

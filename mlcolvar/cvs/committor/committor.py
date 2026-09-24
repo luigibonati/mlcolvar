@@ -169,7 +169,10 @@ class Committor(BaseCV):
         batch_idx: int,
         update_state: bool = False,
     ) -> dict[str, torch.Tensor]:
-        """Compute the committor loss and associated metrics."""
+        """Evaluate the committor loss.
+
+        Returns the variational and boundary loss terms as additional metrics.
+        """
         # The loss may require derivatives with respect to the inputs.
         with torch.enable_grad():
             if isinstance(self.nn, FeedForward):
