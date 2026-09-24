@@ -1,85 +1,90 @@
 Installation
 ============
 
-The recommended way to install the package is using ``pip`` in a dedicated `virtual environment <installation.rst#create-a-virtual-environment>`_.
+The recommended way to install ``mlcolvar`` is using ``pip`` in a dedicated
+virtual environment.
+
+``mlcolvar`` requires Python 3.11 or later.
 
 .. code-block:: bash
 
-    # Activate here your Python virtual environment (e.g., with venv or conda).
+    # Activate your Python virtual environment (e.g., with venv or conda).
     pip install mlcolvar
 
 
-Download & Install from source
-------------------------------
+Download and install from source
+--------------------------------
 
-You can download the source code by cloning the repository locally using ``git``
+You can download the source code by cloning the repository locally using
+``git``:
 
 .. code-block:: bash
 
     git clone https://github.com/luigibonati/mlcolvar.git
 
-Alternatively, you can download a ``tar.gz`` or ``zip`` of the `latest release <https://github.com/luigibonati/mlcolvar/releases/latest>`_
-or a specific release from the `releases page <https://github.com/luigibonati/mlcolvar/releases>`_.
+Alternatively, you can download a ``tar.gz`` or ``zip`` archive of the
+`latest release <https://github.com/luigibonati/mlcolvar/releases/latest>`_
+or a specific release from the
+`releases page <https://github.com/luigibonati/mlcolvar/releases>`_.
 
-To install `mlcolvar` from source, you will need an `environment <installation.rst#create-a-virtual-environment>`_
-with the following **requirements**:
-
-* ``python >= 3.8``
-* ``numpy``
-* ``pytorch >= 1.11``
-* ``lightning > 1.18``
-
-The following packages are optional requirements, but they are recommended as they allow to use all of the helper functions
-contained in the utils module.
-
-* ``pandas`` (i/o)
-* ``matplolib`` (plot)
-* ``KDEpy`` or ``scikit-learn`` (compute free energy profiles via KDE)
-* ``tqdm`` (monitor training progress)
-
-Finally, you can install the package by entering the downloaded (and unzipped) directory and executing
+To install ``mlcolvar`` from source, enter the downloaded repository and run:
 
 .. code-block:: bash
 
-    # Activate here your Python virtual environment (e.g., with venv or conda).
+    # Activate your Python virtual environment (e.g., with venv or conda).
     cd mlcolvar
     pip install .
 
-If you are planning to `modify the code <contributing.rst>`_, we recommend you install in editable mode to have your
-modifications automatically installed
+Runtime dependencies are installed automatically by ``pip``. The authoritative
+list of dependencies is defined in ``pyproject.toml``.
+
+If you are planning to `modify the code <contributing.rst>`_, we recommend
+installing the package in editable mode so that local modifications are
+immediately available:
 
 .. code-block:: bash
 
     pip install -e .
 
-Furthermore, if you want to check that the library is working properly, you can perform the regtests by installing the optional dependencies and running ``pytest`` against the installed package.
+To check that the library is working properly, install the test dependencies
+and run the test suite:
 
 .. code-block:: bash
 
-    pip install mlcolvar[test]
+    pip install "mlcolvar[test]"
     pytest --pyargs mlcolvar.tests
 
 
 Create a virtual environment
 ----------------------------
 
-To create a virtual environment you can use either ``venv`` (which is supplied with Python 3) or if you prefer ``conda``.
+To create a virtual environment, you can use either ``venv`` (included with
+Python) or ``conda``.
 
-With ``venv``, you can create a new virtual environment with
+With ``venv``, create a new environment using a Python 3.11 or later
+interpreter:
 
 .. code-block:: bash
 
     python -m venv path/to/created/environment/folder
 
-Then you can activate the environment to install packages in it.
+Then activate the environment before installing the package.
+
+On Linux or macOS:
 
 .. code-block:: bash
 
     source path/to/created/environment/folder/bin/activate
 
-Alternatively, if you are using ``conda`` you can create and activate the environment using
+On Windows:
+
+.. code-block:: powershell
+
+    path\to\created\environment\folder\Scripts\activate
+
+Alternatively, with ``conda``:
 
 .. code-block:: bash
 
-    conda create --name myenvname
+    conda create --name myenvname python=3.11
     conda activate myenvname
