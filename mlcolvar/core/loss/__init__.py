@@ -29,4 +29,4 @@ from .fisher import FisherDiscriminantLoss, fisher_discriminant_loss
 from .committor_loss import CommittorLoss, committor_loss
 from .generator_loss import GeneratorLoss
 from .utils.smart_derivatives import SmartDerivatives, compute_descriptors_derivatives
-from .constrastive_loss import ContrastiveLoss, contrastive_loss
+from .contrastive_loss import ContrastiveLoss, contrastive_loss
