@@ -207,7 +207,7 @@ class Committor(BaseCV):
                 x, z, q, labels, weights, ref_idx
             )
 
-        # ====================log=====================+
+        # ====================log=====================
         name = "train" if self.training else "valid"
         self.log(f"{name}_loss", loss, on_epoch=True)
         self.log(f"{name}_loss_var", loss_var, on_epoch=True)

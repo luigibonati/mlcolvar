@@ -100,7 +100,7 @@ class BaseGNN(nn.Module):
 
     @property
     def out_features(self):
-        return self.n_out
+        return int(self.n_out.item())
     
     @property
     def in_features(self):
