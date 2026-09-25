@@ -237,6 +237,96 @@ class DictDataset(Dataset):
         )
 
         return cls(**dataset_kwargs)
+    
+    @classmethod
+    def graph_from_ase(
+        cls,
+        atoms,
+        cutoff: float,
+        graph_labels: list = None,
+        node_labels: list = None,
+        system_selection=None,
+        environment_selection=None,
+        buffer: float = 0.0,
+        subsystem_selection=None,
+        long_range_cutoff: float = -1.0,
+        remove_isolated_nodes: bool = False,
+        show_progress: bool = False,
+        atom_names: List = None,
+        lengths_conversion: float = 1.0,
+    ):
+        """Create a graph dataset from ASE Atoms objects.
+
+        Parameters
+        ----------
+        atoms
+            List of ASE Atoms objects or list of ASE trajectories.
+        cutoff : float
+            Cutoff distance used to construct graph edges.
+        graph_labels : list, optional
+            Frame-level graph labels.
+        node_labels : list, optional
+            Node-level labels.
+        system_selection : optional
+            Atom selection defining system atoms.
+        environment_selection : optional
+            Atom selection defining environment atoms.
+        buffer : float, optional
+            Buffer distance used when selecting environment atoms.
+        subsystem_selection : optional
+            Atom selection defining atoms used for long-range edges.
+        long_range_cutoff : float, optional
+            Cutoff distance for long-range subsystem edges.
+        remove_isolated_nodes : bool, optional
+            Whether to remove isolated nodes.
+        show_progress : bool, optional
+            Whether to display graph-construction progress.
+        atom_names : list, optional
+            Names of the system atoms.
+        lengths_conversion : float, optional
+            Conversion factor applied to ASE coordinates.
+
+        Returns
+        -------
+        DictDataset
+            Graph dataset constructed from ASE Atoms objects.
+        """
+        from mlcolvar.io.graphs._utils import _check_atom_selection
+        from mlcolvar.io.graphs.ase_ import (
+            _prepare_configurations_from_ase_trajectories,
+        )
+
+        _check_atom_selection(
+            system_selection=system_selection,
+            environment_selection=environment_selection,
+            subsystem_selection=subsystem_selection,
+            buffer=buffer,
+            long_range_cutoff=long_range_cutoff,
+        )
+
+        configurations, atomic_numbers, atom_names = (
+            _prepare_configurations_from_ase_trajectories(
+                trajectories=atoms,
+                graph_labels=graph_labels,
+                node_labels=node_labels,
+                system_selection=system_selection,
+                environment_selection=environment_selection,
+                subsystem_selection=subsystem_selection,
+                lengths_conversion=lengths_conversion,
+                atom_names=atom_names,
+            )
+        )
+
+        return cls.graph_from_configurations(
+            config=configurations,
+            atomic_numbers=atomic_numbers,
+            cutoff=cutoff,
+            buffer=buffer,
+            long_range_cutoff=long_range_cutoff,
+            atom_names=atom_names,
+            remove_isolated_nodes=remove_isolated_nodes,
+            show_progress=show_progress,
+        )
 
     @classmethod
     def graph_from_trajectories(
@@ -415,6 +505,26 @@ class DictDataset(Dataset):
             return dataset, loaded_trajectories
 
         return dataset
+    
+    def to_ase(self):
+        """Convert a graph dataset to ASE Atoms objects.
+
+        Returns
+        -------
+        list[ase.Atoms]
+            ASE Atoms objects reconstructed from the graph dataset.
+        """
+        if self.metadata.get("data_type") != "graphs":
+            raise ValueError(
+                "`to_ase` is only supported for graph-based datasets."
+            )
+
+        from mlcolvar.io.graphs.ase_ import _ase_from_graphs
+
+        return _ase_from_graphs(
+            graphs=self["data_list"],
+            atomic_numbers=self.metadata["atomic_numbers"],
+        )
 
     def __getitem__(self, index):
         """Return a field, one sample, or a sliced DictDataset."""
