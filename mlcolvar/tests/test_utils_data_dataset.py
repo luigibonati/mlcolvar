@@ -269,6 +269,8 @@ def test_graph_from_ase_roundtrip():
     atoms_back = dataset.to_ase()
 
     assert isinstance(dataset, DictDataset)
+    assert dataset.metadata["data_type"] == "graphs"
+    assert len(dataset) == 1
     assert len(atoms_back) == 1
 
     np.testing.assert_array_equal(
@@ -287,3 +289,15 @@ def test_graph_from_ase_roundtrip():
         atoms_back[0].pbc,
         atoms.pbc,
     )
+
+
+def test_to_ase_requires_graph_dataset():
+    dataset = DictDataset(
+        {"data": torch.zeros(2, 3)}
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="only supported for graph-based datasets",
+    ):
+        dataset.to_ase()
