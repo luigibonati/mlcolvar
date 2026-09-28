@@ -259,8 +259,9 @@ class DictDataset(Dataset):
 
         Parameters
         ----------
-        atoms
-            List of ASE Atoms objects or list of ASE trajectories.
+        atoms : ase.Atoms or list[ase.Atoms] or list[list[ase.Atoms]]
+            Single ASE structure, trajectory represented as a list of ASE Atoms
+            objects, or multiple ASE trajectories.
         cutoff : float
             Cutoff distance used to construct graph edges.
         graph_labels : list, optional
@@ -291,10 +292,16 @@ class DictDataset(Dataset):
         DictDataset
             Graph dataset constructed from ASE Atoms objects.
         """
+        from ase import Atoms
+
         from mlcolvar.io.graphs._utils import _check_atom_selection
         from mlcolvar.io.graphs.ase_ import (
             _prepare_configurations_from_ase_trajectories,
         )
+
+        # Accept both a single Atoms object and a list of Atoms objects.
+        if isinstance(atoms, Atoms):
+            atoms = [atoms]
 
         _check_atom_selection(
             system_selection=system_selection,
