@@ -7,7 +7,6 @@ from torch import nn
 from mlcolvar.representation import (
     MLColvarRepresentation,
     RepresentationModel,
-    TaskHead,
     VectorRepresentation,
     export_representation_torchscript,
 )
@@ -39,7 +38,6 @@ class DummyDescriptorCV(nn.Module):
 
         self.in_features = 3
         self.out_features = 1
-
         self.preprocessing = AddCellPreprocessing()
         self.norm_in = ScaleNormalization()
 
@@ -221,11 +219,8 @@ def test_vector_representation_torchscript(
 
     model = RepresentationModel(
         representation,
-        head=TaskHead(
-            representation.out_features,
-            n_out=1,
-            hidden_layers=(),
-        ),
+        n_out=1,
+        hidden_layers=(),
     ).eval()
 
     path = tmp_path / "model.ptc"

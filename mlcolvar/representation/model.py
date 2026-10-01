@@ -8,10 +8,7 @@ from mlcolvar.core import BaseGNN, FeedForward
 from .base import GraphRepresentation, Representation, VectorRepresentation
 from ._utils import module_reference_tensor
 
-__all__ = [
-    "TaskHead",
-    "RepresentationModel",
-]
+__all__ = ["RepresentationModel"]
 
 
 class _ConcatGraphRepresentation(GraphRepresentation):
@@ -100,6 +97,7 @@ class _ConcatGraphRepresentation(GraphRepresentation):
             0,
             global_indices.reshape(-1),
         )
+
         return selected.reshape(
             ptr.numel() - 1,
             self.out_features,
@@ -115,35 +113,6 @@ def concat_representation(
         representation,
         atom_indices,
     )
-
-
-class TaskHead(FeedForward):
-    """Small trainable MLP applied on top of a reusable representation."""
-
-    def __init__(
-        self,
-        in_features: int,
-        n_out: int = 1,
-        hidden_layers: Sequence[int] = (32, 32),
-        options: Optional[Dict[str, Any]] = None,
-    ) -> None:
-        in_features = int(in_features)
-        n_out = int(n_out)
-        hidden_layers = tuple(int(size) for size in hidden_layers)
-
-        if in_features <= 0:
-            raise ValueError("`in_features` must be positive.")
-        if n_out <= 0:
-            raise ValueError("`n_out` must be positive.")
-        if any(size <= 0 for size in hidden_layers):
-            raise ValueError(
-                "`hidden_layers` must contain positive integers."
-            )
-
-        super().__init__(
-            layers=[in_features, *hidden_layers, n_out],
-            **({} if options is None else dict(options)),
-        )
 
 
 class _RepresentationPipelineMixin:
@@ -214,6 +183,7 @@ class _VectorRepresentationModel(
                 f"Expected {self.in_features} input features, "
                 f"found {x.shape[-1]}."
             )
+
         return self._apply_head(
             self.representation(x, cell=cell)
         )
@@ -249,7 +219,6 @@ class _GraphRepresentationModel(
             ),
         )
 
-        # Representation adapters construct their own neighborhood features.
         self._modules.pop("_radial_embedding", None)
         self._init_pipeline(representation, head)
 
@@ -289,11 +258,13 @@ def RepresentationModel(
         )
 
     if head is None:
-        head = TaskHead(
-            representation.out_features,
-            n_out=n_out,
-            hidden_layers=hidden_layers,
-            options=options,
+        head = FeedForward(
+            layers=[
+                representation.out_features,
+                *hidden_layers,
+                n_out,
+            ],
+            **({} if options is None else dict(options)),
         )
     else:
         if (

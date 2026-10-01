@@ -8,7 +8,6 @@ from mlcolvar.representation import (
     GraphRepresentation,
     MLColvarRepresentation,
     RepresentationModel,
-    TaskHead,
     export_representation_torchscript,
 )
 
@@ -211,11 +210,8 @@ def test_graph_representation_torchscript(
 
     model = RepresentationModel(
         representation,
-        head=TaskHead(
-            representation.out_features,
-            n_out=1,
-            hidden_layers=(),
-        ),
+        n_out=1,
+        hidden_layers=(),
     ).eval()
 
     graph = make_graph()
