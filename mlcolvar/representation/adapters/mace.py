@@ -6,7 +6,6 @@ from torch import nn
 from ..base import GraphRepresentation
 from ._utils import to_float, to_int, to_int_list
 
-
 __all__ = ["MACERepresentation"]
 
 
@@ -16,7 +15,6 @@ def _resolve_num_layers(model: nn.Module, num_layers: Optional[int]) -> int:
         available = to_int(model.num_interactions, name="model.num_interactions")
         if available <= 0:
             raise ValueError("MACE `num_interactions` must be positive.")
-
         selected = available if num_layers is None else to_int(
             num_layers, name="num_layers"
         )
@@ -88,23 +86,7 @@ def _resolve_descriptor_layout(
 
 
 class MACERepresentation(GraphRepresentation):
-    """Extract invariant atom-level features from a pretrained MACE model.
-
-    Notes
-    -----
-    This adapter targets the standard ``mace-torch`` model interface.
-    Compatible models are expected to expose ``atomic_numbers``,
-    ``r_max``, and ``num_interactions``, and to return ``node_feats``
-    from their forward pass.
-
-    Automatic descriptor-layout inference additionally relies on
-    ``model.products[0].linear.irreps_out``. If a MACE version or custom
-    model does not expose this structure, ``num_features`` and ``l_max``
-    must be provided explicitly.
-
-    Compatibility is defined by this model interface rather than by a
-    strict ``mace-torch`` version pin.
-    """
+    """Extract invariant features from a pretrained MACE model."""
 
     __constants__ = [
         "num_layers",
@@ -117,6 +99,8 @@ class MACERepresentation(GraphRepresentation):
     def __init__(
         self,
         model: nn.Module,
+        *,
+        pooling_operation: Optional[str] = None,
         num_layers: Optional[int] = None,
         num_features: Optional[int] = None,
         l_max: Optional[int] = None,
@@ -140,7 +124,7 @@ class MACERepresentation(GraphRepresentation):
                 model.atomic_numbers, name="model.atomic_numbers"
             ),
             cutoff=to_float(model.r_max, name="model.r_max"),
-            output_kind="atom",
+            pooling_operation=pooling_operation,
             buffer=buffer,
             long_range_cutoff=long_range_cutoff,
             full_neighbor_list=True,
@@ -154,7 +138,6 @@ class MACERepresentation(GraphRepresentation):
         self.required_input_features = (
             (num_layers - 1) * self.layer_size + num_features
         )
-
         self.model = model
         self._freeze_module(self.model)
 
@@ -163,7 +146,7 @@ class MACERepresentation(GraphRepresentation):
         data: Dict[str, torch.Tensor],
         cell: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        """Extract invariant atom-level MACE features."""
+        """Extract invariant MACE features."""
         del cell
 
         output = self.model(
@@ -181,7 +164,8 @@ class MACERepresentation(GraphRepresentation):
         if node_features is None:
             raise RuntimeError("The MACE model returned `node_feats=None`.")
 
-        return self._extract_invariant_features(node_features)
+        features = self._extract_invariant_features(node_features)
+        return self.pooling(features, data)
 
     def _extract_invariant_features(
         self,
@@ -202,7 +186,6 @@ class MACERepresentation(GraphRepresentation):
             )
 
         blocks = torch.jit.annotate(List[torch.Tensor], [])
-
         for i in range(self.num_layers):
             start = i * self.layer_size
             blocks.append(

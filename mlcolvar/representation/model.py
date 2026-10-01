@@ -6,98 +6,12 @@ from torch import nn
 from mlcolvar.core import BaseGNN, FeedForward
 
 from .base import GraphRepresentation, Representation, VectorRepresentation
-from ._utils import infer_num_graphs, module_reference_tensor
-
+from ._utils import module_reference_tensor
 
 __all__ = [
     "TaskHead",
     "RepresentationModel",
 ]
-
-
-def _graph_metadata(representation: GraphRepresentation, out_features: int):
-    """Reuse graph metadata for a transformed representation."""
-    return {
-        "out_features": int(out_features),
-        "atomic_numbers": representation.atomic_numbers.detach().cpu().tolist(),
-        "cutoff": float(representation.cutoff.detach().cpu().item()),
-        "output_kind": "system",
-        "buffer": float(representation.buffer.detach().cpu().item()),
-        "long_range_cutoff": float(
-            representation.long_range_cutoff.detach().cpu().item()
-        ),
-        "full_neighbor_list": representation.full_neighbor_list,
-        "freeze": representation.freeze,
-    }
-
-
-def _check_atom_representation(representation):
-    if representation.output_kind != "atom":
-        raise ValueError(
-            "`representation` must produce atom-level features."
-        )
-
-
-class _PooledGraphRepresentation(GraphRepresentation):
-    """Pool atom-level features to one vector per system."""
-
-    __constants__ = ["pooling"]
-
-    def __init__(
-        self,
-        representation: GraphRepresentation,
-        pooling: str = "mean",
-    ) -> None:
-        _check_atom_representation(representation)
-
-        if pooling not in {"mean", "sum"}:
-            raise ValueError("`pooling` must be 'mean' or 'sum'.")
-
-        super().__init__(
-            **_graph_metadata(
-                representation,
-                representation.out_features,
-            )
-        )
-        self.representation = representation
-        self.pooling = pooling
-
-    def forward(
-        self,
-        data: Dict[str, torch.Tensor],
-        cell: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
-        features = self.representation(data, cell=cell)
-
-        if "batch" not in data:
-            raise KeyError(
-                "Graph data must contain `batch` for pooling."
-            )
-
-        batch = data["batch"].to(
-            device=features.device,
-            dtype=torch.long,
-        )
-        n_systems = infer_num_graphs(data)
-
-        mask = (
-            data["system_masks"].reshape(-1, 1).to(features)
-            if "system_masks" in data
-            else features.new_ones((features.size(0), 1))
-        )
-
-        output = features.new_zeros(
-            n_systems,
-            features.size(-1),
-        )
-        output.index_add_(0, batch, features * mask)
-
-        if self.pooling == "sum":
-            return output
-
-        counts = features.new_zeros(n_systems, 1)
-        counts.index_add_(0, batch, mask)
-        return output / counts.clamp_min(1)
 
 
 class _ConcatGraphRepresentation(GraphRepresentation):
@@ -113,7 +27,10 @@ class _ConcatGraphRepresentation(GraphRepresentation):
         representation: GraphRepresentation,
         atom_indices: Sequence[int],
     ) -> None:
-        _check_atom_representation(representation)
+        if representation.output_kind != "atom":
+            raise ValueError(
+                "`representation` must produce atom-level features."
+            )
 
         indices = [int(index) for index in atom_indices]
         if not indices:
@@ -131,10 +48,17 @@ class _ConcatGraphRepresentation(GraphRepresentation):
         self.max_selected_atom_index = max(indices)
 
         super().__init__(
-            **_graph_metadata(
-                representation,
-                representation.out_features * self.n_selected_atoms,
-            )
+            out_features=representation.out_features * self.n_selected_atoms,
+            atomic_numbers=representation.atomic_numbers.detach().cpu().tolist(),
+            cutoff=float(representation.cutoff.detach().cpu().item()),
+            pooling_operation=None,
+            output_kind="system",
+            buffer=float(representation.buffer.detach().cpu().item()),
+            long_range_cutoff=float(
+                representation.long_range_cutoff.detach().cpu().item()
+            ),
+            full_neighbor_list=representation.full_neighbor_list,
+            freeze=representation.freeze,
         )
 
         self.representation = representation
@@ -162,20 +86,16 @@ class _ConcatGraphRepresentation(GraphRepresentation):
         )
         atoms_per_graph = ptr[1:] - ptr[:-1]
 
-        if torch.any(
-            atoms_per_graph <= self.max_selected_atom_index
-        ):
+        if torch.any(atoms_per_graph <= self.max_selected_atom_index):
             raise RuntimeError(
                 "A selected atom index exceeds the number "
                 "of atoms in at least one system."
             )
 
-        atom_indices = self.atom_indices.to(features.device)
         global_indices = (
             ptr[:-1].unsqueeze(1)
-            + atom_indices.unsqueeze(0)
+            + self.atom_indices.to(features.device).unsqueeze(0)
         )
-
         selected = features.index_select(
             0,
             global_indices.reshape(-1),
@@ -186,17 +106,6 @@ class _ConcatGraphRepresentation(GraphRepresentation):
         )
 
 
-def pool_representation(
-    representation: GraphRepresentation,
-    pooling: str = "mean",
-) -> GraphRepresentation:
-    """Pool atom-level features into a system-level representation."""
-    return _PooledGraphRepresentation(
-        representation,
-        pooling=pooling,
-    )
-
-
 def concat_representation(
     representation: GraphRepresentation,
     atom_indices: Sequence[int],
@@ -204,7 +113,7 @@ def concat_representation(
     """Concatenate selected atom features into a system-level representation."""
     return _ConcatGraphRepresentation(
         representation,
-        atom_indices=atom_indices,
+        atom_indices,
     )
 
 
@@ -288,7 +197,6 @@ class _VectorRepresentationModel(
     ) -> None:
         nn.Module.__init__(self)
         self._init_pipeline(representation, head)
-
         self.in_features = int(representation.in_features)
         self.out_features = int(head.out_features)
 
@@ -306,7 +214,6 @@ class _VectorRepresentationModel(
                 f"Expected {self.in_features} input features, "
                 f"found {x.shape[-1]}."
             )
-
         return self._apply_head(
             self.representation(x, cell=cell)
         )
@@ -365,7 +272,6 @@ def RepresentationModel(
     options: Optional[Dict[str, Any]] = None,
 ) -> nn.Module:
     """Build a task model on top of a reusable representation."""
-
     if not isinstance(representation, Representation):
         raise TypeError(
             "`representation` must derive from `Representation`."
@@ -378,7 +284,8 @@ def RepresentationModel(
         raise ValueError(
             "Graph representations passed to `RepresentationModel` "
             "must produce system-level features. "
-            "Use `.pool()` or `.concat_atoms()` first."
+            "Set `pooling_operation='mean'` or `'sum'`, "
+            "or use `.concat_atoms()` first."
         )
 
     if head is None:
@@ -396,7 +303,6 @@ def RepresentationModel(
             raise TypeError(
                 "`head` must expose `in_features` and `out_features`."
             )
-
         if int(head.in_features) != representation.out_features:
             raise ValueError(
                 "`head.in_features` does not match "

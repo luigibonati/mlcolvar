@@ -32,31 +32,13 @@ class DummyGraphRepresentation(GraphRepresentation):
             out_features=2,
             atomic_numbers=[1],
             cutoff=5.0,
-            output_kind="system",
+            pooling_operation="mean",
             freeze=True,
         )
 
     def forward(self, data, cell=None):
-        positions = data["positions"][:, :2]
-        batch = data["batch"]
-        n_graphs = data["ptr"].numel() - 1
-
-        output = positions.new_zeros(
-            n_graphs,
-            2,
-        )
-        output.index_add_(
-            0,
-            batch,
-            positions,
-        )
-
-        counts = torch.bincount(
-            batch,
-            minlength=n_graphs,
-        ).to(output)
-
-        return output / counts.unsqueeze(-1)
+        features = data["positions"][:, :2]
+        return self.pooling(features, data)
 
 
 def test_vector_committor_cache():

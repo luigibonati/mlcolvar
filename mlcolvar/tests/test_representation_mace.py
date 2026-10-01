@@ -1,5 +1,6 @@
-from typing import Dict
+from typing import Dict, Optional
 
+import pytest
 import torch
 from torch import nn
 
@@ -7,7 +8,6 @@ from mlcolvar.representation import (
     MACERepresentation,
     RepresentationModel,
 )
-import pytest
 
 
 class DummyMACE(nn.Module):
@@ -15,7 +15,6 @@ class DummyMACE(nn.Module):
 
     def __init__(self) -> None:
         super().__init__()
-
         self.register_buffer(
             "atomic_numbers",
             torch.tensor([1, 8]),
@@ -28,7 +27,6 @@ class DummyMACE(nn.Module):
             "num_interactions",
             torch.tensor(2),
         )
-
         self.weight = nn.Parameter(
             torch.tensor(1.0, dtype=torch.float64)
         )
@@ -40,9 +38,7 @@ class DummyMACE(nn.Module):
         compute_force: bool = False,
     ) -> Dict[str, torch.Tensor]:
         return {
-            "node_feats": (
-                data["node_feats"] * self.weight
-            )
+            "node_feats": data["node_feats"] * self.weight
         }
 
 
@@ -52,7 +48,6 @@ def make_data() -> Dict[str, torch.Tensor]:
         10,
         dtype=torch.float64,
     )
-
     node_features[:, :2] = torch.tensor(
         [
             [1.0, 2.0],
@@ -62,7 +57,6 @@ def make_data() -> Dict[str, torch.Tensor]:
         ],
         dtype=torch.float64,
     )
-
     node_features[:, 8:10] = torch.tensor(
         [
             [5.0, 6.0],
@@ -72,7 +66,6 @@ def make_data() -> Dict[str, torch.Tensor]:
         ],
         dtype=torch.float64,
     )
-
     return {
         "node_feats": node_features,
         "batch": torch.tensor(
@@ -86,9 +79,12 @@ def make_data() -> Dict[str, torch.Tensor]:
     }
 
 
-def make_representation() -> MACERepresentation:
+def make_representation(
+    pooling_operation: Optional[str] = None,
+) -> MACERepresentation:
     return MACERepresentation(
         model=DummyMACE(),
+        pooling_operation=pooling_operation,
         num_layers=2,
         num_features=2,
         l_max=1,
@@ -98,10 +94,7 @@ def make_representation() -> MACERepresentation:
 
 def test_mace_representation():
     representation = make_representation()
-
-    output = representation(
-        make_data()
-    )
+    output = representation(make_data())
 
     expected = torch.tensor(
         [
@@ -119,20 +112,42 @@ def test_mace_representation():
     )
 
     assert representation.output_kind == "atom"
+    assert representation.pooling_operation is None
     assert representation.out_features == 4
     assert representation.atomic_numbers.tolist() == [1, 8]
     assert representation.cutoff.item() == pytest.approx(5.0)
 
 
+def test_mace_mean_pooling():
+    representation = make_representation(
+        pooling_operation="mean"
+    )
+
+    output = representation(make_data())
+
+    expected = torch.tensor(
+        [
+            [2.0, 3.0, 6.0, 7.0],
+            [3.0, 5.0, 7.0, 9.0],
+        ],
+        dtype=torch.float64,
+    )
+
+    torch.testing.assert_close(
+        output,
+        expected,
+    )
+
+    assert representation.output_kind == "system"
+    assert representation.pooling_operation == "mean"
+
+
 def test_mace_preserves_input_gradients():
     representation = make_representation()
-
     data = make_data()
     data["node_feats"].requires_grad_(True)
 
-    representation(
-        data
-    ).sum().backward()
+    representation(data).sum().backward()
 
     assert data["node_feats"].grad is not None
     assert torch.isfinite(
@@ -141,21 +156,18 @@ def test_mace_preserves_input_gradients():
 
     assert all(
         parameter.grad is None
-        for parameter
-        in representation.model.parameters()
+        for parameter in representation.model.parameters()
     )
 
     assert all(
         not parameter.requires_grad
-        for parameter
-        in representation.model.parameters()
+        for parameter in representation.model.parameters()
     )
 
 
 def test_mace_representation_model():
-    representation = (
-        make_representation()
-        .pool("mean")
+    representation = make_representation(
+        pooling_operation="mean"
     )
 
     model = RepresentationModel(
@@ -164,29 +176,27 @@ def test_mace_representation_model():
         hidden_layers=(),
     )
 
-    output = model(
-        make_data()
-    )
+    output = model(make_data())
 
     assert representation.output_kind == "system"
     assert output.shape == (2, 1)
 
     assert any(
         parameter.requires_grad
-        for parameter
-        in model.head.parameters()
+        for parameter in model.head.parameters()
     )
 
 
 def test_mace_representation_trace():
     model = RepresentationModel(
-        make_representation().pool("mean"),
+        make_representation(
+            pooling_operation="mean"
+        ),
         n_out=1,
         hidden_layers=(),
     ).eval()
 
     data = make_data()
-
     expected = model(data)
 
     traced = torch.jit.trace(
@@ -201,10 +211,10 @@ def test_mace_representation_trace():
         output,
         expected,
     )
-    
+
+
 def test_mace_representation_invalid_node_features():
     representation = make_representation()
-
     data = make_data()
     data["node_feats"] = torch.zeros(
         4,

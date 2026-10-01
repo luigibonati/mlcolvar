@@ -1,4 +1,6 @@
-from typing import Sequence
+from typing import Dict, Optional, Sequence
+
+from mlcolvar.utils import _code
 
 import torch
 from torch import nn
@@ -118,8 +120,7 @@ class Representation(nn.Module):
         Feature-only caching supports variable-size graph systems.
 
         Graph caching expects one system-level feature vector per graph.
-        Atom-level graph representations should first be transformed with
-        :meth:`GraphRepresentation.pool` or
+        Use ``pooling_operation="mean"`` or ``"sum"``, or
         :meth:`GraphRepresentation.concat_atoms`.
 
         When ``jacobian=True`` for a graph representation, all selected
@@ -173,6 +174,7 @@ class GraphRepresentation(Representation):
 
     __constants__ = [
         "full_neighbor_list",
+        "pooling_operation",
     ]
 
     def __init__(
@@ -181,7 +183,8 @@ class GraphRepresentation(Representation):
         out_features: int,
         atomic_numbers: Sequence[int] | torch.Tensor,
         cutoff: float,
-        output_kind: str = "atom",
+        pooling_operation: Optional[str] = None,
+        output_kind: Optional[str] = None,
         buffer: float = 0.0,
         long_range_cutoff: float = -1.0,
         full_neighbor_list: bool = True,
@@ -193,19 +196,27 @@ class GraphRepresentation(Representation):
         )
 
         if cutoff <= 0.0:
-            raise ValueError(
-                "`cutoff` must be positive."
-            )
+            raise ValueError("`cutoff` must be positive.")
 
         if buffer < 0.0:
-            raise ValueError(
-                "`buffer` must be non-negative."
-            )
+            raise ValueError("`buffer` must be non-negative.")
 
         if 0.0 <= long_range_cutoff <= cutoff:
             raise ValueError(
                 "`long_range_cutoff` must be negative "
                 "or larger than `cutoff`."
+            )
+
+        if pooling_operation not in {None, "mean", "sum"}:
+            raise ValueError(
+                "`pooling_operation` must be 'mean', 'sum', or None."
+            )
+
+        if output_kind is None:
+            output_kind = (
+                "atom"
+                if pooling_operation is None
+                else "system"
             )
 
         super().__init__(
@@ -215,11 +226,9 @@ class GraphRepresentation(Representation):
             freeze=freeze,
         )
 
-        # BaseCV uses in_features=None to identify graph models.
         self.in_features = None
-        self.full_neighbor_list = bool(
-            full_neighbor_list
-        )
+        self.pooling_operation = pooling_operation
+        self.full_neighbor_list = bool(full_neighbor_list)
 
         self.register_buffer(
             "feature_dim",
@@ -257,33 +266,48 @@ class GraphRepresentation(Representation):
             ),
         )
 
+    def pooling(
+        self,
+        input: torch.Tensor,
+        data: Dict[str, torch.Tensor],
+    ) -> torch.Tensor:
+        if self.pooling_operation is None:
+            return input
+
+        if self.pooling_operation == "mean":
+            if "system_masks" not in data:
+                return _code.scatter_mean(
+                    input,
+                    data["batch"],
+                    dim=0,
+                )
+
+            output = input * data["system_masks"]
+            output = _code.scatter_sum(
+                output,
+                data["batch"],
+                dim=0,
+            )
+            return output / data["n_system"]
+
+        if "system_masks" in data:
+            input = input * data["system_masks"]
+
+        return _code.scatter_sum(
+            input,
+            data["batch"],
+            dim=0,
+        )
+
     @torch.jit.unused
     def align_dataset(
         self,
         dataset,
     ):
-        """Align dataset atomic species with the representation.
-
-        The graph ``node_attrs`` and ``atomic_numbers`` metadata are updated
-        in place to match the atomic-number ordering expected by the
-        representation. The input dataset is returned for convenience.
-        """
+        """Align dataset atomic species with the representation."""
         return align_node_attrs(
             dataset,
             self.atomic_numbers,
-        )
-
-    @torch.jit.unused
-    def pool(
-        self,
-        pooling: str = "mean",
-    ) -> "GraphRepresentation":
-        """Pool atom-level features into system-level features."""
-        from .model import pool_representation
-
-        return pool_representation(
-            self,
-            pooling=pooling,
         )
 
     @torch.jit.unused
@@ -291,20 +315,7 @@ class GraphRepresentation(Representation):
         self,
         atom_indices: Sequence[int],
     ) -> "GraphRepresentation":
-        """Concatenate features from selected atoms.
-
-        Parameters
-        ----------
-        atom_indices
-            Zero-based atom indices local to each graph. The same atom
-            indices are selected independently from every graph in the batch.
-
-        Returns
-        -------
-        GraphRepresentation
-            System-level representation obtained by concatenating the
-            selected atom features.
-        """
+        """Concatenate features from selected atoms."""
         from .model import concat_representation
 
         return concat_representation(

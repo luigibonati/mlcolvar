@@ -171,12 +171,6 @@ class _GraphMLColvarRepresentation(
             None,
         )
 
-        output_kind = (
-            "atom"
-            if pooling_operation is None
-            else "system"
-        )
-
         resolved_out = as_positive_int(
             encoder.out_features if out_features is None else out_features,
             "encoder.out_features" if out_features is None else "out_features",
@@ -193,7 +187,7 @@ class _GraphMLColvarRepresentation(
                 encoder.cutoff,
                 name="encoder.cutoff",
             ),
-            output_kind=output_kind,
+            pooling_operation=pooling_operation,
             buffer=to_float(
                 encoder.buffer,
                 name="encoder.buffer",
@@ -206,7 +200,6 @@ class _GraphMLColvarRepresentation(
             freeze=freeze,
         )
 
-        self.pooling_operation = pooling_operation
         self._init_model(model)
 
     def _cast_graph(

@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Optional
 
 import pytest
 import torch
@@ -11,9 +11,7 @@ from mlcolvar.representation import (
     RepresentationModel,
     VectorRepresentation,
 )
-from mlcolvar.representation.cache import (
-    CachedRepresentationDerivatives,
-)
+from mlcolvar.representation.cache import CachedRepresentationDerivatives
 
 
 class DummyVectorRepresentation(VectorRepresentation):
@@ -23,13 +21,11 @@ class DummyVectorRepresentation(VectorRepresentation):
             out_features=2,
             freeze=True,
         )
-
         self.encoder = nn.Linear(
             3,
             2,
             bias=False,
         )
-
         self._freeze_module(self.encoder)
 
     def forward(self, x, cell=None):
@@ -37,17 +33,23 @@ class DummyVectorRepresentation(VectorRepresentation):
 
 
 class DummyAtomRepresentation(GraphRepresentation):
-    def __init__(self):
+    def __init__(
+        self,
+        pooling_operation: Optional[str] = None,
+    ):
         super().__init__(
             out_features=2,
             atomic_numbers=[1, 8],
             cutoff=5.0,
-            output_kind="atom",
+            pooling_operation=pooling_operation,
             freeze=True,
         )
 
     def forward(self, data, cell=None):
-        return data["atom_features"]
+        return self.pooling(
+            data["atom_features"],
+            data,
+        )
 
 
 class IdentityDescriptorDerivatives(SmartDerivatives):
@@ -84,19 +86,16 @@ def make_graph() -> Dict[str, torch.Tensor]:
 
 def test_vector_representation_model():
     representation = DummyVectorRepresentation()
-
     model = RepresentationModel(
         representation,
         n_out=1,
         hidden_layers=(),
     )
-
     x = torch.randn(
         2,
         3,
         requires_grad=True,
     )
-
     output = model(x)
 
     assert output.shape == (2, 1)
@@ -104,7 +103,6 @@ def test_vector_representation_model():
     output.sum().backward()
 
     assert x.grad is not None
-
     assert all(
         not parameter.requires_grad
         for parameter in representation.parameters()
@@ -112,22 +110,25 @@ def test_vector_representation_model():
 
 
 @pytest.mark.parametrize(
-    ("transform", "out_features"),
+    ("factory", "out_features"),
     [
-        (lambda x: x.pool("mean"), 2),
         (
-            lambda x: x.concat_atoms([0, 1]),
+            lambda: DummyAtomRepresentation(
+                pooling_operation="mean"
+            ),
+            2,
+        ),
+        (
+            lambda: DummyAtomRepresentation().concat_atoms([0, 1]),
             4,
         ),
     ],
 )
 def test_graph_representation_transforms(
-    transform,
+    factory,
     out_features,
 ):
-    representation = transform(
-        DummyAtomRepresentation()
-    )
+    representation = factory()
 
     assert representation.output_kind == "system"
     assert representation.out_features == out_features
@@ -138,9 +139,7 @@ def test_graph_representation_transforms(
         hidden_layers=(),
     )
 
-    assert model(
-        make_graph()
-    ).shape == (2, 1)
+    assert model(make_graph()).shape == (2, 1)
 
 
 def test_representation_cache():
@@ -169,12 +168,8 @@ def test_jacobian_cache_and_derivatives():
     cache = DummyVectorRepresentation().cache(
         make_dataset(),
         jacobian=True,
-        descriptor_derivatives=(
-            IdentityDescriptorDerivatives()
-        ),
-        jacobian_indices=torch.tensor(
-            [1, 3]
-        ),
+        descriptor_derivatives=IdentityDescriptorDerivatives(),
+        jacobian_indices=torch.tensor([1, 3]),
         batch_size=1,
     )
 
@@ -186,9 +181,7 @@ def test_jacobian_cache_and_derivatives():
 
     torch.testing.assert_close(
         cache.reference_indices,
-        torch.tensor(
-            [-1, 0, -1, 1]
-        ),
+        torch.tensor([-1, 0, -1, 1]),
     )
 
     derivatives = CachedRepresentationDerivatives(

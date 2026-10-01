@@ -20,11 +20,9 @@ class GraphShiftPreprocessing(nn.Module):
         cell: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
         output = dict(data)
-
         shift = 1.0
         if cell is not None:
             shift += float(cell.reshape(()).item())
-
         output["positions"] = data["positions"] + shift
         return output
 
@@ -43,45 +41,14 @@ class DummyGraphEncoder(BaseGNN):
             long_range_cutoff=-1.0,
             atomic_numbers=[1, 6, 8],
         )
-
         self.scale = nn.Parameter(torch.tensor(2.0))
 
     def forward(
         self,
         data: Dict[str, torch.Tensor],
     ) -> torch.Tensor:
-        positions = data["positions"]
-        batch = data["batch"]
-        ptr = data["ptr"]
-
-        node_features = positions[:, :2] * self.scale
-
-        if self.pooling_operation is None:
-            return node_features
-
-        n_graphs = ptr.numel() - 1
-        output = node_features.new_zeros(
-            (n_graphs, 2)
-        )
-
-        output.index_add_(
-            0,
-            batch,
-            node_features,
-        )
-
-        if self.pooling_operation == "mean":
-            counts = torch.bincount(
-                batch,
-                minlength=n_graphs,
-            ).to(output)
-
-            output = (
-                output
-                / counts.clamp_min(1).unsqueeze(-1)
-            )
-
-        return output
+        node_features = data["positions"][:, :2] * self.scale
+        return self.pooling(node_features, data)
 
 
 class DummyGraphCV(nn.Module):
@@ -90,7 +57,6 @@ class DummyGraphCV(nn.Module):
         pooling_operation: Optional[str] = "mean",
     ) -> None:
         super().__init__()
-
         self.in_features = None
         self.nn = DummyGraphEncoder(
             pooling_operation=pooling_operation
@@ -149,9 +115,7 @@ def make_representation(
 def test_graph_representation() -> None:
     representation = make_representation()
 
-    output = representation(
-        make_graph()
-    )
+    output = representation(make_graph())
 
     torch.testing.assert_close(
         output,
@@ -174,9 +138,7 @@ def test_graph_atom_representation() -> None:
         pooling_operation=None
     )
 
-    output = representation(
-        make_graph()
-    )
+    output = representation(make_graph())
 
     torch.testing.assert_close(
         output,
@@ -193,19 +155,6 @@ def test_graph_atom_representation() -> None:
     assert representation.output_kind == "atom"
     assert representation.pooling_operation is None
 
-    pooled = representation.pool("mean")
-
-    torch.testing.assert_close(
-        pooled(make_graph()),
-        torch.tensor(
-            [
-                [4.0, 3.0],
-                [4.0, 6.0],
-            ],
-            dtype=torch.float32,
-        ),
-    )
-
     concatenated = representation.concat_atoms([0])
 
     torch.testing.assert_close(
@@ -219,7 +168,6 @@ def test_graph_atom_representation() -> None:
         ),
     )
 
-    assert pooled.output_kind == "system"
     assert concatenated.output_kind == "system"
 
 
