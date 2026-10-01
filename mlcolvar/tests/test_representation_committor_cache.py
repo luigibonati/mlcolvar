@@ -6,12 +6,8 @@ from mlcolvar.representation import (
     GraphRepresentation,
     VectorRepresentation,
 )
-from mlcolvar.representation.cache import (
-    IdentityDescriptorDerivatives,
-)
-from mlcolvar.representation.committor_cache import (
-    precompute_committor_cache,
-)
+from mlcolvar.representation.cache import IdentityDescriptorDerivatives
+from mlcolvar.representation.committor_cache import precompute_committor_cache
 
 
 class DummyVectorRepresentation(VectorRepresentation):
@@ -37,8 +33,10 @@ class DummyGraphRepresentation(GraphRepresentation):
         )
 
     def forward(self, data, cell=None):
-        features = data["positions"][:, :2]
-        return self.pooling(features, data)
+        return self.pooling(
+            data["positions"][:, :2],
+            data,
+        )
 
 
 def test_vector_committor_cache():
@@ -52,9 +50,7 @@ def test_vector_committor_cache():
                     [3.0, 4.0],
                 ]
             ),
-            "labels": torch.tensor(
-                [0.0, 2.0, 1.0, 3.0]
-            ),
+            "labels": torch.tensor([0.0, 2.0, 1.0, 3.0]),
             "weights": torch.ones(4),
             "ref_idx": torch.arange(4),
         }
@@ -72,7 +68,7 @@ def test_vector_committor_cache():
     )
     torch.testing.assert_close(
         cached["ref_idx"],
-        torch.tensor([-1, 0, -1, 1]),
+        torch.tensor([-1, 0, -1, 1], dtype=torch.int),
     )
 
     gradient = derivatives(
@@ -128,15 +124,13 @@ def test_graph_committor_cache():
             ]
         ),
     )
-
     torch.testing.assert_close(
         cached["weights"],
         torch.tensor([1.0, 2.0]),
     )
-
     torch.testing.assert_close(
         cached["ref_idx"],
-        torch.tensor([0, 1]),
+        torch.tensor([0, 1], dtype=torch.int),
     )
 
     gradient = derivatives(
