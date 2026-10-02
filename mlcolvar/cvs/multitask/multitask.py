@@ -100,8 +100,8 @@ class MultiTaskCV:
 
         """
         # check if model is GNN, not implemented yet TODO
-        if main_cv.uses_graph_input:
-            raise NotImplementedError("Multitask not supported (yet) for graph-based CVs")
+        if hasattr(main_cv, "nn") and isinstance(main_cv.nn, BaseGNN):
+            raise NotImplementedError('Multitask not supported (yet) for GNN-based CVs')
         
         # This changes dynamically the class of this object to inherit both from
         # MultiTaskCV and main_cv.__class__ so that we can access all members of
@@ -134,20 +134,12 @@ class MultiTaskCV:
             }
 
             # Forward data of this dataset (and eventually the time-lagged one).
-            x = dataset_batch["data"]
-            cell = self._get_batch_cell(dataset_batch)
-            if self.preprocessing is not None:
-                x = self._apply_module(self.preprocessing, x, cell=cell)
-            cv = self.forward_cv(x)
-
+            cv = self.forward_cv(dataset_batch["data"])
             try:
-                x_lag = dataset_batch["data_lag"]
+                cv_lag = self.forward_cv(dataset_batch["data_lag"])
             except KeyError:  # Not a time-lagged CV.
                 aux_loss = aux_loss_fn(cv, **aux_loss_kwargs)
             else:
-                if self.preprocessing is not None:
-                    x_lag = self._apply_module(self.preprocessing, x_lag, cell=cell)
-                cv_lag = self.forward_cv(x_lag)
                 aux_loss = aux_loss_fn(cv, cv_lag, **aux_loss_kwargs)
 
             # Log the auxiliary loss (before the coefficient).

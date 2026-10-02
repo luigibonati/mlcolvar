@@ -210,35 +210,44 @@ class DeepGenerator(BaseCV):
         else: #This should only be called upon initialization
             return self.forward_nn(x, cell=cell) 
 
-    def training_step(self, train_batch, batch_idx):
+    def training_step(self, 
+                      train_batch, 
+                      batch_idx):
         """Compute and return the training loss and record metrics."""
         torch.set_grad_enabled(True)
-
+        if isinstance(self.nn, FeedForward):
         # =================get data===================
-        if not self.uses_graph_input:
             x = train_batch["data"]
+        # check data are have shape (n_data, -1)
             x = x.reshape((x.shape[0], -1))
+
             x.requires_grad = True
+
             weights = train_batch["weights"]
-        else:
+        elif isinstance(self.nn, BaseGNN):
             x = self._setup_graph_data(train_batch)
-            weights = x["weight"].clone()
+            labels = x['graph_labels']
+            weights = x['weight'].clone()
         try:
             ref_idx = train_batch["ref_idx"]
         except KeyError:
-            ref_idx = None
+            ref_idx = None 
+
         cell = self._get_batch_cell(train_batch)
 
         # =================forward====================
+        # we use forward and not forward_cv to also apply the preprocessing (if present)
         z = self.forward_nn(x, cell=cell)
-        q = self.postprocessing(z) if self.postprocessing is not None else z
-
+        if self.postprocessing is not None:
+            q=self.postprocessing(z)
+        else:
+            q=z
         # ===================loss=====================
-        loss, loss_ef, loss_ortho = self.loss_fn(
-            x, q, weights, ref_idx
-        )
-
-        # ====================log=====================
+        if self.training:
+            loss, loss_ef, loss_ortho = self.loss_fn(x, q, weights, ref_idx)
+        else:
+            loss, loss_ef, loss_ortho = self.loss_fn(x, q, weights, ref_idx)
+        # ====================log=====================+
         name = "train" if self.training else "valid"
         self.log(f"{name}_loss", loss, on_epoch=True)
         self.log(f"{name}_loss_var", loss_ef, on_epoch=True)

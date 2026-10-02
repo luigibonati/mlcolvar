@@ -189,21 +189,24 @@ class SelfTICA(BaseCV):
 
         with torch.no_grad():
             for batch in dataloader:
+
                 # ===== Process batch =====
-                if self.uses_graph_input:
-                    x_t = self._setup_graph_data(batch, key="data_list")
-                    x_lag = self._setup_graph_data(batch, key="data_list_lag")
-                    w_t_batch = x_t["weight"]
-                    w_lag_batch = x_lag["weight"]
-                else:
+                if isinstance(self.nn, FeedForward):
                     x_t = batch["data"]
                     x_lag = batch["data_lag"]
                     w_t_batch = batch["weights"]
                     w_lag_batch = batch["weights_lag"]
-                cell = self._get_batch_cell(batch)
+
+                elif isinstance(self.nn, BaseGNN):
+                    x_t = self._setup_graph_data(batch, key='data_list')
+                    x_lag = self._setup_graph_data(batch, key='data_list_lag')
+                    w_t_batch = x_t['weight']
+                    w_lag_batch = x_lag['weight']
+
                 # ===== Compute representations =====
-                f_t_list.append(self.forward_nn(x_t, cell=cell))
-                f_lag_list.append(self.forward_nn(x_lag, cell=cell))
+                f_t_list.append(self.forward_nn(x_t))
+                f_lag_list.append(self.forward_nn(x_lag))
+
                 # ===== Append weights =====
                 w_t_list.append(w_t_batch)
                 w_lag_list.append(w_lag_batch)
@@ -234,22 +237,29 @@ class SelfTICA(BaseCV):
             self.optimal_lag_time = torch.tensor(lag_time)
 
     def forward(self, x: torch.Tensor, cell=None) -> torch.Tensor:
+
+        if self.preprocessing is not None:
+            x = self._apply_module(self.preprocessing, x, cell=cell)
+
         # Encode input into latent representation
-        x = self.forward_nn(x, cell=cell)
+        x = self.forward_nn(x)
+
         # In evaluation mode, apply TICA projection to obtain CVs
         if not self.training:
             centered = x - self.current_means
             x = centered @ self.current_evecs[:, :self.out_features]
+        
         if self.postprocessing is not None:
             x = self._apply_module(self.postprocessing, x)
-        return x
 
-    def forward_nn(self, x, cell=None) -> torch.Tensor:
-        if self.preprocessing is not None:
-            x = self._apply_module(self.preprocessing, x, cell=cell)
-        if not self._override_model and self.norm_in is not None:
-            x = self._apply_module(self.norm_in, x)
-        return self._apply_module(self.nn, x)
+        return x
+    
+    def forward_nn(self, x: torch.Tensor) -> torch.Tensor:
+        if not self._override_model:
+            if self.norm_in is not None:
+                x = self._apply_module(self.norm_in, x)
+        x_enc = self._apply_module(self.nn, x)
+        return x_enc
 
     def set_regularization(self, c0_reg=1e-6):
         """
@@ -273,21 +283,21 @@ class SelfTICA(BaseCV):
         gradient tracking for monitoring.
         """
         # =================get data===================
-        if self.uses_graph_input:
-            x_t = self._setup_graph_data(train_batch, key="data_list")
-            x_lag = self._setup_graph_data(train_batch, key="data_list_lag")
-            w_t = x_t["weight"]
-            w_lag = x_lag["weight"]
-        else:
+        if isinstance(self.nn, FeedForward):
             x_t = train_batch["data"]
             x_lag = train_batch["data_lag"]
             w_t = train_batch["weights"]
             w_lag = train_batch["weights_lag"]
-        cell = self._get_batch_cell(train_batch)
+        elif isinstance(self.nn, BaseGNN):
+            x_t = self._setup_graph_data(train_batch, key='data_list')
+            x_lag = self._setup_graph_data(train_batch, key='data_list_lag')
+            w_t = x_t['weight']
+            w_lag = x_lag['weight']
+            
         # =================forward====================
-        z_t = self.forward_nn(x_t, cell=cell)
+        z_t = self.forward_nn(x_t)
         z_t_pred = self.predictor(z_t)
-        z_lag = self.forward_nn(x_lag, cell=cell)
+        z_lag = self.forward_nn(x_lag)
         # ===================loss=====================
         loss = self.loss_fn(z_t_pred, z_lag)
         # ===================tica=====================

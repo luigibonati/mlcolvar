@@ -169,23 +169,25 @@ class Committor(BaseCV):
 
         """Compute and return the training loss and record metrics."""
         # =================get data===================
-        if self.uses_graph_input:
-            x = self._setup_graph_data(train_batch)
-            labels = x["graph_labels"]
-            weights = x["weight"].clone()
-        else:
+        if isinstance(self.nn, FeedForward):
             x = train_batch["data"]
+            # check data have shape (n_data, -1)
             x = x.reshape((x.shape[0], -1))
             x.requires_grad = True
+
             labels = train_batch["labels"]
             weights = train_batch["weights"]
-
+        elif isinstance(self.nn, BaseGNN):
+            x = self._setup_graph_data(train_batch)
+            labels = x['graph_labels']
+            weights = x['weight'].clone()
+        
         try:
             ref_idx = train_batch["ref_idx"]
         except KeyError:
             ref_idx = None
 
-        cell = self._get_batch_cell(x if self.uses_graph_input else train_batch)
+        cell = self._get_batch_cell(train_batch)
 
         # =================forward====================
         z = self.forward_nn(x, cell=cell)
@@ -205,7 +207,7 @@ class Committor(BaseCV):
                 x, z, q, labels, weights, ref_idx
             )
 
-        # ====================log=====================
+        # ====================log=====================+
         name = "train" if self.training else "valid"
         self.log(f"{name}_loss", loss, on_epoch=True)
         self.log(f"{name}_loss_var", loss_var, on_epoch=True)
