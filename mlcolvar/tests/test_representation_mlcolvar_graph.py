@@ -3,11 +3,11 @@ from typing import Dict, Optional
 import torch
 from torch import nn
 
-from mlcolvar.core import BaseGNN
+from mlcolvar.core import BaseGNN, FeedForward
+from mlcolvar.cvs import RegressionCV
 from mlcolvar.representation import (
     GraphRepresentation,
     MLColvarRepresentation,
-    RepresentationModel,
     export_representation_torchscript,
 )
 
@@ -113,7 +113,6 @@ def make_representation(
 
 def test_graph_representation() -> None:
     representation = make_representation()
-
     output = representation(make_graph())
 
     torch.testing.assert_close(
@@ -136,7 +135,6 @@ def test_graph_atom_representation() -> None:
     representation = make_representation(
         pooling_operation=None
     )
-
     output = representation(make_graph())
 
     torch.testing.assert_close(
@@ -179,10 +177,14 @@ def test_graph_representation_gradients() -> None:
         freeze=True,
     )
 
-    model = RepresentationModel(
-        representation,
-        n_out=1,
-        hidden_layers=(),
+    head = FeedForward([
+        representation.out_features,
+        1,
+    ])
+
+    model = RegressionCV(
+        model=head,
+        preprocessing=representation,
     )
 
     data = make_graph()
@@ -199,7 +201,7 @@ def test_graph_representation_gradients() -> None:
 
     assert any(
         parameter.grad is not None
-        for parameter in model.head.parameters()
+        for parameter in model.nn.parameters()
     )
 
 
@@ -208,10 +210,14 @@ def test_graph_representation_torchscript(
 ) -> None:
     representation = make_representation()
 
-    model = RepresentationModel(
-        representation,
-        n_out=1,
-        hidden_layers=(),
+    head = FeedForward([
+        representation.out_features,
+        1,
+    ]).eval()
+
+    postprocessing = nn.Sequential(
+        head,
+        nn.Sigmoid(),
     ).eval()
 
     graph = make_graph()
@@ -226,8 +232,8 @@ def test_graph_representation_torchscript(
     path = tmp_path / "model.ptc"
 
     export_representation_torchscript(
-        model=model,
-        postprocessing=nn.Sigmoid(),
+        representation=representation,
+        postprocessing=postprocessing,
         path=path,
         example_input=graph,
     )

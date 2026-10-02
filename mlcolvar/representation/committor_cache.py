@@ -8,13 +8,14 @@ from mlcolvar.core.loss.utils.smart_derivatives import (
 )
 from mlcolvar.data import DictDataset
 
-from .base import GraphRepresentation, Representation, VectorRepresentation
+from .base import Representation
 from .cache import CachedRepresentationDerivatives
 
 __all__ = ["precompute_committor_cache"]
 
 
 def _graph_field(dataset, field):
+    """Concatenate a graph-level field across all systems."""
     return torch.cat([
         torch.as_tensor(getattr(graph, field)).reshape(-1)
         for graph in dataset["data_list"]
@@ -30,24 +31,56 @@ def precompute_committor_cache(
     output_device="cpu",
     separate_boundary_dataset=True,
 ):
-    """Precompute representation features and Jacobians for committor training."""
+    """Cache a frozen representation for committor training.
+
+    The representation is evaluated once on the input dataset and its
+    Jacobians are cached for samples that require derivative-based committor
+    loss evaluation.
+
+    Parameters
+    ----------
+    representation : Representation
+        Frozen vector or graph representation.
+    dataset : DictDataset
+        Dataset containing the raw committor training data.
+    descriptor_derivatives : SmartDerivatives, optional
+        Descriptor derivatives used for vector representations.
+    batch_size : int, optional
+        Batch size used to evaluate the representation.
+    device : str or torch.device, optional
+        Device used for representation evaluation.
+    output_device : str or torch.device, default="cpu"
+        Device used to store cached tensors.
+    separate_boundary_dataset : bool, default=True
+        Whether boundary samples are separated from transition-region samples.
+        If True, Jacobians are cached only for samples with ``labels > 1``.
+
+    Returns
+    -------
+    cached_dataset : DictDataset
+        Dataset containing cached representation features and committor data.
+    descriptor_derivatives : CachedRepresentationDerivatives
+        Derivative transform backed by the cached representation Jacobians.
+    """
     output_device = torch.device(output_device)
 
-    if isinstance(representation, VectorRepresentation):
+    if representation.input_kind == "vector":
         required = {"data", "labels", "weights", "ref_idx"}
         missing = required.difference(dataset.keys)
         if missing:
             raise KeyError(f"Missing keys: {sorted(missing)}")
-
         labels = dataset["labels"].reshape(-1)
         source_ref_idx = dataset["ref_idx"].reshape(-1).long()
 
-    elif isinstance(representation, GraphRepresentation):
+    elif representation.input_kind == "graph":
         labels = _graph_field(dataset, "graph_labels")
         source_ref_idx = None
 
     else:
-        raise TypeError("Unsupported representation type.")
+        raise ValueError(
+            "Unsupported representation input kind: "
+            f"{representation.input_kind!r}."
+        )
 
     indices = (
         torch.nonzero(labels > 1).reshape(-1)
@@ -66,20 +99,21 @@ def precompute_committor_cache(
         output_device=output_device,
     )
 
-    if isinstance(representation, VectorRepresentation):
+    if representation.input_kind == "vector":
         cached_dataset = create_smart_dataset(
             cache.features,
             dataset,
             separate_boundary_dataset,
         )
-
     else:
         graph_dataset = DictDataset({
             "data": cache.features,
             "labels": labels.to(output_device),
-            "weights": _graph_field(dataset, "weight").to(output_device),
+            "weights": _graph_field(
+                dataset,
+                "weight",
+            ).to(output_device),
         })
-
         cached_dataset = create_smart_dataset(
             cache.features,
             graph_dataset,

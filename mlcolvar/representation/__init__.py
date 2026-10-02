@@ -3,7 +3,6 @@ from .base import (
     Representation,
     VectorRepresentation,
 )
-from .model import RepresentationModel
 from .adapters import (
     MACERepresentation,
     MLColvarRepresentation,
@@ -15,7 +14,6 @@ __all__ = [
     "Representation",
     "VectorRepresentation",
     "GraphRepresentation",
-    "RepresentationModel",
     "MACERepresentation",
     "MLColvarRepresentation",
     "precompute_committor_cache",

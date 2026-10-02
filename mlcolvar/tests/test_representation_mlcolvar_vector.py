@@ -4,9 +4,10 @@ import pytest
 import torch
 from torch import nn
 
+from mlcolvar.core import FeedForward
+from mlcolvar.cvs import RegressionCV
 from mlcolvar.representation import (
     MLColvarRepresentation,
-    RepresentationModel,
     VectorRepresentation,
     export_representation_torchscript,
 )
@@ -35,7 +36,6 @@ class ScaleNormalization(nn.Module):
 class DummyDescriptorCV(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-
         self.in_features = 3
         self.out_features = 1
         self.preprocessing = AddCellPreprocessing()
@@ -54,17 +54,13 @@ class DummyDescriptorCV(nn.Module):
 
         with torch.no_grad():
             self.nn.weight.copy_(
-                torch.tensor(
-                    [
-                        [1.0, 0.0, 0.0],
-                        [0.0, 1.0, 1.0],
-                    ]
-                )
+                torch.tensor([
+                    [1.0, 0.0, 0.0],
+                    [0.0, 1.0, 1.0],
+                ])
             )
             self.head.weight.copy_(
-                torch.tensor(
-                    [[1.0, -1.0]]
-                )
+                torch.tensor([[1.0, -1.0]])
             )
 
     def forward_cv(
@@ -90,12 +86,10 @@ class DummyDescriptorCV(nn.Module):
 
 
 def make_input() -> torch.Tensor:
-    return torch.tensor(
-        [
-            [1.0, 2.0, 3.0],
-            [2.0, 0.0, 1.0],
-        ]
-    )
+    return torch.tensor([
+        [1.0, 2.0, 3.0],
+        [2.0, 0.0, 1.0],
+    ])
 
 
 def make_representation(
@@ -146,16 +140,13 @@ def test_vector_freeze_and_gradients() -> None:
     )
 
     x = make_input().requires_grad_(True)
-
     representation(x).sum().backward()
 
     assert x.grad is not None
-
     assert all(
         not parameter.requires_grad
         for parameter in pretrained.parameters()
     )
-
     assert all(
         parameter.grad is None
         for parameter in pretrained.parameters()
@@ -176,7 +167,7 @@ def test_vector_freeze_and_gradients() -> None:
     )
 
 
-def test_vector_representation_model() -> None:
+def test_vector_representation_preprocessing() -> None:
     pretrained = DummyDescriptorCV()
 
     representation = MLColvarRepresentation(
@@ -185,14 +176,17 @@ def test_vector_representation_model() -> None:
         freeze=True,
     )
 
-    model = RepresentationModel(
-        representation,
-        n_out=1,
-        hidden_layers=(),
+    head = FeedForward([
+        representation.out_features,
+        1,
+    ])
+
+    model = RegressionCV(
+        model=head,
+        preprocessing=representation,
     )
 
     x = make_input().requires_grad_(True)
-
     output = model(x)
 
     assert output.shape == (2, 1)
@@ -200,15 +194,13 @@ def test_vector_representation_model() -> None:
     output.sum().backward()
 
     assert x.grad is not None
-
     assert all(
         parameter.grad is None
         for parameter in pretrained.parameters()
     )
-
     assert any(
         parameter.grad is not None
-        for parameter in model.head.parameters()
+        for parameter in model.nn.parameters()
     )
 
 
@@ -217,17 +209,21 @@ def test_vector_representation_torchscript(
 ) -> None:
     representation = make_representation()
 
-    model = RepresentationModel(
-        representation,
-        n_out=1,
-        hidden_layers=(),
+    head = FeedForward([
+        representation.out_features,
+        1,
+    ])
+
+    postprocessing = nn.Sequential(
+        head,
+        nn.Sigmoid(),
     ).eval()
 
     path = tmp_path / "model.ptc"
 
     export_representation_torchscript(
-        model=model,
-        postprocessing=nn.Sigmoid(),
+        representation=representation,
+        postprocessing=postprocessing,
         path=path,
     )
 

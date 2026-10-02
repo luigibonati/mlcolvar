@@ -4,15 +4,15 @@ import pytest
 import torch
 from torch import nn
 
+from mlcolvar.core import FeedForward
 from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
+from mlcolvar.cvs import RegressionCV
 from mlcolvar.data import DictDataset
 from mlcolvar.representation import (
     GraphRepresentation,
-    RepresentationModel,
     VectorRepresentation,
 )
 from mlcolvar.representation.cache import CachedRepresentationDerivatives
-
 
 class DummyVectorRepresentation(VectorRepresentation):
     def __init__(self):
@@ -30,7 +30,6 @@ class DummyVectorRepresentation(VectorRepresentation):
 
     def forward(self, x, cell=None):
         return self.encoder(x)
-
 
 class DummyAtomRepresentation(GraphRepresentation):
     def __init__(
@@ -51,7 +50,6 @@ class DummyAtomRepresentation(GraphRepresentation):
             data,
         )
 
-
 class IdentityDescriptorDerivatives(SmartDerivatives):
     def __init__(self):
         nn.Module.__init__(self)
@@ -59,38 +57,35 @@ class IdentityDescriptorDerivatives(SmartDerivatives):
     def forward(self, x, ref_idx=None):
         return x
 
-
 def make_dataset():
-    return DictDataset(
-        {
-            "data": torch.randn(4, 3),
-        }
-    )
-
+    return DictDataset({
+        "data": torch.randn(4, 3),
+    })
 
 def make_graph() -> Dict[str, torch.Tensor]:
     return {
-        "atom_features": torch.tensor(
-            [
-                [1.0, 2.0],
-                [3.0, 4.0],
-                [2.0, 4.0],
-                [4.0, 6.0],
-            ]
-        ),
+        "atom_features": torch.tensor([
+            [1.0, 2.0],
+            [3.0, 4.0],
+            [2.0, 4.0],
+            [4.0, 6.0],
+        ]),
         "positions": torch.zeros(4, 3),
         "batch": torch.tensor([0, 0, 1, 1]),
         "ptr": torch.tensor([0, 2, 4]),
     }
 
-
-def test_vector_representation_model():
+def test_vector_representation_preprocessing():
     representation = DummyVectorRepresentation()
-    model = RepresentationModel(
-        representation,
-        n_out=1,
-        hidden_layers=(),
+    head = FeedForward([
+        representation.out_features,
+        1,
+    ])
+    model = RegressionCV(
+        model=head,
+        preprocessing=representation,
     )
+
     x = torch.randn(
         2,
         3,
@@ -107,7 +102,6 @@ def test_vector_representation_model():
         not parameter.requires_grad
         for parameter in representation.parameters()
     )
-
 
 @pytest.mark.parametrize(
     ("factory", "out_features"),
@@ -133,14 +127,16 @@ def test_graph_representation_transforms(
     assert representation.output_kind == "system"
     assert representation.out_features == out_features
 
-    model = RepresentationModel(
-        representation,
-        n_out=1,
-        hidden_layers=(),
+    head = FeedForward([
+        representation.out_features,
+        1,
+    ])
+    model = RegressionCV(
+        model=head,
+        preprocessing=representation,
     )
 
     assert model(make_graph()).shape == (2, 1)
-
 
 def test_representation_cache():
     representation = DummyVectorRepresentation()
@@ -152,17 +148,13 @@ def test_representation_cache():
     )
 
     with torch.no_grad():
-        expected = representation(
-            dataset["data"]
-        )
+        expected = representation(dataset["data"])
 
     torch.testing.assert_close(
         cache.features,
         expected,
     )
-
     assert cache.jacobian is None
-
 
 def test_jacobian_cache_and_derivatives():
     cache = DummyVectorRepresentation().cache(
@@ -178,7 +170,6 @@ def test_jacobian_cache_and_derivatives():
         3,
         2,
     )
-
     torch.testing.assert_close(
         cache.reference_indices,
         torch.tensor([-1, 0, -1, 1]),
@@ -187,7 +178,6 @@ def test_jacobian_cache_and_derivatives():
     derivatives = CachedRepresentationDerivatives(
         cache.jacobian
     )
-
     output = derivatives(
         torch.ones(2, 2),
         torch.tensor([0, 1]),

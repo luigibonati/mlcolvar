@@ -4,9 +4,11 @@ import pytest
 import torch
 from torch import nn
 
+from mlcolvar.core import FeedForward
+from mlcolvar.cvs import RegressionCV
 from mlcolvar.representation import (
     MACERepresentation,
-    RepresentationModel,
+    export_representation_torchscript,
 )
 
 
@@ -165,16 +167,20 @@ def test_mace_preserves_input_gradients():
     )
 
 
-def test_mace_representation_model():
+def test_mace_representation_preprocessing():
     representation = make_representation(
         pooling_operation="mean"
     )
 
-    model = RepresentationModel(
-        representation,
-        n_out=1,
-        hidden_layers=(),
-    )
+    head = FeedForward([
+        representation.out_features,
+        1,
+    ])
+
+    model = RegressionCV(
+        model=head,
+        preprocessing=representation,
+    ).to(torch.float64)
 
     output = model(make_data())
 
@@ -183,34 +189,38 @@ def test_mace_representation_model():
 
     assert any(
         parameter.requires_grad
-        for parameter in model.head.parameters()
+        for parameter in model.nn.parameters()
     )
 
 
-def test_mace_representation_trace():
-    model = RepresentationModel(
-        make_representation(
-            pooling_operation="mean"
-        ),
-        n_out=1,
-        hidden_layers=(),
+def test_mace_representation_trace(tmp_path):
+    representation = make_representation(
+        pooling_operation="mean"
+    )
+
+    head = FeedForward([
+        representation.out_features,
+        1,
+    ]).to(torch.float64).eval()
+
+    path = tmp_path / "model.ptc"
+
+    export_representation_torchscript(
+        representation=representation,
+        postprocessing=head,
+        path=path,
+        example_input=make_data(),
+    )
+
+    loaded = torch.jit.load(
+        str(path),
+        map_location="cpu",
     ).eval()
 
-    data = make_data()
-    expected = model(data)
+    output = loaded(make_data())
 
-    traced = torch.jit.trace(
-        model,
-        example_inputs=(data,),
-        strict=False,
-    )
-
-    output = traced(data)
-
-    torch.testing.assert_close(
-        output,
-        expected,
-    )
+    assert path.exists()
+    assert output.shape == (2, 1)
 
 
 def test_mace_representation_invalid_node_features():

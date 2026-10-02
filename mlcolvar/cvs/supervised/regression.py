@@ -1,5 +1,4 @@
 import torch
-import lightning
 from mlcolvar.cvs import BaseCV
 from mlcolvar.core import FeedForward, Normalization, BaseGNN
 from mlcolvar.core.loss import MSELoss
@@ -55,8 +54,8 @@ class RegressionCV(BaseCV):
             Set 'block_name' = None or False to turn off that block.
         graph_target_key : str, optional
             Graph regression target key, either 'graph_labels' or 'node_labels', by default 'graph_labels'.
-            Only used when `model` is a `BaseGNN` and should match the model output level
-            configured through `model.pooling_operation`.
+            Only used for graph inputs and should match the output level of the graph
+            model or preprocessing representation.
         """
         super().__init__(model, **kwargs)
 
@@ -91,12 +90,7 @@ class RegressionCV(BaseCV):
         """Compute and return the training loss and record metrics."""
         # =================get data===================
         loss_kwargs = {}
-        if isinstance(self.nn, FeedForward):
-            x = train_batch["data"]
-            labels = train_batch["target"]
-            if "weights" in train_batch:
-                loss_kwargs["weights"] = train_batch["weights"]
-        elif isinstance(self.nn, BaseGNN):
+        if self.uses_graph_input:
             x = self._setup_graph_data(train_batch)
             if self.graph_target_key not in x:
                 raise KeyError(
@@ -105,8 +99,17 @@ class RegressionCV(BaseCV):
             labels = x[self.graph_target_key]
             if self.graph_target_key == "graph_labels" and "weight" in x:
                 loss_kwargs["weights"] = x["weight"]
+        else:
+            x = train_batch["data"]
+            labels = train_batch["target"]
+            if "weights" in train_batch:
+                loss_kwargs["weights"] = train_batch["weights"]
 
         # =================forward====================
+        if self.preprocessing is not None:
+            cell = self._get_batch_cell(x if self.uses_graph_input else train_batch)
+            x = self._apply_module(self.preprocessing, x, cell=cell)
+
         y = self.forward_cv(x)
 
         # Keep compatibility with scalar targets stored with extra singleton dims.

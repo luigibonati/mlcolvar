@@ -1,9 +1,7 @@
 import torch
-import lightning
 from mlcolvar.cvs import BaseCV
 from mlcolvar.core import FeedForward, BaseGNN, Normalization
 from mlcolvar.core.loss import TDALoss
-from mlcolvar.data import DictModule
 from typing import Union, List
 
 __all__ = ["DeepTDA"]
@@ -125,16 +123,20 @@ class DeepTDA(BaseCV):
     def training_step(self, train_batch, *args, **kwargs) -> torch.Tensor:
         """Compute and return the training loss and record metrics."""
         # =================get data===================
-        if isinstance(self.nn, FeedForward):
+        if self.uses_graph_input:
+            x = self._setup_graph_data(train_batch)
+            labels = x["graph_labels"].squeeze()
+        else:
             x = train_batch["data"]
             labels = train_batch["labels"]
-        elif isinstance(self.nn, BaseGNN):
-            x = self._setup_graph_data(train_batch)
-            labels = x['graph_labels'].squeeze()
         
         # =================forward====================
-        z = self.forward_cv(x)
+        if self.preprocessing is not None:
+            cell = self._get_batch_cell(x if self.uses_graph_input else train_batch)
+            x = self._apply_module(self.preprocessing, x, cell=cell)
 
+        z = self.forward_cv(x)
+    
         # ===================loss=====================
         loss, loss_centers, loss_sigmas = self.loss_fn(z, 
                                                         labels, 

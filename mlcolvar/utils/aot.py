@@ -460,46 +460,62 @@ class _AOTExporter:
 
     def _build_model_metadata(self) -> Dict[str, str]:
         if isinstance(self.model, BaseGNN):
-            # A raw GNN directly defines the exported CV output dimension.
+            graph_model = self.model
             n_cvs = int(self.model.n_out)
-        else:
-            # CV wrappers expose the final number of CVs explicitly.
+        elif getattr(
+            getattr(self.model, "preprocessing", None),
+            "input_kind",
+            None,
+        ) == "graph":
+            graph_model = self.model.preprocessing
             n_cvs = int(self.model.n_cvs)
+        elif isinstance(getattr(self.model, "nn", None), BaseGNN):
+            graph_model = self.model.nn
+            n_cvs = int(self.model.n_cvs)
+        else:
+            raise TypeError(
+                "AOT export requires a graph-based model or preprocessing."
+            )
 
         if self.calculate_k_bias and n_cvs != 1:
             raise ValueError(
                 "Kolmogorov-bias export requires a single-CV model."
             )
 
-        # In Kolmogorov-bias mode the compiled interface returns [z, q],
-        # while the underlying committor model still has a single CV.
         n_outputs = 2 if self.calculate_k_bias else n_cvs
 
         metadata = {
             "aot_format_version": str(_AOT_FORMAT_VERSION),
             "n_cvs": str(n_cvs),
             "n_outputs": str(n_outputs),
-            "cutoff": str(self.model.cutoff.item()),
-            "buffer": str(self.model.buffer.item()),
-            "long_range_cutoff": str(self.model.long_range_cutoff.item()),
-            "n_atom_types": str(len(self.model.atomic_numbers)),
+            "cutoff": str(graph_model.cutoff.item()),
+            "buffer": str(graph_model.buffer.item()),
+            "long_range_cutoff": str(
+                graph_model.long_range_cutoff.item()
+            ),
+            "n_atom_types": str(len(graph_model.atomic_numbers)),
             "float_dtype": str(self.model.dtype)[-2:],
-            "calculate_gradients": str(self.config.calculate_gradients),
+            "calculate_gradients": str(
+                self.config.calculate_gradients
+            ),
             "calculate_k_bias": str(self.calculate_k_bias),
             "model_type": "gnn",
         }
 
-        for i in range(len(self.model.atomic_numbers)):
+        for i in range(len(graph_model.atomic_numbers)):
             metadata[f"atomic_number_{i:d}"] = str(
-                self.model.atomic_numbers[i].item()
+                graph_model.atomic_numbers[i].item()
             )
 
         metadata["model_summary"] = self._build_model_summary(
-            "CV", self.model, self.config.model_summary_level, 0
+            "CV",
+            self.model,
+            self.config.model_summary_level,
+            0,
         )
 
         metadata["n_parameters"] = str(
-            sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+            sum(p.numel() for p in self.model.parameters())
         )
 
         for k, v in self.k_bias_options.items():
@@ -731,9 +747,9 @@ def export(
 
     Parameters
     ----------
-    model : lightning.LightningModule
-        GNN-based CV model to compile. The model itself, or its ``nn``
-        attribute, must be an instance of ``BaseGNN``.
+    model : torch.nn.Module
+        Graph-based model to compile. Graph inputs may be handled directly by
+        a ``BaseGNN`` model or by a graph representation used as preprocessing.
     example_inputs : torch_geometric.data.Data or dict or list
         Example graph input used to trace and compile the model.
     file_name : str, optional
@@ -829,13 +845,20 @@ def export(
             },
         )
     """
-    is_gnn = isinstance(model, BaseGNN) or (
-        hasattr(model, "nn") and isinstance(model.nn, BaseGNN)
+    is_graph = (
+        isinstance(model, BaseGNN)
+        or isinstance(getattr(model, "nn", None), BaseGNN)
+        or getattr(
+            getattr(model, "preprocessing", None),
+            "input_kind",
+            None,
+        )
+        == "graph"
     )
-    if not is_gnn:
+
+    if not is_graph:
         raise TypeError(
-            "AOT compilation currently supports only BaseGNN models or wrappers "
-            "whose `nn` attribute is a BaseGNN."
+            "AOT compilation currently supports only graph-based models."
         )
 
     exporter = _AOTExporter(

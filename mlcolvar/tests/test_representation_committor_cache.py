@@ -1,12 +1,13 @@
 import torch
+from torch import nn
 from torch_geometric.data import Data
 
+from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
 from mlcolvar.data import DictDataset
 from mlcolvar.representation import (
     GraphRepresentation,
     VectorRepresentation,
 )
-from mlcolvar.representation.cache import IdentityDescriptorDerivatives
 from mlcolvar.representation.committor_cache import precompute_committor_cache
 
 
@@ -39,27 +40,33 @@ class DummyGraphRepresentation(GraphRepresentation):
         )
 
 
+class DummyDescriptorDerivatives(SmartDerivatives):
+    """Treat vector descriptors as coordinates of a single atom."""
+
+    def __init__(self):
+        nn.Module.__init__(self)
+
+    def forward(self, gradient_descriptor, ref_idx=None):
+        return gradient_descriptor.unsqueeze(1)
+
+
 def test_vector_committor_cache():
-    dataset = DictDataset(
-        {
-            "data": torch.tensor(
-                [
-                    [0.0, 1.0],
-                    [1.0, 2.0],
-                    [2.0, 3.0],
-                    [3.0, 4.0],
-                ]
-            ),
-            "labels": torch.tensor([0.0, 2.0, 1.0, 3.0]),
-            "weights": torch.ones(4),
-            "ref_idx": torch.arange(4),
-        }
-    )
+    dataset = DictDataset({
+        "data": torch.tensor([
+            [0.0, 1.0],
+            [1.0, 2.0],
+            [2.0, 3.0],
+            [3.0, 4.0],
+        ]),
+        "labels": torch.tensor([0.0, 2.0, 1.0, 3.0]),
+        "weights": torch.ones(4),
+        "ref_idx": torch.arange(4),
+    })
 
     cached, derivatives = precompute_committor_cache(
         DummyVectorRepresentation(),
         dataset,
-        descriptor_derivatives=IdentityDescriptorDerivatives(),
+        descriptor_derivatives=DummyDescriptorDerivatives(),
     )
 
     torch.testing.assert_close(
@@ -82,23 +89,19 @@ def test_vector_committor_cache():
 def test_graph_committor_cache():
     graphs = [
         Data(
-            positions=torch.tensor(
-                [
-                    [1.0, 0.0, 0.0],
-                    [3.0, 2.0, 0.0],
-                ]
-            ),
+            positions=torch.tensor([
+                [1.0, 0.0, 0.0],
+                [3.0, 2.0, 0.0],
+            ]),
             graph_labels=torch.tensor([2.0]),
             weight=torch.tensor([1.0]),
             num_nodes=2,
         ),
         Data(
-            positions=torch.tensor(
-                [
-                    [2.0, 1.0, 0.0],
-                    [4.0, 3.0, 0.0],
-                ]
-            ),
+            positions=torch.tensor([
+                [2.0, 1.0, 0.0],
+                [4.0, 3.0, 0.0],
+            ]),
             graph_labels=torch.tensor([3.0]),
             weight=torch.tensor([2.0]),
             num_nodes=2,
@@ -117,12 +120,10 @@ def test_graph_committor_cache():
 
     torch.testing.assert_close(
         cached["data"],
-        torch.tensor(
-            [
-                [2.0, 1.0],
-                [3.0, 2.0],
-            ]
-        ),
+        torch.tensor([
+            [2.0, 1.0],
+            [3.0, 2.0],
+        ]),
     )
     torch.testing.assert_close(
         cached["weights"],

@@ -1,12 +1,11 @@
 import torch
 from torch import nn
 
+from mlcolvar.core import FeedForward
 from mlcolvar.core.nn.graph import SchNetModel
+from mlcolvar.cvs import RegressionCV
 from mlcolvar.data.graph.utils import create_test_graph_input
-from mlcolvar.representation import (
-    MLColvarRepresentation,
-    RepresentationModel,
-)
+from mlcolvar.representation import MLColvarRepresentation
 from mlcolvar.utils import aot
 
 
@@ -35,7 +34,6 @@ def test_aot_export_gnn(tmp_path) -> None:
             n_filters=16,
             n_hidden_channels=16,
         )
-
         model.dtype = torch.float32
         model.device = "cpu"
 
@@ -76,7 +74,6 @@ def test_aot_transfer_gnn(tmp_path) -> None:
     torch.set_default_dtype(torch.float32)
 
     try:
-        # Pretrained GNN representation.
         encoder = SchNetModel(
             n_out=4,
             cutoff=0.1,
@@ -96,22 +93,19 @@ def test_aot_transfer_gnn(tmp_path) -> None:
             freeze=True,
         )
 
-        # Transfer-learning model:
-        # frozen GNN representation + new trainable task head.
-        model = RepresentationModel(
-            representation,
-            n_out=1,
-            hidden_layers=(8,),
-        ).eval()
+        head = FeedForward([
+            representation.out_features,
+            8,
+            1,
+        ])
 
-        model = model.to(
+        model = RegressionCV(
+            model=head,
+            preprocessing=representation,
+        ).to(
             device="cpu",
             dtype=torch.float32,
-        )
-
-        # Required by the current AOT exporter.
-        model.dtype = torch.float32
-        model.device = "cpu"
+        ).eval()
 
         batch = create_test_graph_input(
             output_type="batch",

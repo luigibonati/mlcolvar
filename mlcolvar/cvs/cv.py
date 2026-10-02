@@ -66,21 +66,35 @@ class BaseCV(lightning.LightningModule):
         self.preprocessing = preprocessing
         self.postprocessing = postprocessing
         self._preprocessing_training_warning_shown = False
+        
+    @property
+    def uses_graph_input(self):
+        if self.preprocessing is not None:
+            input_kind = getattr(self.preprocessing, "input_kind", None)
+            if input_kind is not None:
+                return input_kind == "graph"
+        return self.in_features is None
 
     @property
     def example_input_array(self):
-        if self.in_features is not None:
-            return torch.randn(
-                (1,self.in_features)
-                if self.preprocessing is None
-                or not hasattr(self.preprocessing, "in_features")
-                else self.preprocessing.in_features
+        if not self.uses_graph_input:
+            in_features = (
+                self.preprocessing.in_features
+                if self.preprocessing is not None
+                and hasattr(self.preprocessing, "in_features")
+                else self.in_features
             )
-        else:
-            return create_graph_tracing_example(n_species=len(self.atomic_numbers), 
-                                                environment=True,
-                                                long_range=True if hasattr(self, 'long_range_cutoff') and self.long_range_cutoff > 0 else False)
+            return torch.randn((1, in_features))
 
+        source = self.preprocessing if self.preprocessing is not None else self
+        return create_graph_tracing_example(
+            n_species=len(source.atomic_numbers),
+            environment=True,
+            long_range=(
+                hasattr(source, "long_range_cutoff")
+                and source.long_range_cutoff > 0
+            ),
+        )
 
     def parse_model(
         self,
@@ -245,26 +259,35 @@ class BaseCV(lightning.LightningModule):
         if self.preprocessing is None or self._preprocessing_training_warning_shown:
             return
 
-        class_name = self.__class__.__name__
-        is_position_dependent_cv = ("Committor" in class_name) or ("Generator" in class_name)
+        if hasattr(self.preprocessing, "input_kind"):
+            if getattr(self.preprocessing, "freeze", False):
+                warn(
+                    "Found a frozen representation as preprocessing. "
+                    "Consider caching it for repeated training."
+                )
+            self._preprocessing_training_warning_shown = True
+            return
+
+        is_position_dependent_cv = any(
+            name in self.__class__.__name__
+            for name in ("Committor", "Generator")
+        )
 
         if is_position_dependent_cv:
-                warn(
-                    "Found a preprocessing module during training. For position-dependent losses "
-                    "(Committor/Generator), this is valid, but it is recommended to use "
-                    "`descriptors_derivatives` (e.g., `SmartDerivatives`) for efficiency and potentially "
-                    "large computational savings."
-                )
+            warn(
+                "Found a preprocessing module during training. For position-dependent losses "
+                "(Committor/Generator), this is valid, but using `descriptors_derivatives` "
+                "(e.g., `SmartDerivatives`) can provide large computational savings."
+            )
         else:
             raise ValueError(
-                "Found a preprocessing module during training. For this CV class, it is generally "
-                "recommended to compute descriptors and store them in a DictDataset instead of  "
-                "re-applying the preprocessing at each training step. This choice typically provides" 
-                "large computational savings."
+                "Found a preprocessing module during training. For this CV class, "
+                "it is recommended to precompute the transformed inputs and store "
+                "them in a DictDataset."
             )
 
         self._preprocessing_training_warning_shown = True
-
+    
     @property
     def optimizer_name(self) -> str:
         """Optimizer name. Options can be set using optimizer_kwargs. Actual optimizer will be return during training from configure_optimizer function."""
