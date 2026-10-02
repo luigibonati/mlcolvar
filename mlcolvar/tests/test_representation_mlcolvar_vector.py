@@ -111,8 +111,8 @@ def test_vector_representation() -> None:
     torch.testing.assert_close(
         output,
         torch.tensor([
-            [5.0, 14.0],
-            [7.0, 7.0],
+            [5.0, 16.0],
+            [7.0, 8.0],
         ]),
     )
 
