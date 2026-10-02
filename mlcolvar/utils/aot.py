@@ -1,22 +1,18 @@
-import os
 import json
+import os
 import tempfile
-import zipfile
 import warnings
-
-from typing import Dict, Tuple, Optional, Any, List, Union
-from dataclasses import dataclass
+import zipfile
 from contextlib import contextmanager
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch._inductor.package
 import torch_geometric
-
 from torch.fx.experimental.proxy_tensor import make_fx
 
 from mlcolvar.core.nn import BaseGNN
 from mlcolvar.utils import _code
-
 
 __all__ = ["GraphAdapter", "export", "load"]
 
@@ -41,32 +37,13 @@ if os.environ.get("MLCOLVAR_EXPORT_MAXIMUM_OPT") == "1":
 _AOT_FORMAT_VERSION = 2
 
 _GRAPH_FIELDS = (
-    "edge_index",
-    "shifts",
-    "unit_shifts",
-    "positions",
-    "node_attrs",
-    "batch",
-    "weight",
-    "graph_labels",
-    "cell",
-    "ptr",
-    "n_system",
+    "edge_index", "shifts", "unit_shifts", "positions", "node_attrs", "batch",
+    "weight", "graph_labels", "cell", "ptr", "n_system",
 )
 
+_OPTIONAL_GRAPH_FIELDS = ("system_masks", "subsystem_masks", "edge_masks_lr")
 
-_OPTIONAL_GRAPH_FIELDS = (
-    "system_masks",
-    "subsystem_masks",
-    "edge_masks_lr",
-)
-
-
-_EXCLUDED_AGGR_MODULES = (
-    "MedianAggregation",
-    "MinAggregation",
-    "MaxAggregation",
-)
+_EXCLUDED_AGGR_MODULES = ("MedianAggregation", "MinAggregation", "MaxAggregation")
 
 
 # Static fallback implementations of scatter operations used during export.
@@ -76,23 +53,32 @@ _EXCLUDED_AGGR_MODULES = (
 # ignore index/out/dim_size. They should only be used when the exported graph
 # operations have already been reduced to fixed-shape reductions for AOT tracing.
 def _scatter_sum_static(
-    src: torch.Tensor,
-    index: torch.Tensor,
-    dim: int = -1,
-    out: Optional[torch.Tensor] = None,
-    dim_size: Optional[int] = None,
+    src: torch.Tensor, index: torch.Tensor, dim: int = -1,
+    out: Optional[torch.Tensor] = None, dim_size: Optional[int] = None,
 ) -> torch.Tensor:
     return torch.sum(src, dim=dim, keepdim=True)
 
 
 def _scatter_mean_static(
-    src: torch.Tensor,
-    index: torch.Tensor,
-    dim: int = -1,
-    out: Optional[torch.Tensor] = None,
-    dim_size: Optional[int] = None,
+    src: torch.Tensor, index: torch.Tensor, dim: int = -1,
+    out: Optional[torch.Tensor] = None, dim_size: Optional[int] = None,
 ) -> torch.Tensor:
     return torch.mean(src, dim=dim, keepdim=True)
+
+
+def _get_graph_model(model: torch.nn.Module) -> torch.nn.Module:
+    if isinstance(model, BaseGNN):
+        return model
+
+    preprocessing = getattr(model, "preprocessing", None)
+    if getattr(preprocessing, "input_kind", None) == "graph":
+        return preprocessing
+
+    nn = getattr(model, "nn", None)
+    if isinstance(nn, BaseGNN):
+        return nn
+
+    raise TypeError("AOT export requires a graph-based model or preprocessing.")
 
 
 class _AOTWrapper(torch.nn.Module):
@@ -118,129 +104,84 @@ class _AOTWrapper(torch.nn.Module):
     """
 
     def __init__(
-        self,
-        model,
-        calculate_gradients: bool = True,
-        calculate_k_bias: bool = False,
-        epsilon: float = 1e-14,
-        lambd: float = -1.0,
-        beta: float = 1.0,
+        self, model, calculate_gradients: bool = True,
+        calculate_k_bias: bool = False, epsilon: float = 1e-14,
+        lambd: float = -1.0, beta: float = 1.0,
     ):
         super().__init__()
-
         self.model = model
         self.calculate_gradients = calculate_gradients
         self.calculate_k_bias = calculate_k_bias
 
-        self.register_buffer(
-            "epsilon", torch.tensor(epsilon, dtype=torch.get_default_dtype())
-        )
-        self.register_buffer(
-            "lambd", torch.tensor(lambd, dtype=torch.get_default_dtype())
-        )
-        self.register_buffer(
-            "beta", torch.tensor(beta, dtype=torch.get_default_dtype())
-        )
+        dtype = torch.get_default_dtype()
+        self.register_buffer("epsilon", torch.tensor(epsilon, dtype=dtype))
+        self.register_buffer("lambd", torch.tensor(lambd, dtype=dtype))
+        self.register_buffer("beta", torch.tensor(beta, dtype=dtype))
 
-        if self.calculate_k_bias:
-            if not hasattr(self.model, "forward_nn"):
+        if calculate_k_bias:
+            if not hasattr(model, "forward_nn"):
                 raise RuntimeError(
                     "k_bias_options was provided, so the model is treated as a "
                     "committor model, but it does not have forward_nn()."
                 )
-
-            if not hasattr(self.model, "sigmoid"):
+            if not hasattr(model, "sigmoid"):
                 raise RuntimeError(
                     "k_bias_options was provided, so the model is treated as a "
                     "committor model, but it does not have sigmoid."
                 )
-
             self.register_buffer(
-                "kb_sigmoid_p",
-                torch.tensor(
-                    self.model.sigmoid.p,
-                    dtype=torch.get_default_dtype(),
-                ),
+                "kb_sigmoid_p", torch.tensor(model.sigmoid.p, dtype=dtype)
             )
 
-        if self.calculate_k_bias and not self.calculate_gradients:
+        if calculate_k_bias and not calculate_gradients:
             raise RuntimeError("Can not calculate k_bias without gradients")
 
     # The token argument is kept for compatibility with the compiled AOT interface.
     def forward(self, inputs, token: bool = False):
-        if self.calculate_k_bias:
-            return self._forward_kbias(inputs)
+        return self._forward_kbias(inputs) if self.calculate_k_bias else self._forward_cv(inputs)
 
-        return self._forward_cv(inputs)
-
-    def _compute_cv_outputs(self, inputs):
+    def _forward_cv(self, inputs):
         data = GraphAdapter.tuple_to_dict(inputs)
-
         x = data["positions"].requires_grad_(True)
         data["positions"] = x
 
         outputs = self.model(data)
-
-        return outputs, x, data
-
-    def _forward_cv(self, inputs):
-        outputs, x, data = self._compute_cv_outputs(inputs)
-
         zero = torch.tensor(0, device=outputs.device, dtype=outputs.dtype)
-
-        if self.calculate_gradients:
-            gradients = self._compute_cv_gradients(outputs, x, data)
-        else:
-            gradients = zero
+        gradients = (
+            self._compute_cv_gradients(outputs, x, data)
+            if self.calculate_gradients else zero
+        )
 
         return outputs, gradients, zero, zero
 
     def _compute_cv_gradients(self, outputs, x, data):
         # Multi-output CV: compute full Jacobian.
         if outputs.shape[1] > 1:
-
             def wrapper(pos):
                 data["positions"] = pos
                 return self.model(data)
 
-            gradients = torch.autograd.functional.jacobian(
-                wrapper,
-                x,
-                create_graph=False,
-                strict=False,
-                vectorize=False,
+            return torch.autograd.functional.jacobian(
+                wrapper, x, create_graph=False, strict=False, vectorize=False
             )[0]
 
         # Single-output CV: ordinary gradient.
-        else:
-            gradients = torch.autograd.grad(
-                outputs.sum(),
-                x,
-                retain_graph=True,
-                create_graph=False,
-            )[0]
-            gradients = gradients.unsqueeze(0)
-
-        return gradients
+        gradients = torch.autograd.grad(
+            outputs.sum(), x, retain_graph=True, create_graph=False
+        )[0]
+        return gradients.unsqueeze(0)
 
     def _forward_kbias(self, inputs):
-        return self._compute_kbias_outputs(inputs)
-
-    def _compute_kbias_outputs(self, inputs):
         data = GraphAdapter.tuple_to_dict(inputs)
-
         x = data["positions"].requires_grad_(True)
         data["positions"] = x
 
         outputs_raw = self.model.forward_nn(data)
-
-        dtype = outputs_raw.dtype
-        device = outputs_raw.device
+        dtype, device = outputs_raw.dtype, outputs_raw.device
 
         epsilon = self.epsilon.to(device=device, dtype=dtype)
         lambd = self.lambd.to(device=device, dtype=dtype)
         beta = self.beta.to(device=device, dtype=dtype)
-        lambda_over_beta = lambd / beta
         sigmoid_p = self.kb_sigmoid_p.to(device=device, dtype=dtype)
 
         z = outputs_raw[:, 0]
@@ -251,10 +192,7 @@ class _AOTWrapper(torch.nn.Module):
 
         # Need create_graph=True because grad_kbias requires second derivatives.
         gradients_z = torch.autograd.grad(
-            z.sum(),
-            x,
-            retain_graph=True,
-            create_graph=True,
+            z.sum(), x, retain_graph=True, create_graph=True
         )[0]
 
         sigmoid_prime = sigmoid_p * q * (1.0 - q)
@@ -264,36 +202,18 @@ class _AOTWrapper(torch.nn.Module):
         gradients = torch.stack([gradients_z, gradients_q], dim=0)
 
         gradients_z_sum = torch.sum(gradients_z.pow(2))
-
         log_grad_sq = (
             torch.log(gradients_z_sum + epsilon)
             - 4.0 * torch.log(1.0 + torch.exp(-sigmoid_p * z))
             - 2.0 * sigmoid_p * z
         )
 
-        k_bias_value = -lambda_over_beta * (
-            log_grad_sq - torch.log(epsilon)
-        )
-
+        k_bias_value = -(lambd / beta) * (log_grad_sq - torch.log(epsilon))
         gradients_b = torch.autograd.grad(
-            k_bias_value.sum(),
-            x,
-            retain_graph=False,
-            create_graph=False,
+            k_bias_value.sum(), x, retain_graph=False, create_graph=False
         )[0]
 
-        gradients_b = gradients_b.unsqueeze(0)
-
-        return outputs, gradients, k_bias_value, gradients_b
-
-
-@dataclass
-class _AOTConfig:
-    file_name: str = "model.pt2"
-    calculate_gradients: bool = True
-    k_bias_options: Optional[Dict[str, Any]] = None
-    model_summary_level: int = 3
-    run_check: bool = False
+        return outputs, gradients, k_bias_value, gradients_b.unsqueeze(0)
 
 
 class GraphAdapter:
@@ -319,41 +239,30 @@ class GraphAdapter:
             data = data[0]
 
         loader = torch_geometric.loader.DataLoader([data], batch_size=1, shuffle=False)
-        batch = next(iter(loader)).to(device)
-        dd = batch.to_dict()
+        inputs = next(iter(loader)).to(device).to_dict()
+        inputs["positions"].requires_grad_(True)
 
-        dd["positions"].requires_grad_(True)
-
-        return GraphAdapter.dict_to_tuple(dd)
+        return GraphAdapter.dict_to_tuple(inputs)
 
     @staticmethod
     def dict_to_tuple(inputs: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, ...]:
-        dtype = inputs["positions"].dtype
-        device = inputs["positions"].device
-
-        tensors = [inputs[k] for k in _GRAPH_FIELDS]
-
-        for k in _OPTIONAL_GRAPH_FIELDS:
-            if k in inputs:
-                tensors.append(inputs[k])
-            else:
-                tensors.append(torch.zeros((), device=device, dtype=dtype))
-
+        dtype, device = inputs["positions"].dtype, inputs["positions"].device
+        tensors = [inputs[key] for key in _GRAPH_FIELDS]
+        tensors.extend(
+            inputs[key] if key in inputs else torch.zeros((), device=device, dtype=dtype)
+            for key in _OPTIONAL_GRAPH_FIELDS
+        )
         return tuple(tensors)
 
     @staticmethod
     def tuple_to_dict(inputs: Tuple[torch.Tensor, ...]) -> Dict[str, torch.Tensor]:
-        outputs: Dict[str, torch.Tensor] = {}
-
-        for i, k in enumerate(_GRAPH_FIELDS):
-            outputs[k] = inputs[i]
-
+        outputs = {key: inputs[i] for i, key in enumerate(_GRAPH_FIELDS)}
         offset = len(_GRAPH_FIELDS)
 
-        for i, k in enumerate(_OPTIONAL_GRAPH_FIELDS):
+        for i, key in enumerate(_OPTIONAL_GRAPH_FIELDS):
             tensor = inputs[offset + i]
             if tensor.ndim != 0:
-                outputs[k] = tensor
+                outputs[key] = tensor
 
         return outputs
 
@@ -371,170 +280,114 @@ class _AOTExporter:
     """
 
     def __init__(
-        self,
-        model: torch.nn.Module,
+        self, model: torch.nn.Module,
         example_inputs: Union[torch_geometric.data.Data, Dict[str, Any], List[Any]],
-        config: _AOTConfig,
+        file_name: str = "model.pt2", calculate_gradients: bool = True,
+        k_bias_options: Optional[Dict[str, Any]] = None,
+        model_summary_level: int = 3, run_check: bool = False,
     ):
         self.model = model
+        self.graph_model = _get_graph_model(model)
         self.example_inputs = example_inputs
-        self.config = config
-
-        self.k_bias_options = self._normalize_k_bias_options(
-            model,
-            config.k_bias_options,
-        )
-
-        # Kolmogorov-bias export is enabled whenever k_bias_options is provided.
-        self.calculate_k_bias = config.k_bias_options is not None
+        self.file_name = file_name
+        self.calculate_gradients = calculate_gradients
+        self.model_summary_level = model_summary_level
+        self.run_check = run_check
+        self.k_bias_options = self._normalize_k_bias_options(model, k_bias_options)
+        self.calculate_k_bias = k_bias_options is not None
 
     @staticmethod
     def _normalize_k_bias_options(
-        model,
-        k_bias_options: Optional[Dict[str, Any]] = None,
+        model, k_bias_options: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         try:
             dtype = next(model.parameters()).dtype
         except StopIteration:
             dtype = torch.get_default_dtype()
 
-        results = {
+        options = {
             "epsilon": 1e-14 if dtype == torch.float64 else 1e-7,
             "lambd": 1.0,
             "beta": 1.0,
         }
 
-        if not k_bias_options:
-            return results
+        if k_bias_options:
+            unknown = set(k_bias_options) - set(options)
+            if unknown:
+                raise ValueError(f"Unknown k_bias_options key: {sorted(unknown)[0]}")
+            options.update({key: float(value) for key, value in k_bias_options.items()})
 
-        for k, v in k_bias_options.items():
-            if k == "epsilon":
-                results["epsilon"] = float(v)
-            elif k == "lambd":
-                results["lambd"] = float(v)
-            elif k == "beta":
-                results["beta"] = float(v)
-            else:
-                raise ValueError(f"Unknown k_bias_options key: {k}")
-
-        if results["beta"] <= 0:
+        if options["beta"] <= 0:
             raise ValueError("k_bias_options['beta'] must be positive.")
 
-        return results
-
-    def _prepare_example_inputs(self) -> Tuple[torch.Tensor, ...]:
-        return GraphAdapter.data_to_tuple(
-            self.example_inputs,
-            self.model.device,
-        )
+        return options
 
     def _build_model_summary(
-        self,
-        model_name: str,
-        module: torch.nn.Module,
-        level_max: int,
-        level: int,
+        self, model_name: str, module: torch.nn.Module,
+        level_max: int, level: int,
     ) -> str:
-        result = "  " * (level + 1) + "(" + model_name + "): "
+        indent = "  " * (level + 1)
+        model_type = module.__class__.__name__
+        result = f"{indent}({model_name}): " + (
+            str(module) if model_type in ("Linear", "TICA") else model_type
+        )
 
-        model_type = str(module.__class__.__name__)
-        if model_type in ["Linear", "TICA"]:
-            result = result + str(module)
-        else:
-            result = result + model_type
+        children = list(module.named_children())
+        if not children:
+            return result + "\n"
+        if level > level_max:
+            return result + " { ... }\n"
 
-        if len(list(module.named_children())) != 0:
-            if level <= level_max:
-                result = result + " {\n"
-                for s in module.named_children():
-                    result = result + self._build_model_summary(
-                        s[0], s[1], level_max, level + 1
-                    )
-                result = result + "  " * (level + 1) + "}\n"
-            else:
-                result = result + " { ... }\n"
-        else:
-            result = result + "\n"
+        result += " {\n"
+        for name, child in children:
+            result += self._build_model_summary(name, child, level_max, level + 1)
 
-        return result
+        return result + indent + "}\n"
 
     def _build_model_metadata(self) -> Dict[str, str]:
-        if isinstance(self.model, BaseGNN):
-            graph_model = self.model
-            n_cvs = int(self.model.n_out)
-        elif getattr(
-            getattr(self.model, "preprocessing", None),
-            "input_kind",
-            None,
-        ) == "graph":
-            graph_model = self.model.preprocessing
-            n_cvs = int(self.model.n_cvs)
-        elif isinstance(getattr(self.model, "nn", None), BaseGNN):
-            graph_model = self.model.nn
-            n_cvs = int(self.model.n_cvs)
-        else:
-            raise TypeError(
-                "AOT export requires a graph-based model or preprocessing."
-            )
+        graph_model = self.graph_model
+        n_cvs = (
+            int(self.model.n_out)
+            if isinstance(self.model, BaseGNN)
+            else int(self.model.n_cvs)
+        )
 
         if self.calculate_k_bias and n_cvs != 1:
-            raise ValueError(
-                "Kolmogorov-bias export requires a single-CV model."
-            )
+            raise ValueError("Kolmogorov-bias export requires a single-CV model.")
 
         n_outputs = 2 if self.calculate_k_bias else n_cvs
-
         metadata = {
             "aot_format_version": str(_AOT_FORMAT_VERSION),
             "n_cvs": str(n_cvs),
             "n_outputs": str(n_outputs),
             "cutoff": str(graph_model.cutoff.item()),
             "buffer": str(graph_model.buffer.item()),
-            "long_range_cutoff": str(
-                graph_model.long_range_cutoff.item()
-            ),
+            "long_range_cutoff": str(graph_model.long_range_cutoff.item()),
             "n_atom_types": str(len(graph_model.atomic_numbers)),
             "float_dtype": str(self.model.dtype)[-2:],
-            "calculate_gradients": str(
-                self.config.calculate_gradients
-            ),
+            "calculate_gradients": str(self.calculate_gradients),
             "calculate_k_bias": str(self.calculate_k_bias),
             "model_type": "gnn",
         }
 
-        for i in range(len(graph_model.atomic_numbers)):
-            metadata[f"atomic_number_{i:d}"] = str(
-                graph_model.atomic_numbers[i].item()
-            )
+        for i, atomic_number in enumerate(graph_model.atomic_numbers):
+            metadata[f"atomic_number_{i}"] = str(atomic_number.item())
 
         metadata["model_summary"] = self._build_model_summary(
-            "CV",
-            self.model,
-            self.config.model_summary_level,
-            0,
+            "CV", self.model, self.model_summary_level, 0
         )
-
         metadata["n_parameters"] = str(
-            sum(p.numel() for p in self.model.parameters())
+            sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         )
-
-        for k, v in self.k_bias_options.items():
-            metadata[k] = str(v)
+        metadata.update({key: str(value) for key, value in self.k_bias_options.items()})
 
         return metadata
 
     @staticmethod
-    def _update_package_metadata(
-        file_name: str,
-        data: Dict[str, str],
-    ) -> None:
+    def _update_package_metadata(file_name: str, data: Dict[str, str]) -> None:
         file_path = os.path.abspath(file_name)
         directory = os.path.dirname(file_path)
-
-        fd, tmp_path = tempfile.mkstemp(
-            dir=directory,
-            suffix=".pt2",
-        )
+        fd, tmp_path = tempfile.mkstemp(dir=directory, suffix=".pt2")
         os.close(fd)
 
         try:
@@ -543,18 +396,14 @@ class _AOTExporter:
                 zipfile.ZipFile(tmp_path, "w") as fout,
             ):
                 for item in fin.infolist():
+                    content = fin.read(item.filename)
+
                     if "metadata" in item.filename:
-                        metadata = json.loads(fin.read(item.filename))
+                        metadata = json.loads(content)
                         metadata.update(data)
-                        fout.writestr(
-                            item,
-                            json.dumps(metadata),
-                        )
-                    else:
-                        fout.writestr(
-                            item,
-                            fin.read(item.filename),
-                        )
+                        content = json.dumps(metadata)
+
+                    fout.writestr(item, content)
 
             os.replace(tmp_path, file_path)
 
@@ -564,18 +413,18 @@ class _AOTExporter:
 
     def _check_aggr_modules(self) -> None:
         model_summary = self._build_model_summary("", self.model, 100, 0)
+
         for name in _EXCLUDED_AGGR_MODULES:
             if name in model_summary:
-                message = (
-                    "Aggregation modules {} cannot be correctly exported on some "
-                    + "machines, and your input model contains the {} module!"
+                raise RuntimeError(
+                    f"Aggregation modules {_EXCLUDED_AGGR_MODULES} cannot be "
+                    f"correctly exported on some machines, and your input model "
+                    f"contains the {name} module!"
                 )
-                raise RuntimeError(message.format(_EXCLUDED_AGGR_MODULES, name))
 
     @staticmethod
     def _check_exported_model_outputs(
-        file_name: str,
-        model: torch.nn.Module,
+        file_name: str, model: torch.nn.Module,
         example_inputs: Tuple[torch.Tensor, ...],
     ) -> None:
         print("Export precision check:")
@@ -586,17 +435,14 @@ class _AOTExporter:
             elif dtype == "64":
                 tol = float(os.environ.get("MLCOLVAR_EXPORT_FLOAT_TOL", "1E-12"))
             else:
-                raise RuntimeError("Unknown dtype " + dtype)
+                raise RuntimeError(f"Unknown dtype {dtype}")
 
             if x > tol:
                 raise RuntimeError(
-                    "Maximum absolute error ({:e}) of {:s} is larger than ".format(
-                        x, prefix
-                    )
-                    + "{:e} for a float{:s} model!".format(tol, dtype)
+                    f"Maximum absolute error ({x:e}) of {prefix} is larger than "
+                    f"{tol:e} for a float{dtype} model!"
                 )
-            else:
-                print("  Maximum absolute error of {:s}: {:e}".format(prefix, x))
+            print(f"  Maximum absolute error of {prefix}: {x:e}")
 
         aot_model = torch._inductor.aoti_load_package(file_name)
         metadata = aot_model.get_metadata()
@@ -604,9 +450,7 @@ class _AOTExporter:
         float_dtype = metadata["float_dtype"]
         calculate_gradients = metadata["calculate_gradients"] in ("True", "1", True)
         calculate_k_bias = metadata.get("calculate_k_bias", "False") in (
-            "True",
-            "1",
-            True,
+            "True", "1", True
         )
         n_outputs = int(metadata["n_outputs"])
 
@@ -614,47 +458,40 @@ class _AOTExporter:
         aot_model_outputs = aot_model(example_inputs)
 
         delta = model_outputs[0] - aot_model_outputs[0]
-        max_abs_error = delta.abs().max().item()
-        check_max_abs_error(max_abs_error, float_dtype, "CV values")
+        check_max_abs_error(delta.abs().max().item(), float_dtype, "CV values")
 
         if calculate_gradients:
             for i in range(n_outputs):
-                delta_i = model_outputs[1][i] - aot_model_outputs[1][i]
-                max_abs_error = delta_i.abs().max().item()
+                delta = model_outputs[1][i] - aot_model_outputs[1][i]
                 check_max_abs_error(
-                    max_abs_error,
-                    float_dtype,
-                    "CV gradients {:d}".format(i),
+                    delta.abs().max().item(), float_dtype, f"CV gradients {i}"
                 )
 
         if calculate_k_bias:
-            delta_k = model_outputs[2] - aot_model_outputs[2]
-            max_abs_error = delta_k.abs().max().item()
-            check_max_abs_error(max_abs_error, float_dtype, "KBias")
+            delta = model_outputs[2] - aot_model_outputs[2]
+            check_max_abs_error(delta.abs().max().item(), float_dtype, "KBias")
 
-            delta_k_grad = model_outputs[3][0] - aot_model_outputs[3][0]
-            max_abs_error = delta_k_grad.abs().max().item()
-            check_max_abs_error(max_abs_error, float_dtype, "KBias gradients")
+            delta = model_outputs[3][0] - aot_model_outputs[3][0]
+            check_max_abs_error(
+                delta.abs().max().item(), float_dtype, "KBias gradients"
+            )
 
     @contextmanager
     def _patched_graph_ops(self):
-        scatter_sum = _code.scatter_sum
-        scatter_mean = _code.scatter_mean
-
-        _code.scatter_sum = _scatter_sum_static
-        _code.scatter_mean = _scatter_mean_static
+        scatter_sum, scatter_mean = _code.scatter_sum, _code.scatter_mean
+        _code.scatter_sum, _code.scatter_mean = _scatter_sum_static, _scatter_mean_static
 
         try:
             yield
         finally:
-            _code.scatter_sum = scatter_sum
-            _code.scatter_mean = scatter_mean
+            _code.scatter_sum, _code.scatter_mean = scatter_sum, scatter_mean
 
     @contextmanager
     def _exporting_flag(self):
         had_attr = hasattr(self.model, "_exporting")
         old_value = getattr(self.model, "_exporting", False)
         self.model._exporting = True
+
         try:
             yield
         finally:
@@ -663,56 +500,34 @@ class _AOTExporter:
             else:
                 delattr(self.model, "_exporting")
 
-    def _wrap_model(self) -> _AOTWrapper:
-        return _AOTWrapper(
-            self.model,
-            calculate_gradients=self.config.calculate_gradients,
-            calculate_k_bias=self.calculate_k_bias,
-            **self.k_bias_options,
-        )
-
     def _compile_and_package(
-        self,
-        wrapped_model: _AOTWrapper,
-        inputs: Tuple[torch.Tensor, ...],
-        metadata: Dict[str, str],
+        self, wrapped_model: _AOTWrapper,
+        inputs: Tuple[torch.Tensor, ...], metadata: Dict[str, str],
     ) -> str:
         # Taken from: https://depyf.readthedocs.io/en/latest/walk_through.html
         def forward_and_backward(_inputs, _kwargs=None):
             return wrapped_model(_inputs, False)
 
         wrapped = make_fx(
-            forward_and_backward,
-            tracing_mode="symbolic",
-            _allow_non_fake_inputs=True,
+            forward_and_backward, tracing_mode="symbolic", _allow_non_fake_inputs=True
         )
         graph = wrapped(inputs, {})
 
         aot_files = torch._inductor.aot_compile(
-            graph,
-            inputs,
-            options={"aot_inductor.package": True},
+            graph, inputs, options={"aot_inductor.package": True}
         )
 
-        file_name = self.config.file_name
+        file_name = self.file_name
         if not file_name.endswith(".pt2"):
             tmp = os.path.splitext(file_name)[0] + ".pt2"
             warnings.warn(f'renamed file name "{file_name}" to "{tmp}"!')
             file_name = tmp
 
-        output_path = torch._inductor.package.package_aoti(
-            file_name,
-            aot_files,
-        )
-
+        output_path = torch._inductor.package.package_aoti(file_name, aot_files)
         self._update_package_metadata(file_name, metadata)
 
-        if self.config.run_check:
-            self._check_exported_model_outputs(
-                file_name=file_name,
-                model=wrapped_model,
-                example_inputs=inputs,
-            )
+        if self.run_check:
+            self._check_exported_model_outputs(file_name, wrapped_model, inputs)
 
         return output_path
 
@@ -721,16 +536,17 @@ class _AOTExporter:
         torch._dynamo.allow_in_graph(torch.autograd.grad)
         torch._dynamo.allow_in_graph(torch.autograd.functional.jacobian)
 
-        inputs = self._prepare_example_inputs()
+        inputs = GraphAdapter.data_to_tuple(self.example_inputs, self.model.device)
         metadata = self._build_model_metadata()
-        wrapped_model = self._wrap_model()
+        wrapped_model = _AOTWrapper(
+            self.model,
+            calculate_gradients=self.calculate_gradients,
+            calculate_k_bias=self.calculate_k_bias,
+            **self.k_bias_options,
+        )
 
         with self._exporting_flag(), self._patched_graph_ops():
-            return self._compile_and_package(
-                wrapped_model=wrapped_model,
-                inputs=inputs,
-                metadata=metadata,
-            )
+            return self._compile_and_package(wrapped_model, inputs, metadata)
 
 
 def export(
@@ -749,7 +565,8 @@ def export(
     ----------
     model : torch.nn.Module
         Graph-based model to compile. Graph inputs may be handled directly by
-        a ``BaseGNN`` model or by a graph representation used as preprocessing.
+        a ``BaseGNN`` model, by a ``BaseGNN`` stored in ``model.nn``, or by a
+        graph representation used as preprocessing.
     example_inputs : torch_geometric.data.Data or dict or list
         Example graph input used to trace and compile the model.
     file_name : str, optional
@@ -845,35 +662,16 @@ def export(
             },
         )
     """
-    is_graph = (
-        isinstance(model, BaseGNN)
-        or isinstance(getattr(model, "nn", None), BaseGNN)
-        or getattr(
-            getattr(model, "preprocessing", None),
-            "input_kind",
-            None,
-        )
-        == "graph"
-    )
 
-    if not is_graph:
-        raise TypeError(
-            "AOT compilation currently supports only graph-based models."
-        )
-
-    exporter = _AOTExporter(
+    return _AOTExporter(
         model=model,
         example_inputs=example_inputs,
-        config=_AOTConfig(
-            file_name=file_name,
-            calculate_gradients=calculate_gradients,
-            k_bias_options=k_bias_options,
-            model_summary_level=model_summary_level,
-            run_check=run_check,
-        ),
-    )
-
-    return exporter.export()
+        file_name=file_name,
+        calculate_gradients=calculate_gradients,
+        k_bias_options=k_bias_options,
+        model_summary_level=model_summary_level,
+        run_check=run_check,
+    ).export()
 
 
 def load(
