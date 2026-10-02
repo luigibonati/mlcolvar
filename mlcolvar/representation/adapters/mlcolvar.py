@@ -5,31 +5,38 @@ from torch import nn
 
 from mlcolvar.core import BaseGNN
 
-from ..base import GraphRepresentation, Representation, VectorRepresentation
 from .._utils import as_positive_int, module_reference_tensor
+from ..base import GraphRepresentation, Representation, VectorRepresentation
 from ._utils import to_float, to_int_list
-
 
 __all__ = ["MLColvarRepresentation"]
 
 
-def _infer_model_output_dimension(model: nn.Module) -> int:
-    """Infer the latent output dimension of an mlcolvar model."""
-    internal = getattr(model, "nn", model)
+def _latent_encoder(model: nn.Module) -> nn.Module:
+    """Return the latent encoder exposed as ``model.nn``."""
+    encoder = getattr(model, "nn", None)
+    if encoder is None:
+        raise TypeError(
+            f"{model.__class__.__name__} does not expose an `.nn` latent encoder."
+        )
+    return encoder
 
+
+def _infer_output_dimension(encoder: nn.Module) -> int:
+    """Infer the latent representation dimension from an encoder."""
     for name in ("out_features", "n_out"):
-        value = getattr(internal, name, None)
+        value = getattr(encoder, name, None)
         if value is not None:
             return as_positive_int(value, name)
 
     raise ValueError(
         "Cannot infer the representation dimension from "
-        f"{model.__class__.__name__}; pass `out_features` explicitly."
+        f"{encoder.__class__.__name__}; pass `out_features` explicitly."
     )
 
 
 class _FrozenModelMixin:
-    """Shared utilities for wrapping pretrained mlcolvar models."""
+    """Utilities shared by pretrained mlcolvar representations."""
 
     def _init_model(self, model: nn.Module) -> None:
         self.model = model
@@ -63,58 +70,30 @@ class _VectorMLColvarRepresentation(
     _FrozenModelMixin,
     VectorRepresentation,
 ):
-    """Adapt a vector-based mlcolvar model as a representation.
-
-    The adapter can expose the latent encoder, ``forward_cv`` output, or
-    complete model output according to ``mode``.
-    """
-
-    __constants__ = ["mode"]
+    """Adapt the latent encoder of a vector-based mlcolvar model."""
 
     def __init__(
         self,
         model: nn.Module,
         *,
-        mode: str,
         out_features: Optional[int],
         freeze: bool,
     ) -> None:
+        encoder = _latent_encoder(model)
+
+        if isinstance(encoder, BaseGNN):
+            raise TypeError(f"{model.__class__.__name__} is graph-based.")
+
         if getattr(model, "in_features", None) is None:
             raise TypeError(
-                f"{model.__class__.__name__} is graph-based."
+                f"{model.__class__.__name__} does not expose vector input features."
             )
 
-        if mode == "latent":
-            if getattr(model, "nn", None) is None:
-                raise TypeError(
-                    f"{model.__class__.__name__} does not expose "
-                    "an `.nn` latent encoder."
-                )
-            resolved_out = (
-                _infer_model_output_dimension(model)
-                if out_features is None
-                else as_positive_int(
-                    out_features,
-                    "out_features",
-                )
-            )
-        else:
-            if out_features is not None:
-                raise ValueError(
-                    "`out_features` is only valid with mode='latent'."
-                )
-            if mode == "forward" and not hasattr(
-                model,
-                "forward_cv",
-            ):
-                raise TypeError(
-                    f"{model.__class__.__name__} does not implement "
-                    "`forward_cv()`."
-                )
-            resolved_out = as_positive_int(
-                model.out_features,
-                "model.out_features",
-            )
+        resolved_out = (
+            _infer_output_dimension(encoder)
+            if out_features is None
+            else as_positive_int(out_features, "out_features")
+        )
 
         VectorRepresentation.__init__(
             self,
@@ -126,8 +105,6 @@ class _VectorMLColvarRepresentation(
             output_kind="system",
             freeze=freeze,
         )
-
-        self.mode = mode
         self._init_model(model)
 
     def forward(
@@ -135,10 +112,10 @@ class _VectorMLColvarRepresentation(
         x: torch.Tensor,
         cell: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
+        """Evaluate the pretrained latent representation."""
         if x.ndim < 2:
-            raise ValueError(
-                "`x` must include a batch dimension."
-            )
+            raise ValueError("`x` must include a batch dimension.")
+
         if x.shape[-1] != self.in_features:
             raise ValueError(
                 f"Expected {self.in_features} input features, "
@@ -149,46 +126,20 @@ class _VectorMLColvarRepresentation(
         if cell is not None:
             cell = cell.to(self._model_reference)
 
-        if self.mode == "output":
-            return (
-                self.model(x)
-                if cell is None
-                else self.model(
-                    x,
-                    cell=cell,
-                )
-            )
+        x = self._apply_preprocessing(x, cell)
 
-        x = self._apply_preprocessing(
-            x,
-            cell,
-        )
-
-        if self.mode == "forward":
-            return self.model.forward_cv(x)
-
-        norm_in = getattr(
-            self.model,
-            "norm_in",
-            None,
-        )
+        norm_in = getattr(self.model, "norm_in", None)
         if norm_in is not None:
             x = norm_in(x)
 
-        return self._validate_output(
-            self.model.nn(x)
-        )
+        return self._validate_output(self.model.nn(x))
 
 
 class _GraphMLColvarRepresentation(
     _FrozenModelMixin,
     GraphRepresentation,
 ):
-    """Adapt a graph-based mlcolvar model as a representation.
-
-    The wrapped ``BaseGNN`` is used as the latent encoder while preserving
-    its graph metadata and pooling configuration.
-    """
+    """Adapt the latent encoder of a graph-based mlcolvar model."""
 
     def __init__(
         self,
@@ -197,34 +148,18 @@ class _GraphMLColvarRepresentation(
         out_features: Optional[int],
         freeze: bool,
     ) -> None:
-        encoder = getattr(
-            model,
-            "nn",
-            None,
-        )
+        encoder = _latent_encoder(model)
 
-        if not isinstance(
-            encoder,
-            BaseGNN,
-        ):
+        if not isinstance(encoder, BaseGNN):
             raise TypeError(
                 f"{model.__class__.__name__} is not graph-based: "
                 "expected `.nn` to be BaseGNN."
             )
 
-        pooling_operation = getattr(
-            encoder,
-            "pooling_operation",
-            None,
-        )
-
-        resolved_out = as_positive_int(
-            encoder.out_features
+        resolved_out = (
+            _infer_output_dimension(encoder)
             if out_features is None
-            else out_features,
-            "encoder.out_features"
-            if out_features is None
-            else "out_features",
+            else as_positive_int(out_features, "out_features")
         )
 
         GraphRepresentation.__init__(
@@ -238,7 +173,11 @@ class _GraphMLColvarRepresentation(
                 encoder.cutoff,
                 name="encoder.cutoff",
             ),
-            pooling_operation=pooling_operation,
+            pooling_operation=getattr(
+                encoder,
+                "pooling_operation",
+                None,
+            ),
             buffer=to_float(
                 encoder.buffer,
                 name="encoder.buffer",
@@ -250,14 +189,13 @@ class _GraphMLColvarRepresentation(
             full_neighbor_list=True,
             freeze=freeze,
         )
-
         self._init_model(model)
 
     def _cast_graph(
         self,
         data: Dict[str, torch.Tensor],
     ) -> Dict[str, torch.Tensor]:
-        """Move graph tensors to the wrapped model dtype and device."""
+        """Move graph tensors to the wrapped model device and dtype."""
         output: Dict[str, torch.Tensor] = {}
 
         for key, value in data.items():
@@ -266,11 +204,8 @@ class _GraphMLColvarRepresentation(
 
             output[key] = (
                 value.to(self._model_reference)
-                if value.is_floating_point()
-                or value.is_complex()
-                else value.to(
-                    self._model_reference.device
-                )
+                if value.is_floating_point() or value.is_complex()
+                else value.to(self._model_reference.device)
             )
 
         return output
@@ -280,102 +215,64 @@ class _GraphMLColvarRepresentation(
         data: Dict[str, torch.Tensor],
         cell: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
+        """Evaluate the pretrained graph representation."""
         data = self._cast_graph(data)
 
         if cell is not None:
-            cell = cell.to(
-                self._model_reference
-            )
+            cell = cell.to(self._model_reference)
 
-        data = self._apply_preprocessing(
-            data,
-            cell,
-        )
+        data = self._apply_preprocessing(data, cell)
 
-        if getattr(
-            self.model,
-            "norm_in",
-            None,
-        ) is not None:
+        if getattr(self.model, "norm_in", None) is not None:
             raise ValueError(
                 "Input normalization cannot be applied "
                 "directly to graph dictionaries."
             )
 
-        return self._validate_output(
-            self.model.nn(data)
-        )
+        return self._validate_output(self.model.nn(data))
 
 
 def MLColvarRepresentation(
     model: nn.Module,
     *,
-    mode: str = "latent",
     out_features: Optional[int] = None,
     freeze: bool = True,
 ) -> Representation:
-    """Wrap a pretrained mlcolvar model as a reusable representation.
+    """Wrap the latent encoder of a pretrained mlcolvar model.
+
+    The representation includes any preprocessing and input normalization
+    applied before ``model.nn``, while excluding downstream task-specific
+    blocks and postprocessing.
 
     Parameters
     ----------
     model : torch.nn.Module
-        Pretrained mlcolvar model to adapt.
-    mode : {"latent", "forward", "output"}, default="latent"
-        Representation output to expose. ``"latent"`` uses ``model.nn``,
-        ``"forward"`` uses ``model.forward_cv()``, and ``"output"`` uses
-        the complete model forward pass. Graph-based models support only
-        ``"latent"``.
+        Pretrained mlcolvar model exposing its latent encoder as ``model.nn``.
     out_features : int, optional
-        Output dimension override for ``mode="latent"``. If not provided,
-        it is inferred from the latent encoder.
+        Latent representation dimension. If not provided, it is inferred from
+        the encoder.
     freeze : bool, default=True
-        If True, freeze the pretrained model parameters and keep the model
-        in evaluation mode.
+        If True, freeze the pretrained model parameters and keep the wrapped
+        model in evaluation mode.
 
     Returns
     -------
     Representation
-        Vector or graph representation matching the wrapped model.
+        Vector or graph representation matching the pretrained model.
 
     Raises
     ------
     TypeError
-        If ``model`` is not a ``torch.nn.Module`` or is incompatible with
-        the selected representation type.
+        If ``model`` is not a module or does not expose a valid latent encoder.
     ValueError
-        If ``mode`` is invalid, the output dimension cannot be inferred, or
-        an unsupported mode is requested for a graph-based model.
+        If the latent representation dimension cannot be inferred.
     """
-    if not isinstance(
-        model,
-        nn.Module,
-    ):
-        raise TypeError(
-            "`model` must be a torch.nn.Module."
-        )
+    if not isinstance(model, nn.Module):
+        raise TypeError("`model` must be a torch.nn.Module.")
 
-    mode = mode.lower()
-    if mode not in {
-        "latent",
-        "output",
-        "forward",
-    }:
-        raise ValueError(
-            "`mode` must be 'latent', 'output', or 'forward'."
-        )
+    encoder = _latent_encoder(model)
 
-    if isinstance(
-        getattr(
-            model,
-            "nn",
-            None,
-        ),
-        BaseGNN,
-    ):
-        if mode != "latent":
-            raise ValueError(
-                "Graph-based pretrained CVs support only mode='latent'."
-            )
+    if isinstance(encoder, BaseGNN):
         return _GraphMLColvarRepresentation(
             model=model,
             out_features=out_features,
@@ -384,7 +281,6 @@ def MLColvarRepresentation(
 
     return _VectorMLColvarRepresentation(
         model=model,
-        mode=mode,
         out_features=out_features,
         freeze=freeze,
     )

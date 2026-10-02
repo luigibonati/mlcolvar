@@ -1,8 +1,6 @@
 import torch
-from torch import nn
 from torch_geometric.data import Data
 
-from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
 from mlcolvar.data import DictDataset
 from mlcolvar.representation import (
     GraphRepresentation,
@@ -40,16 +38,6 @@ class DummyGraphRepresentation(GraphRepresentation):
         )
 
 
-class DummyDescriptorDerivatives(SmartDerivatives):
-    """Treat vector descriptors as coordinates of a single atom."""
-
-    def __init__(self):
-        nn.Module.__init__(self)
-
-    def forward(self, gradient_descriptor, ref_idx=None):
-        return gradient_descriptor.unsqueeze(1)
-
-
 def test_vector_committor_cache():
     dataset = DictDataset({
         "data": torch.tensor([
@@ -66,7 +54,6 @@ def test_vector_committor_cache():
     cached, derivatives = precompute_committor_cache(
         DummyVectorRepresentation(),
         dataset,
-        descriptor_derivatives=DummyDescriptorDerivatives(),
     )
 
     torch.testing.assert_close(
@@ -75,7 +62,10 @@ def test_vector_committor_cache():
     )
     torch.testing.assert_close(
         cached["ref_idx"],
-        torch.tensor([-1, 0, -1, 1], dtype=torch.int),
+        torch.tensor(
+            [-1, 0, -1, 1],
+            dtype=cached["ref_idx"].dtype,
+        ),
     )
 
     gradient = derivatives(
@@ -83,7 +73,7 @@ def test_vector_committor_cache():
         torch.tensor([0, 1]),
     )
 
-    assert gradient.shape == (2, 1, 2)
+    assert gradient.shape == (2, 2)
 
 
 def test_graph_committor_cache():
@@ -131,7 +121,10 @@ def test_graph_committor_cache():
     )
     torch.testing.assert_close(
         cached["ref_idx"],
-        torch.tensor([0, 1], dtype=torch.int),
+        torch.tensor(
+            [0, 1],
+            dtype=cached["ref_idx"].dtype,
+        ),
     )
 
     gradient = derivatives(

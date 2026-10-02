@@ -1,6 +1,5 @@
 from typing import Optional
 
-import pytest
 import torch
 from torch import nn
 
@@ -93,41 +92,34 @@ def make_input() -> torch.Tensor:
 
 
 def make_representation(
-    mode: str = "latent",
     freeze: bool = True,
 ) -> VectorRepresentation:
     return MLColvarRepresentation(
         DummyDescriptorCV(),
-        mode=mode,
         freeze=freeze,
     )
 
 
-@pytest.mark.parametrize(
-    ("mode", "out_features"),
-    [
-        ("latent", 2),
-        ("forward", 1),
-        ("output", 1),
-    ],
-)
-def test_vector_modes(
-    mode,
-    out_features,
-) -> None:
-    representation = make_representation(
-        mode=mode
-    )
+def test_vector_representation() -> None:
+    representation = make_representation()
 
     output = representation(
         make_input(),
         cell=torch.tensor(0.5),
     )
 
+    torch.testing.assert_close(
+        output,
+        torch.tensor([
+            [5.0, 14.0],
+            [7.0, 7.0],
+        ]),
+    )
+
     assert representation.input_kind == "vector"
     assert representation.in_features == 3
-    assert representation.out_features == out_features
-    assert output.shape == (2, out_features)
+    assert representation.out_features == 2
+    assert output.shape == (2, 2)
 
 
 def test_vector_freeze_and_gradients() -> None:
@@ -135,7 +127,6 @@ def test_vector_freeze_and_gradients() -> None:
 
     representation = MLColvarRepresentation(
         pretrained,
-        mode="latent",
         freeze=True,
     )
 
@@ -172,7 +163,6 @@ def test_vector_representation_preprocessing() -> None:
 
     representation = MLColvarRepresentation(
         pretrained,
-        mode="latent",
         freeze=True,
     )
 

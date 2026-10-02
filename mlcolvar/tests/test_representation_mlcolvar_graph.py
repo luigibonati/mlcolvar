@@ -106,7 +106,6 @@ def make_representation(
         DummyGraphCV(
             pooling_operation=pooling_operation
         ),
-        mode="latent",
         freeze=True,
     )
 
@@ -173,7 +172,6 @@ def test_graph_representation_gradients() -> None:
 
     representation = MLColvarRepresentation(
         pretrained,
-        mode="latent",
         freeze=True,
     )
 
