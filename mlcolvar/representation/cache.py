@@ -14,6 +14,7 @@ from .base import Representation
 
 __all__ = [
     "RepresentationCache",
+    "IdentityDescriptorDerivatives",
     "CachedRepresentationDerivatives",
     "precompute_representation_cache",
 ]
@@ -52,6 +53,38 @@ class CachedRepresentationDerivatives(SmartDerivatives):
             "bl,b...l->b...",
             gradient_latent,
             jacobian,
+        )
+        
+
+class IdentityDescriptorDerivatives(nn.Module):
+    """Treat input descriptors as Cartesian coordinates."""
+
+    def __init__(
+        self,
+        n_atoms: int,
+        n_dim: int,
+    ) -> None:
+        super().__init__()
+        self.n_atoms = int(n_atoms)
+        self.n_dim = int(n_dim)
+
+    def forward(
+        self,
+        gradient_descriptor: torch.Tensor,
+        ref_idx=None,
+    ) -> torch.Tensor:
+        expected = self.n_atoms * self.n_dim
+
+        if gradient_descriptor.shape[-1] != expected:
+            raise ValueError(
+                f"Expected {expected} Cartesian descriptors, "
+                f"found {gradient_descriptor.shape[-1]}."
+            )
+
+        return gradient_descriptor.reshape(
+            gradient_descriptor.shape[0],
+            self.n_atoms,
+            self.n_dim,
         )
 
 
