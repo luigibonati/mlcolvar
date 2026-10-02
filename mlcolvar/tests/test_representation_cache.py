@@ -11,7 +11,6 @@ from mlcolvar.representation import (
     GraphRepresentation,
     VectorRepresentation,
 )
-from mlcolvar.representation.cache import CachedRepresentationDerivatives
 
 
 class DummyVectorRepresentation(VectorRepresentation):
@@ -159,7 +158,7 @@ def test_representation_cache():
     assert cache.jacobian is None
 
 
-def test_coordinate_jacobian_cache_and_derivatives():
+def test_vector_jacobian_cache():
     cache = DummyVectorRepresentation().cache(
         make_dataset(),
         jacobian=True,
@@ -176,14 +175,3 @@ def test_coordinate_jacobian_cache_and_derivatives():
         cache.reference_indices,
         torch.tensor([-1, 0, -1, 1]),
     )
-
-    derivatives = CachedRepresentationDerivatives(
-        cache.jacobian
-    )
-
-    output = derivatives(
-        torch.ones(2, 2),
-        torch.tensor([0, 1]),
-    )
-
-    assert output.shape == (2, 3)

@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from typing import Optional
 
 import torch
-from torch import nn
 from torch_geometric.loader import DataLoader as GraphDataLoader
 
 from mlcolvar.data import DictDataset
@@ -13,7 +12,6 @@ from .base import Representation
 
 __all__ = [
     "RepresentationCache",
-    "CachedRepresentationDerivatives",
     "precompute_representation_cache",
 ]
 
@@ -25,32 +23,6 @@ class RepresentationCache:
     features: torch.Tensor
     jacobian: Optional[torch.Tensor] = None
     reference_indices: Optional[torch.Tensor] = None
-
-
-class CachedRepresentationDerivatives(nn.Module):
-    """Apply cached representation Jacobians through the chain rule."""
-
-    def __init__(self, jacobian: torch.Tensor) -> None:
-        super().__init__()
-        self.register_buffer("jacobian", jacobian, persistent=False)
-
-    def forward(
-        self,
-        gradient_latent: torch.Tensor,
-        ref_idx: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
-        if ref_idx is None:
-            raise ValueError("`ref_idx` is required.")
-
-        ref_idx = ref_idx.reshape(-1).to(self.jacobian.device, dtype=torch.long)
-        if torch.any(ref_idx < 0) or torch.any(ref_idx >= len(self.jacobian)):
-            raise IndexError("Invalid cached derivative index.")
-
-        jacobian = self.jacobian[ref_idx].to(
-            device=gradient_latent.device,
-            dtype=gradient_latent.dtype,
-        )
-        return torch.einsum("bl,b...l->b...", gradient_latent, jacobian)
 
 
 def _indices(n, indices=None):
@@ -99,15 +71,13 @@ def _cache_vector(
     representation,
     dataset,
     *,
-    descriptor_derivatives,
     jacobian_indices,
-    source_ref_idx,
     batch_size,
     device,
     output_device,
     compute_jacobian,
 ):
-    """Cache features and optional Jacobians for vector inputs."""
+    """Cache vector representation outputs and optional input Jacobians."""
     if "data" not in dataset.keys:
         raise KeyError("Vector caching requires `data`.")
 
@@ -133,23 +103,6 @@ def _cache_vector(
         if selected.numel() == 0:
             raise ValueError("No samples selected for Jacobian caching.")
 
-        if descriptor_derivatives is None:
-            if source_ref_idx is not None:
-                raise ValueError(
-                    "`source_ref_idx` requires `descriptor_derivatives`."
-                )
-        else:
-            descriptor_derivatives.to(device)
-            source_ref_idx = (
-                torch.arange(n)
-                if source_ref_idx is None
-                else torch.as_tensor(source_ref_idx).reshape(-1).long().cpu()
-            )
-            if len(source_ref_idx) != n:
-                raise ValueError(
-                    "`source_ref_idx` must have the same length as the dataset."
-                )
-
         jacobians = []
         with torch.enable_grad():
             for start in range(0, len(selected), batch_size):
@@ -165,11 +118,6 @@ def _cache_vector(
                     if cell is None
                     else cell[idx.to(cell.device)].to(device)
                 )
-                refs = (
-                    None
-                    if descriptor_derivatives is None
-                    else source_ref_idx[idx].to(device)
-                )
 
                 h = representation(xb, cell=cb).reshape(len(xb), -1)
                 grads = []
@@ -180,8 +128,6 @@ def _cache_vector(
                         xb,
                         retain_graph=i + 1 < h.shape[-1],
                     )[0]
-                    if descriptor_derivatives is not None:
-                        dh = descriptor_derivatives(dh, refs)
                     grads.append(dh)
 
                 jacobians.append(
@@ -205,12 +151,13 @@ def _cache_graph(
     output_device,
     compute_jacobian,
 ):
-    """Cache features and optional Cartesian Jacobians for graph inputs."""
+    """Cache graph representation outputs and optional position Jacobians."""
     if dataset.metadata.get("data_type") != "graphs":
         raise TypeError("Expected a graph dataset.")
 
     n = len(dataset)
     selected = _indices(n, jacobian_indices) if compute_jacobian else None
+
     if compute_jacobian and selected.numel() == 0:
         raise ValueError("No samples selected for Jacobian caching.")
 
@@ -267,6 +214,7 @@ def _cache_graph(
                             graph.positions,
                             retain_graph=i + 1 < h.shape[-1],
                         )[0]
+
                         grads.append(
                             torch.stack([
                                 dp[graph.batch == j]
@@ -282,6 +230,7 @@ def _cache_graph(
             offset += n_graphs
 
         features = torch.cat(features)
+
         if not compute_jacobian:
             return RepresentationCache(features)
 
@@ -296,15 +245,13 @@ def precompute_representation_cache(
     representation: Representation,
     dataset: DictDataset,
     *,
-    descriptor_derivatives: Optional[nn.Module] = None,
     jacobian_indices: Optional[torch.Tensor] = None,
-    source_ref_idx: Optional[torch.Tensor] = None,
     batch_size: Optional[int] = None,
     device=None,
     output_device="cpu",
     compute_jacobian: bool = False,
 ):
-    """Cache a frozen representation and optional Jacobians.
+    """Cache a frozen representation and optional input Jacobians.
 
     Parameters
     ----------
@@ -312,13 +259,8 @@ def precompute_representation_cache(
         Frozen representation to evaluate.
     dataset : DictDataset
         Dataset containing raw vector or graph inputs.
-    descriptor_derivatives : torch.nn.Module, optional
-        Transform vector-descriptor gradients to Cartesian-coordinate gradients.
-        If None, vector inputs are treated as coordinates.
     jacobian_indices : torch.Tensor, optional
         Samples for which Jacobians are cached.
-    source_ref_idx : torch.Tensor, optional
-        Reference indices used by ``descriptor_derivatives``.
     batch_size : int, optional
         Evaluation batch size.
     device : str or torch.device, optional
@@ -326,12 +268,12 @@ def precompute_representation_cache(
     output_device : str or torch.device, default="cpu"
         Device used to store cached tensors.
     compute_jacobian : bool, default=False
-        Whether to cache representation Jacobians.
+        Whether to cache representation Jacobians with respect to its inputs.
 
     Returns
     -------
     RepresentationCache
-        Cached representation outputs and optional Jacobians.
+        Cached representation outputs and optional input Jacobians.
     """
     if not isinstance(representation, Representation):
         raise TypeError("`representation` must derive from `Representation`.")
@@ -347,9 +289,7 @@ def precompute_representation_cache(
         return _cache_vector(
             representation,
             dataset,
-            descriptor_derivatives=descriptor_derivatives,
             jacobian_indices=jacobian_indices,
-            source_ref_idx=source_ref_idx,
             batch_size=batch_size or 1024,
             device=device,
             output_device=output_device,
@@ -361,10 +301,6 @@ def precompute_representation_cache(
             raise ValueError(
                 "Graph caching requires system-level representation outputs. "
                 "Use pooling or `concat_atoms()` first."
-            )
-        if descriptor_derivatives is not None or source_ref_idx is not None:
-            raise ValueError(
-                "Descriptor derivatives and source indices are vector-only."
             )
 
         return _cache_graph(

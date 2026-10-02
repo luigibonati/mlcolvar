@@ -7,7 +7,7 @@ from mlcolvar.core.loss.utils.smart_derivatives import create_smart_dataset
 from mlcolvar.data import DictDataset
 
 from .base import Representation
-from .cache import CachedRepresentationDerivatives
+from .derivatives import CachedRepresentationDerivatives
 
 __all__ = ["precompute_committor_cache"]
 
@@ -34,6 +34,13 @@ def precompute_committor_cache(
     The representation is evaluated once and its Jacobians are cached for
     samples contributing to the derivative-based committor loss.
 
+    For vector representations, cached Jacobians are computed with respect
+    to the representation inputs. If ``descriptor_derivatives`` is provided,
+    they are subsequently transformed to Cartesian-coordinate Jacobians.
+
+    For graph representations, Jacobians are computed directly with respect
+    to atomic positions.
+
     Parameters
     ----------
     representation : Representation
@@ -41,8 +48,9 @@ def precompute_committor_cache(
     dataset : DictDataset
         Dataset containing the committor training data.
     descriptor_derivatives : torch.nn.Module, optional
-        Transform descriptor gradients to Cartesian-coordinate gradients.
-        If None, vector inputs are treated directly as coordinates.
+        Transform gradients with respect to vector descriptors into gradients
+        with respect to Cartesian coordinates. Only supported for vector
+        representations.
     batch_size : int, optional
         Batch size used to evaluate the representation.
     device : str or torch.device, optional
@@ -56,13 +64,14 @@ def precompute_committor_cache(
     -------
     cached_dataset : DictDataset
         Dataset containing cached representation features and committor data.
-    descriptor_derivatives : CachedRepresentationDerivatives
-        Derivative transform backed by cached representation Jacobians.
+    cached_derivatives : CachedRepresentationDerivatives
+        Derivative transform backed by cached Cartesian Jacobians.
     """
     output_device = torch.device(output_device)
 
     if representation.input_kind == "vector":
         required = {"data", "labels", "weights"}
+
         if descriptor_derivatives is not None:
             required.add("ref_idx")
 
@@ -71,15 +80,15 @@ def precompute_committor_cache(
             raise KeyError(f"Missing keys: {sorted(missing)}")
 
         labels = dataset["labels"].reshape(-1)
-        source_ref_idx = (
-            dataset["ref_idx"].reshape(-1).long()
-            if descriptor_derivatives is not None
-            else None
-        )
 
     elif representation.input_kind == "graph":
+        if descriptor_derivatives is not None:
+            raise ValueError(
+                "`descriptor_derivatives` is only supported for "
+                "vector representations."
+            )
+
         labels = _graph_field(dataset, "graph_labels")
-        source_ref_idx = None
 
     else:
         raise ValueError(
@@ -96,13 +105,29 @@ def precompute_committor_cache(
     cache = representation.cache(
         dataset,
         jacobian=True,
-        descriptor_derivatives=descriptor_derivatives,
         jacobian_indices=indices,
-        source_ref_idx=source_ref_idx,
         batch_size=batch_size,
         device=device,
         output_device=output_device,
     )
+
+    jacobian = cache.jacobian
+
+    if jacobian is None:
+        raise RuntimeError(
+            "Representation cache did not return Jacobians."
+        )
+
+    if descriptor_derivatives is not None:
+        source_ref_idx = dataset["ref_idx"].reshape(-1).long()
+        selected_ref_idx = source_ref_idx[
+            indices.to(source_ref_idx.device)
+        ].to(jacobian.device)
+
+        jacobian = descriptor_derivatives(
+            jacobian,
+            selected_ref_idx,
+        )
 
     if representation.input_kind == "vector":
         cached_dataset = create_smart_dataset(
@@ -110,12 +135,17 @@ def precompute_committor_cache(
             dataset,
             separate_boundary_dataset,
         )
+
     else:
         graph_dataset = DictDataset({
             "data": cache.features,
             "labels": labels.to(output_device),
-            "weights": _graph_field(dataset, "weight").to(output_device),
+            "weights": _graph_field(
+                dataset,
+                "weight",
+            ).to(output_device),
         })
+
         cached_dataset = create_smart_dataset(
             cache.features,
             graph_dataset,
@@ -124,5 +154,5 @@ def precompute_committor_cache(
 
     return (
         cached_dataset,
-        CachedRepresentationDerivatives(cache.jacobian),
+        CachedRepresentationDerivatives(jacobian),
     )
