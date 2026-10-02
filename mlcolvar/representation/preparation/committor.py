@@ -9,7 +9,6 @@ from mlcolvar.core.loss.utils.smart_derivatives import (
 )
 from mlcolvar.data import DictDataset
 
-from ..base import Representation
 from .derivatives import JacobianTransform, compute_jacobian
 
 __all__ = ["prepare_committor"]
@@ -35,13 +34,13 @@ def _graph_field(
     field: str,
 ) -> torch.Tensor:
     return torch.cat([
-        torch.as_tensor(getattr(graph, field)).reshape(-1)
+        torch.as_tensor(graph[field]).reshape(-1)
         for graph in dataset["data_list"]
     ])
 
 
 def prepare_committor(
-    representation: Representation,
+    model: nn.Module,
     dataset: DictDataset,
     features: torch.Tensor,
     descriptor_derivatives: Optional[nn.Module] = None,
@@ -50,10 +49,23 @@ def prepare_committor(
     output_device="cpu",
     separate_boundary_dataset: bool = True,
 ):
-    """Prepare materialized representation features for committor training."""
-    output_device = torch.device(output_device)
+    """Prepare precomputed features and derivatives for committor training."""
+    is_graph = dataset.metadata.get("data_type") == "graphs"
 
-    if representation.input_kind == "vector":
+    if is_graph:
+        if descriptor_derivatives is not None:
+            raise ValueError(
+                "`descriptor_derivatives` is not supported "
+                "for graph datasets."
+            )
+
+        source_dataset = DictDataset({
+            "data": features,
+            "labels": _graph_field(dataset, "graph_labels").to(features.device),
+            "weights": _graph_field(dataset, "weight").to(features.device),
+        })
+
+    else:
         required = {"data", "labels", "weights"}
         if descriptor_derivatives is not None:
             required.add("ref_idx")
@@ -62,26 +74,13 @@ def prepare_committor(
         if missing:
             raise KeyError(f"Missing keys: {sorted(missing)}")
 
-        labels = dataset["labels"].reshape(-1)
+        source_dataset = dataset
 
-    elif representation.input_kind == "graph":
-        if descriptor_derivatives is not None:
-            raise ValueError(
-                "`descriptor_derivatives` is only supported "
-                "for vector representations."
-            )
-
-        labels = _graph_field(dataset, "graph_labels")
-
-    else:
-        raise ValueError(
-            "Unsupported representation input kind: "
-            f"{representation.input_kind!r}."
-        )
+    labels = source_dataset["labels"].reshape(-1)
 
     if len(features) != len(labels):
         raise ValueError(
-            "The number of materialized features must match "
+            "The number of features must match "
             "the number of dataset samples."
         )
 
@@ -92,7 +91,7 @@ def prepare_committor(
     )
 
     jacobian = compute_jacobian(
-        representation,
+        model,
         dataset,
         indices=indices,
         batch_size=batch_size,
@@ -101,34 +100,23 @@ def prepare_committor(
     )
 
     if descriptor_derivatives is not None:
-        source_ref_idx = dataset["ref_idx"].reshape(-1).long()
-        selected_ref_idx = source_ref_idx[
-            indices.to(source_ref_idx.device)
+        ref_idx = dataset["ref_idx"].reshape(-1).long()
+        ref_idx = ref_idx[
+            indices.to(ref_idx.device)
         ].to(jacobian.device)
 
-        descriptor_derivatives = descriptor_derivatives.to(jacobian.device)
-        jacobian = descriptor_derivatives(
+        jacobian = descriptor_derivatives.to(jacobian.device)(
             jacobian,
-            selected_ref_idx,
+            ref_idx,
         )
 
-    if representation.input_kind == "vector":
-        feature_dataset = create_smart_dataset(
-            features,
-            dataset,
-            separate_boundary_dataset,
-        )
-    else:
-        graph_dataset = DictDataset({
-            "data": features,
-            "labels": labels.to(output_device),
-            "weights": _graph_field(dataset, "weight").to(output_device),
-        })
+    prepared_dataset = create_smart_dataset(
+        features,
+        source_dataset,
+        separate_boundary_dataset,
+    )
 
-        feature_dataset = create_smart_dataset(
-            features,
-            graph_dataset,
-            separate_boundary_dataset,
-        )
-
-    return feature_dataset, _CommittorJacobianTransform(jacobian)
+    return (
+        prepared_dataset,
+        _CommittorJacobianTransform(jacobian),
+    )
