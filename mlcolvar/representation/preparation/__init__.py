@@ -1,9 +1,9 @@
 from .committor import prepare_committor
 from .derivatives import JacobianTransform, compute_jacobian
-from .materialize import materialize
+from .evaluate_dataset import evaluate_dataset
 
 __all__ = [
-    "materialize",
+    "evaluate_dataset",
     "compute_jacobian",
     "JacobianTransform",
     "prepare_committor",

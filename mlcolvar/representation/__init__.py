@@ -8,7 +8,7 @@ from .adapters import (
     MLColvarRepresentation,
 )
 from .preparation import (
-    materialize,
+    evaluate_dataset,
     prepare_committor,
 )
 from .export import export_representation_torchscript
@@ -19,7 +19,7 @@ __all__ = [
     "GraphRepresentation",
     "MACERepresentation",
     "MLColvarRepresentation",
-    "materialize",
+    "evaluate_dataset",
     "prepare_committor",
     "export_representation_torchscript",
 ]

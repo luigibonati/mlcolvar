@@ -4,10 +4,8 @@ import torch
 from torch import nn
 from torch_geometric.loader import DataLoader as GraphDataLoader
 
-from mlcolvar.data import DictDataset
-
-from ..base import Representation
-from ._utils import require_graph_dataset, resolve_devices, temporary_eval
+from mlcolvar.data import DictDataset, DictLoader
+from mlcolvar.representation._utils import module_reference_tensor
 
 __all__ = [
     "compute_jacobian",
@@ -19,21 +17,19 @@ def _indices(
     n: int,
     indices: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
-    """Normalize selected sample indices."""
     if indices is None:
-        return torch.arange(n, dtype=torch.long)
+        return torch.arange(n)
 
     indices = torch.as_tensor(indices).cpu()
 
     if indices.dtype == torch.bool:
-        indices = indices.reshape(-1)
-        if len(indices) != n:
+        if indices.numel() != n:
             raise ValueError(
                 "Boolean `indices` must have the same length as the dataset."
             )
-        indices = torch.nonzero(indices, as_tuple=False).reshape(-1)
+        indices = indices.nonzero().flatten()
     else:
-        indices = indices.reshape(-1).long()
+        indices = indices.flatten().long()
 
     indices = torch.unique(indices, sorted=True)
 
@@ -43,146 +39,8 @@ def _indices(
     return indices
 
 
-def _compute_vector_jacobian(
-    representation: Representation,
-    dataset: DictDataset,
-    indices: torch.Tensor,
-    batch_size: int,
-    device: torch.device,
-    output_device: torch.device,
-) -> torch.Tensor:
-    """Compute Jacobians for vector representation inputs."""
-    if "data" not in dataset.keys:
-        raise KeyError("Vector Jacobian computation requires `data`.")
-
-    x = dataset["data"]
-    cell = dataset["cell"] if "cell" in dataset.keys else None
-    jacobians = []
-
-    with temporary_eval(representation, device), torch.enable_grad():
-        for start in range(0, len(indices), batch_size):
-            idx = indices[start : start + batch_size]
-
-            xb = (
-                x[idx.to(x.device)]
-                .to(device)
-                .detach()
-                .requires_grad_(True)
-            )
-            cb = (
-                None
-                if cell is None
-                else cell[idx.to(cell.device)].to(device)
-            )
-
-            output = representation(xb, cell=cb).reshape(len(xb), -1)
-
-            gradients = [
-                torch.autograd.grad(
-                    output[:, i].sum(),
-                    xb,
-                    retain_graph=i + 1 < output.shape[-1],
-                )[0]
-                for i in range(output.shape[-1])
-            ]
-
-            jacobians.append(
-                torch.stack(gradients, dim=-1)
-                .detach()
-                .to(output_device)
-            )
-
-    return torch.cat(jacobians)
-
-
-def _compute_graph_jacobian(
-    representation: Representation,
-    dataset: DictDataset,
-    indices: torch.Tensor,
-    batch_size: int,
-    device: torch.device,
-    output_device: torch.device,
-) -> torch.Tensor:
-    """Compute Jacobians with respect to graph positions."""
-    require_graph_dataset(dataset)
-
-    selected_graphs = [
-        dataset["data_list"][int(index)]
-        for index in indices
-    ]
-    loader = GraphDataLoader(
-        selected_graphs,
-        batch_size=batch_size,
-        shuffle=False,
-    )
-
-    jacobians = []
-    n_atoms_ref = None
-
-    with temporary_eval(representation, device):
-        for graph in loader:
-            graph = graph.to(device)
-            n_graphs = int(graph.num_graphs)
-
-            counts = torch.bincount(
-                graph.batch,
-                minlength=n_graphs,
-            )
-
-            if not torch.all(counts == counts[0]):
-                raise ValueError(
-                    "Selected graphs must have equal atom counts."
-                )
-
-            n_atoms = int(counts[0])
-            if n_atoms_ref is None:
-                n_atoms_ref = n_atoms
-            elif n_atoms != n_atoms_ref:
-                raise ValueError(
-                    "Selected graphs must have equal atom counts."
-                )
-
-            graph.positions = (
-                graph.positions
-                .detach()
-                .requires_grad_(True)
-            )
-
-            with torch.enable_grad():
-                output = representation(graph)
-
-                if output.ndim != 2 or output.shape[0] != n_graphs:
-                    raise ValueError(
-                        "Representation outputs must contain "
-                        "one row per graph."
-                    )
-
-                gradients = []
-                for i in range(output.shape[-1]):
-                    gradient = torch.autograd.grad(
-                        output[:, i].sum(),
-                        graph.positions,
-                        retain_graph=i + 1 < output.shape[-1],
-                    )[0]
-
-                    gradients.append(
-                        torch.stack([
-                            gradient[graph.batch == j]
-                            for j in range(n_graphs)
-                        ])
-                    )
-
-                jacobians.append(
-                    torch.stack(gradients, dim=-1)
-                    .detach()
-                    .to(output_device)
-                )
-
-    return torch.cat(jacobians)
-
-
 def compute_jacobian(
-    representation: Representation,
+    model: nn.Module,
     dataset: DictDataset,
     *,
     indices: Optional[torch.Tensor] = None,
@@ -190,66 +48,133 @@ def compute_jacobian(
     device=None,
     output_device="cpu",
 ) -> torch.Tensor:
-    """Compute Jacobians of a frozen representation with respect to its inputs."""
-    if not isinstance(representation, Representation):
-        raise TypeError(
-            "`representation` must derive from `Representation`."
-        )
-
-    if not representation.freeze:
-        raise RuntimeError(
-            "Jacobian computation requires a frozen representation."
-        )
-
-    device, output_device = resolve_devices(
-        representation,
-        device,
-        output_device,
-    )
+    """Compute model-output Jacobians with respect to dataset inputs."""
+    if not isinstance(model, nn.Module):
+        raise TypeError("`model` must be a torch.nn.Module.")
 
     selected = _indices(len(dataset), indices)
     if selected.numel() == 0:
-        raise ValueError(
-            "No samples selected for Jacobian computation."
-        )
+        raise ValueError("No samples selected for Jacobian computation.")
 
-    if representation.input_kind == "vector":
-        return _compute_vector_jacobian(
-            representation,
+    dataset = dataset[selected]
+
+    reference = module_reference_tensor(model)
+    original_device = reference.device
+    training = model.training
+
+    device = torch.device(device or original_device)
+    output_device = torch.device(output_device)
+
+    is_graph = dataset.metadata.get("data_type") == "graphs"
+    batch_size = batch_size or (256 if is_graph else 1024)
+
+    loader = (
+        GraphDataLoader(
             dataset,
-            selected,
-            batch_size or 1024,
-            device,
-            output_device,
+            batch_size=batch_size,
+            shuffle=False,
         )
-
-    if representation.input_kind == "graph":
-        if representation.output_kind != "system":
-            raise ValueError(
-                "Graph Jacobians require system-level "
-                "representation outputs. Use pooling or "
-                "`concat_atoms()` first."
-            )
-
-        return _compute_graph_jacobian(
-            representation,
+        if is_graph
+        else DictLoader(
             dataset,
-            selected,
-            batch_size or 256,
-            device,
-            output_device,
+            batch_size=batch_size,
+            shuffle=False,
         )
-
-    raise ValueError(
-        "Unsupported representation input kind: "
-        f"{representation.input_kind!r}."
     )
+
+    jacobians = []
+    n_atoms_ref = None
+
+    model.to(device).eval()
+
+    try:
+        with torch.enable_grad():
+            for batch in loader:
+                if is_graph:
+                    data = batch["data_list"].to(device)
+                    n_samples = int(data.num_graphs)
+
+                    counts = torch.bincount(
+                        data.batch,
+                        minlength=n_samples,
+                    )
+
+                    if not torch.all(counts == counts[0]):
+                        raise ValueError(
+                            "Graphs must have equal atom counts."
+                        )
+
+                    n_atoms = int(counts[0])
+                    if n_atoms_ref is None:
+                        n_atoms_ref = n_atoms
+                    elif n_atoms != n_atoms_ref:
+                        raise ValueError(
+                            "Graphs must have equal atom counts."
+                        )
+
+                    data.positions = (
+                        data.positions
+                        .detach()
+                        .requires_grad_(True)
+                    )
+
+                    output = model(data)
+                    inputs = data.positions
+
+                else:
+                    data = (
+                        batch["data"]
+                        .to(device)
+                        .detach()
+                        .requires_grad_(True)
+                    )
+
+                    cell = batch.get("cell")
+                    if cell is not None:
+                        cell = cell.to(device)
+
+                    n_samples = len(data)
+                    output = (
+                        model(data)
+                        if cell is None
+                        else model(data, cell=cell)
+                    )
+                    inputs = data
+
+                output = output.reshape(n_samples, -1)
+
+                gradients = []
+                for i in range(output.shape[-1]):
+                    gradient = torch.autograd.grad(
+                        output[:, i].sum(),
+                        inputs,
+                        retain_graph=i + 1 < output.shape[-1],
+                    )[0]
+
+                    if is_graph:
+                        gradient = torch.stack([
+                            gradient[data.batch == j]
+                            for j in range(n_samples)
+                        ])
+
+                    gradients.append(gradient)
+
+                jacobians.append(
+                    torch.stack(gradients, dim=-1)
+                    .detach()
+                    .to(output_device)
+                )
+
+    finally:
+        model.to(original_device).train(training)
+
+    return torch.cat(jacobians)
 
 
 class JacobianTransform(nn.Module):
-    """Apply a materialized Jacobian through the chain rule."""
+    """Propagate gradients through precomputed Jacobians."""
 
-    def __init__(self, jacobian: torch.Tensor) -> None:
+    def __init__(self, jacobian: torch.Tensor):
         super().__init__()
         self.register_buffer(
             "jacobian",
@@ -259,13 +184,13 @@ class JacobianTransform(nn.Module):
 
     def forward(
         self,
-        gradient_output: torch.Tensor,
+        gradient: torch.Tensor,
         ref_idx: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         if ref_idx is None:
             raise ValueError("`ref_idx` is required.")
 
-        ref_idx = ref_idx.reshape(-1).to(
+        ref_idx = ref_idx.flatten().to(
             self.jacobian.device,
             dtype=torch.long,
         )
@@ -273,17 +198,15 @@ class JacobianTransform(nn.Module):
         if torch.any(ref_idx < 0) or torch.any(
             ref_idx >= len(self.jacobian)
         ):
-            raise IndexError(
-                "Invalid Jacobian index."
-            )
+            raise IndexError("Invalid Jacobian index.")
 
         jacobian = self.jacobian[ref_idx].to(
-            device=gradient_output.device,
-            dtype=gradient_output.dtype,
+            gradient.device,
+            gradient.dtype,
         )
 
         return torch.einsum(
             "bl,b...l->b...",
-            gradient_output,
+            gradient,
             jacobian,
         )

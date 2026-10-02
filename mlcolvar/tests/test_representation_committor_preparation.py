@@ -6,7 +6,7 @@ from mlcolvar.data import DictDataset
 from mlcolvar.representation import (
     GraphRepresentation,
     VectorRepresentation,
-    materialize,
+    evaluate_dataset,
     prepare_committor,
 )
 
@@ -73,7 +73,10 @@ def test_vector_committor_preparation():
     })
 
     representation = DummyVectorRepresentation()
-    features = materialize(representation, dataset)
+    features = evaluate_dataset(
+        representation,
+        dataset,
+    )
 
     prepared, transform = prepare_committor(
         representation,
@@ -97,6 +100,7 @@ def test_vector_committor_preparation():
         torch.ones(2, 2),
         torch.tensor([0, 1]),
     )
+
     torch.testing.assert_close(
         gradient,
         torch.ones(2, 2),
@@ -117,7 +121,10 @@ def test_vector_descriptor_committor_preparation():
     })
 
     representation = DummyVectorRepresentation()
-    features = materialize(representation, dataset)
+    features = evaluate_dataset(
+        representation,
+        dataset,
+    )
 
     prepared, transform = prepare_committor(
         representation,
@@ -147,7 +154,11 @@ def test_vector_descriptor_committor_preparation():
         [[1.0, 1.0, 0.0]],
         [[1.0, 1.0, 0.0]],
     ])
-    torch.testing.assert_close(gradient, expected)
+
+    torch.testing.assert_close(
+        gradient,
+        expected,
+    )
 
 
 def test_graph_committor_preparation():
@@ -178,7 +189,10 @@ def test_graph_committor_preparation():
     )
 
     representation = DummyGraphRepresentation()
-    features = materialize(representation, dataset)
+    features = evaluate_dataset(
+        representation,
+        dataset,
+    )
 
     prepared, transform = prepare_committor(
         representation,
@@ -224,4 +238,8 @@ def test_graph_committor_preparation():
             [0.5, 0.5, 0.0],
         ],
     ])
-    torch.testing.assert_close(gradient, expected)
+
+    torch.testing.assert_close(
+        gradient,
+        expected,
+    )

@@ -23,6 +23,7 @@ def test_jacobian_transform():
         [1.0, 4.0, 3.0],
         [6.0, 12.0, 11.0],
     ])
+
     torch.testing.assert_close(output, expected)
 
 
@@ -41,21 +42,30 @@ def test_jacobian_transform_reference_indices():
         [2.0, 2.0],
         [1.0, 1.0],
     ])
+
     torch.testing.assert_close(output, expected)
 
 
-def test_jacobian_transform_requires_ref_idx():
+@pytest.mark.parametrize(
+    ("ref_idx", "error", "match"),
+    [
+        (
+            None,
+            ValueError,
+            "`ref_idx` is required",
+        ),
+        (
+            torch.tensor([2]),
+            IndexError,
+            "Invalid Jacobian index",
+        ),
+    ],
+)
+def test_jacobian_transform_errors(ref_idx, error, match):
     transform = JacobianTransform(torch.ones(2, 3, 2))
 
-    with pytest.raises(ValueError, match="`ref_idx` is required"):
-        transform(torch.ones(2, 2))
-
-
-def test_jacobian_transform_invalid_ref_idx():
-    transform = JacobianTransform(torch.ones(2, 3, 2))
-
-    with pytest.raises(IndexError, match="Invalid Jacobian index"):
+    with pytest.raises(error, match=match):
         transform(
             torch.ones(1, 2),
-            torch.tensor([2]),
+            ref_idx,
         )

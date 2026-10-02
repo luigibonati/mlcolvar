@@ -10,7 +10,7 @@ from mlcolvar.data import DictDataset
 from mlcolvar.representation import (
     GraphRepresentation,
     VectorRepresentation,
-    materialize,
+    evaluate_dataset,
 )
 from mlcolvar.representation.preparation import compute_jacobian
 
@@ -65,9 +65,8 @@ def make_graph() -> Dict[str, torch.Tensor]:
 
 def test_vector_representation_preprocessing():
     representation = DummyVectorRepresentation()
-    head = FeedForward([representation.out_features, 1])
     model = RegressionCV(
-        model=head,
+        model=FeedForward([representation.out_features, 1]),
         preprocessing=representation,
     )
 
@@ -106,37 +105,36 @@ def test_graph_representation_transforms(factory, out_features):
     assert representation.output_kind == "system"
     assert representation.out_features == out_features
 
-    head = FeedForward([representation.out_features, 1])
     model = RegressionCV(
-        model=head,
+        model=FeedForward([out_features, 1]),
         preprocessing=representation,
     )
 
     assert model(make_graph()).shape == (2, 1)
 
 
-def test_materialize_vector_representation():
-    representation = DummyVectorRepresentation()
+def test_evaluate_dataset():
+    model = nn.Linear(3, 2, bias=False)
     dataset = make_dataset()
 
-    features = materialize(
-        representation,
+    output = evaluate_dataset(
+        model,
         dataset,
         batch_size=2,
     )
 
     with torch.no_grad():
-        expected = representation(dataset["data"])
+        expected = model(dataset["data"])
 
-    torch.testing.assert_close(features, expected)
+    torch.testing.assert_close(output, expected)
 
 
-def test_compute_vector_jacobian():
-    representation = DummyVectorRepresentation()
+def test_compute_jacobian():
+    model = nn.Linear(3, 2, bias=False)
     dataset = make_dataset()
 
     jacobian = compute_jacobian(
-        representation,
+        model,
         dataset,
         indices=torch.tensor([1, 3]),
         batch_size=1,
@@ -145,7 +143,7 @@ def test_compute_vector_jacobian():
     assert jacobian.shape == (2, 3, 2)
 
     expected = (
-        representation.encoder.weight
+        model.weight
         .detach()
         .T
         .unsqueeze(0)
