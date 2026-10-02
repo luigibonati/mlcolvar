@@ -10,7 +10,9 @@ from mlcolvar.data import DictDataset
 from mlcolvar.representation import (
     GraphRepresentation,
     VectorRepresentation,
+    materialize,
 )
+from mlcolvar.representation.preparation import compute_jacobian
 
 
 class DummyVectorRepresentation(VectorRepresentation):
@@ -20,11 +22,7 @@ class DummyVectorRepresentation(VectorRepresentation):
             out_features=2,
             freeze=True,
         )
-        self.encoder = nn.Linear(
-            3,
-            2,
-            bias=False,
-        )
+        self.encoder = nn.Linear(3, 2, bias=False)
         self._freeze_module(self.encoder)
 
     def forward(self, x, cell=None):
@@ -32,10 +30,7 @@ class DummyVectorRepresentation(VectorRepresentation):
 
 
 class DummyAtomRepresentation(GraphRepresentation):
-    def __init__(
-        self,
-        pooling_operation: Optional[str] = None,
-    ):
+    def __init__(self, pooling_operation: Optional[str] = None):
         super().__init__(
             out_features=2,
             atomic_numbers=[1, 8],
@@ -45,10 +40,7 @@ class DummyAtomRepresentation(GraphRepresentation):
         )
 
     def forward(self, data, cell=None):
-        return self.pooling(
-            data["atom_features"],
-            data,
-        )
+        return self.pooling(data["atom_features"], data)
 
 
 def make_dataset():
@@ -73,21 +65,13 @@ def make_graph() -> Dict[str, torch.Tensor]:
 
 def test_vector_representation_preprocessing():
     representation = DummyVectorRepresentation()
-
-    head = FeedForward([
-        representation.out_features,
-        1,
-    ])
+    head = FeedForward([representation.out_features, 1])
     model = RegressionCV(
         model=head,
         preprocessing=representation,
     )
 
-    x = torch.randn(
-        2,
-        3,
-        requires_grad=True,
-    )
+    x = torch.randn(2, 3, requires_grad=True)
     output = model(x)
 
     assert output.shape == (2, 1)
@@ -116,19 +100,13 @@ def test_vector_representation_preprocessing():
         ),
     ],
 )
-def test_graph_representation_transforms(
-    factory,
-    out_features,
-):
+def test_graph_representation_transforms(factory, out_features):
     representation = factory()
 
     assert representation.output_kind == "system"
     assert representation.out_features == out_features
 
-    head = FeedForward([
-        representation.out_features,
-        1,
-    ])
+    head = FeedForward([representation.out_features, 1])
     model = RegressionCV(
         model=head,
         preprocessing=representation,
@@ -137,41 +115,41 @@ def test_graph_representation_transforms(
     assert model(make_graph()).shape == (2, 1)
 
 
-def test_representation_cache():
+def test_materialize_vector_representation():
     representation = DummyVectorRepresentation()
     dataset = make_dataset()
 
-    cache = representation.cache(
+    features = materialize(
+        representation,
         dataset,
         batch_size=2,
     )
 
     with torch.no_grad():
-        expected = representation(
-            dataset["data"]
-        )
+        expected = representation(dataset["data"])
 
-    torch.testing.assert_close(
-        cache.features,
-        expected,
-    )
-    assert cache.jacobian is None
+    torch.testing.assert_close(features, expected)
 
 
-def test_vector_jacobian_cache():
-    cache = DummyVectorRepresentation().cache(
-        make_dataset(),
-        jacobian=True,
-        jacobian_indices=torch.tensor([1, 3]),
+def test_compute_vector_jacobian():
+    representation = DummyVectorRepresentation()
+    dataset = make_dataset()
+
+    jacobian = compute_jacobian(
+        representation,
+        dataset,
+        indices=torch.tensor([1, 3]),
         batch_size=1,
     )
 
-    assert cache.jacobian.shape == (
-        2,
-        3,
-        2,
+    assert jacobian.shape == (2, 3, 2)
+
+    expected = (
+        representation.encoder.weight
+        .detach()
+        .T
+        .unsqueeze(0)
+        .expand(2, -1, -1)
     )
-    torch.testing.assert_close(
-        cache.reference_indices,
-        torch.tensor([-1, 0, -1, 1]),
-    )
+
+    torch.testing.assert_close(jacobian, expected)

@@ -6,9 +6,7 @@ from mlcolvar.data import DictDataset
 from mlcolvar.representation import (
     GraphRepresentation,
     VectorRepresentation,
-)
-from mlcolvar.representation.committor_cache import (
-    precompute_committor_cache,
+    prepare_committor_dataset,
 )
 
 
@@ -50,7 +48,9 @@ class DummyDescriptorDerivatives(nn.Module):
         ref_idx=None,
     ):
         if ref_idx is None:
-            raise ValueError("`ref_idx` is required.")
+            raise ValueError(
+                "`ref_idx` is required."
+            )
 
         output = torch.zeros(
             gradient.shape[0],
@@ -67,7 +67,7 @@ class DummyDescriptorDerivatives(nn.Module):
         return output
 
 
-def test_vector_committor_cache():
+def test_vector_committor_preparation():
     dataset = DictDataset({
         "data": torch.tensor([
             [0.0, 1.0],
@@ -84,25 +84,25 @@ def test_vector_committor_cache():
         "weights": torch.ones(4),
     })
 
-    cached, derivatives = precompute_committor_cache(
+    prepared, transform = prepare_committor_dataset(
         DummyVectorRepresentation(),
         dataset,
     )
 
     torch.testing.assert_close(
-        cached["data"],
+        prepared["data"],
         dataset["data"],
     )
 
     torch.testing.assert_close(
-        cached["ref_idx"],
+        prepared["ref_idx"],
         torch.tensor(
             [-1, 0, -1, 1],
-            dtype=cached["ref_idx"].dtype,
+            dtype=prepared["ref_idx"].dtype,
         ),
     )
 
-    gradient = derivatives(
+    gradient = transform(
         torch.ones(2, 2),
         torch.tensor([0, 1]),
     )
@@ -113,7 +113,7 @@ def test_vector_committor_cache():
     )
 
 
-def test_vector_descriptor_committor_cache():
+def test_vector_descriptor_committor_preparation():
     dataset = DictDataset({
         "data": torch.tensor([
             [0.0, 1.0],
@@ -131,26 +131,26 @@ def test_vector_descriptor_committor_cache():
         "ref_idx": torch.arange(4),
     })
 
-    cached, derivatives = precompute_committor_cache(
+    prepared, transform = prepare_committor_dataset(
         DummyVectorRepresentation(),
         dataset,
         descriptor_derivatives=DummyDescriptorDerivatives(),
     )
 
     torch.testing.assert_close(
-        cached["data"],
+        prepared["data"],
         dataset["data"],
     )
 
     torch.testing.assert_close(
-        cached["ref_idx"],
+        prepared["ref_idx"],
         torch.tensor(
             [-1, 0, -1, 1],
-            dtype=cached["ref_idx"].dtype,
+            dtype=prepared["ref_idx"].dtype,
         ),
     )
 
-    gradient = derivatives(
+    gradient = transform(
         torch.ones(2, 2),
         torch.tensor([0, 1]),
     )
@@ -170,7 +170,7 @@ def test_vector_descriptor_committor_cache():
     )
 
 
-def test_graph_committor_cache():
+def test_graph_committor_preparation():
     graphs = [
         Data(
             positions=torch.tensor([
@@ -197,13 +197,13 @@ def test_graph_committor_cache():
         data_type="graphs",
     )
 
-    cached, derivatives = precompute_committor_cache(
+    prepared, transform = prepare_committor_dataset(
         DummyGraphRepresentation(),
         dataset,
     )
 
     torch.testing.assert_close(
-        cached["data"],
+        prepared["data"],
         torch.tensor([
             [2.0, 1.0],
             [3.0, 2.0],
@@ -211,19 +211,22 @@ def test_graph_committor_cache():
     )
 
     torch.testing.assert_close(
-        cached["weights"],
-        torch.tensor([1.0, 2.0]),
+        prepared["weights"],
+        torch.tensor([
+            1.0,
+            2.0,
+        ]),
     )
 
     torch.testing.assert_close(
-        cached["ref_idx"],
+        prepared["ref_idx"],
         torch.tensor(
             [0, 1],
-            dtype=cached["ref_idx"].dtype,
+            dtype=prepared["ref_idx"].dtype,
         ),
     )
 
-    gradient = derivatives(
+    gradient = transform(
         torch.ones(2, 2),
         torch.tensor([0, 1]),
     )

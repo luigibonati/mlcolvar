@@ -1,36 +1,21 @@
 import pytest
 import torch
 
-from mlcolvar.representation.derivatives import (
-    CachedRepresentationDerivatives,
-)
+from mlcolvar.representation.preparation import JacobianTransform
 
 
-def test_cached_representation_derivatives():
+def test_jacobian_transform():
     jacobian = torch.tensor([
-        [
-            [1.0, 0.0],
-            [0.0, 2.0],
-            [1.0, 1.0],
-        ],
-        [
-            [2.0, 0.0],
-            [0.0, 3.0],
-            [1.0, 2.0],
-        ],
+        [[1.0, 0.0], [0.0, 2.0], [1.0, 1.0]],
+        [[2.0, 0.0], [0.0, 3.0], [1.0, 2.0]],
     ])
-
-    derivatives = CachedRepresentationDerivatives(
-        jacobian
-    )
-
-    gradient_latent = torch.tensor([
+    gradient = torch.tensor([
         [1.0, 2.0],
         [3.0, 4.0],
     ])
 
-    output = derivatives(
-        gradient_latent,
+    output = JacobianTransform(jacobian)(
+        gradient,
         torch.tensor([0, 1]),
     )
 
@@ -38,37 +23,39 @@ def test_cached_representation_derivatives():
         [1.0, 4.0, 3.0],
         [6.0, 12.0, 11.0],
     ])
+    torch.testing.assert_close(output, expected)
 
-    torch.testing.assert_close(
-        output,
-        expected,
+
+def test_jacobian_transform_reference_indices():
+    jacobian = torch.tensor([
+        [[1.0, 0.0], [0.0, 1.0]],
+        [[2.0, 0.0], [0.0, 2.0]],
+    ])
+
+    output = JacobianTransform(jacobian)(
+        torch.ones(2, 2),
+        torch.tensor([1, 0]),
     )
 
-
-def test_cached_representation_derivatives_requires_ref_idx():
-    derivatives = CachedRepresentationDerivatives(
-        torch.ones(2, 3, 2)
-    )
-
-    with pytest.raises(
-        ValueError,
-        match="`ref_idx` is required",
-    ):
-        derivatives(
-            torch.ones(2, 2)
-        )
+    expected = torch.tensor([
+        [2.0, 2.0],
+        [1.0, 1.0],
+    ])
+    torch.testing.assert_close(output, expected)
 
 
-def test_cached_representation_derivatives_invalid_ref_idx():
-    derivatives = CachedRepresentationDerivatives(
-        torch.ones(2, 3, 2)
-    )
+def test_jacobian_transform_requires_ref_idx():
+    transform = JacobianTransform(torch.ones(2, 3, 2))
 
-    with pytest.raises(
-        IndexError,
-        match="Invalid cached derivative index",
-    ):
-        derivatives(
+    with pytest.raises(ValueError, match="`ref_idx` is required"):
+        transform(torch.ones(2, 2))
+
+
+def test_jacobian_transform_invalid_ref_idx():
+    transform = JacobianTransform(torch.ones(2, 3, 2))
+
+    with pytest.raises(IndexError, match="Invalid Jacobian index"):
+        transform(
             torch.ones(1, 2),
             torch.tensor([2]),
         )

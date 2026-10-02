@@ -22,8 +22,7 @@ class Representation(nn.Module):
     """Base class for reusable preprocessing representations.
 
     A representation maps raw model inputs to latent features and can be used
-    directly as a ``BaseCV.preprocessing`` module. Frozen representations can
-    also be materialized offline with :meth:`cache`.
+    directly as a ``BaseCV.preprocessing`` module.
 
     Parameters
     ----------
@@ -78,51 +77,6 @@ class Representation(nn.Module):
     ):
         """Keep frozen representations in evaluation mode."""
         return super().train(False if self.freeze else mode)
-
-    @torch.jit.unused
-    def cache(
-        self,
-        dataset,
-        *,
-        jacobian: bool = False,
-        **kwargs,
-    ):
-        """Materialize this frozen preprocessing on a dataset.
-
-        Parameters
-        ----------
-        dataset
-            Dataset containing the raw inputs.
-        jacobian : bool, default=False
-            If True, also materialize derivatives of the latent features.
-        **kwargs
-            Additional arguments forwarded to the cache implementation.
-
-        Returns
-        -------
-        RepresentationCache
-            Materialized latent features and, optionally, their Jacobians.
-
-        Notes
-        -----
-        Graph caching requires system-level outputs. Use
-        ``pooling_operation="mean"`` or ``"sum"``, or
-        :meth:`GraphRepresentation.concat_atoms`.
-
-        Graph Jacobians require selected systems to contain the same number of
-        atoms because the derivatives are stored as a dense tensor.
-        """
-        if not self.freeze:
-            raise RuntimeError("Caching requires a frozen representation.")
-
-        from .cache import precompute_representation_cache
-
-        return precompute_representation_cache(
-            self,
-            dataset,
-            compute_jacobian=jacobian,
-            **kwargs,
-        )
 
 
 class VectorRepresentation(Representation):
