@@ -89,7 +89,6 @@ def test_aot_transfer_gnn(tmp_path) -> None:
 
         representation = MLColvarRepresentation(
             pretrained,
-            mode="latent",
             freeze=True,
         )
 
