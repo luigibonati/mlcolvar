@@ -17,18 +17,22 @@ class DummyMACE(nn.Module):
 
     def __init__(self) -> None:
         super().__init__()
+
         self.register_buffer(
             "atomic_numbers",
             torch.tensor([1, 8]),
         )
+
         self.register_buffer(
             "r_max",
             torch.tensor(5.0, dtype=torch.float64),
         )
+
         self.register_buffer(
             "num_interactions",
             torch.tensor(2),
         )
+
         self.weight = nn.Parameter(
             torch.tensor(1.0, dtype=torch.float64)
         )
@@ -50,6 +54,7 @@ def make_data() -> Dict[str, torch.Tensor]:
         10,
         dtype=torch.float64,
     )
+
     node_features[:, :2] = torch.tensor(
         [
             [1.0, 2.0],
@@ -59,6 +64,7 @@ def make_data() -> Dict[str, torch.Tensor]:
         ],
         dtype=torch.float64,
     )
+
     node_features[:, 8:10] = torch.tensor(
         [
             [5.0, 6.0],
@@ -68,6 +74,7 @@ def make_data() -> Dict[str, torch.Tensor]:
         ],
         dtype=torch.float64,
     )
+
     return {
         "node_feats": node_features,
         "batch": torch.tensor(
@@ -194,6 +201,11 @@ def test_mace_representation_preprocessing():
 
 
 def test_mace_representation_trace(tmp_path):
+    pytest.importorskip(
+        "e3nn",
+        reason="MACE TorchScript export requires e3nn.",
+    )
+
     representation = make_representation(
         pooling_operation="mean"
     )
@@ -226,6 +238,7 @@ def test_mace_representation_trace(tmp_path):
 def test_mace_representation_invalid_node_features():
     representation = make_representation()
     data = make_data()
+
     data["node_feats"] = torch.zeros(
         4,
         9,
