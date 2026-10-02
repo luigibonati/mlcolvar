@@ -14,20 +14,11 @@ def _restore_native_torch_indexing() -> None:
     except ImportError:
         return
 
-    torch.index_select = getattr(
-        hash_tensor,
-        "_old_index_select",
-        torch.index_select,
-    )
-    torch.select = getattr(
-        hash_tensor,
-        "_old_select",
-        torch.select,
-    )
+    torch.index_select = getattr(hash_tensor, "_old_index_select", torch.index_select)
+    torch.select = getattr(hash_tensor, "_old_select", torch.select)
 
 
 _restore_native_torch_indexing()
-
 
 try:
     from metatensor.torch import Labels, TensorBlock, TensorMap

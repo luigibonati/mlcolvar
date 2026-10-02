@@ -11,11 +11,7 @@ from ._compat import (
     TensorMap,
 )
 
-
-__all__ = [
-    "CVInferenceModel",
-    "MetatomicCVWrapper",
-]
+__all__ = ["CVInferenceModel", "MetatomicCVWrapper"]
 
 
 class CVInferenceModel(torch.nn.Module):
@@ -34,10 +30,7 @@ class CVInferenceModel(torch.nn.Module):
         self.network = network
         self.postprocessing = postprocessing
         self.neighbor_options = neighbor_options
-        self.register_buffer(
-            "atomic_numbers",
-            atomic_numbers.to(dtype=torch.long),
-        )
+        self.register_buffer("atomic_numbers", atomic_numbers.to(dtype=torch.long))
 
     def requested_neighbor_lists(self) -> List[NeighborListOptions]:
         """Return the neighbor list required by the wrapped model."""
@@ -62,10 +55,7 @@ class CVInferenceModel(torch.nn.Module):
 
         for system_index, system in enumerate(systems):
             positions = system.positions
-            types = system.types.to(
-                dtype=torch.long,
-                device=positions.device,
-            )
+            types = system.types.to(dtype=torch.long, device=positions.device)
             cell = system.cell.to(
                 dtype=positions.dtype,
                 device=positions.device,
@@ -80,10 +70,7 @@ class CVInferenceModel(torch.nn.Module):
             node_attrs = (
                 types.reshape(-1, 1)
                 == self.atomic_numbers.reshape(1, -1)
-            ).to(
-                dtype=positions.dtype,
-                device=positions.device,
-            )
+            ).to(dtype=positions.dtype, device=positions.device)
             node_attrs_list.append(node_attrs)
 
             batch_list.append(
@@ -95,9 +82,7 @@ class CVInferenceModel(torch.nn.Module):
                 )
             )
 
-            neighbor_list = system.get_neighbor_list(
-                self.neighbor_options
-            )
+            neighbor_list = system.get_neighbor_list(self.neighbor_options)
             samples = neighbor_list.samples.values
 
             first_atom = samples[:, 0].to(
@@ -154,9 +139,7 @@ class CVInferenceModel(torch.nn.Module):
     ) -> torch.Tensor:
         """Evaluate the complete atomistic CV inference pipeline."""
         return self.postprocessing(
-            self.network(
-                self._systems_to_graph(systems)
-            )
+            self.network(self._systems_to_graph(systems))
         )
 
 
@@ -173,18 +156,13 @@ class MetatomicCVWrapper(torch.nn.Module):
         super().__init__()
 
         if out_features < 1:
-            raise ValueError(
-                "'out_features' must be a positive integer."
-            )
+            raise ValueError("'out_features' must be a positive integer.")
         if output_name != "feature":
             raise ValueError(
-                "PLUMED requires the Metatomic output "
-                "to be named 'feature'."
+                "PLUMED requires the Metatomic output to be named 'feature'."
             )
         if not property_name:
-            raise ValueError(
-                "'property_name' must not be empty."
-            )
+            raise ValueError("'property_name' must not be empty.")
 
         self.model = model
         self.out_features = int(out_features)
@@ -222,10 +200,7 @@ class MetatomicCVWrapper(torch.nn.Module):
 
         block = TensorBlock(
             values=values,
-            samples=Labels(
-                names=["system"],
-                values=samples,
-            ),
+            samples=Labels(names=["system"], values=samples),
             components=components,
             properties=self._properties(device),
         )
@@ -260,22 +235,10 @@ class MetatomicCVWrapper(torch.nn.Module):
     ) -> TensorMap:
         """Convert dense system-level CV values to a TensorMap."""
         if features.ndim == 1:
-            if (
-                n_systems == 1
-                and features.shape[0] == self.out_features
-            ):
-                features = features.reshape(
-                    1,
-                    self.out_features,
-                )
-            elif (
-                self.out_features == 1
-                and features.shape[0] == n_systems
-            ):
-                features = features.reshape(
-                    n_systems,
-                    1,
-                )
+            if n_systems == 1 and features.shape[0] == self.out_features:
+                features = features.reshape(1, self.out_features)
+            elif self.out_features == 1 and features.shape[0] == n_systems:
+                features = features.reshape(n_systems, 1)
             else:
                 raise ValueError(
                     "The one-dimensional model output is ambiguous."
@@ -287,18 +250,15 @@ class MetatomicCVWrapper(torch.nn.Module):
             )
         if features.shape[0] != n_systems:
             raise ValueError(
-                "The first output dimension must equal "
-                "the number of systems."
+                "The first output dimension must equal the number of systems."
             )
         if features.shape[1] != self.out_features:
             raise ValueError(
-                "The second output dimension must equal "
-                "'out_features'."
+                "The second output dimension must equal 'out_features'."
             )
         if features.device != device:
             raise ValueError(
-                "The model output and input systems must "
-                "use the same device."
+                "The model output and input systems must use the same device."
             )
 
         return self._tensor_map(
@@ -328,9 +288,7 @@ class MetatomicCVWrapper(torch.nn.Module):
             )
 
         if len(systems) == 0:
-            raise ValueError(
-                "At least one System must be supplied."
-            )
+            raise ValueError("At least one System must be supplied.")
 
         if len(systems) == 1 and len(systems[0]) == 0:
             result["feature"] = self._empty_feature(systems[0])

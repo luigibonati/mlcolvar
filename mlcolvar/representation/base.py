@@ -5,17 +5,9 @@ from torch import nn
 
 from mlcolvar.utils import _code
 
-from ._utils import (
-    _as_atomic_number_list,
-    align_node_attrs,
-    as_positive_int,
-)
+from ._utils import _as_atomic_number_list, align_node_attrs, as_positive_int
 
-__all__ = [
-    "Representation",
-    "VectorRepresentation",
-    "GraphRepresentation",
-]
+__all__ = ["Representation", "VectorRepresentation", "GraphRepresentation"]
 
 
 class Representation(nn.Module):
@@ -33,15 +25,11 @@ class Representation(nn.Module):
     output_kind : {"atom", "system"}
         Whether the representation produces atom-level or system-level features.
     freeze : bool, default=True
-        If True, keep the representation parameters frozen and in evaluation mode.
+        If ``True``, keep the representation parameters frozen and in
+        evaluation mode.
     """
 
-    __constants__ = [
-        "input_kind",
-        "output_kind",
-        "out_features",
-        "freeze",
-    ]
+    __constants__ = ["input_kind", "output_kind", "out_features", "freeze"]
 
     def __init__(
         self,
@@ -52,30 +40,28 @@ class Representation(nn.Module):
         freeze: bool = True,
     ) -> None:
         super().__init__()
+
         if input_kind not in {"vector", "graph"}:
             raise ValueError("`input_kind` must be 'vector' or 'graph'.")
         if output_kind not in {"atom", "system"}:
             raise ValueError("`output_kind` must be 'atom' or 'system'.")
+
         self.out_features = as_positive_int(out_features, "out_features")
         self.input_kind = input_kind
         self.output_kind = output_kind
         self.freeze = bool(freeze)
 
-    def _freeze_module(
-        self,
-        module: nn.Module,
-    ) -> None:
+    def _freeze_module(self, module: nn.Module) -> None:
+        """Freeze a wrapped module when the representation is frozen."""
         if not self.freeze:
             return
+
         if not isinstance(module, torch.jit.ScriptModule):
             module.requires_grad_(False)
         module.eval()
 
-    def train(
-        self,
-        mode: bool = True,
-    ):
-        """Keep frozen representations in evaluation mode."""
+    def train(self, mode: bool = True):
+        """Set training mode while keeping frozen representations in evaluation."""
         return super().train(False if self.freeze else mode)
 
 
@@ -91,7 +77,8 @@ class VectorRepresentation(Representation):
     output_kind : {"atom", "system"}, default="system"
         Level of the representation output.
     freeze : bool, default=True
-        If True, keep the representation parameters frozen and in evaluation mode.
+        If ``True``, keep the representation parameters frozen and in
+        evaluation mode.
     """
 
     __constants__ = ["in_features"]
@@ -126,24 +113,23 @@ class GraphRepresentation(Representation):
         Cutoff used to construct the local neighbor list.
     pooling_operation : {"mean", "sum"}, optional
         Operation used to reduce atom-level features to system-level features.
-        If None, atom-level features are returned.
+        If ``None``, atom-level features are returned.
     output_kind : {"atom", "system"}, optional
-        Level of the output. If not provided, it is inferred from
+        Level of the output. If omitted, it is inferred from
         ``pooling_operation``.
     buffer : float, default=0.0
         Buffer added to the neighbor-list cutoff.
     long_range_cutoff : float, default=-1.0
-        Optional cutoff for long-range interactions. A negative value disables it.
+        Optional cutoff for long-range interactions. A negative value disables
+        it.
     full_neighbor_list : bool, default=True
         Whether the representation requires a full neighbor list.
     freeze : bool, default=True
-        If True, keep the representation parameters frozen and in evaluation mode.
+        If ``True``, keep the representation parameters frozen and in
+        evaluation mode.
     """
 
-    __constants__ = [
-        "full_neighbor_list",
-        "pooling_operation",
-    ]
+    __constants__ = ["full_neighbor_list", "pooling_operation"]
 
     def __init__(
         self,
@@ -162,6 +148,7 @@ class GraphRepresentation(Representation):
             atomic_numbers,
             "representation",
         )
+
         if cutoff <= 0.0:
             raise ValueError("`cutoff` must be positive.")
         if buffer < 0.0:
@@ -174,6 +161,7 @@ class GraphRepresentation(Representation):
             raise ValueError(
                 "`pooling_operation` must be 'mean', 'sum', or None."
             )
+
         if output_kind is None:
             output_kind = "atom" if pooling_operation is None else "system"
 
@@ -183,9 +171,11 @@ class GraphRepresentation(Representation):
             output_kind=output_kind,
             freeze=freeze,
         )
+
         self.in_features = None
         self.pooling_operation = pooling_operation
         self.full_neighbor_list = bool(full_neighbor_list)
+
         self.register_buffer(
             "feature_dim",
             torch.tensor(self.out_features, dtype=torch.int64),
@@ -204,10 +194,7 @@ class GraphRepresentation(Representation):
         )
         self.register_buffer(
             "long_range_cutoff",
-            torch.tensor(
-                long_range_cutoff,
-                dtype=torch.get_default_dtype(),
-            ),
+            torch.tensor(long_range_cutoff, dtype=torch.get_default_dtype()),
         )
 
     def pooling(
@@ -221,7 +208,7 @@ class GraphRepresentation(Representation):
         ----------
         input : torch.Tensor
             Atom-level features.
-        data : dict
+        data : dict[str, torch.Tensor]
             Graph data containing batch indices and optional system masks.
 
         Returns
@@ -232,33 +219,22 @@ class GraphRepresentation(Representation):
         """
         if self.pooling_operation is None:
             return input
+
         if self.pooling_operation == "mean":
             if "system_masks" not in data:
-                return _code.scatter_mean(
-                    input,
-                    data["batch"],
-                    dim=0,
-                )
+                return _code.scatter_mean(input, data["batch"], dim=0)
+
             output = input * data["system_masks"]
-            output = _code.scatter_sum(
-                output,
-                data["batch"],
-                dim=0,
-            )
+            output = _code.scatter_sum(output, data["batch"], dim=0)
             return output / data["n_system"]
+
         if "system_masks" in data:
             input = input * data["system_masks"]
-        return _code.scatter_sum(
-            input,
-            data["batch"],
-            dim=0,
-        )
+
+        return _code.scatter_sum(input, data["batch"], dim=0)
 
     @torch.jit.unused
-    def align_dataset(
-        self,
-        dataset,
-    ):
+    def align_dataset(self, dataset):
         """Align graph node attributes with the representation atomic species.
 
         Parameters
@@ -271,10 +247,7 @@ class GraphRepresentation(Representation):
         dataset
             Dataset with node attributes aligned with ``atomic_numbers``.
         """
-        return align_node_attrs(
-            dataset,
-            self.atomic_numbers,
-        )
+        return align_node_attrs(dataset, self.atomic_numbers)
 
     @torch.jit.unused
     def concat_atoms(
@@ -294,19 +267,13 @@ class GraphRepresentation(Representation):
             System-level representation with
             ``out_features * len(atom_indices)`` output features.
         """
-        return _ConcatGraphRepresentation(
-            self,
-            atom_indices,
-        )
+        return _ConcatGraphRepresentation(self, atom_indices)
 
 
 class _ConcatGraphRepresentation(GraphRepresentation):
-    """Concatenate selected atom features for each system."""
+    """Concatenate selected atom-level representation features per system."""
 
-    __constants__ = [
-        "n_selected_atoms",
-        "max_selected_atom_index",
-    ]
+    __constants__ = ["n_selected_atoms", "max_selected_atom_index"]
 
     def __init__(
         self,
@@ -332,6 +299,7 @@ class _ConcatGraphRepresentation(GraphRepresentation):
 
         self.n_selected_atoms = len(indices)
         self.max_selected_atom_index = max(indices)
+
         super().__init__(
             out_features=representation.out_features * self.n_selected_atoms,
             atomic_numbers=representation.atomic_numbers.detach().cpu().tolist(),
@@ -345,6 +313,7 @@ class _ConcatGraphRepresentation(GraphRepresentation):
             full_neighbor_list=representation.full_neighbor_list,
             freeze=representation.freeze,
         )
+
         self.representation = representation
         self.register_buffer(
             "atom_indices",
@@ -356,16 +325,29 @@ class _ConcatGraphRepresentation(GraphRepresentation):
         data: Dict[str, torch.Tensor],
         cell: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
+        """Evaluate and concatenate selected atom features for each system.
+
+        Parameters
+        ----------
+        data : dict[str, torch.Tensor]
+            Batched graph input containing ``ptr`` offsets for each system.
+        cell : torch.Tensor, optional
+            Optional simulation cell forwarded to the wrapped representation.
+
+        Returns
+        -------
+        torch.Tensor
+            Concatenated selected-atom features with shape
+            ``(n_systems, out_features)``.
+        """
         features = self.representation(data, cell=cell)
+
         if "ptr" not in data:
             raise KeyError(
                 "Graph data must contain `ptr` for selected-atom concatenation."
             )
 
-        ptr = data["ptr"].to(
-            device=features.device,
-            dtype=torch.long,
-        )
+        ptr = data["ptr"].to(device=features.device, dtype=torch.long)
         atoms_per_graph = ptr[1:] - ptr[:-1]
         if torch.any(atoms_per_graph <= self.max_selected_atom_index):
             raise RuntimeError(
@@ -373,14 +355,13 @@ class _ConcatGraphRepresentation(GraphRepresentation):
                 "in at least one system."
             )
 
+        # Convert per-system atom indices to indices in the batched atom tensor.
         global_indices = (
             ptr[:-1].unsqueeze(1)
             + self.atom_indices.to(features.device).unsqueeze(0)
         )
-        selected = features.index_select(
-            0,
-            global_indices.reshape(-1),
-        )
+        selected = features.index_select(0, global_indices.reshape(-1))
+
         return selected.reshape(
             ptr.numel() - 1,
             self.out_features,

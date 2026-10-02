@@ -14,10 +14,7 @@ from ._compat import (
 )
 from .wrapper import CVInferenceModel, MetatomicCVWrapper
 
-__all__ = [
-    "create_metatomic_model",
-    "export_metatomic_model",
-]
+__all__ = ["create_metatomic_model", "export_metatomic_model"]
 
 
 def _as_float(value) -> float:
@@ -163,19 +160,12 @@ def _make_inference_model(
     model = model.eval()
     network = _network(model)
     postprocessing = _build_postprocessing(model, network)
-
-    neighbor_options = _get_neighbor_options(
-        network,
-        interaction_range,
-    )
+    neighbor_options = _get_neighbor_options(network, interaction_range)
 
     return CVInferenceModel(
         network=_prepare_network(network),
         postprocessing=postprocessing,
-        atomic_numbers=torch.as_tensor(
-            atomic_types,
-            dtype=torch.long,
-        ),
+        atomic_numbers=torch.as_tensor(atomic_types, dtype=torch.long),
         neighbor_options=neighbor_options,
     ).eval()
 
@@ -237,50 +227,31 @@ def create_metatomic_model(
             )
 
     if atomic_types is None:
-        atomic_types = _model_attribute(
-            model,
-            network,
-            "atomic_numbers",
-        )
+        atomic_types = _model_attribute(model, network, "atomic_numbers")
         if atomic_types is None:
             raise ValueError(
                 "Could not infer `atomic_types`; provide them explicitly."
             )
 
     if interaction_range is None:
-        interaction_range = _model_attribute(
-            model,
-            network,
-            "cutoff",
-        )
+        interaction_range = _model_attribute(model, network, "cutoff")
         if interaction_range is None:
             raise ValueError(
                 "Could not infer `interaction_range`; provide it explicitly."
             )
 
     if length_unit is None:
-        length_unit = _model_attribute(
-            model,
-            network,
-            "length_unit",
-        )
+        length_unit = _model_attribute(model, network, "length_unit")
         if length_unit is None:
             length_unit = "angstrom"
 
     if dtype is None:
         reference = _reference_tensor(model)
-        dtype = (
-            "float64"
-            if reference.dtype == torch.float64
-            else "float32"
-        )
+        dtype = "float64" if reference.dtype == torch.float64 else "float32"
 
     out_features = _as_int(out_features)
     atomic_types = (
-        torch.as_tensor(
-            atomic_types,
-            dtype=torch.long,
-        )
+        torch.as_tensor(atomic_types, dtype=torch.long)
         .detach()
         .cpu()
         .reshape(-1)
@@ -290,21 +261,15 @@ def create_metatomic_model(
     interaction_range = _as_float(interaction_range)
 
     if out_features <= 0:
-        raise ValueError(
-            "`out_features` must be positive."
-        )
+        raise ValueError("`out_features` must be positive.")
     if not atomic_types:
         raise ValueError(
             "`atomic_types` must contain at least one atomic type."
         )
     if interaction_range < 0:
-        raise ValueError(
-            "`interaction_range` must be non-negative."
-        )
+        raise ValueError("`interaction_range` must be non-negative.")
     if dtype not in {"float32", "float64"}:
-        raise ValueError(
-            "`dtype` must be 'float32' or 'float64'."
-        )
+        raise ValueError("`dtype` must be 'float32' or 'float64'.")
 
     supported_devices = (
         ("cpu", "cuda")
@@ -318,7 +283,6 @@ def create_metatomic_model(
         atomic_types,
         interaction_range,
     )
-
     wrapper = MetatomicCVWrapper(
         model=inference,
         out_features=out_features,
@@ -329,14 +293,9 @@ def create_metatomic_model(
         description=description,
         authors=list(authors),
     )
-
     capabilities = ModelCapabilities(
         length_unit=length_unit,
-        outputs={
-            "feature": ModelOutput(
-                sample_kind="system",
-            )
-        },
+        outputs={"feature": ModelOutput(sample_kind="system")},
         atomic_types=atomic_types,
         interaction_range=interaction_range,
         supported_devices=list(supported_devices),
@@ -400,15 +359,13 @@ def export_metatomic_model(
         Path of the saved Metatomic model.
     """
     path = Path(path)
+
     if path.suffix != ".pt":
         raise ValueError(
             "The exported Metatomic model must use the '.pt' extension."
         )
 
-    path.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
+    path.parent.mkdir(parents=True, exist_ok=True)
 
     metatomic_model = create_metatomic_model(
         model=model,
@@ -427,10 +384,7 @@ def export_metatomic_model(
         metatomic_model.save(str(path))
     else:
         extensions = Path(collect_extensions)
-        extensions.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
+        extensions.mkdir(parents=True, exist_ok=True)
         metatomic_model.save(
             str(path),
             collect_extensions=str(extensions),
