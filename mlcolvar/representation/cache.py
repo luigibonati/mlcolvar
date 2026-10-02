@@ -6,7 +6,6 @@ import torch
 from torch import nn
 from torch_geometric.loader import DataLoader as GraphDataLoader
 
-from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
 from mlcolvar.data import DictDataset
 
 from ._utils import module_reference_tensor
@@ -28,31 +27,30 @@ class RepresentationCache:
     reference_indices: Optional[torch.Tensor] = None
 
 
-class CachedRepresentationDerivatives(SmartDerivatives):
+class CachedRepresentationDerivatives(nn.Module):
     """Apply cached representation Jacobians through the chain rule."""
 
-    def __init__(self, jacobian: torch.Tensor):
-        nn.Module.__init__(self)
+    def __init__(self, jacobian: torch.Tensor) -> None:
+        super().__init__()
         self.register_buffer("jacobian", jacobian, persistent=False)
 
-    def forward(self, gradient_latent, ref_idx=None):
+    def forward(
+        self,
+        gradient_latent: torch.Tensor,
+        ref_idx: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
         if ref_idx is None:
             raise ValueError("`ref_idx` is required.")
-        ref_idx = ref_idx.reshape(-1).to(
-            self.jacobian.device,
-            dtype=torch.long,
-        )
+
+        ref_idx = ref_idx.reshape(-1).to(self.jacobian.device, dtype=torch.long)
         if torch.any(ref_idx < 0) or torch.any(ref_idx >= len(self.jacobian)):
             raise IndexError("Invalid cached derivative index.")
+
         jacobian = self.jacobian[ref_idx].to(
             device=gradient_latent.device,
             dtype=gradient_latent.dtype,
         )
-        return torch.einsum(
-            "bl,b...l->b...",
-            gradient_latent,
-            jacobian,
-        )
+        return torch.einsum("bl,b...l->b...", gradient_latent, jacobian)
 
 
 def _indices(n, indices=None):
@@ -65,8 +63,7 @@ def _indices(n, indices=None):
         indices = indices.reshape(-1)
         if len(indices) != n:
             raise ValueError(
-                "Boolean `jacobian_indices` must have the same length "
-                "as the dataset."
+                "Boolean `jacobian_indices` must have the same length as the dataset."
             )
         indices = torch.nonzero(indices, as_tuple=False).reshape(-1)
     else:
@@ -74,25 +71,15 @@ def _indices(n, indices=None):
 
     indices = torch.unique(indices, sorted=True)
     if torch.any(indices < 0) or torch.any(indices >= n):
-        raise IndexError(
-            "`jacobian_indices` contains out-of-range indices."
-        )
+        raise IndexError("`jacobian_indices` contains out-of-range indices.")
     return indices
 
 
 def _references(n, selected, device):
     """Map dataset indices to cached Jacobian indices."""
-    refs = torch.full(
-        (n,),
-        -1,
-        dtype=torch.long,
-        device=device,
-    )
+    refs = torch.full((n,), -1, dtype=torch.long, device=device)
     selected = selected.to(device)
-    refs[selected] = torch.arange(
-        len(selected),
-        device=device,
-    )
+    refs[selected] = torch.arange(len(selected), device=device)
     return refs
 
 
@@ -136,11 +123,7 @@ def _cache_vector(
                 xb = x[start:stop].to(device)
                 cb = None if cell is None else cell[start:stop].to(device)
                 h = representation(xb, cell=cb)
-                features.append(
-                    h.reshape(len(xb), -1)
-                    .detach()
-                    .to(output_device)
-                )
+                features.append(h.reshape(len(xb), -1).detach().to(output_device))
 
         features = torch.cat(features)
         if not compute_jacobian:
@@ -160,15 +143,11 @@ def _cache_vector(
             source_ref_idx = (
                 torch.arange(n)
                 if source_ref_idx is None
-                else torch.as_tensor(source_ref_idx)
-                .reshape(-1)
-                .long()
-                .cpu()
+                else torch.as_tensor(source_ref_idx).reshape(-1).long().cpu()
             )
             if len(source_ref_idx) != n:
                 raise ValueError(
-                    "`source_ref_idx` must have the same length "
-                    "as the dataset."
+                    "`source_ref_idx` must have the same length as the dataset."
                 )
 
         jacobians = []
@@ -206,19 +185,13 @@ def _cache_vector(
                     grads.append(dh)
 
                 jacobians.append(
-                    torch.stack(grads, dim=-1)
-                    .detach()
-                    .to(output_device)
+                    torch.stack(grads, dim=-1).detach().to(output_device)
                 )
 
         return RepresentationCache(
             features=features,
             jacobian=torch.cat(jacobians),
-            reference_indices=_references(
-                n,
-                selected,
-                output_device,
-            ),
+            reference_indices=_references(n, selected, output_device),
         )
 
 
@@ -237,23 +210,13 @@ def _cache_graph(
         raise TypeError("Expected a graph dataset.")
 
     n = len(dataset)
-    selected = (
-        _indices(n, jacobian_indices)
-        if compute_jacobian
-        else None
-    )
+    selected = _indices(n, jacobian_indices) if compute_jacobian else None
     if compute_jacobian and selected.numel() == 0:
         raise ValueError("No samples selected for Jacobian caching.")
 
     with _temporary_eval(representation, device):
-        loader = GraphDataLoader(
-            dataset,
-            batch_size=batch_size,
-            shuffle=False,
-        )
-
-        features = []
-        jacobians = []
+        loader = GraphDataLoader(dataset, batch_size=batch_size, shuffle=False)
+        features, jacobians = [], []
         offset = 0
         n_atoms_ref = None
 
@@ -263,8 +226,7 @@ def _cache_graph(
 
             local = (
                 selected[
-                    (selected >= offset)
-                    & (selected < offset + n_graphs)
+                    (selected >= offset) & (selected < offset + n_graphs)
                 ] - offset
                 if compute_jacobian
                 else torch.empty(0, dtype=torch.long)
@@ -272,40 +234,21 @@ def _cache_graph(
             need_grad = compute_jacobian and len(local) > 0
 
             if need_grad:
-                counts = torch.bincount(
-                    graph.batch,
-                    minlength=n_graphs,
-                )
-                selected_counts = counts[
-                    local.to(counts.device)
-                ]
+                counts = torch.bincount(graph.batch, minlength=n_graphs)
+                selected_counts = counts[local.to(counts.device)]
 
-                if not torch.all(
-                    selected_counts == selected_counts[0]
-                ):
-                    raise ValueError(
-                        "Selected graphs must have equal atom counts."
-                    )
+                if not torch.all(selected_counts == selected_counts[0]):
+                    raise ValueError("Selected graphs must have equal atom counts.")
 
                 n_atoms = int(selected_counts[0])
                 if n_atoms_ref is None:
                     n_atoms_ref = n_atoms
                 elif n_atoms != n_atoms_ref:
-                    raise ValueError(
-                        "Selected graphs must have equal atom counts."
-                    )
+                    raise ValueError("Selected graphs must have equal atom counts.")
 
-                graph.positions = (
-                    graph.positions
-                    .detach()
-                    .requires_grad_(True)
-                )
+                graph.positions = graph.positions.detach().requires_grad_(True)
 
-            with (
-                torch.enable_grad()
-                if need_grad
-                else torch.no_grad()
-            ):
+            with torch.enable_grad() if need_grad else torch.no_grad():
                 h = representation(graph)
 
                 if h.ndim != 2 or h.shape[0] != n_graphs:
@@ -332,14 +275,10 @@ def _cache_graph(
                         )
 
                     jacobians.append(
-                        torch.stack(grads, dim=-1)
-                        .detach()
-                        .to(output_device)
+                        torch.stack(grads, dim=-1).detach().to(output_device)
                     )
 
-            features.append(
-                h.detach().to(output_device)
-            )
+            features.append(h.detach().to(output_device))
             offset += n_graphs
 
         features = torch.cat(features)
@@ -349,11 +288,7 @@ def _cache_graph(
         return RepresentationCache(
             features=features,
             jacobian=torch.cat(jacobians),
-            reference_indices=_references(
-                n,
-                selected,
-                output_device,
-            ),
+            reference_indices=_references(n, selected, output_device),
         )
 
 
@@ -376,10 +311,10 @@ def precompute_representation_cache(
     representation : Representation
         Frozen representation to evaluate.
     dataset : DictDataset
-        Dataset containing vector or graph inputs.
+        Dataset containing raw vector or graph inputs.
     descriptor_derivatives : torch.nn.Module, optional
-        Transform vector-descriptor gradients to Cartesian-coordinate
-        gradients. If None, vector inputs are treated as coordinates.
+        Transform vector-descriptor gradients to Cartesian-coordinate gradients.
+        If None, vector inputs are treated as coordinates.
     jacobian_indices : torch.Tensor, optional
         Samples for which Jacobians are cached.
     source_ref_idx : torch.Tensor, optional
@@ -399,13 +334,9 @@ def precompute_representation_cache(
         Cached representation outputs and optional Jacobians.
     """
     if not isinstance(representation, Representation):
-        raise TypeError(
-            "`representation` must derive from `Representation`."
-        )
+        raise TypeError("`representation` must derive from `Representation`.")
     if not representation.freeze:
-        raise RuntimeError(
-            "Caching requires a frozen representation."
-        )
+        raise RuntimeError("Caching requires a frozen representation.")
 
     device = torch.device(
         device or module_reference_tensor(representation).device

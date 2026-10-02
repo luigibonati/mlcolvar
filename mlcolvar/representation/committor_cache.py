@@ -1,11 +1,9 @@
 from typing import Optional
 
 import torch
+from torch import nn
 
-from mlcolvar.core.loss.utils.smart_derivatives import (
-    SmartDerivatives,
-    create_smart_dataset,
-)
+from mlcolvar.core.loss.utils.smart_derivatives import create_smart_dataset
 from mlcolvar.data import DictDataset
 
 from .base import Representation
@@ -25,7 +23,7 @@ def _graph_field(dataset, field):
 def precompute_committor_cache(
     representation: Representation,
     dataset: DictDataset,
-    descriptor_derivatives: Optional[SmartDerivatives] = None,
+    descriptor_derivatives: Optional[nn.Module] = None,
     batch_size=None,
     device=None,
     output_device="cpu",
@@ -42,7 +40,7 @@ def precompute_committor_cache(
         Frozen vector or graph representation.
     dataset : DictDataset
         Dataset containing the committor training data.
-    descriptor_derivatives : SmartDerivatives, optional
+    descriptor_derivatives : torch.nn.Module, optional
         Transform descriptor gradients to Cartesian-coordinate gradients.
         If None, vector inputs are treated directly as coordinates.
     batch_size : int, optional

@@ -48,7 +48,6 @@ def test_vector_committor_cache():
         ]),
         "labels": torch.tensor([0.0, 2.0, 1.0, 3.0]),
         "weights": torch.ones(4),
-        "ref_idx": torch.arange(4),
     })
 
     cached, derivatives = precompute_committor_cache(
