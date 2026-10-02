@@ -52,21 +52,22 @@ def _create_pyg_data_from_configuration(
     # the graph, like, we don't even change the node indices in `edge_index`.
     # Here we simply ignore them and rely on `RemoveIsolatedNodes`,
     # which is applied later during dataset preparation.
-    edge_index, shifts, unit_shifts = get_neighborhood(positions=config.positions,
-                                                       cutoff=cutoff,
-                                                       cell=config.cell,
-                                                       pbc=config.pbc,
-                                                       system_indices=config.system,
-                                                       environment_indices=config.environment,
-                                                       buffer=buffer
-                                                    )
+    edge_index, shifts, unit_shifts = get_neighborhood(
+        positions=config.positions,
+        cutoff=cutoff,
+        cell=np.array(config.cell, copy=True),
+        pbc=config.pbc,
+        system_indices=config.system,
+        environment_indices=config.environment,
+        buffer=buffer
+    )
     
     if config.subsystem is not None:
         config.subsystem = np.array(config.subsystem)
         edge_index_lr, shifts_lr, unit_shifts_lr = get_neighborhood(
             positions=config.positions[config.subsystem],
             cutoff=long_range_cutoff,
-            cell=config.cell,
+            cell=np.array(config.cell, copy=True),
             pbc=config.pbc,
         )
         edge_index_lr = np.vstack([config.subsystem[edge_index_lr[0]],
@@ -78,12 +79,12 @@ def _create_pyg_data_from_configuration(
         unit_shifts = np.vstack([unit_shifts,
                                  unit_shifts_lr])
     
-    edge_index  = torch.tensor( edge_index, dtype=torch.long )
-    shifts      = torch.tensor( shifts, dtype=torch.get_default_dtype() )
-    unit_shifts = torch.tensor( unit_shifts, dtype=torch.get_default_dtype() )
-    positions   = torch.tensor( config.positions, dtype=torch.get_default_dtype() )
-    cell        = torch.tensor( config.cell, dtype=torch.get_default_dtype() )
-    
+    edge_index  = torch.tensor(edge_index, dtype=torch.long)
+    shifts      = torch.tensor(shifts, dtype=torch.get_default_dtype())
+    unit_shifts = torch.tensor(unit_shifts, dtype=torch.get_default_dtype())
+    positions   = torch.tensor(config.positions, dtype=torch.get_default_dtype())
+    cell        = torch.tensor(config.cell, dtype=torch.get_default_dtype())
+    pbc         = torch.tensor(config.pbc, dtype=torch.bool).reshape(1, 3)
     
     node_labels  = torch.tensor( config.node_labels, dtype=torch.get_default_dtype() )    if config.node_labels is not None else None
     graph_labels = torch.tensor( config.graph_labels, dtype=torch.get_default_dtype() )   if config.graph_labels is not None else None
@@ -121,6 +122,7 @@ def _create_pyg_data_from_configuration(
                                          unit_shifts=unit_shifts,
                                          positions=positions,
                                          cell=cell,
+                                         pbc=pbc,
                                          node_attrs=one_hot,
                                          node_labels=node_labels,
                                          graph_labels=graph_labels,
@@ -361,7 +363,12 @@ class _RemoveIsolatedNodes(BaseTransform):
             for key, value in node_store.items():
                 if key == 'num_nodes':
                     out.num_nodes = n_id_dict[node_store._key].numel()
-                elif node_store.is_node_attr(key) and key not in ['shifts', 'unit_shifts']:
+                elif node_store.is_node_attr(key) and key not in [
+                    'shifts',
+                    'unit_shifts',
+                    'cell',
+                    'pbc',
+                ]:
                     out[key] = value[n_id_dict[node_store._key]]
 
         return data
