@@ -11,9 +11,8 @@ from mlcolvar.data import DictDataset
 
 from ..base import Representation
 from .derivatives import JacobianTransform, compute_jacobian
-from .materialize import materialize
 
-__all__ = ["prepare_committor_dataset"]
+__all__ = ["prepare_committor"]
 
 
 class _CommittorJacobianTransform(SmartDerivatives):
@@ -35,56 +34,23 @@ def _graph_field(
     dataset: DictDataset,
     field: str,
 ) -> torch.Tensor:
-    """Concatenate a graph-level field across all systems."""
     return torch.cat([
         torch.as_tensor(getattr(graph, field)).reshape(-1)
         for graph in dataset["data_list"]
     ])
 
 
-def prepare_committor_dataset(
+def prepare_committor(
     representation: Representation,
     dataset: DictDataset,
+    features: torch.Tensor,
     descriptor_derivatives: Optional[nn.Module] = None,
     batch_size: Optional[int] = None,
     device=None,
     output_device="cpu",
     separate_boundary_dataset: bool = True,
 ):
-    """Prepare materialized representation data for committor training.
-
-    The representation is materialized over the full dataset, while Jacobians
-    are computed only for samples contributing to the variational loss.
-
-    For vector representations, Jacobians are computed with respect to the
-    direct inputs. If ``descriptor_derivatives`` is provided, they are
-    transformed to Cartesian-coordinate Jacobians. For graph representations,
-    Jacobians are computed directly with respect to atomic positions.
-
-    Parameters
-    ----------
-    representation : Representation
-        Frozen vector or graph representation.
-    dataset : DictDataset
-        Committor training dataset.
-    descriptor_derivatives : torch.nn.Module, optional
-        Transform descriptor Jacobians to Cartesian-coordinate Jacobians.
-    batch_size : int, optional
-        Evaluation batch size.
-    device : str or torch.device, optional
-        Device used for representation evaluation.
-    output_device : str or torch.device, default="cpu"
-        Device used to store materialized tensors.
-    separate_boundary_dataset : bool, default=True
-        Compute Jacobians only for samples with ``labels > 1``.
-
-    Returns
-    -------
-    DictDataset
-        Dataset containing materialized representation features.
-    SmartDerivatives
-        Committor-compatible transform backed by materialized Jacobians.
-    """
+    """Prepare materialized representation features for committor training."""
     output_device = torch.device(output_device)
 
     if representation.input_kind == "vector":
@@ -109,22 +75,20 @@ def prepare_committor_dataset(
 
     else:
         raise ValueError(
-            f"Unsupported representation input kind: "
+            "Unsupported representation input kind: "
             f"{representation.input_kind!r}."
+        )
+
+    if len(features) != len(labels):
+        raise ValueError(
+            "The number of materialized features must match "
+            "the number of dataset samples."
         )
 
     indices = (
         torch.nonzero(labels > 1, as_tuple=False).reshape(-1)
         if separate_boundary_dataset
         else torch.arange(len(labels))
-    )
-
-    features = materialize(
-        representation,
-        dataset,
-        batch_size=batch_size,
-        device=device,
-        output_device=output_device,
     )
 
     jacobian = compute_jacobian(
@@ -149,7 +113,7 @@ def prepare_committor_dataset(
         )
 
     if representation.input_kind == "vector":
-        prepared_dataset = create_smart_dataset(
+        feature_dataset = create_smart_dataset(
             features,
             dataset,
             separate_boundary_dataset,
@@ -160,10 +124,11 @@ def prepare_committor_dataset(
             "labels": labels.to(output_device),
             "weights": _graph_field(dataset, "weight").to(output_device),
         })
-        prepared_dataset = create_smart_dataset(
+
+        feature_dataset = create_smart_dataset(
             features,
             graph_dataset,
             separate_boundary_dataset,
         )
 
-    return prepared_dataset, _CommittorJacobianTransform(jacobian)
+    return feature_dataset, _CommittorJacobianTransform(jacobian)

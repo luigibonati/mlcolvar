@@ -6,7 +6,8 @@ from mlcolvar.data import DictDataset
 from mlcolvar.representation import (
     GraphRepresentation,
     VectorRepresentation,
-    prepare_committor_dataset,
+    materialize,
+    prepare_committor,
 )
 
 
@@ -42,15 +43,9 @@ class DummyGraphRepresentation(GraphRepresentation):
 class DummyDescriptorDerivatives(nn.Module):
     """Map descriptor gradients to Cartesian-coordinate gradients."""
 
-    def forward(
-        self,
-        gradient,
-        ref_idx=None,
-    ):
+    def forward(self, gradient, ref_idx=None):
         if ref_idx is None:
-            raise ValueError(
-                "`ref_idx` is required."
-            )
+            raise ValueError("`ref_idx` is required.")
 
         output = torch.zeros(
             gradient.shape[0],
@@ -60,10 +55,8 @@ class DummyDescriptorDerivatives(nn.Module):
             device=gradient.device,
             dtype=gradient.dtype,
         )
-
         output[:, 0, 0, :] = gradient[:, 0, :]
         output[:, 0, 1, :] = gradient[:, 1, :]
-
         return output
 
 
@@ -75,25 +68,23 @@ def test_vector_committor_preparation():
             [2.0, 3.0],
             [3.0, 4.0],
         ]),
-        "labels": torch.tensor([
-            0.0,
-            2.0,
-            1.0,
-            3.0,
-        ]),
+        "labels": torch.tensor([0.0, 2.0, 1.0, 3.0]),
         "weights": torch.ones(4),
     })
 
-    prepared, transform = prepare_committor_dataset(
-        DummyVectorRepresentation(),
+    representation = DummyVectorRepresentation()
+    features = materialize(representation, dataset)
+
+    prepared, transform = prepare_committor(
+        representation,
         dataset,
+        features,
     )
 
     torch.testing.assert_close(
         prepared["data"],
-        dataset["data"],
+        features,
     )
-
     torch.testing.assert_close(
         prepared["ref_idx"],
         torch.tensor(
@@ -106,7 +97,6 @@ def test_vector_committor_preparation():
         torch.ones(2, 2),
         torch.tensor([0, 1]),
     )
-
     torch.testing.assert_close(
         gradient,
         torch.ones(2, 2),
@@ -121,27 +111,25 @@ def test_vector_descriptor_committor_preparation():
             [2.0, 3.0],
             [3.0, 4.0],
         ]),
-        "labels": torch.tensor([
-            0.0,
-            2.0,
-            1.0,
-            3.0,
-        ]),
+        "labels": torch.tensor([0.0, 2.0, 1.0, 3.0]),
         "weights": torch.ones(4),
         "ref_idx": torch.arange(4),
     })
 
-    prepared, transform = prepare_committor_dataset(
-        DummyVectorRepresentation(),
+    representation = DummyVectorRepresentation()
+    features = materialize(representation, dataset)
+
+    prepared, transform = prepare_committor(
+        representation,
         dataset,
+        features,
         descriptor_derivatives=DummyDescriptorDerivatives(),
     )
 
     torch.testing.assert_close(
         prepared["data"],
-        dataset["data"],
+        features,
     )
-
     torch.testing.assert_close(
         prepared["ref_idx"],
         torch.tensor(
@@ -156,18 +144,10 @@ def test_vector_descriptor_committor_preparation():
     )
 
     expected = torch.tensor([
-        [
-            [1.0, 1.0, 0.0],
-        ],
-        [
-            [1.0, 1.0, 0.0],
-        ],
+        [[1.0, 1.0, 0.0]],
+        [[1.0, 1.0, 0.0]],
     ])
-
-    torch.testing.assert_close(
-        gradient,
-        expected,
-    )
+    torch.testing.assert_close(gradient, expected)
 
 
 def test_graph_committor_preparation():
@@ -197,27 +177,30 @@ def test_graph_committor_preparation():
         data_type="graphs",
     )
 
-    prepared, transform = prepare_committor_dataset(
-        DummyGraphRepresentation(),
+    representation = DummyGraphRepresentation()
+    features = materialize(representation, dataset)
+
+    prepared, transform = prepare_committor(
+        representation,
         dataset,
+        features,
     )
 
     torch.testing.assert_close(
-        prepared["data"],
+        features,
         torch.tensor([
             [2.0, 1.0],
             [3.0, 2.0],
         ]),
     )
-
+    torch.testing.assert_close(
+        prepared["data"],
+        features,
+    )
     torch.testing.assert_close(
         prepared["weights"],
-        torch.tensor([
-            1.0,
-            2.0,
-        ]),
+        torch.tensor([1.0, 2.0]),
     )
-
     torch.testing.assert_close(
         prepared["ref_idx"],
         torch.tensor(
@@ -241,8 +224,4 @@ def test_graph_committor_preparation():
             [0.5, 0.5, 0.0],
         ],
     ])
-
-    torch.testing.assert_close(
-        gradient,
-        expected,
-    )
+    torch.testing.assert_close(gradient, expected)

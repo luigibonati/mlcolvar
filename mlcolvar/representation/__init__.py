@@ -9,7 +9,7 @@ from .adapters import (
 )
 from .preparation import (
     materialize,
-    prepare_committor_dataset,
+    prepare_committor,
 )
 from .export import export_representation_torchscript
 
@@ -20,6 +20,6 @@ __all__ = [
     "MACERepresentation",
     "MLColvarRepresentation",
     "materialize",
-    "prepare_committor_dataset",
+    "prepare_committor",
     "export_representation_torchscript",
 ]
