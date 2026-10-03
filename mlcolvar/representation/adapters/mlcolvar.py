@@ -3,149 +3,70 @@ from torch import nn
 
 from mlcolvar.core import BaseGNN
 
-from .._utils import as_positive_int, module_reference_tensor
+from .._utils import as_float, as_positive_int, module_reference_tensor
 from ..base import Representation
-from ._utils import to_float, to_int_list
 
 __all__ = ["MLColvarRepresentation"]
 
 
-def _encoder(model: nn.Module) -> nn.Module:
-    """Return the latent encoder of an mlcolvar model."""
-    encoder = getattr(model, "nn", None)
-    if encoder is None:
-        raise TypeError(
-            f"{model.__class__.__name__} does not expose an `.nn` encoder."
-        )
-    return encoder
-
-
-def _input_kind(model: nn.Module, encoder: nn.Module) -> str:
-    """Infer whether the model consumes vector or graph inputs."""
-    if isinstance(encoder, BaseGNN):
-        return "graph"
-    if all(hasattr(encoder, name) for name in ("atomic_numbers", "cutoff")):
-        return "graph"
-    if getattr(model, "in_features", None) is not None:
-        return "vector"
-
-    raise TypeError(
-        f"Cannot infer the input type of {model.__class__.__name__}. "
-        "Expected `in_features` for vector inputs or graph metadata "
-        "(`atomic_numbers`, `cutoff`) on the encoder."
-    )
-
-
-def _out_features(
-    encoder: nn.Module,
-    value: int | None,
-) -> int:
-    """Resolve the encoder output dimension."""
-    if value is not None:
-        return as_positive_int(value, "out_features")
-
-    for name in ("out_features", "n_out"):
-        value = getattr(encoder, name, None)
-        if value is not None:
-            return as_positive_int(value, name)
-
-    raise ValueError(
-        "Cannot infer the representation dimension from "
-        f"{encoder.__class__.__name__}; pass `out_features` explicitly."
-    )
-
-
-def _preprocess(
-    model: nn.Module,
-    data,
-    cell: torch.Tensor | None = None,
-):
-    """Apply optional model preprocessing."""
-    preprocessing = getattr(model, "preprocessing", None)
-    if preprocessing is None:
-        return data
-    return preprocessing(data) if cell is None else preprocessing(data, cell=cell)
-
-
 class MLColvarRepresentation(Representation):
-    """Reusable latent representation from a pretrained mlcolvar model.
-
-    The representation reuses the latent encoder stored in ``model.nn`` while
-    excluding task-specific downstream blocks and postprocessing. The input
-    type is inferred automatically from the model.
-
-    Parameters
-    ----------
-    model : torch.nn.Module
-        Pretrained mlcolvar model exposing its latent encoder through ``nn``.
-    out_features : int, optional
-        Latent dimension. If omitted, inferred from ``encoder.out_features``
-        or ``encoder.n_out``.
-    freeze : bool, default=True
-        Whether to freeze the pretrained model.
-    """
+    """Reusable latent representation from a pretrained mlcolvar model."""
 
     def __init__(
         self,
         model: nn.Module,
         *,
-        out_features: int | None = None,
         freeze: bool = True,
     ) -> None:
         if not isinstance(model, nn.Module):
             raise TypeError("`model` must be a torch.nn.Module.")
+        encoder = getattr(model, "nn", None)
+        if encoder is None:
+            raise TypeError(
+                f"{model.__class__.__name__} does not expose an `.nn` encoder."
+            )
 
-        encoder = _encoder(model)
-        input_kind = _input_kind(model, encoder)
-        out_features = _out_features(encoder, out_features)
-
-        if input_kind == "vector":
+        out_features = as_positive_int(
+            encoder.out_features, "encoder.out_features"
+        )
+        if isinstance(encoder, BaseGNN):
             super().__init__(
                 out_features=out_features,
-                input_kind="vector",
-                in_features=as_positive_int(
-                    model.in_features,
-                    "model.in_features",
+                input_kind="graph",
+                atomic_numbers=encoder.atomic_numbers,
+                cutoff=as_float(encoder.cutoff, "encoder.cutoff"),
+                pooling_operation=encoder.pooling_operation,
+                buffer=as_float(encoder.buffer, "encoder.buffer"),
+                long_range_cutoff=as_float(
+                    encoder.long_range_cutoff,
+                    "encoder.long_range_cutoff",
                 ),
-                output_kind="system",
                 freeze=freeze,
             )
         else:
             super().__init__(
                 out_features=out_features,
-                input_kind="graph",
-                atomic_numbers=to_int_list(
-                    encoder.atomic_numbers,
-                    name="encoder.atomic_numbers",
+                input_kind="vector",
+                output_kind="system",
+                in_features=as_positive_int(
+                    model.in_features, "model.in_features"
                 ),
-                cutoff=to_float(
-                    encoder.cutoff,
-                    name="encoder.cutoff",
-                ),
-                pooling_operation=getattr(
-                    encoder,
-                    "pooling_operation",
-                    None,
-                ),
-                buffer=to_float(
-                    getattr(encoder, "buffer", 0.0),
-                    name="encoder.buffer",
-                ),
-                long_range_cutoff=to_float(
-                    getattr(encoder, "long_range_cutoff", -1.0),
-                    name="encoder.long_range_cutoff",
-                ),
-                full_neighbor_list=True,
                 freeze=freeze,
             )
 
-        self.model = model
+        self.encoder = encoder
+        self.preprocessing = getattr(model, "preprocessing", None)
+        self.norm_in = getattr(model, "norm_in", None)
         self.register_buffer(
             "_model_reference",
-            module_reference_tensor(model),
+            module_reference_tensor(encoder),
             persistent=False,
         )
-        self._freeze_module(model)
+        self._freeze_module(self.encoder)
+        if isinstance(self.preprocessing, nn.Module):
+            self._freeze_module(self.preprocessing)
+        if isinstance(self.norm_in, nn.Module):
+            self._freeze_module(self.norm_in)
 
     def forward(
         self,
@@ -165,9 +86,13 @@ class MLColvarRepresentation(Representation):
                 for key, value in data.items()
                 if torch.is_tensor(value)
             }
-            data = _preprocess(self.model, data, cell)
-
-            if getattr(self.model, "norm_in", None) is not None:
+            if self.preprocessing is not None:
+                data = (
+                    self.preprocessing(data)
+                    if cell is None
+                    else self.preprocessing(data, cell=cell)
+                )
+            if self.norm_in is not None:
                 raise ValueError(
                     "Input normalization cannot be applied directly "
                     "to graph dictionaries."
@@ -180,15 +105,17 @@ class MLColvarRepresentation(Representation):
                     f"Expected {self.in_features} input features, "
                     f"found {data.shape[-1]}."
                 )
-
             data = data.to(self._model_reference)
-            data = _preprocess(self.model, data, cell)
+            if self.preprocessing is not None:
+                data = (
+                    self.preprocessing(data)
+                    if cell is None
+                    else self.preprocessing(data, cell=cell)
+                )
+            if self.norm_in is not None:
+                data = self.norm_in(data)
 
-            norm_in = getattr(self.model, "norm_in", None)
-            if norm_in is not None:
-                data = norm_in(data)
-
-        output = self.model.nn(data)
+        output = self.encoder(data)
         if output.shape[-1] != self.out_features:
             raise ValueError(
                 f"Expected {self.out_features} latent features, "

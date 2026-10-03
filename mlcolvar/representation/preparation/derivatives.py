@@ -3,7 +3,8 @@ from torch import nn
 from torch_geometric.loader import DataLoader as GraphDataLoader
 
 from mlcolvar.data import DictDataset, DictLoader
-from mlcolvar.representation._utils import module_reference_tensor
+
+from .._utils import module_reference_tensor
 
 __all__ = ["compute_jacobian", "JacobianTransform"]
 
@@ -22,12 +23,12 @@ def _indices(
             raise ValueError(
                 "Boolean `indices` must have the same length as the dataset."
             )
-        indices = indices.nonzero().flatten()
+        indices = torch.where(indices)[0]
     else:
         indices = indices.flatten().long()
 
     indices = torch.unique(indices, sorted=True)
-    if torch.any(indices < 0) or torch.any(indices >= n):
+    if torch.any((indices < 0) | (indices >= n)):
         raise IndexError("`indices` contains out-of-range indices.")
     return indices
 
@@ -41,57 +42,21 @@ def compute_jacobian(
     device: torch.device | str | None = None,
     output_device: torch.device | str = "cpu",
 ) -> torch.Tensor:
-    """Compute model-output Jacobians with respect to dataset inputs.
-
-    For vector datasets, derivatives are computed with respect to ``data``.
-    For graph datasets, derivatives are computed with respect to atomic
-    positions. Graphs must contain the same number of atoms so that their
-    Jacobians can be collected into a dense tensor.
-
-    Parameters
-    ----------
-    model : torch.nn.Module
-        Model whose output Jacobian is evaluated.
-    dataset : DictDataset
-        Vector- or graph-based dataset containing the model inputs.
-    indices : torch.Tensor, optional
-        Dataset indices to evaluate. Boolean masks are also supported.
-    batch_size : int, optional
-        Number of samples evaluated per batch. Defaults to 256 for graph
-        datasets and 1024 for vector datasets.
-    device : torch.device or str, optional
-        Device used for model evaluation. By default, use the current model
-        device.
-    output_device : torch.device or str, default="cpu"
-        Device on which the computed Jacobians are stored.
-
-    Returns
-    -------
-    torch.Tensor
-        Jacobians with the output-feature dimension stored last.
-
-    Notes
-    -----
-    Samples are assumed to be independent within a batch. This allows the
-    gradient of the summed batch output to recover the per-sample Jacobians.
-    """
-    if not isinstance(model, nn.Module):
-        raise TypeError("`model` must be a torch.nn.Module.")
-
+    """Compute model-output Jacobians with respect to dataset inputs."""
     selected = _indices(len(dataset), indices)
     if selected.numel() == 0:
         raise ValueError("No samples selected for Jacobian computation.")
-
     dataset = dataset[selected]
 
     reference = module_reference_tensor(model)
     original_device = reference.device
     training = model.training
-    device = torch.device(device or original_device)
+    device = original_device if device is None else torch.device(device)
     output_device = torch.device(output_device)
 
     is_graph = dataset.metadata.get("data_type") == "graphs"
-    batch_size = batch_size or (256 if is_graph else 1024)
+    if batch_size is None:
+        batch_size = 256 if is_graph else 1024
     loader = (
         GraphDataLoader(dataset, batch_size=batch_size, shuffle=False)
         if is_graph
@@ -107,12 +72,11 @@ def compute_jacobian(
             for batch in loader:
                 if is_graph:
                     data = batch["data_list"].to(device)
-                    n_samples = int(data.num_graphs)
-
-                    counts = torch.bincount(data.batch, minlength=n_samples)
+                    counts = data.ptr[1:] - data.ptr[:-1]
                     if not torch.all(counts == counts[0]):
                         raise ValueError("Graphs must have equal atom counts.")
 
+                    n_samples = len(counts)
                     n_atoms = int(counts[0])
                     if n_atoms_ref is None:
                         n_atoms_ref = n_atoms
@@ -120,36 +84,34 @@ def compute_jacobian(
                         raise ValueError("Graphs must have equal atom counts.")
 
                     data.positions = data.positions.detach().requires_grad_(True)
-                    output = model(data)
                     inputs = data.positions
+                    output = model(data)
                 else:
                     data = batch["data"].to(device).detach().requires_grad_(True)
                     cell = batch.get("cell")
-                    if cell is not None:
-                        cell = cell.to(device)
-
+                    cell = None if cell is None else cell.to(device)
                     n_samples = len(data)
-                    output = model(data) if cell is None else model(data, cell=cell)
                     inputs = data
+                    output = (
+                        model(data)
+                        if cell is None
+                        else model(data, cell=cell)
+                    )
 
                 output = output.reshape(n_samples, -1)
                 gradients: list[torch.Tensor] = []
-
                 for i in range(output.shape[-1]):
                     gradient = torch.autograd.grad(
                         output[:, i].sum(),
                         inputs,
                         retain_graph=i + 1 < output.shape[-1],
                     )[0]
-
                     if is_graph:
-                        gradient = torch.stack(
-                            [
-                                gradient[data.batch == j]
-                                for j in range(n_samples)
-                            ]
+                        gradient = gradient.reshape(
+                            n_samples,
+                            n_atoms,
+                            *gradient.shape[1:],
                         )
-
                     gradients.append(gradient)
 
                 jacobians.append(
@@ -164,17 +126,7 @@ def compute_jacobian(
 
 
 class JacobianTransform(nn.Module):
-    """Propagate feature-space gradients through precomputed Jacobians.
-
-    Given a downstream gradient with respect to representation features and
-    the corresponding representation Jacobian, this module applies the chain
-    rule to obtain gradients with respect to the original inputs.
-
-    Parameters
-    ----------
-    jacobian : torch.Tensor
-        Precomputed representation Jacobians indexed by sample.
-    """
+    """Propagate feature gradients through precomputed Jacobians."""
 
     def __init__(self, jacobian: torch.Tensor):
         super().__init__()
@@ -185,22 +137,7 @@ class JacobianTransform(nn.Module):
         gradient: torch.Tensor,
         ref_idx: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        """Apply the chain rule using the selected precomputed Jacobians.
-
-        Parameters
-        ----------
-        gradient : torch.Tensor
-            Gradient of the downstream model with respect to representation
-            features.
-        ref_idx : torch.Tensor
-            Indices selecting the representation Jacobian associated with each
-            input sample.
-
-        Returns
-        -------
-        torch.Tensor
-            Gradient propagated to the original input space.
-        """
+        """Apply the chain rule using precomputed Jacobians."""
         if ref_idx is None:
             raise ValueError("`ref_idx` is required.")
 
@@ -208,7 +145,7 @@ class JacobianTransform(nn.Module):
             self.jacobian.device,
             dtype=torch.long,
         )
-        if torch.any(ref_idx < 0) or torch.any(ref_idx >= len(self.jacobian)):
+        if torch.any((ref_idx < 0) | (ref_idx >= len(self.jacobian))):
             raise IndexError("Invalid Jacobian index.")
 
         jacobian = self.jacobian[ref_idx].to(

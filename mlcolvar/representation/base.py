@@ -19,7 +19,6 @@ class Representation(nn.Module):
         "in_features",
         "out_features",
         "pooling_operation",
-        "full_neighbor_list",
         "freeze",
     ]
 
@@ -35,7 +34,6 @@ class Representation(nn.Module):
         pooling_operation: str | None = None,
         buffer: float = 0.0,
         long_range_cutoff: float = -1.0,
-        full_neighbor_list: bool = True,
         freeze: bool = True,
     ) -> None:
         super().__init__()
@@ -49,8 +47,11 @@ class Representation(nn.Module):
         if input_kind == "vector":
             if in_features is None:
                 raise ValueError("`in_features` is required for vector inputs.")
-            if output_kind is None:
-                output_kind = "system"
+            if pooling_operation is not None:
+                raise ValueError(
+                    "`pooling_operation` is only available for graph inputs."
+                )
+            output_kind = "system" if output_kind is None else output_kind
         else:
             if atomic_numbers is None or cutoff is None:
                 raise ValueError(
@@ -59,11 +60,11 @@ class Representation(nn.Module):
             atomic_numbers = _as_atomic_number_list(
                 atomic_numbers, "representation"
             )
-            if cutoff <= 0.0:
+            if cutoff <= 0:
                 raise ValueError("`cutoff` must be positive.")
-            if buffer < 0.0:
+            if buffer < 0:
                 raise ValueError("`buffer` must be non-negative.")
-            if 0.0 <= long_range_cutoff <= cutoff:
+            if 0 <= long_range_cutoff <= cutoff:
                 raise ValueError(
                     "`long_range_cutoff` must be negative or larger than `cutoff`."
                 )
@@ -82,38 +83,20 @@ class Representation(nn.Module):
         )
         self.out_features = as_positive_int(out_features, "out_features")
         self.pooling_operation = pooling_operation
-        self.full_neighbor_list = bool(full_neighbor_list)
         self.freeze = bool(freeze)
 
-        self.register_buffer(
-            "feature_dim",
-            torch.tensor(self.out_features, dtype=torch.int64),
-        )
-        self.register_buffer(
-            "atomic_numbers",
-            torch.tensor(
-                atomic_numbers if atomic_numbers is not None else [],
-                dtype=torch.int64,
-            ),
-        )
-        self.register_buffer(
-            "cutoff",
-            torch.tensor(
-                cutoff if cutoff is not None else -1.0,
-                dtype=torch.get_default_dtype(),
-            ),
-        )
-        self.register_buffer(
-            "buffer",
-            torch.tensor(buffer, dtype=torch.get_default_dtype()),
-        )
-        self.register_buffer(
-            "long_range_cutoff",
-            torch.tensor(
-                long_range_cutoff,
-                dtype=torch.get_default_dtype(),
-            ),
-        )
+        if input_kind == "graph":
+            dtype = torch.get_default_dtype()
+            self.register_buffer(
+                "atomic_numbers",
+                torch.tensor(atomic_numbers, dtype=torch.long),
+            )
+            self.register_buffer("cutoff", torch.tensor(cutoff, dtype=dtype))
+            self.register_buffer("buffer", torch.tensor(buffer, dtype=dtype))
+            self.register_buffer(
+                "long_range_cutoff",
+                torch.tensor(long_range_cutoff, dtype=dtype),
+            )
 
     def _freeze_module(self, module: nn.Module) -> None:
         """Freeze a wrapped module when requested."""
@@ -133,7 +116,7 @@ class Representation(nn.Module):
         data: dict[str, torch.Tensor],
     ) -> torch.Tensor:
         """Pool atom-level graph features into system-level features."""
-        if self.input_kind != "graph" or self.pooling_operation is None:
+        if self.pooling_operation is None:
             return features
         if "system_masks" in data:
             features = features * data["system_masks"]
@@ -163,26 +146,23 @@ class Representation(nn.Module):
             raise TypeError(
                 "`concat_atoms` is only available for graph inputs."
             )
+        if self.output_kind != "atom":
+            raise ValueError(
+                "`concat_atoms` requires atom-level representation features."
+            )
         return _ConcatRepresentation(self, atom_indices)
 
 
 class _ConcatRepresentation(Representation):
-    """Concatenate selected atom-level representation features per system."""
+    """Concatenate selected atom-level features per system."""
 
-    __constants__ = ["n_selected_atoms", "max_selected_atom_index"]
+    __constants__ = ["max_selected_atom_index"]
 
     def __init__(
         self,
         representation: Representation,
         atom_indices: Sequence[int],
     ) -> None:
-        if representation.input_kind != "graph":
-            raise TypeError("`representation` must consume graph inputs.")
-        if representation.output_kind != "atom":
-            raise ValueError(
-                "`representation` must produce atom-level features."
-            )
-
         indices = [int(index) for index in atom_indices]
         if not indices:
             raise ValueError("`atom_indices` cannot be empty.")
@@ -191,26 +171,19 @@ class _ConcatRepresentation(Representation):
                 "`atom_indices` must contain non-negative indices."
             )
         if len(indices) != len(set(indices)):
-            raise ValueError(
-                "`atom_indices` must not contain duplicates."
-            )
+            raise ValueError("`atom_indices` must not contain duplicates.")
 
-        self.n_selected_atoms = len(indices)
         self.max_selected_atom_index = max(indices)
         super().__init__(
-            out_features=representation.out_features * self.n_selected_atoms,
+            out_features=representation.out_features * len(indices),
             input_kind="graph",
             output_kind="system",
             atomic_numbers=representation.atomic_numbers.detach().cpu().tolist(),
-            cutoff=float(representation.cutoff.detach().cpu().item()),
-            buffer=float(representation.buffer.detach().cpu().item()),
-            long_range_cutoff=float(
-                representation.long_range_cutoff.detach().cpu().item()
-            ),
-            full_neighbor_list=representation.full_neighbor_list,
+            cutoff=float(representation.cutoff.item()),
+            buffer=float(representation.buffer.item()),
+            long_range_cutoff=float(representation.long_range_cutoff.item()),
             freeze=representation.freeze,
         )
-
         self.representation = representation
         self.register_buffer(
             "atom_indices",
@@ -228,17 +201,16 @@ class _ConcatRepresentation(Representation):
                 "Graph data must contain `ptr` for selected-atom concatenation."
             )
 
-        ptr = data["ptr"].to(device=features.device, dtype=torch.long)
-        atoms_per_graph = ptr[1:] - ptr[:-1]
-        if torch.any(atoms_per_graph <= self.max_selected_atom_index):
+        ptr = data["ptr"].to(features.device, dtype=torch.long)
+        if torch.any(ptr[1:] - ptr[:-1] <= self.max_selected_atom_index):
             raise RuntimeError(
                 "A selected atom index exceeds the number of atoms "
                 "in at least one system."
             )
 
-        global_indices = (
+        indices = (
             ptr[:-1].unsqueeze(1)
             + self.atom_indices.to(features.device).unsqueeze(0)
         )
-        selected = features.index_select(0, global_indices.reshape(-1))
+        selected = features.index_select(0, indices.reshape(-1))
         return selected.reshape(ptr.numel() - 1, self.out_features)

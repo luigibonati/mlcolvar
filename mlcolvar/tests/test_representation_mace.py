@@ -1,5 +1,3 @@
-from typing import Optional
-
 import pytest
 import torch
 from torch import nn
@@ -13,8 +11,6 @@ from mlcolvar.representation import (
 
 
 class DummyMACE(nn.Module):
-    """Minimal MACE-like model for testing."""
-
     def __init__(self) -> None:
         super().__init__()
         self.register_buffer("atomic_numbers", torch.tensor([1, 8]))
@@ -31,7 +27,7 @@ class DummyMACE(nn.Module):
         return {"node_feats": data["node_feats"] * self.weight}
 
 
-def make_data() -> dict[str, torch.Tensor]:
+def _make_data() -> dict[str, torch.Tensor]:
     node_features = torch.zeros(4, 10, dtype=torch.float64)
     node_features[:, :2] = torch.tensor(
         [
@@ -58,8 +54,8 @@ def make_data() -> dict[str, torch.Tensor]:
     }
 
 
-def make_representation(
-    pooling_operation: Optional[str] = None,
+def _make_representation(
+    pooling_operation: str | None = None,
 ) -> MACERepresentation:
     return MACERepresentation(
         model=DummyMACE(),
@@ -67,13 +63,12 @@ def make_representation(
         num_layers=2,
         num_features=2,
         l_max=1,
-        freeze=True,
     )
 
 
 def test_mace_representation():
-    representation = make_representation()
-    output = representation(make_data())
+    representation = _make_representation()
+    output = representation(_make_data())
 
     expected = torch.tensor(
         [
@@ -86,6 +81,10 @@ def test_mace_representation():
     )
 
     torch.testing.assert_close(output, expected)
+    torch.testing.assert_close(
+        representation.feature_indices,
+        torch.tensor([0, 1, 8, 9]),
+    )
     assert representation.input_kind == "graph"
     assert representation.output_kind == "atom"
     assert representation.pooling_operation is None
@@ -95,8 +94,8 @@ def test_mace_representation():
 
 
 def test_mace_mean_pooling():
-    representation = make_representation(pooling_operation="mean")
-    output = representation(make_data())
+    representation = _make_representation(pooling_operation="mean")
+    output = representation(_make_data())
 
     expected = torch.tensor(
         [
@@ -107,14 +106,13 @@ def test_mace_mean_pooling():
     )
 
     torch.testing.assert_close(output, expected)
-    assert representation.input_kind == "graph"
     assert representation.output_kind == "system"
     assert representation.pooling_operation == "mean"
 
 
 def test_mace_preserves_input_gradients():
-    representation = make_representation()
-    data = make_data()
+    representation = _make_representation()
+    data = _make_data()
     data["node_feats"].requires_grad_(True)
 
     representation(data).sum().backward()
@@ -132,13 +130,13 @@ def test_mace_preserves_input_gradients():
 
 
 def test_mace_representation_preprocessing():
-    representation = make_representation(pooling_operation="mean")
+    representation = _make_representation(pooling_operation="mean")
     model = RegressionCV(
         model=FeedForward([representation.out_features, 1]),
         preprocessing=representation,
     ).to(torch.float64)
 
-    output = model(make_data())
+    output = model(_make_data())
 
     assert representation.output_kind == "system"
     assert output.shape == (2, 1)
@@ -154,29 +152,27 @@ def test_mace_representation_torchscript(tmp_path):
         reason="MACE TorchScript export requires e3nn.",
     )
 
-    representation = make_representation(pooling_operation="mean")
+    representation = _make_representation(pooling_operation="mean")
     head = FeedForward(
         [representation.out_features, 1]
     ).to(torch.float64).eval()
-
     path = tmp_path / "model.ptc"
 
     export_representation_torchscript(
-        representation=representation,
+        representation,
+        path,
         postprocessing=head,
-        path=path,
-        example_input=make_data(),
+        example_input=_make_data(),
     )
 
     loaded = torch.jit.load(str(path), map_location="cpu").eval()
-
     assert path.exists()
-    assert loaded(make_data()).shape == (2, 1)
+    assert loaded(_make_data()).shape == (2, 1)
 
 
 def test_mace_representation_invalid_node_features():
-    representation = make_representation()
-    data = make_data()
+    representation = _make_representation()
+    data = _make_data()
     data["node_feats"] = torch.zeros(4, 9, dtype=torch.float64)
 
     with pytest.raises(

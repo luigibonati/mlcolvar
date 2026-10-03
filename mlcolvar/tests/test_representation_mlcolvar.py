@@ -1,5 +1,3 @@
-from typing import Optional
-
 import torch
 from torch import nn
 
@@ -16,7 +14,7 @@ class AddCellPreprocessing(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        cell: Optional[torch.Tensor] = None,
+        cell: torch.Tensor | None = None,
     ) -> torch.Tensor:
         x = x + 1.0
         return x if cell is None else x + cell.reshape(())
@@ -37,10 +35,12 @@ class DummyDescriptorCV(nn.Module):
 
         with torch.no_grad():
             self.nn.weight.copy_(
-                torch.tensor([
-                    [1.0, 0.0, 0.0],
-                    [0.0, 1.0, 1.0],
-                ])
+                torch.tensor(
+                    [
+                        [1.0, 0.0, 0.0],
+                        [0.0, 1.0, 1.0],
+                    ]
+                )
             )
 
 
@@ -48,7 +48,7 @@ class GraphShiftPreprocessing(nn.Module):
     def forward(
         self,
         data: dict[str, torch.Tensor],
-        cell: Optional[torch.Tensor] = None,
+        cell: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
         output = dict(data)
         shift = 1.0 if cell is None else 1.0 + cell.reshape(())
@@ -59,7 +59,7 @@ class GraphShiftPreprocessing(nn.Module):
 class DummyGraphEncoder(BaseGNN):
     def __init__(
         self,
-        pooling_operation: Optional[str] = "mean",
+        pooling_operation: str | None = "mean",
     ) -> None:
         super().__init__(
             n_out=2,
@@ -85,7 +85,7 @@ class DummyGraphEncoder(BaseGNN):
 class DummyGraphCV(nn.Module):
     def __init__(
         self,
-        pooling_operation: Optional[str] = "mean",
+        pooling_operation: str | None = "mean",
     ) -> None:
         super().__init__()
         self.in_features = None
@@ -95,10 +95,12 @@ class DummyGraphCV(nn.Module):
 
 
 def _vector_input() -> torch.Tensor:
-    return torch.tensor([
-        [1.0, 2.0, 3.0],
-        [2.0, 0.0, 1.0],
-    ])
+    return torch.tensor(
+        [
+            [1.0, 2.0, 3.0],
+            [2.0, 0.0, 1.0],
+        ]
+    )
 
 
 def _graph_input(
@@ -122,7 +124,7 @@ def _graph_input(
 
 def _vector_representation(
     freeze: bool = True,
-) -> Representation:
+) -> MLColvarRepresentation:
     return MLColvarRepresentation(
         DummyDescriptorCV(),
         freeze=freeze,
@@ -130,11 +132,10 @@ def _vector_representation(
 
 
 def _graph_representation(
-    pooling_operation: Optional[str] = "mean",
-) -> Representation:
+    pooling_operation: str | None = "mean",
+) -> MLColvarRepresentation:
     return MLColvarRepresentation(
         DummyGraphCV(pooling_operation),
-        freeze=True,
     )
 
 
@@ -165,20 +166,22 @@ def test_vector_representation() -> None:
 
     torch.testing.assert_close(
         output,
-        torch.tensor([
-            [5.0, 16.0],
-            [7.0, 8.0],
-        ]),
+        torch.tensor(
+            [
+                [5.0, 16.0],
+                [7.0, 8.0],
+            ]
+        ),
     )
     assert representation.input_kind == "vector"
+    assert representation.output_kind == "system"
     assert representation.in_features == 3
     assert representation.out_features == 2
-    assert output.shape == (2, 2)
 
 
 def test_vector_freeze_and_gradients() -> None:
     pretrained = DummyDescriptorCV()
-    representation = MLColvarRepresentation(pretrained, freeze=True)
+    representation = MLColvarRepresentation(pretrained)
 
     x = _vector_input().requires_grad_(True)
     representation(x).sum().backward()
@@ -186,16 +189,16 @@ def test_vector_freeze_and_gradients() -> None:
     assert x.grad is not None
     assert all(
         not parameter.requires_grad
-        for parameter in pretrained.parameters()
+        for parameter in representation.parameters()
     )
     assert all(
         parameter.grad is None
-        for parameter in pretrained.parameters()
+        for parameter in representation.parameters()
     )
 
     representation.train()
     assert not representation.training
-    assert not pretrained.training
+    assert not representation.encoder.training
 
     unfrozen = _vector_representation(freeze=False)
     assert all(
@@ -205,8 +208,7 @@ def test_vector_freeze_and_gradients() -> None:
 
 
 def test_vector_representation_preprocessing() -> None:
-    pretrained = DummyDescriptorCV()
-    representation = MLColvarRepresentation(pretrained, freeze=True)
+    representation = _vector_representation()
     model = _regression_model(representation)
 
     x = _vector_input().requires_grad_(True)
@@ -217,7 +219,7 @@ def test_vector_representation_preprocessing() -> None:
     assert x.grad is not None
     assert all(
         parameter.grad is None
-        for parameter in pretrained.parameters()
+        for parameter in representation.parameters()
     )
     assert any(
         parameter.grad is not None
@@ -243,14 +245,16 @@ def test_graph_representation() -> None:
     assert representation.output_kind == "system"
     assert representation.out_features == 2
     assert representation.pooling_operation == "mean"
+    assert representation.atomic_numbers.tolist() == [1, 6, 8]
+    assert representation.cutoff.item() == 4.0
+    assert representation.buffer.item() == 0.5
 
 
 def test_graph_atom_representation() -> None:
     representation = _graph_representation(pooling_operation=None)
-    output = representation(_graph_input())
 
     torch.testing.assert_close(
-        output,
+        representation(_graph_input()),
         torch.tensor(
             [
                 [2.0, 2.0],
@@ -264,7 +268,6 @@ def test_graph_atom_representation() -> None:
     assert representation.pooling_operation is None
 
     concatenated = representation.concat_atoms([0])
-
     torch.testing.assert_close(
         concatenated(_graph_input()),
         torch.tensor(
@@ -279,8 +282,7 @@ def test_graph_atom_representation() -> None:
 
 
 def test_graph_representation_gradients() -> None:
-    pretrained = DummyGraphCV()
-    representation = MLColvarRepresentation(pretrained, freeze=True)
+    representation = _graph_representation()
     model = _regression_model(representation)
 
     data = _graph_input()
@@ -290,7 +292,7 @@ def test_graph_representation_gradients() -> None:
     assert data["positions"].grad is not None
     assert all(
         parameter.grad is None
-        for parameter in pretrained.parameters()
+        for parameter in representation.parameters()
     )
     assert any(
         parameter.grad is not None
@@ -303,13 +305,12 @@ def test_vector_representation_torchscript(tmp_path) -> None:
     path = tmp_path / "vector_model.ptc"
 
     export_representation_torchscript(
-        representation=representation,
+        representation,
+        path,
         postprocessing=_postprocessing(representation),
-        path=path,
     )
 
     loaded = torch.jit.load(str(path), map_location="cpu").eval()
-
     assert path.exists()
     assert loaded(_vector_input()).shape == (2, 1)
 
@@ -323,17 +324,15 @@ def test_graph_representation_torchscript(tmp_path) -> None:
         dtype=graph["positions"].dtype,
     )
     graph["shifts"] = graph["unit_shifts"].clone()
-
     path = tmp_path / "graph_model.ptc"
 
     export_representation_torchscript(
-        representation=representation,
+        representation,
+        path,
         postprocessing=_postprocessing(representation),
-        path=path,
         example_input=graph,
     )
 
     loaded = torch.jit.load(str(path), map_location="cpu").eval()
-
     assert path.exists()
     assert loaded(graph).shape == (2, 1)
