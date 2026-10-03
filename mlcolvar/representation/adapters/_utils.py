@@ -4,6 +4,7 @@ import torch
 
 
 def to_int(value: Any, *, name: str) -> int:
+    """Convert a scalar value to an integer."""
     if isinstance(value, torch.Tensor):
         if value.numel() != 1:
             raise ValueError(f"`{name}` must be scalar.")
@@ -12,6 +13,7 @@ def to_int(value: Any, *, name: str) -> int:
 
 
 def to_float(value: Any, *, name: str) -> float:
+    """Convert a scalar value to a float."""
     if isinstance(value, torch.Tensor):
         if value.numel() != 1:
             raise ValueError(f"`{name}` must be scalar.")
@@ -20,8 +22,11 @@ def to_float(value: Any, *, name: str) -> float:
 
 
 def to_int_list(value: Any, *, name: str) -> list[int]:
+    """Convert an array-like value to a list of integers."""
     try:
         values = torch.as_tensor(value, dtype=torch.long).detach().cpu().reshape(-1)
     except Exception as exc:
-        raise ValueError(f"Could not convert `{name}` to an integer list.") from exc
+        raise ValueError(
+            f"Could not convert `{name}` to an integer list."
+        ) from exc
     return [int(item) for item in values.tolist()]

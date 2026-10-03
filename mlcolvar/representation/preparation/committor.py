@@ -1,5 +1,3 @@
-from typing import Optional
-
 import torch
 from torch import nn
 
@@ -26,7 +24,11 @@ class _CommittorJacobianTransform(SmartDerivatives):
         """Return the stored representation Jacobian."""
         return self.transform.jacobian
 
-    def forward(self, gradient, ref_idx=None):
+    def forward(
+        self,
+        gradient: torch.Tensor,
+        ref_idx: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         """Propagate feature-space gradients through the stored Jacobian."""
         return self.transform(gradient, ref_idx)
 
@@ -45,12 +47,12 @@ def prepare_committor(
     model: nn.Module,
     dataset: DictDataset,
     features: torch.Tensor,
-    descriptor_derivatives: Optional[nn.Module] = None,
-    batch_size: Optional[int] = None,
-    device=None,
-    output_device="cpu",
+    descriptor_derivatives: nn.Module | None = None,
+    batch_size: int | None = None,
+    device: torch.device | str | None = None,
+    output_device: torch.device | str = "cpu",
     separate_boundary_dataset: bool = True,
-):
+) -> tuple[DictDataset, _CommittorJacobianTransform]:
     """Prepare precomputed representations and derivatives for committor training.
 
     The representation values are supplied through ``features`` while the
@@ -98,7 +100,9 @@ def prepare_committor(
         source_dataset = DictDataset(
             {
                 "data": features,
-                "labels": _graph_field(dataset, "graph_labels").to(features.device),
+                "labels": _graph_field(dataset, "graph_labels").to(
+                    features.device
+                ),
                 "weights": _graph_field(dataset, "weight").to(features.device),
             }
         )
@@ -119,7 +123,7 @@ def prepare_committor(
             "The number of features must match the number of dataset samples."
         )
 
-    # Jacobians are required only for the samples used by the derivative loss.
+    # Jacobians are required only for samples used by the derivative loss.
     indices = (
         torch.nonzero(labels > 1, as_tuple=False).reshape(-1)
         if separate_boundary_dataset
@@ -135,8 +139,8 @@ def prepare_committor(
         output_device=output_device,
     )
 
-    # For descriptor-based inputs, apply the chain rule through the descriptor
-    # derivatives to obtain derivatives with respect to the original coordinates.
+    # For descriptor-based inputs, propagate the representation Jacobian
+    # through the descriptor derivatives to Cartesian coordinates.
     if descriptor_derivatives is not None:
         ref_idx = dataset["ref_idx"].reshape(-1).long()
         ref_idx = ref_idx[indices.to(ref_idx.device)].to(jacobian.device)
@@ -150,5 +154,4 @@ def prepare_committor(
         source_dataset,
         separate_boundary_dataset,
     )
-
     return prepared_dataset, _CommittorJacobianTransform(jacobian)

@@ -1,5 +1,3 @@
-from typing import Optional
-
 import torch
 from torch import nn
 
@@ -23,35 +21,45 @@ def _encoder(model: nn.Module) -> nn.Module:
 
 
 def _input_kind(model: nn.Module, encoder: nn.Module) -> str:
-    """Infer whether the model consumes graph or descriptor inputs."""
+    """Infer whether the model consumes vector or graph inputs."""
     if isinstance(encoder, BaseGNN):
         return "graph"
     if all(hasattr(encoder, name) for name in ("atomic_numbers", "cutoff")):
         return "graph"
     if getattr(model, "in_features", None) is not None:
         return "vector"
+
     raise TypeError(
         f"Cannot infer the input type of {model.__class__.__name__}. "
-        "Expected `in_features` for descriptor inputs or graph metadata "
+        "Expected `in_features` for vector inputs or graph metadata "
         "(`atomic_numbers`, `cutoff`) on the encoder."
     )
 
 
-def _out_features(encoder: nn.Module, value: Optional[int]) -> int:
+def _out_features(
+    encoder: nn.Module,
+    value: int | None,
+) -> int:
     """Resolve the encoder output dimension."""
     if value is not None:
         return as_positive_int(value, "out_features")
+
     for name in ("out_features", "n_out"):
         value = getattr(encoder, name, None)
         if value is not None:
             return as_positive_int(value, name)
+
     raise ValueError(
         "Cannot infer the representation dimension from "
         f"{encoder.__class__.__name__}; pass `out_features` explicitly."
     )
 
 
-def _preprocess(model: nn.Module, data, cell=None):
+def _preprocess(
+    model: nn.Module,
+    data,
+    cell: torch.Tensor | None = None,
+):
     """Apply optional model preprocessing."""
     preprocessing = getattr(model, "preprocessing", None)
     if preprocessing is None:
@@ -81,7 +89,7 @@ class MLColvarRepresentation(Representation):
         self,
         model: nn.Module,
         *,
-        out_features: Optional[int] = None,
+        out_features: int | None = None,
         freeze: bool = True,
     ) -> None:
         if not isinstance(model, nn.Module):
@@ -89,22 +97,23 @@ class MLColvarRepresentation(Representation):
 
         encoder = _encoder(model)
         input_kind = _input_kind(model, encoder)
-        kwargs = {
-            "out_features": _out_features(encoder, out_features),
-            "input_kind": input_kind,
-            "freeze": freeze,
-        }
+        out_features = _out_features(encoder, out_features)
 
         if input_kind == "vector":
-            kwargs.update(
+            super().__init__(
+                out_features=out_features,
+                input_kind="vector",
                 in_features=as_positive_int(
                     model.in_features,
                     "model.in_features",
                 ),
                 output_kind="system",
+                freeze=freeze,
             )
         else:
-            kwargs.update(
+            super().__init__(
+                out_features=out_features,
+                input_kind="graph",
                 atomic_numbers=to_int_list(
                     encoder.atomic_numbers,
                     name="encoder.atomic_numbers",
@@ -127,9 +136,9 @@ class MLColvarRepresentation(Representation):
                     name="encoder.long_range_cutoff",
                 ),
                 full_neighbor_list=True,
+                freeze=freeze,
             )
 
-        super().__init__(**kwargs)
         self.model = model
         self.register_buffer(
             "_model_reference",
@@ -141,7 +150,7 @@ class MLColvarRepresentation(Representation):
     def forward(
         self,
         data,
-        cell: Optional[torch.Tensor] = None,
+        cell: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Evaluate the latent representation."""
         cell = None if cell is None else cell.to(self._model_reference)
@@ -157,6 +166,7 @@ class MLColvarRepresentation(Representation):
                 if torch.is_tensor(value)
             }
             data = _preprocess(self.model, data, cell)
+
             if getattr(self.model, "norm_in", None) is not None:
                 raise ValueError(
                     "Input normalization cannot be applied directly "

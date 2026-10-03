@@ -42,10 +42,8 @@ def _prepare_vector_example(
 ) -> torch.Tensor:
     """Prepare a vector example input for TorchScript tracing."""
     in_features = int(representation.in_features)
-
     if example_input is None:
         return torch.zeros(1, in_features, dtype=dtype)
-
     if not torch.is_tensor(example_input):
         raise TypeError(
             "Vector representations require a tensor `example_input`."
@@ -57,7 +55,6 @@ def _prepare_vector_example(
             f"Expected example input shape (..., {in_features}); "
             f"found {tuple(example_input.shape)}."
         )
-
     return example_input
 
 
@@ -70,7 +67,6 @@ def _prepare_graph_example(
         raise ValueError(
             "Graph export requires an explicit `example_input`."
         )
-
     if hasattr(example_input, "to_dict"):
         example_input = example_input.to_dict()
     if not isinstance(example_input, Mapping):
@@ -90,7 +86,6 @@ def _prepare_graph_example(
         raise ValueError(
             "Graph `example_input` must contain tensor fields."
         )
-
     return graph
 
 
@@ -191,5 +186,4 @@ def export_representation_torchscript(
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     torch.jit.save(traced, str(path))
-
     return traced

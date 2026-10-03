@@ -1,4 +1,4 @@
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 import torch
 from torch import nn
@@ -11,34 +11,7 @@ __all__ = ["Representation"]
 
 
 class Representation(nn.Module):
-    """Base class for reusable vector or graph representations.
-
-    Parameters
-    ----------
-    out_features : int
-        Number of output features.
-    input_kind : {"vector", "graph"}
-        Type of input consumed by the representation.
-    output_kind : {"atom", "system"}, optional
-        Level of the representation output. For graph inputs, if omitted it is
-        inferred from ``pooling_operation``. Vector inputs default to "system".
-    in_features : int, optional
-        Number of vector input features.
-    atomic_numbers : sequence of int or torch.Tensor, optional
-        Atomic numbers supported by a graph representation.
-    cutoff : float, optional
-        Neighbor-list cutoff for graph inputs.
-    pooling_operation : {"mean", "sum"}, optional
-        Atom-to-system pooling operation for graph inputs.
-    buffer : float, default=0.0
-        Buffer added to the graph cutoff.
-    long_range_cutoff : float, default=-1.0
-        Optional long-range cutoff. A negative value disables it.
-    full_neighbor_list : bool, default=True
-        Whether graph inputs require a full neighbor list.
-    freeze : bool, default=True
-        Whether wrapped model parameters are frozen.
-    """
+    """Base class for reusable vector or graph representations."""
 
     __constants__ = [
         "input_kind",
@@ -55,11 +28,11 @@ class Representation(nn.Module):
         *,
         out_features: int,
         input_kind: str,
-        output_kind: Optional[str] = None,
-        in_features: Optional[int] = None,
-        atomic_numbers: Optional[Sequence[int] | torch.Tensor] = None,
-        cutoff: Optional[float] = None,
-        pooling_operation: Optional[str] = None,
+        output_kind: str | None = None,
+        in_features: int | None = None,
+        atomic_numbers: Sequence[int] | torch.Tensor | None = None,
+        cutoff: float | None = None,
+        pooling_operation: str | None = None,
         buffer: float = 0.0,
         long_range_cutoff: float = -1.0,
         full_neighbor_list: bool = True,
@@ -156,24 +129,22 @@ class Representation(nn.Module):
 
     def pooling(
         self,
-        input: torch.Tensor,
+        features: torch.Tensor,
         data: dict[str, torch.Tensor],
     ) -> torch.Tensor:
         """Pool atom-level graph features into system-level features."""
-        if self.input_kind != "graph":
-            return input
-        if self.pooling_operation is None:
-            return input
+        if self.input_kind != "graph" or self.pooling_operation is None:
+            return features
         if "system_masks" in data:
-            input = input * data["system_masks"]
+            features = features * data["system_masks"]
         if self.pooling_operation == "mean":
             if "system_masks" not in data:
-                return _code.scatter_mean(input, data["batch"], dim=0)
+                return _code.scatter_mean(features, data["batch"], dim=0)
             return (
-                _code.scatter_sum(input, data["batch"], dim=0)
+                _code.scatter_sum(features, data["batch"], dim=0)
                 / data["n_system"]
             )
-        return _code.scatter_sum(input, data["batch"], dim=0)
+        return _code.scatter_sum(features, data["batch"], dim=0)
 
     @torch.jit.unused
     def align_dataset(self, dataset):
@@ -189,7 +160,9 @@ class Representation(nn.Module):
     ) -> "Representation":
         """Concatenate selected atom-level features for each system."""
         if self.input_kind != "graph":
-            raise TypeError("`concat_atoms` is only available for graph inputs.")
+            raise TypeError(
+                "`concat_atoms` is only available for graph inputs."
+            )
         return _ConcatRepresentation(self, atom_indices)
 
 
@@ -206,19 +179,24 @@ class _ConcatRepresentation(Representation):
         if representation.input_kind != "graph":
             raise TypeError("`representation` must consume graph inputs.")
         if representation.output_kind != "atom":
-            raise ValueError("`representation` must produce atom-level features.")
+            raise ValueError(
+                "`representation` must produce atom-level features."
+            )
 
         indices = [int(index) for index in atom_indices]
         if not indices:
             raise ValueError("`atom_indices` cannot be empty.")
         if any(index < 0 for index in indices):
-            raise ValueError("`atom_indices` must contain non-negative indices.")
+            raise ValueError(
+                "`atom_indices` must contain non-negative indices."
+            )
         if len(indices) != len(set(indices)):
-            raise ValueError("`atom_indices` must not contain duplicates.")
+            raise ValueError(
+                "`atom_indices` must not contain duplicates."
+            )
 
         self.n_selected_atoms = len(indices)
         self.max_selected_atom_index = max(indices)
-
         super().__init__(
             out_features=representation.out_features * self.n_selected_atoms,
             input_kind="graph",
@@ -232,6 +210,7 @@ class _ConcatRepresentation(Representation):
             full_neighbor_list=representation.full_neighbor_list,
             freeze=representation.freeze,
         )
+
         self.representation = representation
         self.register_buffer(
             "atom_indices",
@@ -241,7 +220,7 @@ class _ConcatRepresentation(Representation):
     def forward(
         self,
         data: dict[str, torch.Tensor],
-        cell: Optional[torch.Tensor] = None,
+        cell: torch.Tensor | None = None,
     ) -> torch.Tensor:
         features = self.representation(data, cell=cell)
         if "ptr" not in data:

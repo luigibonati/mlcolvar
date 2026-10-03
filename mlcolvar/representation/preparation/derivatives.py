@@ -1,5 +1,3 @@
-from typing import Optional
-
 import torch
 from torch import nn
 from torch_geometric.loader import DataLoader as GraphDataLoader
@@ -12,7 +10,7 @@ __all__ = ["compute_jacobian", "JacobianTransform"]
 
 def _indices(
     n: int,
-    indices: Optional[torch.Tensor] = None,
+    indices: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """Normalize and validate dataset indices."""
     if indices is None:
@@ -31,7 +29,6 @@ def _indices(
     indices = torch.unique(indices, sorted=True)
     if torch.any(indices < 0) or torch.any(indices >= n):
         raise IndexError("`indices` contains out-of-range indices.")
-
     return indices
 
 
@@ -39,10 +36,10 @@ def compute_jacobian(
     model: nn.Module,
     dataset: DictDataset,
     *,
-    indices: Optional[torch.Tensor] = None,
-    batch_size: Optional[int] = None,
-    device=None,
-    output_device="cpu",
+    indices: torch.Tensor | None = None,
+    batch_size: int | None = None,
+    device: torch.device | str | None = None,
+    output_device: torch.device | str = "cpu",
 ) -> torch.Tensor:
     """Compute model-output Jacobians with respect to dataset inputs.
 
@@ -86,23 +83,23 @@ def compute_jacobian(
         raise ValueError("No samples selected for Jacobian computation.")
 
     dataset = dataset[selected]
+
     reference = module_reference_tensor(model)
     original_device = reference.device
     training = model.training
-
     device = torch.device(device or original_device)
     output_device = torch.device(output_device)
+
     is_graph = dataset.metadata.get("data_type") == "graphs"
     batch_size = batch_size or (256 if is_graph else 1024)
-
     loader = (
         GraphDataLoader(dataset, batch_size=batch_size, shuffle=False)
         if is_graph
         else DictLoader(dataset, batch_size=batch_size, shuffle=False)
     )
 
-    jacobians = []
-    n_atoms_ref = None
+    jacobians: list[torch.Tensor] = []
+    n_atoms_ref: int | None = None
     model.to(device).eval()
 
     try:
@@ -112,7 +109,6 @@ def compute_jacobian(
                     data = batch["data_list"].to(device)
                     n_samples = int(data.num_graphs)
 
-                    # Dense graph Jacobians require a common atom dimension.
                     counts = torch.bincount(data.batch, minlength=n_samples)
                     if not torch.all(counts == counts[0]):
                         raise ValueError("Graphs must have equal atom counts.")
@@ -127,29 +123,18 @@ def compute_jacobian(
                     output = model(data)
                     inputs = data.positions
                 else:
-                    data = (
-                        batch["data"]
-                        .to(device)
-                        .detach()
-                        .requires_grad_(True)
-                    )
+                    data = batch["data"].to(device).detach().requires_grad_(True)
                     cell = batch.get("cell")
                     if cell is not None:
                         cell = cell.to(device)
 
                     n_samples = len(data)
-                    output = (
-                        model(data)
-                        if cell is None
-                        else model(data, cell=cell)
-                    )
+                    output = model(data) if cell is None else model(data, cell=cell)
                     inputs = data
 
                 output = output.reshape(n_samples, -1)
+                gradients: list[torch.Tensor] = []
 
-                # Summing over independent samples gives the per-sample
-                # derivative without constructing the full batch Jacobian.
-                gradients = []
                 for i in range(output.shape[-1]):
                     gradient = torch.autograd.grad(
                         output[:, i].sum(),
@@ -198,7 +183,7 @@ class JacobianTransform(nn.Module):
     def forward(
         self,
         gradient: torch.Tensor,
-        ref_idx: Optional[torch.Tensor] = None,
+        ref_idx: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Apply the chain rule using the selected precomputed Jacobians.
 

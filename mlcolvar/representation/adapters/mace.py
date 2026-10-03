@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple
+from typing import List
 
 import torch
 from torch import nn
@@ -9,7 +9,10 @@ from ._utils import to_float, to_int, to_int_list
 __all__ = ["MACERepresentation"]
 
 
-def _resolve_num_layers(model: nn.Module, num_layers: Optional[int]) -> int:
+def _resolve_num_layers(
+    model: nn.Module,
+    num_layers: int | None,
+) -> int:
     """Resolve the number of MACE interaction layers used by the representation."""
     if hasattr(model, "num_interactions"):
         available = to_int(
@@ -18,6 +21,7 @@ def _resolve_num_layers(model: nn.Module, num_layers: Optional[int]) -> int:
         )
         if available <= 0:
             raise ValueError("MACE `num_interactions` must be positive.")
+
         selected = (
             available
             if num_layers is None
@@ -41,7 +45,7 @@ def _resolve_num_layers(model: nn.Module, num_layers: Optional[int]) -> int:
     return selected
 
 
-def _infer_descriptor_layout(model: nn.Module) -> Tuple[int, int]:
+def _infer_descriptor_layout(model: nn.Module) -> tuple[int, int]:
     """Infer the scalar feature count and maximum angular degree from MACE."""
     try:
         irreps = model.products[0].linear.irreps_out
@@ -70,14 +74,15 @@ def _infer_descriptor_layout(model: nn.Module) -> Tuple[int, int]:
             "The MACE descriptor dimension is incompatible "
             f"with l_max={l_max}."
         )
+
     return descriptor_dim // angular_size, l_max
 
 
 def _resolve_descriptor_layout(
     model: nn.Module,
-    num_features: Optional[int],
-    l_max: Optional[int],
-) -> Tuple[int, int]:
+    num_features: int | None,
+    l_max: int | None,
+) -> tuple[int, int]:
     """Resolve the number of scalar features and maximum angular degree."""
     if num_features is None or l_max is None:
         inferred_features, inferred_lmax = _infer_descriptor_layout(model)
@@ -95,6 +100,7 @@ def _resolve_descriptor_layout(
         raise ValueError("`num_features` must be positive.")
     if l_max < 0:
         raise ValueError("`l_max` must be non-negative.")
+
     return num_features, l_max
 
 
@@ -145,10 +151,10 @@ class MACERepresentation(Representation):
         self,
         model: nn.Module,
         *,
-        pooling_operation: Optional[str] = None,
-        num_layers: Optional[int] = None,
-        num_features: Optional[int] = None,
-        l_max: Optional[int] = None,
+        pooling_operation: str | None = None,
+        num_layers: int | None = None,
+        num_features: int | None = None,
+        l_max: int | None = None,
         buffer: float = 0.0,
         long_range_cutoff: float = -1.0,
         freeze: bool = True,
@@ -189,13 +195,14 @@ class MACERepresentation(Representation):
         self.required_input_features = (
             (num_layers - 1) * self.layer_size + num_features
         )
+
         self.model = model
         self._freeze_module(model)
 
     def forward(
         self,
         data: dict[str, torch.Tensor],
-        cell: Optional[torch.Tensor] = None,
+        cell: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Evaluate the MACE representation."""
         del cell
@@ -240,6 +247,7 @@ class MACERepresentation(Representation):
             blocks.append(
                 node_features[:, start : start + self.num_features]
             )
+
         return torch.cat(blocks, dim=-1)
 
     @torch.jit.unused
@@ -247,6 +255,7 @@ class MACERepresentation(Representation):
         """Prepare the wrapped MACE model for TorchScript export."""
         if isinstance(self.model, torch.jit.ScriptModule):
             return
+
         try:
             from e3nn.util.jit import script as e3nn_script
         except ImportError as exc:
