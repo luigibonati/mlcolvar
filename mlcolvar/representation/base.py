@@ -27,7 +27,6 @@ class Representation(nn.Module):
         *,
         out_features: int,
         input_kind: str,
-        output_kind: str | None = None,
         in_features: int | None = None,
         atomic_numbers: Sequence[int] | torch.Tensor | None = None,
         cutoff: float | None = None,
@@ -51,14 +50,15 @@ class Representation(nn.Module):
                 raise ValueError(
                     "`pooling_operation` is only available for graph inputs."
                 )
-            output_kind = "system" if output_kind is None else output_kind
+            output_kind = "system"
         else:
             if atomic_numbers is None or cutoff is None:
                 raise ValueError(
                     "`atomic_numbers` and `cutoff` are required for graph inputs."
                 )
             atomic_numbers = _as_atomic_number_list(
-                atomic_numbers, "representation"
+                atomic_numbers,
+                "representation",
             )
             if cutoff <= 0:
                 raise ValueError("`cutoff` must be positive.")
@@ -68,11 +68,7 @@ class Representation(nn.Module):
                 raise ValueError(
                     "`long_range_cutoff` must be negative or larger than `cutoff`."
                 )
-            if output_kind is None:
-                output_kind = "atom" if pooling_operation is None else "system"
-
-        if output_kind not in {"atom", "system"}:
-            raise ValueError("`output_kind` must be 'atom' or 'system'.")
+            output_kind = "atom" if pooling_operation is None else "system"
 
         self.input_kind = input_kind
         self.output_kind = output_kind
@@ -91,8 +87,14 @@ class Representation(nn.Module):
                 "atomic_numbers",
                 torch.tensor(atomic_numbers, dtype=torch.long),
             )
-            self.register_buffer("cutoff", torch.tensor(cutoff, dtype=dtype))
-            self.register_buffer("buffer", torch.tensor(buffer, dtype=dtype))
+            self.register_buffer(
+                "cutoff",
+                torch.tensor(cutoff, dtype=dtype),
+            )
+            self.register_buffer(
+                "buffer",
+                torch.tensor(buffer, dtype=dtype),
+            )
             self.register_buffer(
                 "long_range_cutoff",
                 torch.tensor(long_range_cutoff, dtype=dtype),
@@ -122,7 +124,11 @@ class Representation(nn.Module):
             features = features * data["system_masks"]
         if self.pooling_operation == "mean":
             if "system_masks" not in data:
-                return _code.scatter_mean(features, data["batch"], dim=0)
+                return _code.scatter_mean(
+                    features,
+                    data["batch"],
+                    dim=0,
+                )
             return (
                 _code.scatter_sum(features, data["batch"], dim=0)
                 / data["n_system"]
@@ -135,82 +141,3 @@ class Representation(nn.Module):
         if self.input_kind != "graph":
             return dataset
         return align_node_attrs(dataset, self.atomic_numbers)
-
-    @torch.jit.unused
-    def concat_atoms(
-        self,
-        atom_indices: Sequence[int],
-    ) -> "Representation":
-        """Concatenate selected atom-level features for each system."""
-        if self.input_kind != "graph":
-            raise TypeError(
-                "`concat_atoms` is only available for graph inputs."
-            )
-        if self.output_kind != "atom":
-            raise ValueError(
-                "`concat_atoms` requires atom-level representation features."
-            )
-        return _ConcatRepresentation(self, atom_indices)
-
-
-class _ConcatRepresentation(Representation):
-    """Concatenate selected atom-level features per system."""
-
-    __constants__ = ["max_selected_atom_index"]
-
-    def __init__(
-        self,
-        representation: Representation,
-        atom_indices: Sequence[int],
-    ) -> None:
-        indices = [int(index) for index in atom_indices]
-        if not indices:
-            raise ValueError("`atom_indices` cannot be empty.")
-        if any(index < 0 for index in indices):
-            raise ValueError(
-                "`atom_indices` must contain non-negative indices."
-            )
-        if len(indices) != len(set(indices)):
-            raise ValueError("`atom_indices` must not contain duplicates.")
-
-        self.max_selected_atom_index = max(indices)
-        super().__init__(
-            out_features=representation.out_features * len(indices),
-            input_kind="graph",
-            output_kind="system",
-            atomic_numbers=representation.atomic_numbers.detach().cpu().tolist(),
-            cutoff=float(representation.cutoff.item()),
-            buffer=float(representation.buffer.item()),
-            long_range_cutoff=float(representation.long_range_cutoff.item()),
-            freeze=representation.freeze,
-        )
-        self.representation = representation
-        self.register_buffer(
-            "atom_indices",
-            torch.tensor(indices, dtype=torch.long),
-        )
-
-    def forward(
-        self,
-        data: dict[str, torch.Tensor],
-        cell: torch.Tensor | None = None,
-    ) -> torch.Tensor:
-        features = self.representation(data, cell=cell)
-        if "ptr" not in data:
-            raise KeyError(
-                "Graph data must contain `ptr` for selected-atom concatenation."
-            )
-
-        ptr = data["ptr"].to(features.device, dtype=torch.long)
-        if torch.any(ptr[1:] - ptr[:-1] <= self.max_selected_atom_index):
-            raise RuntimeError(
-                "A selected atom index exceeds the number of atoms "
-                "in at least one system."
-            )
-
-        indices = (
-            ptr[:-1].unsqueeze(1)
-            + self.atom_indices.to(features.device).unsqueeze(0)
-        )
-        selected = features.index_select(0, indices.reshape(-1))
-        return selected.reshape(ptr.numel() - 1, self.out_features)
