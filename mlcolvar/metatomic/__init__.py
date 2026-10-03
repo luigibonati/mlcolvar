@@ -1,16 +1,6 @@
-from .export import (
-    create_metatomic_model,
-    export_metatomic_model,
-)
-from .wrapper import (
-    CVInferenceModel,
-    MetatomicCVWrapper,
-)
-
+from .export import create_metatomic_model, export_metatomic_model
 
 __all__ = [
-    "CVInferenceModel",
-    "MetatomicCVWrapper",
     "create_metatomic_model",
     "export_metatomic_model",
 ]

@@ -1,41 +1,44 @@
+from contextlib import contextmanager
+
 import torch
 
 
-def _restore_torch_indexing() -> None:
-    """Restore PyTorch indexing potentially patched by PyG HashTensor."""
+@contextmanager
+def _torch_indexing_compat():
+    """Temporarily restore PyTorch indexing patched by PyG HashTensor."""
     try:
         import torch_geometric.hash_tensor as hash_tensor
     except ImportError:
+        yield
         return
 
-    torch.index_select = getattr(
-        hash_tensor,
-        "_old_index_select",
-        torch.index_select,
-    )
-    torch.select = getattr(
-        hash_tensor,
-        "_old_select",
-        torch.select,
-    )
+    index_select = torch.index_select
+    select = torch.select
+    torch.index_select = getattr(hash_tensor, "_old_index_select", index_select)
+    torch.select = getattr(hash_tensor, "_old_select", select)
+
+    try:
+        yield
+    finally:
+        torch.index_select = index_select
+        torch.select = select
 
 
-_restore_torch_indexing()
-
-try:
-    from metatensor.torch import Labels, TensorBlock, TensorMap
-    from metatomic.torch import (
-        AtomisticModel as MetatomicAtomisticModel,
-        ModelCapabilities,
-        ModelMetadata,
-        ModelOutput,
-        NeighborListOptions,
-        System,
-    )
-except ImportError as exc:
-    raise ImportError(
-        "Metatomic export requires 'metatensor-torch' and 'metatomic-torch'."
-    ) from exc
+with _torch_indexing_compat():
+    try:
+        from metatensor.torch import Labels, TensorBlock, TensorMap
+        from metatomic.torch import (
+            AtomisticModel as MetatomicAtomisticModel,
+            ModelCapabilities,
+            ModelMetadata,
+            ModelOutput,
+            NeighborListOptions,
+            System,
+        )
+    except ImportError as exc:
+        raise ImportError(
+            "Metatomic export requires 'metatensor-torch' and 'metatomic-torch'."
+        ) from exc
 
 
 __all__ = [

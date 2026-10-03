@@ -11,10 +11,8 @@ from ._compat import (
     TensorMap,
 )
 
-__all__ = ["CVInferenceModel", "MetatomicCVWrapper"]
 
-
-class CVInferenceModel(torch.nn.Module):
+class _CVInferenceModel(torch.nn.Module):
     """Adapt Metatomic systems to the mlcolvar graph interface."""
 
     neighbor_options: NeighborListOptions
@@ -30,18 +28,12 @@ class CVInferenceModel(torch.nn.Module):
         self.network = network
         self.postprocessing = postprocessing
         self.neighbor_options = neighbor_options
-        self.register_buffer(
-            "atomic_numbers",
-            atomic_numbers.to(dtype=torch.long),
-        )
+        self.register_buffer("atomic_numbers", atomic_numbers.to(dtype=torch.long))
 
     def requested_neighbor_lists(self) -> List[NeighborListOptions]:
         return [self.neighbor_options]
 
-    def _systems_to_graph(
-        self,
-        systems: List[System],
-    ) -> Dict[str, torch.Tensor]:
+    def _systems_to_graph(self, systems: List[System]) -> Dict[str, torch.Tensor]:
         positions_list = torch.jit.annotate(List[torch.Tensor], [])
         node_attrs_list = torch.jit.annotate(List[torch.Tensor], [])
         edge_index_list = torch.jit.annotate(List[torch.Tensor], [])
@@ -55,27 +47,16 @@ class CVInferenceModel(torch.nn.Module):
         atom_offset = 0
         for system_index, system in enumerate(systems):
             positions = system.positions
-            types = system.types.to(
-                dtype=torch.long,
-                device=positions.device,
-            )
-            cell = system.cell.to(
-                dtype=positions.dtype,
-                device=positions.device,
-            )
-            pbc = system.pbc.to(device=positions.device)
+            types = system.types.to(dtype=torch.long, device=positions.device)
+            cell = system.cell.to(dtype=positions.dtype, device=positions.device)
             n_atoms = positions.shape[0]
 
             positions_list.append(positions)
             cell_list.append(cell)
-            pbc_list.append(pbc)
+            pbc_list.append(system.pbc.to(device=positions.device))
             node_attrs_list.append(
-                (
-                    types.reshape(-1, 1)
-                    == self.atomic_numbers.reshape(1, -1)
-                ).to(
-                    dtype=positions.dtype,
-                    device=positions.device,
+                (types.reshape(-1, 1) == self.atomic_numbers.reshape(1, -1)).to(
+                    dtype=positions.dtype, device=positions.device
                 )
             )
             batch_list.append(
@@ -87,33 +68,21 @@ class CVInferenceModel(torch.nn.Module):
                 )
             )
 
-            samples = system.get_neighbor_list(
-                self.neighbor_options
-            ).samples.values
-            first_atom = samples[:, 0].to(
-                dtype=torch.long,
-                device=positions.device,
-            )
-            second_atom = samples[:, 1].to(
-                dtype=torch.long,
-                device=positions.device,
-            )
+            samples = system.get_neighbor_list(self.neighbor_options).samples.values
+            first_atom = samples[:, 0].to(dtype=torch.long, device=positions.device)
+            second_atom = samples[:, 1].to(dtype=torch.long, device=positions.device)
             edge_index_list.append(
                 torch.stack(
-                    (
-                        first_atom + atom_offset,
-                        second_atom + atom_offset,
-                    ),
+                    (first_atom + atom_offset, second_atom + atom_offset),
                     dim=0,
                 )
             )
 
             unit_shifts = samples[:, 2:5].to(
-                dtype=positions.dtype,
-                device=positions.device,
+                dtype=positions.dtype, device=positions.device
             )
             unit_shifts_list.append(unit_shifts)
-            shifts_list.append(torch.matmul(unit_shifts, cell))
+            shifts_list.append(unit_shifts @ cell)
 
             atom_offset += n_atoms
             ptr_list.append(atom_offset)
@@ -134,53 +103,19 @@ class CVInferenceModel(torch.nn.Module):
         data["pbc"] = torch.stack(pbc_list, dim=0)
         return data
 
-    def forward(
-        self,
-        systems: List[System],
-    ) -> torch.Tensor:
-        return self.postprocessing(
-            self.network(self._systems_to_graph(systems))
-        )
+    def forward(self, systems: List[System]) -> torch.Tensor:
+        return self.postprocessing(self.network(self._systems_to_graph(systems)))
 
 
-class MetatomicCVWrapper(torch.nn.Module):
+class _MetatomicCVWrapper(torch.nn.Module):
     """Expose an inference-only mlcolvar CV through Metatomic."""
 
-    def __init__(
-        self,
-        model: torch.nn.Module,
-        out_features: int,
-        property_name: str = "feature",
-    ) -> None:
+    def __init__(self, model: torch.nn.Module, out_features: int) -> None:
         super().__init__()
         if out_features < 1:
-            raise ValueError("'out_features' must be a positive integer.")
-        if not property_name:
-            raise ValueError("'property_name' must not be empty.")
-
+            raise ValueError("`out_features` must be positive.")
         self.model = model
         self.out_features = int(out_features)
-        self.property_name = property_name
-
-    def _keys(self, device: torch.device) -> Labels:
-        return Labels(
-            names=["_"],
-            values=torch.zeros(
-                (1, 1),
-                dtype=torch.int32,
-                device=device,
-            ),
-        )
-
-    def _properties(self, device: torch.device) -> Labels:
-        return Labels(
-            names=[self.property_name],
-            values=torch.arange(
-                self.out_features,
-                dtype=torch.int32,
-                device=device,
-            ).reshape(-1, 1),
-        )
 
     def _tensor_map(
         self,
@@ -191,30 +126,36 @@ class MetatomicCVWrapper(torch.nn.Module):
         components = torch.jit.annotate(List[Labels], [])
         block = TensorBlock(
             values=values,
-            samples=Labels(
-                names=["system"],
-                values=samples,
-            ),
+            samples=Labels(names=["system"], values=samples),
             components=components,
-            properties=self._properties(device),
+            properties=Labels(
+                names=["feature"],
+                values=torch.arange(
+                    self.out_features,
+                    dtype=torch.int32,
+                    device=device,
+                ).reshape(-1, 1),
+            ),
         )
         return TensorMap(
-            keys=self._keys(device),
+            keys=Labels(
+                names=["_"],
+                values=torch.zeros((1, 1), dtype=torch.int32, device=device),
+            ),
             blocks=[block],
         )
 
     def _empty_feature(self, system: System) -> TensorMap:
-        device = system.positions.device
         return self._tensor_map(
             torch.zeros(
                 (0, self.out_features),
                 dtype=system.positions.dtype,
-                device=device,
+                device=system.positions.device,
             ),
             torch.zeros(
                 (0, 1),
                 dtype=torch.int32,
-                device=device,
+                device=system.positions.device,
             ),
         )
 
@@ -230,21 +171,17 @@ class MetatomicCVWrapper(torch.nn.Module):
             elif self.out_features == 1 and features.shape[0] == n_systems:
                 features = features.reshape(n_systems, 1)
             else:
-                raise ValueError(
-                    "The one-dimensional model output is ambiguous."
-                )
+                raise ValueError("The one-dimensional model output is ambiguous.")
 
         if features.ndim != 2:
-            raise ValueError(
-                "The wrapped model must return a rank-two tensor."
-            )
+            raise ValueError("The wrapped model must return a rank-two tensor.")
         if features.shape[0] != n_systems:
             raise ValueError(
                 "The first output dimension must equal the number of systems."
             )
         if features.shape[1] != self.out_features:
             raise ValueError(
-                "The second output dimension must equal 'out_features'."
+                "The second output dimension must equal `out_features`."
             )
         if features.device != device:
             raise ValueError(
@@ -267,13 +204,10 @@ class MetatomicCVWrapper(torch.nn.Module):
         selected_atoms: Optional[Labels] = None,
     ) -> Dict[str, TensorMap]:
         result = torch.jit.annotate(Dict[str, TensorMap], {})
-
         if "feature" not in outputs:
             return result
         if outputs["feature"].sample_kind == "atom":
-            raise ValueError(
-                "MetatomicCVWrapper only supports system-level features."
-            )
+            raise ValueError("Only system-level features are currently supported.")
         if len(systems) == 0:
             raise ValueError("At least one System must be supplied.")
         if len(systems) == 1 and len(systems[0]) == 0:

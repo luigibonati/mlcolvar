@@ -18,7 +18,7 @@ from ._compat import (
     ModelOutput,
     NeighborListOptions,
 )
-from .wrapper import CVInferenceModel, MetatomicCVWrapper
+from .wrapper import _CVInferenceModel, _MetatomicCVWrapper
 
 __all__ = ["create_metatomic_model", "export_metatomic_model"]
 
@@ -28,20 +28,13 @@ def _network(model: nn.Module) -> nn.Module:
     preprocessing = getattr(model, "preprocessing", None)
     if getattr(preprocessing, "input_kind", None) == "graph":
         return preprocessing
-    network = getattr(model, "nn", None)
-    return model if network is None else network
+    return getattr(model, "nn", model)
 
 
-def _model_attribute(
-    model: nn.Module,
-    network: nn.Module,
-    name: str,
-):
+def _model_attribute(model: nn.Module, network: nn.Module, name: str):
     """Get export metadata from the model or atomistic network."""
     value = getattr(model, name, None)
-    if value is None and network is not model:
-        value = getattr(network, name, None)
-    return value
+    return getattr(network, name, None) if value is None else value
 
 
 def _get_neighbor_options(
@@ -51,16 +44,15 @@ def _get_neighbor_options(
     """Return neighbor-list options required by the network."""
     for module in network.modules():
         request = getattr(module, "requested_neighbor_lists", None)
-        if not callable(request):
-            continue
-        options = request()
-        if len(options) == 1:
-            return options[0]
-        if len(options) > 1:
-            raise ValueError(
-                "The model requests multiple neighbor lists; "
-                "only one is currently supported."
-            )
+        if callable(request):
+            options = request()
+            if len(options) == 1:
+                return options[0]
+            if len(options) > 1:
+                raise ValueError(
+                    "The model requests multiple neighbor lists; "
+                    "only one is currently supported."
+                )
 
     for module in network.modules():
         options = getattr(module, "neighbor_options", None)
@@ -78,32 +70,20 @@ def _get_neighbor_options(
 def _prepare_network(network: nn.Module) -> nn.Module:
     """Prepare an atomistic network for TorchScript export."""
     network = deepcopy(network).eval()
-    for module in list(network.modules()):
+    for module in network.modules():
         prepare = getattr(module, "prepare_for_torchscript", None)
-        if not callable(prepare):
-            continue
-        try:
+        if callable(prepare):
             prepare()
-        except Exception as exc:
-            raise RuntimeError(
-                f"Failed to prepare {module.__class__.__name__} "
-                "for TorchScript export."
-            ) from exc
     return network
 
 
-def _build_postprocessing(
-    model: nn.Module,
-    network: nn.Module,
-) -> nn.Module:
+def _build_postprocessing(model: nn.Module, network: nn.Module) -> nn.Module:
     """Build the inference pipeline applied after the graph network."""
     if network is model:
         return nn.Identity()
 
-    preprocessing = getattr(model, "preprocessing", None)
     modules = []
-    include = network is preprocessing
-
+    include = network is getattr(model, "preprocessing", None)
     for name in getattr(model, "BLOCKS", ()):
         block = getattr(model, name, None)
         if block is None:
@@ -117,7 +97,6 @@ def _build_postprocessing(
     postprocessing = getattr(model, "postprocessing", None)
     if postprocessing is not None:
         modules.append(deepcopy(postprocessing))
-
     return nn.Sequential(*modules).eval() if modules else nn.Identity()
 
 
@@ -125,10 +104,10 @@ def _make_inference_model(
     model: nn.Module,
     atomic_types: Sequence[int],
     interaction_range: float,
-) -> CVInferenceModel:
+) -> _CVInferenceModel:
     """Build the complete Metatomic inference pipeline."""
     network = _network(model)
-    return CVInferenceModel(
+    return _CVInferenceModel(
         network=_prepare_network(network),
         postprocessing=_build_postprocessing(model, network),
         atomic_numbers=torch.as_tensor(atomic_types, dtype=torch.long),
@@ -162,46 +141,29 @@ def create_metatomic_model(
             )
 
     if atomic_types is None:
-        atomic_types = _model_attribute(
-            model,
-            network,
-            "atomic_numbers",
-        )
+        atomic_types = _model_attribute(model, network, "atomic_numbers")
         if atomic_types is None:
             raise ValueError(
                 "Could not infer `atomic_types`; provide them explicitly."
             )
 
     if interaction_range is None:
-        interaction_range = _model_attribute(
-            model,
-            network,
-            "cutoff",
-        )
+        interaction_range = _model_attribute(model, network, "cutoff")
         if interaction_range is None:
             raise ValueError(
                 "Could not infer `interaction_range`; provide it explicitly."
             )
 
     if length_unit is None:
-        length_unit = (
-            _model_attribute(model, network, "length_unit")
-            or "angstrom"
-        )
+        length_unit = _model_attribute(model, network, "length_unit") or "angstrom"
 
     if dtype is None:
         reference = module_reference_tensor(model)
         dtype = "float64" if reference.dtype == torch.float64 else "float32"
 
     out_features = as_positive_int(out_features, "out_features")
-    atomic_types = _as_atomic_number_list(
-        atomic_types,
-        "atomic_types",
-    )
-    interaction_range = as_float(
-        interaction_range,
-        "interaction_range",
-    )
+    atomic_types = _as_atomic_number_list(atomic_types, "atomic_types")
+    interaction_range = as_float(interaction_range, "interaction_range")
 
     if interaction_range <= 0:
         raise ValueError("`interaction_range` must be positive.")
@@ -209,40 +171,34 @@ def create_metatomic_model(
         raise ValueError("`dtype` must be 'float32' or 'float64'.")
 
     supported_devices = (
-        ("cpu", "cuda")
-        if supported_devices is None
-        else supported_devices
+        ("cpu", "cuda") if supported_devices is None else supported_devices
     )
     authors = () if authors is None else authors
 
-    inference = _make_inference_model(
-        model,
-        atomic_types,
-        interaction_range,
-    )
-    wrapper = MetatomicCVWrapper(
-        model=inference,
+    wrapper = _MetatomicCVWrapper(
+        model=_make_inference_model(
+            model,
+            atomic_types,
+            interaction_range,
+        ),
         out_features=out_features,
     ).eval()
 
-    metadata = ModelMetadata(
-        name=name,
-        description=description,
-        authors=list(authors),
-    )
-    capabilities = ModelCapabilities(
-        length_unit=length_unit,
-        outputs={"feature": ModelOutput(sample_kind="system")},
-        atomic_types=atomic_types,
-        interaction_range=interaction_range,
-        supported_devices=list(supported_devices),
-        dtype=dtype,
-    )
-
     return MetatomicAtomisticModel(
         module=wrapper,
-        metadata=metadata,
-        capabilities=capabilities,
+        metadata=ModelMetadata(
+            name=name,
+            description=description,
+            authors=list(authors),
+        ),
+        capabilities=ModelCapabilities(
+            length_unit=length_unit,
+            outputs={"feature": ModelOutput(sample_kind="system")},
+            atomic_types=atomic_types,
+            interaction_range=interaction_range,
+            supported_devices=list(supported_devices),
+            dtype=dtype,
+        ),
     )
 
 
@@ -264,9 +220,7 @@ def export_metatomic_model(
     """Create and save a Metatomic model."""
     path = Path(path)
     if path.suffix != ".pt":
-        raise ValueError(
-            "The exported Metatomic model must use the '.pt' extension."
-        )
+        raise ValueError("The exported Metatomic model must use the '.pt' extension.")
     path.parent.mkdir(parents=True, exist_ok=True)
 
     metatomic_model = create_metatomic_model(
