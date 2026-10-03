@@ -7,7 +7,7 @@ from lightning.pytorch.core.module import _jit_is_scripting, get_filesystem
 from typing import Any, Dict, Optional, Union, List
 from warnings import warn
 from torch.jit import ScriptModule
-from mlcolvar.core.nn import BaseGNN
+from mlcolvar.core.nn import FeedForward, BaseGNN
 from mlcolvar.core.transform import Transform
 from mlcolvar.data.graph.utils import create_graph_tracing_example
 
@@ -24,7 +24,7 @@ class BaseCV(lightning.LightningModule):
 
     def __init__(
         self,
-        model: Union[List[int], torch.nn.Module],
+        model: Union[List[int], FeedForward, BaseGNN],
         preprocessing: torch.nn.Module = None,
         postprocessing: torch.nn.Module = None,
         *args,
@@ -73,43 +73,34 @@ class BaseCV(lightning.LightningModule):
             return create_graph_tracing_example(
                 n_species=len(self.preprocessing.atomic_numbers),
                 environment=True,
-                long_range=(
-                    hasattr(self.preprocessing, "long_range_cutoff")
-                    and self.preprocessing.long_range_cutoff > 0
-                ),
+                long_range=getattr(
+                    self.preprocessing, "long_range_cutoff", -1
+                ) > 0,
             )
 
         if self.in_features is not None:
-            return torch.randn(
-                (1, self.in_features)
-                if self.preprocessing is None
-                or not hasattr(self.preprocessing, "in_features")
-                else self.preprocessing.in_features
+            in_features = getattr(
+                self.preprocessing,
+                "in_features",
+                self.in_features,
             )
+            return torch.randn(1, in_features)
 
         return create_graph_tracing_example(
             n_species=len(self.atomic_numbers),
             environment=True,
-            long_range=(
-                hasattr(self, "long_range_cutoff")
-                and self.long_range_cutoff > 0
-            ),
+            long_range=getattr(self, "long_range_cutoff", -1) > 0,
         )
 
-
-    def parse_model(
-        self,
-        model: Union[List[int], torch.nn.Module],
-    ):
+    # TODO add general torch.nn.Module
+    def parse_model(self, model: Union[List[int], FeedForward, BaseGNN]):
         if isinstance(model, list):
             self.layers = model
             self.BLOCKS = self.DEFAULT_BLOCKS
             self._override_model = False
             self.in_features = self.layers[0]
             self.out_features = self.layers[-1]
-        elif isinstance(model, torch.nn.Module):
-            if not hasattr(model, "in_features") or not hasattr(model,"out_features"):
-                raise ValueError("A custom model must expose `in_features` and `out_features`.")
+        elif isinstance(model, FeedForward) or isinstance(model, BaseGNN):
             self.BLOCKS = self.MODEL_BLOCKS
             self._override_model = True
             self.in_features = model.in_features
@@ -121,7 +112,9 @@ class BaseCV(lightning.LightningModule):
                 self.register_buffer("long_range_cutoff", model.long_range_cutoff)
                 self.register_buffer("atomic_numbers", model.atomic_numbers)
         else:
-            raise ValueError(f"Keyword `model` must be either a list of layer sizes or a torch.nn.Module. Found {type(model)}.")
+            raise ValueError(
+                f"Keyword model can either accept type list, FeedForward or BaseGNN. Found {type(model)}"
+            )
         
 
     def parse_options(self, options: dict = None):

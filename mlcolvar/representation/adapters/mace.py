@@ -62,8 +62,6 @@ class MACERepresentation(Representation):
         num_layers: int | None = None,
         num_features: int | None = None,
         l_max: int | None = None,
-        buffer: float = 0.0,
-        long_range_cutoff: float = -1.0,
         freeze: bool = True,
     ) -> None:
         if not hasattr(model, "atomic_numbers") or not hasattr(model, "r_max"):
@@ -108,8 +106,6 @@ class MACERepresentation(Representation):
             atomic_numbers=model.atomic_numbers,
             cutoff=as_float(model.r_max, "model.r_max"),
             pooling_operation=pooling_operation,
-            buffer=buffer,
-            long_range_cutoff=long_range_cutoff,
             freeze=freeze,
         )
 

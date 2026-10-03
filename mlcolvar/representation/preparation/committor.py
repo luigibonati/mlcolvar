@@ -42,7 +42,7 @@ def prepare_committor(
     model: nn.Module,
     dataset: DictDataset,
     features: torch.Tensor,
-    descriptor_derivatives: SmartDerivatives | None = None,
+    descriptor_derivatives: nn.Module | None = None,
     batch_size: int | None = None,
     device: torch.device | str | None = None,
     output_device: torch.device | str = "cpu",

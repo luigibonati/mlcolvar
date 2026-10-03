@@ -5,45 +5,24 @@ from mlcolvar.representation import SelectAtoms
 
 
 def test_select_atoms():
-    features = torch.tensor(
-        [
-            [1.0, 2.0],
-            [3.0, 4.0],
-            [5.0, 6.0],
-            [7.0, 8.0],
-            [9.0, 10.0],
-            [11.0, 12.0],
-        ]
-    )
-    ptr = torch.tensor([0, 3, 6])
-
-    output = SelectAtoms([0, 2])(features, ptr)
-
-    expected = torch.tensor(
-        [
-            [1.0, 2.0, 5.0, 6.0],
-            [7.0, 8.0, 11.0, 12.0],
-        ]
-    )
+    features = torch.tensor([
+        [1., 2.], [3., 4.], [5., 6.],
+        [7., 8.], [9., 10.], [11., 12.],
+    ])
+    output = SelectAtoms([0, 2])(features, torch.tensor([0, 3, 6]))
+    expected = torch.tensor([[1., 2., 5., 6.], [7., 8., 11., 12.]])
     torch.testing.assert_close(output, expected)
 
 
-@pytest.mark.parametrize(
-    "atom_indices",
-    [
-        [],
-        [-1],
-        [0, 0],
-    ],
-)
-def test_select_atoms_invalid_indices(atom_indices):
+@pytest.mark.parametrize("indices", [[], [-1], [0, 0]])
+def test_select_atoms_errors(indices):
     with pytest.raises(ValueError):
-        SelectAtoms(atom_indices)
+        SelectAtoms(indices)
 
 
 def test_select_atoms_out_of_range():
-    features = torch.ones(3, 2)
-    ptr = torch.tensor([0, 2, 3])
-
     with pytest.raises(RuntimeError):
-        SelectAtoms([1])(features, ptr)
+        SelectAtoms([1])(
+            torch.ones(3, 2),
+            torch.tensor([0, 2, 3]),
+        )

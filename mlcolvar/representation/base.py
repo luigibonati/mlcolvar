@@ -15,7 +15,6 @@ class Representation(nn.Module):
 
     __constants__ = [
         "input_kind",
-        "output_kind",
         "in_features",
         "out_features",
         "pooling_operation",
@@ -50,7 +49,6 @@ class Representation(nn.Module):
                 raise ValueError(
                     "`pooling_operation` is only available for graph inputs."
                 )
-            output_kind = "system"
         else:
             if atomic_numbers is None or cutoff is None:
                 raise ValueError(
@@ -68,10 +66,8 @@ class Representation(nn.Module):
                 raise ValueError(
                     "`long_range_cutoff` must be negative or larger than `cutoff`."
                 )
-            output_kind = "atom" if pooling_operation is None else "system"
 
         self.input_kind = input_kind
-        self.output_kind = output_kind
         self.in_features = (
             as_positive_int(in_features, "in_features")
             if in_features is not None
