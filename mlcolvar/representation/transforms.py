@@ -1,34 +1,51 @@
 from collections.abc import Sequence
 
 import torch
-from torch import nn
+
+from ._utils import as_float
+from .base import Representation
 
 __all__ = ["SelectAtoms"]
 
 
-class SelectAtoms(nn.Module):
-    """Select and concatenate atom-level features for each system."""
+class SelectAtoms(Representation):
+    """Select and concatenate fixed atom-level representation features."""
 
     __constants__ = ["max_atom_index"]
 
     def __init__(
         self,
+        representation: Representation,
         atom_indices: Sequence[int],
     ) -> None:
-        super().__init__()
+        if representation.input_kind != "graph":
+            raise ValueError("`representation` must use graph inputs.")
+        if representation.pooling_operation is not None:
+            raise ValueError(
+                "`representation` must return atom-level features "
+                "(`pooling_operation=None`)."
+            )
 
         indices = [int(index) for index in atom_indices]
-        if not indices:
-            raise ValueError("`atom_indices` cannot be empty.")
-        if any(index < 0 for index in indices):
-            raise ValueError(
-                "`atom_indices` must contain non-negative indices."
-            )
+        if not indices or any(index < 0 for index in indices):
+            raise ValueError("`atom_indices` must contain non-negative indices.")
         if len(indices) != len(set(indices)):
-            raise ValueError(
-                "`atom_indices` must not contain duplicates."
-            )
+            raise ValueError("`atom_indices` must not contain duplicates.")
 
+        super().__init__(
+            out_features=representation.out_features * len(indices),
+            input_kind="graph",
+            atomic_numbers=representation.atomic_numbers,
+            cutoff=as_float(representation.cutoff, "representation.cutoff"),
+            buffer=as_float(representation.buffer, "representation.buffer"),
+            long_range_cutoff=as_float(
+                representation.long_range_cutoff,
+                "representation.long_range_cutoff",
+            ),
+            freeze=representation.freeze,
+        )
+
+        self.representation = representation
         self.max_atom_index = max(indices)
         self.register_buffer(
             "atom_indices",
@@ -37,23 +54,16 @@ class SelectAtoms(nn.Module):
 
     def forward(
         self,
-        features: torch.Tensor,
-        ptr: torch.Tensor,
+        data: dict[str, torch.Tensor],
+        cell: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        """Select atom features and concatenate them per system."""
+        features = self.representation(data, cell=cell)
+        ptr = data["ptr"].to(features.device, torch.long)
+
         if features.ndim != 2:
             raise ValueError(
-                "`features` must have shape (n_atoms, n_features)."
+                "The wrapped representation must return atom-level features."
             )
-        if ptr.ndim != 1:
-            raise ValueError("`ptr` must be one-dimensional.")
-        if ptr.numel() < 2:
-            raise ValueError("`ptr` must describe at least one system.")
-
-        ptr = ptr.to(
-            device=features.device,
-            dtype=torch.long,
-        )
 
         atoms_per_system = ptr[1:] - ptr[:-1]
         if torch.any(atoms_per_system <= self.max_atom_index):
@@ -66,12 +76,5 @@ class SelectAtoms(nn.Module):
             ptr[:-1].unsqueeze(1)
             + self.atom_indices.to(features.device).unsqueeze(0)
         )
-        selected = features.index_select(
-            0,
-            indices.reshape(-1),
-        )
-
-        return selected.reshape(
-            ptr.numel() - 1,
-            -1,
-        )
+        selected = features.index_select(0, indices.reshape(-1))
+        return selected.reshape(ptr.numel() - 1, -1)
