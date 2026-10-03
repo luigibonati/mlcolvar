@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Optional
 
 import pytest
 import torch
@@ -7,19 +7,17 @@ from torch import nn
 from mlcolvar.core import FeedForward
 from mlcolvar.cvs import RegressionCV
 from mlcolvar.data import DictDataset
-from mlcolvar.representation import (
-    GraphRepresentation,
-    VectorRepresentation,
-    evaluate_dataset,
-)
+from mlcolvar.representation import Representation, evaluate_dataset
 from mlcolvar.representation.preparation import compute_jacobian
 
 
-class DummyVectorRepresentation(VectorRepresentation):
+class DummyVectorRepresentation(Representation):
     def __init__(self):
         super().__init__(
             in_features=3,
             out_features=2,
+            input_kind="vector",
+            output_kind="system",
             freeze=True,
         )
         self.encoder = nn.Linear(3, 2, bias=False)
@@ -29,10 +27,14 @@ class DummyVectorRepresentation(VectorRepresentation):
         return self.encoder(x)
 
 
-class DummyAtomRepresentation(GraphRepresentation):
-    def __init__(self, pooling_operation: Optional[str] = None):
+class DummyAtomRepresentation(Representation):
+    def __init__(
+        self,
+        pooling_operation: Optional[str] = None,
+    ):
         super().__init__(
             out_features=2,
+            input_kind="graph",
             atomic_numbers=[1, 8],
             cutoff=5.0,
             pooling_operation=pooling_operation,
@@ -49,7 +51,7 @@ def make_dataset():
     })
 
 
-def make_graph() -> Dict[str, torch.Tensor]:
+def make_graph() -> dict[str, torch.Tensor]:
     return {
         "atom_features": torch.tensor([
             [1.0, 2.0],
@@ -72,11 +74,9 @@ def test_vector_representation_preprocessing():
 
     x = torch.randn(2, 3, requires_grad=True)
     output = model(x)
-
     assert output.shape == (2, 1)
 
     output.sum().backward()
-
     assert x.grad is not None
     assert all(
         not parameter.requires_grad
@@ -88,9 +88,7 @@ def test_vector_representation_preprocessing():
     ("factory", "out_features"),
     [
         (
-            lambda: DummyAtomRepresentation(
-                pooling_operation="mean"
-            ),
+            lambda: DummyAtomRepresentation(pooling_operation="mean"),
             2,
         ),
         (
@@ -102,6 +100,7 @@ def test_vector_representation_preprocessing():
 def test_graph_representation_transforms(factory, out_features):
     representation = factory()
 
+    assert representation.input_kind == "graph"
     assert representation.output_kind == "system"
     assert representation.out_features == out_features
 
@@ -143,10 +142,8 @@ def test_compute_jacobian():
     assert jacobian.shape == (2, 3, 2)
 
     expected = (
-        model.weight
-        .detach()
-        .T
-        .unsqueeze(0)
+        model.weight.detach()
+        .T.unsqueeze(0)
         .expand(2, -1, -1)
     )
 

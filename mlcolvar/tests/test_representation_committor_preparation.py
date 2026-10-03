@@ -3,19 +3,16 @@ from torch import nn
 from torch_geometric.data import Data
 
 from mlcolvar.data import DictDataset
-from mlcolvar.representation import (
-    GraphRepresentation,
-    VectorRepresentation,
-    evaluate_dataset,
-    prepare_committor,
-)
+from mlcolvar.representation import Representation, evaluate_dataset, prepare_committor
 
 
-class DummyVectorRepresentation(VectorRepresentation):
+class DummyVectorRepresentation(Representation):
     def __init__(self):
         super().__init__(
             in_features=2,
             out_features=2,
+            input_kind="vector",
+            output_kind="system",
             freeze=True,
         )
 
@@ -23,10 +20,11 @@ class DummyVectorRepresentation(VectorRepresentation):
         return x
 
 
-class DummyGraphRepresentation(GraphRepresentation):
+class DummyGraphRepresentation(Representation):
     def __init__(self):
         super().__init__(
             out_features=2,
+            input_kind="graph",
             atomic_numbers=[1],
             cutoff=5.0,
             pooling_operation="mean",
@@ -34,10 +32,7 @@ class DummyGraphRepresentation(GraphRepresentation):
         )
 
     def forward(self, data, cell=None):
-        return self.pooling(
-            data["positions"][:, :2],
-            data,
-        )
+        return self.pooling(data["positions"][:, :2], data)
 
 
 class DummyDescriptorDerivatives(nn.Module):
@@ -46,7 +41,6 @@ class DummyDescriptorDerivatives(nn.Module):
     def forward(self, gradient, ref_idx=None):
         if ref_idx is None:
             raise ValueError("`ref_idx` is required.")
-
         output = torch.zeros(
             gradient.shape[0],
             1,
@@ -73,38 +67,24 @@ def test_vector_committor_preparation():
     })
 
     representation = DummyVectorRepresentation()
-    features = evaluate_dataset(
-        representation,
-        dataset,
-    )
-
+    features = evaluate_dataset(representation, dataset)
     prepared, transform = prepare_committor(
         representation,
         dataset,
         features,
     )
 
-    torch.testing.assert_close(
-        prepared["data"],
-        features,
-    )
+    torch.testing.assert_close(prepared["data"], features)
     torch.testing.assert_close(
         prepared["ref_idx"],
-        torch.tensor(
-            [-1, 0, -1, 1],
-            dtype=prepared["ref_idx"].dtype,
-        ),
+        torch.tensor([-1, 0, -1, 1], dtype=prepared["ref_idx"].dtype),
     )
 
     gradient = transform(
         torch.ones(2, 2),
         torch.tensor([0, 1]),
     )
-
-    torch.testing.assert_close(
-        gradient,
-        torch.ones(2, 2),
-    )
+    torch.testing.assert_close(gradient, torch.ones(2, 2))
 
 
 def test_vector_descriptor_committor_preparation():
@@ -121,11 +101,7 @@ def test_vector_descriptor_committor_preparation():
     })
 
     representation = DummyVectorRepresentation()
-    features = evaluate_dataset(
-        representation,
-        dataset,
-    )
-
+    features = evaluate_dataset(representation, dataset)
     prepared, transform = prepare_committor(
         representation,
         dataset,
@@ -133,32 +109,21 @@ def test_vector_descriptor_committor_preparation():
         descriptor_derivatives=DummyDescriptorDerivatives(),
     )
 
-    torch.testing.assert_close(
-        prepared["data"],
-        features,
-    )
+    torch.testing.assert_close(prepared["data"], features)
     torch.testing.assert_close(
         prepared["ref_idx"],
-        torch.tensor(
-            [-1, 0, -1, 1],
-            dtype=prepared["ref_idx"].dtype,
-        ),
+        torch.tensor([-1, 0, -1, 1], dtype=prepared["ref_idx"].dtype),
     )
 
     gradient = transform(
         torch.ones(2, 2),
         torch.tensor([0, 1]),
     )
-
     expected = torch.tensor([
         [[1.0, 1.0, 0.0]],
         [[1.0, 1.0, 0.0]],
     ])
-
-    torch.testing.assert_close(
-        gradient,
-        expected,
-    )
+    torch.testing.assert_close(gradient, expected)
 
 
 def test_graph_committor_preparation():
@@ -189,11 +154,7 @@ def test_graph_committor_preparation():
     )
 
     representation = DummyGraphRepresentation()
-    features = evaluate_dataset(
-        representation,
-        dataset,
-    )
-
+    features = evaluate_dataset(representation, dataset)
     prepared, transform = prepare_committor(
         representation,
         dataset,
@@ -207,27 +168,20 @@ def test_graph_committor_preparation():
             [3.0, 2.0],
         ]),
     )
-    torch.testing.assert_close(
-        prepared["data"],
-        features,
-    )
+    torch.testing.assert_close(prepared["data"], features)
     torch.testing.assert_close(
         prepared["weights"],
         torch.tensor([1.0, 2.0]),
     )
     torch.testing.assert_close(
         prepared["ref_idx"],
-        torch.tensor(
-            [0, 1],
-            dtype=prepared["ref_idx"].dtype,
-        ),
+        torch.tensor([0, 1], dtype=prepared["ref_idx"].dtype),
     )
 
     gradient = transform(
         torch.ones(2, 2),
         torch.tensor([0, 1]),
     )
-
     expected = torch.tensor([
         [
             [0.5, 0.5, 0.0],
@@ -238,8 +192,4 @@ def test_graph_committor_preparation():
             [0.5, 0.5, 0.0],
         ],
     ])
-
-    torch.testing.assert_close(
-        gradient,
-        expected,
-    )
+    torch.testing.assert_close(gradient, expected)

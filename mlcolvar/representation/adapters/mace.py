@@ -1,9 +1,9 @@
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import torch
 from torch import nn
 
-from ..base import GraphRepresentation
+from ..base import Representation
 from ._utils import to_float, to_int, to_int_list
 
 __all__ = ["MACERepresentation"]
@@ -18,7 +18,6 @@ def _resolve_num_layers(model: nn.Module, num_layers: Optional[int]) -> int:
         )
         if available <= 0:
             raise ValueError("MACE `num_interactions` must be positive.")
-
         selected = (
             available
             if num_layers is None
@@ -39,7 +38,6 @@ def _resolve_num_layers(model: nn.Module, num_layers: Optional[int]) -> int:
 
     if selected <= 0:
         raise ValueError("`num_layers` must be positive.")
-
     return selected
 
 
@@ -72,7 +70,6 @@ def _infer_descriptor_layout(model: nn.Module) -> Tuple[int, int]:
             "The MACE descriptor dimension is incompatible "
             f"with l_max={l_max}."
         )
-
     return descriptor_dim // angular_size, l_max
 
 
@@ -85,7 +82,9 @@ def _resolve_descriptor_layout(
     if num_features is None or l_max is None:
         inferred_features, inferred_lmax = _infer_descriptor_layout(model)
         num_features = (
-            inferred_features if num_features is None else num_features
+            inferred_features
+            if num_features is None
+            else num_features
         )
         l_max = inferred_lmax if l_max is None else l_max
 
@@ -96,17 +95,16 @@ def _resolve_descriptor_layout(
         raise ValueError("`num_features` must be positive.")
     if l_max < 0:
         raise ValueError("`l_max` must be non-negative.")
-
     return num_features, l_max
 
 
-class MACERepresentation(GraphRepresentation):
+class MACERepresentation(Representation):
     """Extract invariant features from a pretrained MACE model.
 
     Scalar features are collected from selected MACE interaction layers and
-    concatenated into a reusable atom-level representation. Only the invariant
-    scalar components of each selected layer are retained. Optional pooling
-    reduces the atom-level features to a system-level representation.
+    concatenated into a reusable atom-level representation. Only invariant
+    scalar components are retained. Optional pooling reduces atom-level
+    features to a system-level representation.
 
     Parameters
     ----------
@@ -114,24 +112,21 @@ class MACERepresentation(GraphRepresentation):
         Pretrained MACE model exposing ``atomic_numbers``, ``r_max``, and
         interaction-layer node features through ``node_feats``.
     pooling_operation : {"mean", "sum"}, optional
-        Optional reduction from atom-level to system-level features. If
-        ``None``, atom-level features are returned.
+        Optional atom-to-system reduction. If ``None``, atom-level features
+        are returned.
     num_layers : int, optional
-        Number of MACE interaction layers used for the representation. If not
-        provided, it is inferred from ``model.num_interactions``.
+        Number of MACE interaction layers used. If omitted, inferred from
+        ``model.num_interactions``.
     num_features : int, optional
         Number of invariant scalar features extracted from each selected layer.
-        If not provided, it is inferred from the MACE descriptor layout.
     l_max : int, optional
-        Maximum angular degree of the MACE feature layout. If not provided,
-        it is inferred from the model.
+        Maximum angular degree of the MACE feature layout.
     buffer : float, default=0.0
         Buffer added to the graph neighbor-list cutoff.
     long_range_cutoff : float, default=-1.0
-        Optional long-range interaction cutoff. A negative value disables it.
+        Optional long-range interaction cutoff.
     freeze : bool, default=True
-        If ``True``, freeze the pretrained MACE model and keep it in evaluation
-        mode.
+        Whether to freeze the pretrained MACE model.
 
     Notes
     -----
@@ -174,6 +169,7 @@ class MACERepresentation(GraphRepresentation):
 
         super().__init__(
             out_features=num_layers * num_features,
+            input_kind="graph",
             atomic_numbers=to_int_list(
                 model.atomic_numbers,
                 name="model.atomic_numbers",
@@ -193,30 +189,15 @@ class MACERepresentation(GraphRepresentation):
         self.required_input_features = (
             (num_layers - 1) * self.layer_size + num_features
         )
-
         self.model = model
-        self._freeze_module(self.model)
+        self._freeze_module(model)
 
     def forward(
         self,
-        data: Dict[str, torch.Tensor],
+        data: dict[str, torch.Tensor],
         cell: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        """Evaluate the MACE representation.
-
-        Parameters
-        ----------
-        data : dict[str, torch.Tensor]
-            Atomistic graph input expected by the wrapped MACE model.
-        cell : torch.Tensor, optional
-            Unused compatibility argument accepted by graph representations.
-
-        Returns
-        -------
-        torch.Tensor
-            Concatenated invariant MACE features, optionally pooled according
-            to ``pooling_operation``.
-        """
+        """Evaluate the MACE representation."""
         del cell
 
         output = self.model(
@@ -224,7 +205,6 @@ class MACERepresentation(GraphRepresentation):
             training=self.training and not self.freeze,
             compute_force=False,
         )
-
         if "node_feats" not in output:
             raise RuntimeError(
                 "The MACE model output does not contain `node_feats`."
@@ -246,7 +226,6 @@ class MACERepresentation(GraphRepresentation):
             raise RuntimeError(
                 "MACE `node_feats` must be a rank-two tensor."
             )
-
         if node_features.size(1) < self.required_input_features:
             raise RuntimeError(
                 "MACE `node_feats` is incompatible with the configured "
@@ -261,26 +240,13 @@ class MACERepresentation(GraphRepresentation):
             blocks.append(
                 node_features[:, start : start + self.num_features]
             )
-
         return torch.cat(blocks, dim=-1)
 
     @torch.jit.unused
     def prepare_for_torchscript(self) -> None:
-        """Prepare the wrapped MACE model for TorchScript export.
-
-        Native MACE modules contain e3nn components that need to be converted
-        with ``e3nn.util.jit.script`` before exporting the complete inference
-        pipeline. Calling this method repeatedly is safe: an already scripted
-        model is left unchanged.
-
-        Raises
-        ------
-        ImportError
-            If ``e3nn`` is not installed.
-        """
+        """Prepare the wrapped MACE model for TorchScript export."""
         if isinstance(self.model, torch.jit.ScriptModule):
             return
-
         try:
             from e3nn.util.jit import script as e3nn_script
         except ImportError as exc:
