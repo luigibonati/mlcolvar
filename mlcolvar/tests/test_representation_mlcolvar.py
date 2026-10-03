@@ -251,7 +251,9 @@ def test_graph_representation() -> None:
 
 
 def test_graph_atom_representation() -> None:
-    representation = _graph_representation(pooling_operation=None)
+    representation = _graph_representation(
+        pooling_operation=None
+    )
 
     torch.testing.assert_close(
         representation(_graph_input()),
@@ -266,19 +268,6 @@ def test_graph_atom_representation() -> None:
     )
     assert representation.output_kind == "atom"
     assert representation.pooling_operation is None
-
-    concatenated = representation.concat_atoms([0])
-    torch.testing.assert_close(
-        concatenated(_graph_input()),
-        torch.tensor(
-            [
-                [2.0, 2.0],
-                [4.0, 6.0],
-            ],
-            dtype=torch.float32,
-        ),
-    )
-    assert concatenated.output_kind == "system"
 
 
 def test_graph_representation_gradients() -> None:

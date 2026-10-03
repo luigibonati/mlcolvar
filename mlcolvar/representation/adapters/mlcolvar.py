@@ -47,7 +47,6 @@ class MLColvarRepresentation(Representation):
             super().__init__(
                 out_features=out_features,
                 input_kind="vector",
-                output_kind="system",
                 in_features=as_positive_int(
                     model.in_features, "model.in_features"
                 ),

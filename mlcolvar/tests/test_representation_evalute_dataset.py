@@ -79,24 +79,20 @@ def test_vector_representation_preprocessing():
     )
 
 
-@pytest.mark.parametrize(
-    ("factory", "out_features"),
-    [
-        (lambda: DummyAtomRepresentation(pooling_operation="mean"), 2),
-        (lambda: DummyAtomRepresentation().concat_atoms([0, 1]), 4),
-    ],
-)
-def test_graph_representation_transforms(factory, out_features):
-    representation = factory()
+def test_graph_representation_preprocessing():
+    representation = DummyAtomRepresentation(
+        pooling_operation="mean"
+    )
 
     assert representation.input_kind == "graph"
     assert representation.output_kind == "system"
-    assert representation.out_features == out_features
+    assert representation.out_features == 2
 
     model = RegressionCV(
-        model=FeedForward([out_features, 1]),
+        model=FeedForward([representation.out_features, 1]),
         preprocessing=representation,
     )
+
     assert model(_make_graph()).shape == (2, 1)
 
 

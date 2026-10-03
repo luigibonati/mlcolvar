@@ -133,14 +133,17 @@ class MACERepresentation(Representation):
             training=self.training and not self.freeze,
             compute_force=False,
         )
-        if "node_feats" not in output or output["node_feats"] is None:
+
+        node_features = output.get("node_feats")
+        if node_features is None:
             raise RuntimeError(
                 "The MACE model output does not contain valid `node_feats`."
             )
 
-        node_features = output["node_feats"]
         if node_features.dim() != 2:
-            raise RuntimeError("MACE `node_feats` must be a rank-two tensor.")
+            raise RuntimeError(
+                "MACE `node_feats` must be a rank-two tensor."
+            )
         if node_features.size(1) < self.required_input_features:
             raise RuntimeError(
                 "MACE `node_feats` is incompatible with the configured "
@@ -149,7 +152,10 @@ class MACERepresentation(Representation):
                 f"{node_features.size(1)}."
             )
 
-        features = node_features.index_select(1, self.feature_indices)
+        features = node_features.index_select(
+            1,
+            self.feature_indices,
+        )
         return self.pooling(features, data)
 
     @torch.jit.unused
