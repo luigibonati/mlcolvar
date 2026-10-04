@@ -1,5 +1,6 @@
-from .adapters import MACERepresentation, MLColvarRepresentation
 from .base import Representation
+from .mace import MACERepresentation
+from .mlcolvar import MLColvarRepresentation
 from .preparation import evaluate_dataset, prepare_committor
 from .transforms import SelectAtoms
 

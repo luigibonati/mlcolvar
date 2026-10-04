@@ -1,8 +1,8 @@
 import torch
 from torch import nn
 
-from .._utils import as_float, as_int, as_positive_int
-from ..base import Representation
+from ._utils import as_float, as_int, as_positive_int
+from .base import Representation
 
 __all__ = ["MACERepresentation"]
 

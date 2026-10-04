@@ -3,8 +3,8 @@ from torch import nn
 
 from mlcolvar.core import BaseGNN
 
-from .._utils import as_float, as_positive_int
-from ..base import Representation
+from ._utils import as_float, as_positive_int
+from .base import Representation
 
 __all__ = ["MLColvarRepresentation"]
 
