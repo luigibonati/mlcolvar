@@ -9,7 +9,19 @@ __all__ = ["SelectAtoms"]
 
 
 class SelectAtoms(Representation):
-    """Select and concatenate fixed atom-level representation features."""
+    """Select and concatenate fixed atom-level representation features.
+
+    The wrapped representation must return atom-level features. For each system,
+    features of the selected atoms are concatenated into a single feature vector.
+    This transform assumes a consistent atom ordering across systems.
+
+    Parameters
+    ----------
+    representation : Representation
+        Graph representation with ``pooling_operation=None``.
+    atom_indices : Sequence[int]
+        Non-negative, unique atom indices to select from each system.
+    """
 
     __constants__ = ["max_atom_index"]
 
@@ -21,10 +33,7 @@ class SelectAtoms(Representation):
         if representation.input_kind != "graph":
             raise ValueError("`representation` must use graph inputs.")
         if representation.pooling_operation is not None:
-            raise ValueError(
-                "`representation` must return atom-level features "
-                "(`pooling_operation=None`)."
-            )
+            raise ValueError("`representation` must return atom-level features (`pooling_operation=None`).")
 
         indices = [int(index) for index in atom_indices]
         if not indices or any(index < 0 for index in indices):
@@ -47,30 +56,37 @@ class SelectAtoms(Representation):
 
         self.representation = representation
         self.max_atom_index = max(indices)
-        self.register_buffer(
-            "atom_indices",
-            torch.tensor(indices, dtype=torch.long),
-        )
+        self.register_buffer("atom_indices", torch.tensor(indices, dtype=torch.long))
 
     def forward(
         self,
         data: dict[str, torch.Tensor],
         cell: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        """Select atom features and concatenate them for each system.
+
+        Parameters
+        ----------
+        data : dict[str, torch.Tensor]
+            Graph batch containing ``ptr`` to delimit individual systems.
+        cell : torch.Tensor, optional
+            Simulation cell forwarded to the wrapped representation.
+
+        Returns
+        -------
+        torch.Tensor
+            Concatenated features with shape
+            ``(n_systems, len(atom_indices) * representation.out_features)``.
+        """
         features = self.representation(data, cell=cell)
         ptr = data["ptr"].to(features.device, torch.long)
 
         if features.ndim != 2:
-            raise ValueError(
-                "The wrapped representation must return atom-level features."
-            )
+            raise ValueError("The wrapped representation must return atom-level features.")
 
         atoms_per_system = ptr[1:] - ptr[:-1]
         if torch.any(atoms_per_system <= self.max_atom_index):
-            raise RuntimeError(
-                "A selected atom index exceeds the number of atoms "
-                "in at least one system."
-            )
+            raise RuntimeError("A selected atom index exceeds the number of atoms in at least one system.")
 
         indices = (
             ptr[:-1].unsqueeze(1)
