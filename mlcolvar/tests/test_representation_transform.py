@@ -11,6 +11,7 @@ class AtomRepresentation(Representation):
         super().__init__(
             out_features=2,
             input_kind="graph",
+            output_kind="atom" if pooling_operation is None else "system",
             atomic_numbers=[1],
             cutoff=5.0,
             pooling_operation=pooling_operation,
@@ -34,7 +35,11 @@ def graph():
 def test_select_atoms():
     representation = SelectAtoms(AtomRepresentation(), [0, 2])
     expected = torch.tensor([[1., 2., 5., 6.], [7., 8., 11., 12.]])
+
     torch.testing.assert_close(representation(graph()), expected)
+
+    assert representation.input_kind == "graph"
+    assert representation.output_kind == "system"
     assert representation.out_features == 4
 
     model = RegressionCV(

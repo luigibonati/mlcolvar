@@ -30,14 +30,19 @@ def _infer_descriptor_layout(model: nn.Module) -> tuple[int, int]:
         descriptor_dim = int(irreps.dim)
         l_max = int(irreps.lmax)
     except (AttributeError, IndexError, TypeError, ValueError) as exc:
-        raise ValueError("Could not infer the MACE descriptor layout from `model.products[0].linear.irreps_out`.") from exc
+        raise ValueError(
+            "Could not infer the MACE descriptor layout from "
+            "`model.products[0].linear.irreps_out`."
+        ) from exc
 
     if descriptor_dim <= 0 or l_max < 0:
         raise ValueError("Invalid MACE descriptor layout.")
 
     angular_size = (l_max + 1) ** 2
     if descriptor_dim % angular_size:
-        raise ValueError(f"The MACE descriptor dimension is incompatible with l_max={l_max}.")
+        raise ValueError(
+            f"The MACE descriptor dimension is incompatible with l_max={l_max}."
+        )
     return descriptor_dim // angular_size, l_max
 
 
@@ -127,17 +132,28 @@ class MACERepresentation(Representation):
             raise ValueError("The MACE model must expose `num_interactions`.")
 
         available = as_positive_int(model.num_interactions, "model.num_interactions")
-        num_layers = (available if num_layers is None else as_positive_int(num_layers, "num_layers"))
+        num_layers = (
+            available
+            if num_layers is None
+            else as_positive_int(num_layers, "num_layers")
+        )
         if num_layers > available:
-            raise ValueError(f"Requested {num_layers} MACE layers, but the model contains only {available}.")
+            raise ValueError(
+                f"Requested {num_layers} MACE layers, but the model contains only {available}."
+            )
 
         num_features, l_max = _resolve_descriptor_layout(model, num_features, l_max)
         layer_size = (l_max + 1) ** 2 * num_features
-        indices = [i * layer_size + j for i in range(num_layers) for j in range(num_features)]
+        indices = [
+            i * layer_size + j
+            for i in range(num_layers)
+            for j in range(num_features)
+        ]
 
         super().__init__(
             out_features=len(indices),
             input_kind="graph",
+            output_kind="atom" if pooling_operation is None else "system",
             atomic_numbers=model.atomic_numbers,
             cutoff=as_float(model.r_max, "model.r_max"),
             pooling_operation=pooling_operation,
@@ -175,7 +191,11 @@ class MACERepresentation(Representation):
             If ``node_feats`` is missing or incompatible with the descriptor layout.
         """
         del cell
-        output = self.model(data, training=self.training and not self.freeze, compute_force=False)
+        output = self.model(
+            data,
+            training=self.training and not self.freeze,
+            compute_force=False,
+        )
 
         node_features = output.get("node_feats")
         if node_features is None:

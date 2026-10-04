@@ -96,12 +96,15 @@ def test_vector_representation():
     representation = vector_representation()
     x = vector_input().requires_grad_(True)
     output = representation(x, cell=torch.tensor(0.5))
+
     torch.testing.assert_close(
         output, torch.tensor([[5., 16.], [7., 8.]])
     )
     output.sum().backward()
 
     assert x.grad is not None
+    assert representation.input_kind == "vector"
+    assert representation.output_kind == "system"
     assert representation.in_features == 3
     assert representation.out_features == 2
     assert all(
@@ -114,18 +117,28 @@ def test_vector_representation():
 
 
 @pytest.mark.parametrize(
-    ("pooling", "expected"),
+    ("pooling", "output_kind", "expected"),
     [
-        ("mean", torch.tensor([[4., 3.], [4., 6.]])),
-        (None, torch.tensor([[2., 2.], [6., 4.], [4., 6.]])),
+        (
+            "mean",
+            "system",
+            torch.tensor([[4., 3.], [4., 6.]]),
+        ),
+        (
+            None,
+            "atom",
+            torch.tensor([[2., 2.], [6., 4.], [4., 6.]]),
+        ),
     ],
 )
-def test_graph_representation(pooling, expected):
+def test_graph_representation(pooling, output_kind, expected):
     representation = graph_representation(pooling)
     output = representation(graph_input())
+
     torch.testing.assert_close(output, expected)
 
     assert representation.input_kind == "graph"
+    assert representation.output_kind == output_kind
     assert representation.pooling_operation == pooling
     assert representation.out_features == 2
 

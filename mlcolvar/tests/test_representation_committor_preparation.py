@@ -9,7 +9,12 @@ from mlcolvar.representation import Representation, evaluate_dataset, prepare_co
 
 class VectorRepresentation(Representation):
     def __init__(self):
-        super().__init__(in_features=2, out_features=2, input_kind="vector")
+        super().__init__(
+            in_features=2,
+            out_features=2,
+            input_kind="vector",
+            output_kind="system",
+        )
 
     def forward(self, x, cell=None):
         return x
@@ -20,6 +25,7 @@ class GraphRepresentation(Representation):
         super().__init__(
             out_features=2,
             input_kind="graph",
+            output_kind="system",
             atomic_numbers=[1],
             cutoff=5.0,
             pooling_operation="mean",

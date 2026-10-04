@@ -61,10 +61,11 @@ def make_cv():
 
 
 @pytest.mark.parametrize(
-    ("pooling", "expected"),
+    ("pooling", "output_kind", "expected"),
     [
         (
             None,
+            "atom",
             torch.tensor(
                 [
                     [1., 2., 5., 6.],
@@ -77,6 +78,7 @@ def make_cv():
         ),
         (
             "mean",
+            "system",
             torch.tensor(
                 [[2., 3., 6., 7.], [3., 5., 7., 9.]],
                 dtype=DTYPE,
@@ -84,10 +86,13 @@ def make_cv():
         ),
     ],
 )
-def test_mace_representation(pooling, expected):
+def test_mace_representation(pooling, output_kind, expected):
     representation = make_representation(pooling)
     output = representation(make_data())
+
     torch.testing.assert_close(output, expected)
+    assert representation.input_kind == "graph"
+    assert representation.output_kind == output_kind
     assert representation.pooling_operation == pooling
     assert representation.out_features == 4
 

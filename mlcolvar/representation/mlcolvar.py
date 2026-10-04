@@ -43,6 +43,7 @@ class MLColvarRepresentation(Representation):
             super().__init__(
                 out_features=out_features,
                 input_kind="graph",
+                output_kind="atom" if encoder.pooling_operation is None else "system",
                 atomic_numbers=encoder.atomic_numbers,
                 cutoff=as_float(encoder.cutoff, "encoder.cutoff"),
                 pooling_operation=encoder.pooling_operation,
@@ -57,6 +58,7 @@ class MLColvarRepresentation(Representation):
             super().__init__(
                 out_features=out_features,
                 input_kind="vector",
+                output_kind="system",
                 in_features=as_positive_int(model.in_features, "model.in_features"),
                 freeze=freeze,
             )
@@ -96,7 +98,11 @@ class MLColvarRepresentation(Representation):
             raise ValueError("Input normalization cannot be applied directly to graph dictionaries.")
 
         if self.preprocessing is not None:
-            data = (self.preprocessing(data) if cell is None else self.preprocessing(data, cell=cell))
+            data = (
+                self.preprocessing(data)
+                if cell is None
+                else self.preprocessing(data, cell=cell)
+            )
 
         if self.norm_in is not None:
             data = self.norm_in(data)
