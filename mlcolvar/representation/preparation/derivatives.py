@@ -1,3 +1,4 @@
+# TODO: Move this module to `mlcolvar.utils.derivatives`, as the Jacobian utilities are generic and not specific to representations?
 import torch
 from torch import nn
 from torch_geometric.loader import DataLoader as GraphDataLoader

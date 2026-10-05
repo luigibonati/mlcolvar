@@ -1,3 +1,4 @@
+# TODO: Move this module to `mlcolvar.cvs.committor.preparation`, as it contains committor-specific preparation logic rather than generic representation utilities?
 import torch
 from torch import nn
 

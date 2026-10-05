@@ -1,3 +1,4 @@
+# TODO: Move this module to `mlcolvar.utils.evaluation`, as dataset evaluation is not specific to representations?
 import torch
 from torch import nn
 from torch_geometric.loader import DataLoader as GraphDataLoader
