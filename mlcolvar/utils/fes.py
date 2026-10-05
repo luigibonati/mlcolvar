@@ -351,6 +351,7 @@ def compute_deltaG(X: np.ndarray,
                    time: np.ndarray = None,
                    plot: bool = False,
                    plot_color: str = "fessa6",
+                   plot_error_style: str = "fill_between",
                    ax: matplotlib.axes = None,
                    eps: float = 1e-8,
                    rfunnel: float = None,
@@ -386,7 +387,7 @@ def compute_deltaG(X: np.ndarray,
     blocks : int, optional
         Number of equally sized independent trajectory blocks (e.g., walkers)
         concatenated consecutively in the input data. The blocks are used for
-        uncertainty estimation. Default is 1 (no error estimate).
+        averaging and uncertainty estimation. Default is 1.
     weights : np.ndarray, optional
         Weights associated with the data points, shape (n_samples,), by default None.
     bias : np.ndarray, optional
@@ -400,6 +401,9 @@ def compute_deltaG(X: np.ndarray,
         Whether to plot the deltaG, by default False.
     plot_color : str, optional
         Color for the deltaG plot, by default "fessa6".
+    plot_error_style : str, optional
+        Style for plotting the uncertainty: "fill_between", "errorbar", or None.
+        Default is "fill_between".
     ax : matplotlib.axes, optional
         Axis object to plot into. If None, a new figure is created, by default None.
     eps : float, optional
@@ -421,9 +425,10 @@ def compute_deltaG(X: np.ndarray,
         (intervals,). If `time` is provided, the corresponding time values
         within each trajectory block are returned.
     deltaG : np.ndarray
-        DeltaG values computed up to each interval, shape is (intervals,).
+        Mean deltaG across trajectory blocks computed up to each interval,
+        shape is (intervals,).
     error : np.ndarray or None
-        Standard error estimated from the independent trajectory blocks if
+        Standard error estimated across the independent trajectory blocks if
         `blocks` > 1, otherwise None. Shape is (intervals,).
 
     References
@@ -431,16 +436,12 @@ def compute_deltaG(X: np.ndarray,
     [1] Limongelli, Bonomi, and Parrinello, Proc. Natl. Acad. Sci. U.S.A.
         110, 6358-6363 (2013).
     """
-
     # ensure to have np.ndarrays
     X = np.asarray(X)
-
     if weights is not None:
         weights = np.asarray(weights)
-
     if bias is not None:
         bias = np.asarray(bias)
-
     if time is not None:
         time = np.asarray(time)
 
@@ -452,10 +453,8 @@ def compute_deltaG(X: np.ndarray,
     if use_funnel:
         if rfunnel <= 0:
             raise ValueError("rfunnel must be positive.")
-
         if X.ndim > 1 and X.shape[-1] != 1:
             raise ValueError("Funnel correction only supports 1D data.")
-
         X = X.reshape(-1)
 
     # check that inputs are consistent with each other
@@ -504,10 +503,7 @@ def compute_deltaG(X: np.ndarray,
         else:
             weights = np.exp(bias / kbt)
 
-    deltaG = []
-    error = [] if blocks > 1 else None
-
-    # compute the estimate by reweighting the energy in the two basins
+    # compute the masks defining the two states
     if n_dim == 1:
         X_1d = X.reshape(-1)
 
@@ -515,6 +511,7 @@ def compute_deltaG(X: np.ndarray,
             X_1d > stateA_bounds[0],
             X_1d < stateA_bounds[1],
         )
+
         mask_B = np.logical_and(
             X_1d > stateB_bounds[0],
             X_1d < stateB_bounds[1],
@@ -588,12 +585,12 @@ def compute_deltaG(X: np.ndarray,
         standard_volume = 1.66 / c0
         volume_correction = np.pi * rfunnel**2 / standard_volume
 
-    # compute progressive estimates using the same fraction of each trajectory
+    deltaG = []
+    error = [] if blocks > 1 else None
+
+    # compute progressive estimates for each trajectory block
     for i in range(intervals):
         end = interval_bounds[i + 1]
-
-        tot_A = eps
-        tot_B = eps
 
         deltaG_blocks = []
 
@@ -601,45 +598,31 @@ def compute_deltaG(X: np.ndarray,
             aux_A_block = weights_b[j][:end][mask_A_b[j][:end]]
             aux_B_block = weights_b[j][:end][mask_B_b[j][:end]]
 
-            pop_A_block = np.sum(aux_A_block)
-            pop_B_block = np.sum(aux_B_block)
+            tot_A_block = eps + np.sum(aux_A_block)
+            tot_B_block = eps + np.sum(aux_B_block)
 
-            # pooled populations for the central estimate
-            tot_A += pop_A_block
-            tot_B += pop_B_block
+            if use_funnel:
+                population_ratio_block = tot_A_block / tot_B_block
 
-            # independent estimate from each walker
-            if blocks > 1:
-                tot_A_block = eps + pop_A_block
-                tot_B_block = eps + pop_B_block
+                deltaG_block = -kbt * np.log(
+                    population_ratio_block * volume_correction
+                )
 
-                if use_funnel:
-                    population_ratio_block = tot_A_block / tot_B_block
-                    deltaG_block = -kbt * np.log(
-                        population_ratio_block * volume_correction
-                    )
-                else:
-                    G_A_block = -kbt * np.log(tot_A_block)
-                    G_B_block = -kbt * np.log(tot_B_block)
-                    deltaG_block = G_B_block - G_A_block
+            else:
+                G_A_block = -kbt * np.log(tot_A_block)
+                G_B_block = -kbt * np.log(tot_B_block)
 
-                deltaG_blocks.append(deltaG_block)
+                deltaG_block = G_B_block - G_A_block
 
-        # central estimate from pooled populations of all walkers
-        if use_funnel:
-            population_ratio = tot_A / tot_B
-            deltaG.append(
-                -kbt * np.log(population_ratio * volume_correction)
-            )
-        else:
-            G_A = -kbt * np.log(tot_A)
-            G_B = -kbt * np.log(tot_B)
-            deltaG.append(G_B - G_A)
+            deltaG_blocks.append(deltaG_block)
 
-        # standard error across independent walkers
+        deltaG_blocks = np.asarray(deltaG_blocks)
+
+        # average across independent trajectory blocks
+        deltaG.append(np.mean(deltaG_blocks))
+
+        # standard error across independent trajectory blocks
         if blocks > 1:
-            deltaG_blocks = np.asarray(deltaG_blocks)
-
             error.append(
                 np.std(deltaG_blocks, ddof=1) / np.sqrt(blocks)
             )
@@ -665,18 +648,47 @@ def compute_deltaG(X: np.ndarray,
         if ax is None:
             fig, ax = plt.subplots()
 
-        ax.plot(grid, deltaG, color=plot_color)
+        if error is not None and plot_error_style is not None:
+            if plot_error_style == "errorbar":
+                ax.errorbar(
+                    grid,
+                    deltaG,
+                    yerr=error,
+                    color=plot_color,
+                    alpha=0.5,
+                )
 
-        if error is not None:
-            ax.fill_between(
+            elif plot_error_style == "fill_between":
+                ax.plot(
+                    grid,
+                    deltaG,
+                    color=plot_color,
+                )
+
+                ax.fill_between(
+                    grid,
+                    deltaG - error,
+                    deltaG + error,
+                    color=plot_color,
+                    alpha=0.3,
+                )
+
+            else:
+                raise ValueError(
+                    "plot_error_style must be 'errorbar' or 'fill_between' "
+                    "(None to disable plotting errors)"
+                )
+
+        else:
+            ax.plot(
                 grid,
-                deltaG - error,
-                deltaG + error,
+                deltaG,
                 color=plot_color,
-                alpha=0.3,
             )
 
-        ax.set_xlabel("Time" if time is not None else "Frame")
+        ax.set_xlabel(
+            "Time" if time is not None else "Frame"
+        )
 
         if use_funnel:
             ax.set_ylabel(
@@ -684,6 +696,7 @@ def compute_deltaG(X: np.ndarray,
                 if units is not None
                 else "$\\Delta G_{funnel}$"
             )
+
         else:
             ax.set_ylabel(
                 f"$\\Delta$G [{units}]"
