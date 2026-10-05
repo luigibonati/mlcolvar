@@ -86,7 +86,7 @@ def compute_fes(
     scale_by : str or list, optional
         Standardize each variable before KDE. Use "std" to scale by standard deviation, "range" for range normalization, or provide a list of scaling factors.
     blocks : int, optional
-        Number of data blocks to use for uncertainty estimation. Default is 1 (no error estimate).
+        Number of equally sized independent trajectory blocks (e.g., walkers) concatenated consecutively in the input data. The blocks are used for uncertainty estimation. Default is 1 (no error estimate).
     fes_to_zero : int or tuple, optional
         Index (or multi-index) in the grid where FES is shifted to zero. If None, minimum value is subtracted.
     plot : bool, optional
@@ -384,15 +384,16 @@ def compute_deltaG(X: np.ndarray,
         Number of intervals on which the deltaG is progressively computed,
         by default 10.
     blocks : int, optional
-        Number of data blocks to use for uncertainty estimation. Default is 1
-        (no error estimate).
+        Number of equally sized independent trajectory blocks (e.g., walkers)
+        concatenated consecutively in the input data. The blocks are used for
+        uncertainty estimation. Default is 1 (no error estimate).
     weights : np.ndarray, optional
         Weights associated with the data points, shape (n_samples,), by default None.
     bias : np.ndarray, optional
         Bias values to be used to compute the weights as exp(bias / kbt),
         shape (n_samples,), by default None.
     reverse : bool, optional
-        Switch to reverse the data, by default False.
+        Switch to reverse each trajectory block, by default False.
     time : np.ndarray, optional
         Time reference for the input data, by default None.
     plot : bool, optional
@@ -418,12 +419,12 @@ def compute_deltaG(X: np.ndarray,
     grid : np.ndarray
         Bounds of the intervals used for computing the deltaG, shape is
         (intervals,). If `time` is provided, the corresponding time values
-        are returned.
+        within each trajectory block are returned.
     deltaG : np.ndarray
         DeltaG values computed up to each interval, shape is (intervals,).
     error : np.ndarray or None
-        Standard error estimate from block averaging if `blocks` > 1,
-        otherwise None. Shape is (intervals,).
+        Standard error estimated from the independent trajectory blocks if
+        `blocks` > 1, otherwise None. Shape is (intervals,).
 
     References
     ----------
@@ -506,13 +507,6 @@ def compute_deltaG(X: np.ndarray,
     deltaG = []
     error = [] if blocks > 1 else None
 
-    if reverse:
-        X = np.flip(X, axis=0)
-        weights = np.flip(weights, axis=0)
-
-        if time is not None:
-            time = np.flip(time, axis=0)
-
     # compute the estimate by reweighting the energy in the two basins
     if n_dim == 1:
         X_1d = X.reshape(-1)
@@ -549,21 +543,43 @@ def compute_deltaG(X: np.ndarray,
             ),
         )
 
-    # build intervals
-    interval_len = len(X) / intervals
-    interval_bounds = np.arange(0, len(X), interval_len)
-    interval_bounds = np.ceil(interval_bounds).astype("int")
-    interval_bounds = np.concatenate((interval_bounds, np.array([len(X)])))
-
-    if blocks > 1 and blocks > interval_bounds[1]:
+    # check that the concatenated trajectories can be evenly split into blocks
+    if len(X) % blocks != 0:
         raise ValueError(
-            f"blocks ({blocks}) cannot exceed the number of samples in the "
-            f"first interval ({interval_bounds[1]})."
+            f"The number of samples ({len(X)}) must be divisible by blocks "
+            f"({blocks}) because the input is assumed to contain equally sized "
+            "concatenated trajectories."
         )
 
-    # we progressively store the data
-    tot_A = eps
-    tot_B = eps
+    block_len = len(X) // blocks
+
+    if intervals > block_len:
+        raise ValueError(
+            f"intervals ({intervals}) cannot exceed the number of samples "
+            f"in each block ({block_len})."
+        )
+
+    # split the concatenated data into independent trajectories
+    weights_b = np.array_split(weights, blocks)
+    mask_A_b = np.array_split(mask_A, blocks)
+    mask_B_b = np.array_split(mask_B, blocks)
+
+    if time is not None:
+        time_b = np.array_split(time, blocks)
+
+    # reverse each trajectory independently
+    if reverse:
+        weights_b = [np.flip(w, axis=0) for w in weights_b]
+        mask_A_b = [np.flip(m, axis=0) for m in mask_A_b]
+        mask_B_b = [np.flip(m, axis=0) for m in mask_B_b]
+
+    # build progressive intervals within each trajectory
+    interval_len = block_len / intervals
+    interval_bounds = np.arange(0, block_len, interval_len)
+    interval_bounds = np.ceil(interval_bounds).astype("int")
+    interval_bounds = np.concatenate(
+        (interval_bounds, np.array([block_len]))
+    )
 
     if use_funnel:
         if c0 <= 0:
@@ -572,50 +588,30 @@ def compute_deltaG(X: np.ndarray,
         standard_volume = 1.66 / c0
         volume_correction = np.pi * rfunnel**2 / standard_volume
 
-    # iterate over intervals
+    # compute progressive estimates using the same fraction of each trajectory
     for i in range(intervals):
-        start = interval_bounds[i]
         end = interval_bounds[i + 1]
 
-        aux_A = weights[start:end][mask_A[start:end]]
-        aux_B = weights[start:end][mask_B[start:end]]
+        tot_A = eps
+        tot_B = eps
 
-        tot_A += np.sum(aux_A)
-        tot_B += np.sum(aux_B)
+        deltaG_blocks = []
 
-        G_A = -kbt * np.log(tot_A)
-        G_B = -kbt * np.log(tot_B)
+        for j in range(blocks):
+            aux_A_block = weights_b[j][:end][mask_A_b[j][:end]]
+            aux_B_block = weights_b[j][:end][mask_B_b[j][:end]]
 
-        if use_funnel:
-            # stateA_bounds = bound region
-            # stateB_bounds = unbound region
-            population_ratio = tot_A / tot_B
-            deltaG.append(
-                -kbt * np.log(population_ratio * volume_correction)
-            )
-        else:
-            deltaG.append(G_B - G_A)
+            pop_A_block = np.sum(aux_A_block)
+            pop_B_block = np.sum(aux_B_block)
 
-        # estimate uncertainty using block averaging
-        if blocks > 1:
-            block_bounds = np.linspace(0, end, blocks + 1).astype("int")
+            # pooled populations for the central estimate
+            tot_A += pop_A_block
+            tot_B += pop_B_block
 
-            deltaG_blocks = []
-            W_blocks = []
-
-            for j in range(blocks):
-                block_start = block_bounds[j]
-                block_end = block_bounds[j + 1]
-
-                aux_A_block = weights[block_start:block_end][
-                    mask_A[block_start:block_end]
-                ]
-                aux_B_block = weights[block_start:block_end][
-                    mask_B[block_start:block_end]
-                ]
-
-                tot_A_block = eps + np.sum(aux_A_block)
-                tot_B_block = eps + np.sum(aux_B_block)
+            # independent estimate from each walker
+            if blocks > 1:
+                tot_A_block = eps + pop_A_block
+                tot_B_block = eps + pop_B_block
 
                 if use_funnel:
                     population_ratio_block = tot_A_block / tot_B_block
@@ -628,30 +624,25 @@ def compute_deltaG(X: np.ndarray,
                     deltaG_block = G_B_block - G_A_block
 
                 deltaG_blocks.append(deltaG_block)
-                W_blocks.append(np.sum(weights[block_start:block_end]))
 
+        # central estimate from pooled populations of all walkers
+        if use_funnel:
+            population_ratio = tot_A / tot_B
+            deltaG.append(
+                -kbt * np.log(population_ratio * volume_correction)
+            )
+        else:
+            G_A = -kbt * np.log(tot_A)
+            G_B = -kbt * np.log(tot_B)
+            deltaG.append(G_B - G_A)
+
+        # standard error across independent walkers
+        if blocks > 1:
             deltaG_blocks = np.asarray(deltaG_blocks)
-            W_blocks = np.asarray(W_blocks)
 
-            # weighted average and standard error
-            blocks_eff = (
-                np.sum(W_blocks) ** 2 / np.sum(W_blocks**2)
+            error.append(
+                np.std(deltaG_blocks, ddof=1) / np.sqrt(blocks)
             )
-
-            deltaG_avg = (
-                np.nansum(deltaG_blocks * W_blocks)
-                / np.nansum(W_blocks)
-            )
-
-            dev = deltaG_blocks - deltaG_avg
-
-            variance = (
-                blocks_eff / (blocks_eff - 1)
-                * np.nansum(dev**2 * W_blocks)
-                / np.nansum(W_blocks)
-            )
-
-            error.append(np.sqrt(variance / blocks_eff))
 
     # prepare for return
     deltaG = np.asarray(deltaG)
@@ -660,12 +651,12 @@ def compute_deltaG(X: np.ndarray,
         error = np.asarray(error)
 
     # interval bounds are exclusive, so subtract one to obtain
-    # the index of the last included frame
+    # the index of the last included frame within each trajectory
     grid_idx = interval_bounds[1:] - 1
 
     # switch to time if needed
     if time is not None:
-        grid = time[grid_idx]
+        grid = time_b[0][grid_idx]
     else:
         grid = grid_idx
 
