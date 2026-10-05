@@ -344,6 +344,7 @@ def compute_deltaG(X: np.ndarray,
                    units="kJ/mol",
                    kbt: float = None,
                    intervals: int = 10,
+                   blocks: int = 1,
                    weights: np.ndarray = None,
                    bias: np.ndarray = None,
                    reverse: bool = False,
@@ -382,6 +383,9 @@ def compute_deltaG(X: np.ndarray,
     intervals : int, optional
         Number of intervals on which the deltaG is progressively computed,
         by default 10.
+    blocks : int, optional
+        Number of data blocks to use for uncertainty estimation. Default is 1
+        (no error estimate).
     weights : np.ndarray, optional
         Weights associated with the data points, shape (n_samples,), by default None.
     bias : np.ndarray, optional
@@ -412,11 +416,15 @@ def compute_deltaG(X: np.ndarray,
     Returns
     -------
     grid : np.ndarray
-        Bounds of the intervals used for computing the deltaG, shape is (n_blocks,).
-        If `time` is provided, the time bounds are returned.
+        Bounds of the intervals used for computing the deltaG, shape is
+        (intervals,). If `time` is provided, the corresponding time values
+        are returned.
     deltaG : np.ndarray
-        DeltaG values computed up to each block, shape is (n_blocks,).
-        
+        DeltaG values computed up to each interval, shape is (intervals,).
+    error : np.ndarray or None
+        Standard error estimate from block averaging if `blocks` > 1,
+        otherwise None. Shape is (intervals,).
+
     References
     ----------
     [1] Limongelli, Bonomi, and Parrinello, Proc. Natl. Acad. Sci. U.S.A.
@@ -473,6 +481,12 @@ def compute_deltaG(X: np.ndarray,
             f"Found {len(X)} and {len(time)}."
         )
 
+    if intervals < 1:
+        raise ValueError("intervals must be at least 1.")
+
+    if blocks < 1:
+        raise ValueError("blocks must be at least 1.")
+
     n_dim = 1
     if not use_funnel and X.ndim > 1 and X.shape[-1] == 2:
         n_dim = 2
@@ -490,6 +504,7 @@ def compute_deltaG(X: np.ndarray,
             weights = np.exp(bias / kbt)
 
     deltaG = []
+    error = [] if blocks > 1 else None
 
     if reverse:
         X = np.flip(X, axis=0)
@@ -538,7 +553,13 @@ def compute_deltaG(X: np.ndarray,
     interval_len = len(X) / intervals
     interval_bounds = np.arange(0, len(X), interval_len)
     interval_bounds = np.ceil(interval_bounds).astype("int")
-    interval_bounds = np.concatenate((interval_bounds, np.array([len(X) - 1])))
+    interval_bounds = np.concatenate((interval_bounds, np.array([len(X)])))
+
+    if blocks > 1 and blocks > interval_bounds[1]:
+        raise ValueError(
+            f"blocks ({blocks}) cannot exceed the number of samples in the "
+            f"first interval ({interval_bounds[1]})."
+        )
 
     # we progressively store the data
     tot_A = eps
@@ -575,13 +596,78 @@ def compute_deltaG(X: np.ndarray,
         else:
             deltaG.append(G_B - G_A)
 
-    # switch to time if needed
-    if time is not None:
-        interval_bounds = time[interval_bounds]
+        # estimate uncertainty using block averaging
+        if blocks > 1:
+            block_bounds = np.linspace(0, end, blocks + 1).astype("int")
+
+            deltaG_blocks = []
+            W_blocks = []
+
+            for j in range(blocks):
+                block_start = block_bounds[j]
+                block_end = block_bounds[j + 1]
+
+                aux_A_block = weights[block_start:block_end][
+                    mask_A[block_start:block_end]
+                ]
+                aux_B_block = weights[block_start:block_end][
+                    mask_B[block_start:block_end]
+                ]
+
+                tot_A_block = eps + np.sum(aux_A_block)
+                tot_B_block = eps + np.sum(aux_B_block)
+
+                if use_funnel:
+                    population_ratio_block = tot_A_block / tot_B_block
+                    deltaG_block = -kbt * np.log(
+                        population_ratio_block * volume_correction
+                    )
+                else:
+                    G_A_block = -kbt * np.log(tot_A_block)
+                    G_B_block = -kbt * np.log(tot_B_block)
+                    deltaG_block = G_B_block - G_A_block
+
+                deltaG_blocks.append(deltaG_block)
+                W_blocks.append(np.sum(weights[block_start:block_end]))
+
+            deltaG_blocks = np.asarray(deltaG_blocks)
+            W_blocks = np.asarray(W_blocks)
+
+            # weighted average and standard error
+            blocks_eff = (
+                np.sum(W_blocks) ** 2 / np.sum(W_blocks**2)
+            )
+
+            deltaG_avg = (
+                np.nansum(deltaG_blocks * W_blocks)
+                / np.nansum(W_blocks)
+            )
+
+            dev = deltaG_blocks - deltaG_avg
+
+            variance = (
+                blocks_eff / (blocks_eff - 1)
+                * np.nansum(dev**2 * W_blocks)
+                / np.nansum(W_blocks)
+            )
+
+            error.append(np.sqrt(variance / blocks_eff))
 
     # prepare for return
-    deltaG = np.array(deltaG)
-    grid = interval_bounds[1:]
+    deltaG = np.asarray(deltaG)
+
+    if error is not None:
+        error = np.asarray(error)
+
+    # interval bounds are exclusive, so subtract one to obtain
+    # the index of the last included frame
+    grid_idx = interval_bounds[1:] - 1
+
+    # switch to time if needed
+    if time is not None:
+        grid = time[grid_idx]
+    else:
+        grid = grid_idx
 
     # plot if needed
     if plot:
@@ -589,6 +675,16 @@ def compute_deltaG(X: np.ndarray,
             fig, ax = plt.subplots()
 
         ax.plot(grid, deltaG, color=plot_color)
+
+        if error is not None:
+            ax.fill_between(
+                grid,
+                deltaG - error,
+                deltaG + error,
+                color=plot_color,
+                alpha=0.3,
+            )
+
         ax.set_xlabel("Time" if time is not None else "Frame")
 
         if use_funnel:
@@ -604,7 +700,7 @@ def compute_deltaG(X: np.ndarray,
                 else "$\\Delta$G"
             )
 
-    return grid, deltaG
+    return grid, deltaG, error
 
 def _check_kbt_units(kbt, temp, units):
     "Helper function to handle inputs to specify free energy units in free energy utils"
