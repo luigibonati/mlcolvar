@@ -69,18 +69,28 @@ class BaseCV(lightning.LightningModule):
 
     @property
     def example_input_array(self):
-        if self.in_features is not None:
-            return torch.randn(
-                (1,self.in_features)
-                if self.preprocessing is None
-                or not hasattr(self.preprocessing, "in_features")
-                else self.preprocessing.in_features
+        if getattr(self.preprocessing, "input_kind", None) == "graph":
+            return create_graph_tracing_example(
+                n_species=len(self.preprocessing.atomic_numbers),
+                environment=True,
+                long_range=getattr(
+                    self.preprocessing, "long_range_cutoff", -1
+                ) > 0,
             )
-        else:
-            return create_graph_tracing_example(n_species=len(self.atomic_numbers), 
-                                                environment=True,
-                                                long_range=True if hasattr(self, 'long_range_cutoff') and self.long_range_cutoff > 0 else False)
 
+        if self.in_features is not None:
+            in_features = getattr(
+                self.preprocessing,
+                "in_features",
+                self.in_features,
+            )
+            return torch.randn(1, in_features)
+
+        return create_graph_tracing_example(
+            n_species=len(self.atomic_numbers),
+            environment=True,
+            long_range=getattr(self, "long_range_cutoff", -1) > 0,
+        )
 
     # TODO add general torch.nn.Module
     def parse_model(self, model: Union[List[int], FeedForward, BaseGNN]):
