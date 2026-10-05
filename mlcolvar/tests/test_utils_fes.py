@@ -336,7 +336,6 @@ def test_delta_g():
 def test_funnel_delta_g():
     rng = np.random.default_rng(123)
 
-    # Case 1: 1D funnel deltaG with plotting enabled and explicit time axis.
     x_bound = rng.normal(loc=0.6, scale=0.05, size=200)
     x_unbound = rng.normal(loc=1.6, scale=0.05, size=200)
     x = np.concatenate((x_bound, x_unbound))
@@ -354,6 +353,7 @@ def test_funnel_delta_g():
     bound_region = [bounds[0], bat]
     unbound_region = [uat, bounds[1]]
 
+    # Case 1: funnel deltaG with block uncertainty and plotting.
     fig1, ax1 = plt.subplots()
     grid, delta_g, error = compute_deltaG(
         X=x,
@@ -383,7 +383,7 @@ def test_funnel_delta_g():
     assert "$\\Delta G_{funnel}$" in ax1.get_ylabel()
     plt.close(fig1)
 
-    # Case 1b: bias-derived weights should match explicitly supplied weights.
+    # Case 1b: bias-derived weights should match explicit weights.
     positive_weights = weights + 0.1
 
     grid_w, delta_g_w, error_w = compute_deltaG(
@@ -416,17 +416,38 @@ def test_funnel_delta_g():
     np.testing.assert_allclose(delta_g_b, delta_g_w)
     np.testing.assert_allclose(error_b, error_w)
 
-    # Case 1c: final value should match the direct population-based formula.
-    mask_bound = np.logical_and(x > bound_region[0], x < bound_region[1])
-    mask_unbound = np.logical_and(x > unbound_region[0], x < unbound_region[1])
-
-    p_bound = 1e-8 + np.sum(positive_weights[mask_bound])
-    p_unbound = 1e-8 + np.sum(positive_weights[mask_unbound])
-
+    # Case 1c: final value should match the mean of the block estimates.
     volume_correction = np.pi * rfunnel**2 * c0 / 1.66
-    expected_delta_g = -np.log((p_bound / p_unbound) * volume_correction)
+    delta_g_blocks = []
 
-    np.testing.assert_allclose(delta_g_w[-1], expected_delta_g)
+    for x_block, w_block in zip(
+        np.array_split(x, 4),
+        np.array_split(positive_weights, 4),
+    ):
+        mask_bound = np.logical_and(
+            x_block > bound_region[0],
+            x_block < bound_region[1],
+        )
+        mask_unbound = np.logical_and(
+            x_block > unbound_region[0],
+            x_block < unbound_region[1],
+        )
+
+        p_bound = 1e-8 + np.sum(w_block[mask_bound])
+        p_unbound = 1e-8 + np.sum(w_block[mask_unbound])
+
+        delta_g_blocks.append(
+            -np.log((p_bound / p_unbound) * volume_correction)
+        )
+
+    np.testing.assert_allclose(
+        delta_g_w[-1],
+        np.mean(delta_g_blocks),
+    )
+    np.testing.assert_allclose(
+        error_w[-1],
+        np.std(delta_g_blocks, ddof=1) / np.sqrt(4),
+    )
 
     # Case 2: blocks=1 should disable uncertainty estimation.
     grid2, delta_g2, error2 = compute_deltaG(
