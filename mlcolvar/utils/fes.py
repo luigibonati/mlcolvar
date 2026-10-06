@@ -385,9 +385,7 @@ def compute_deltaG(X: np.ndarray,
         Number of intervals on which the deltaG is progressively computed,
         by default 10.
     blocks : int, optional
-        Number of equally sized independent trajectory blocks (e.g., walkers)
-        concatenated consecutively in the input data. The blocks are used for
-        averaging and uncertainty estimation. Default is 1.
+        Number of data blocks to use for uncertainty estimation. Default is 1 (no error estimate). 
     weights : np.ndarray, optional
         Weights associated with the data points, shape (n_samples,), by default None.
     bias : np.ndarray, optional
