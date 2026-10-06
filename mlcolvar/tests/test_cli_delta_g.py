@@ -18,6 +18,7 @@ def test_delta_g_cli_prints_yaml_template(capsys, tmp_path):
     assert "state_b_bounds:" in text
     assert "\n  - 1\n  - 2\nintervals:" in text
     assert "state_b_bounds: null" not in text
+    assert "blocks: 1" in text
     assert "plot: null" not in text
     assert "yaml_template" not in text
 
@@ -51,13 +52,15 @@ def test_delta_g_cli_writes_outputs(tmp_path, monkeypatch):
         # Because --bias is omitted, all COLVAR fields containing "bias" should be summed.
         np.testing.assert_allclose(kwargs["bias"], np.array([2.5, 3.5]))
         assert kwargs["intervals"] == 4
+        assert kwargs["blocks"] == 2
         assert kwargs["time"] is None
         assert kwargs["plot"] is True
         assert kwargs["plot_color"] == "fessa6"
 
         grid = np.array([0, 1])
         delta_g = np.array([0.2, 0.0])
-        return grid, delta_g
+        error = np.array([0.05, 0.02])
+        return grid, delta_g, error
 
     monkeypatch.setattr("mlcolvar.cli.delta_g.compute_deltaG", fake_compute_deltaG)
 
@@ -69,6 +72,7 @@ def test_delta_g_cli_writes_outputs(tmp_path, monkeypatch):
         f"state-a-bounds: [-1.5, -0.5]\n"
         f"state-b-bounds: [0.5, 1.5]\n"
         f"intervals: 4\n"
+        f"blocks: 2\n"
         f"output: {output}\n"
     )
 
@@ -82,17 +86,22 @@ def test_delta_g_cli_writes_outputs(tmp_path, monkeypatch):
     assert (tmp_path / "deltaG.png").exists()
     assert (tmp_path / "deltaG.yaml").exists()
 
+    with np.load(output.with_suffix(".npz")) as data:
+        np.testing.assert_allclose(data["deltaG"], np.array([0.2, 0.0]))
+        np.testing.assert_allclose(data["error"], np.array([0.05, 0.02]))
+
     # The CLI also writes a COLVAR-like text file next to the .npz output by default.
     colvar_output = tmp_path / "deltaG.dat"
     assert colvar_output.exists()
 
     text = colvar_output.read_text()
-    assert text.startswith("#! FIELDS frame deltaG")
+    assert text.startswith("#! FIELDS frame deltaG error")
 
     yaml_text = (tmp_path / "deltaG.yaml").read_text()
     assert f"output: {output}" in yaml_text
     assert "cvs:" in yaml_text
     assert "state_a_bounds:" in yaml_text
+    assert "blocks: 2" in yaml_text
     assert "\nplot:" not in yaml_text
 
 
@@ -107,7 +116,7 @@ def test_delta_g_cli_warns_periodic_cv_from_colvar_header(tmp_path, monkeypatch)
     )
 
     def fake_compute_deltaG(**_kwargs):
-        return np.array([0, 1]), np.array([0.0, 0.1])
+        return np.array([0, 1]), np.array([0.0, 0.1]), None
 
     monkeypatch.setattr("mlcolvar.cli.delta_g.compute_deltaG", fake_compute_deltaG)
 
@@ -151,11 +160,12 @@ def test_delta_g_cli_writes_2d_outputs_and_plot(tmp_path, monkeypatch):
         assert kwargs["plot"] is True
         assert kwargs["plot_color"] == "C0"
         assert kwargs["reverse"] is True
+        assert kwargs["blocks"] == 1
         assert kwargs["eps"] == 1e-6
 
         grid = np.array([0, 10])
         delta_g = np.array([0.4, 0.0])
-        return grid, delta_g
+        return grid, delta_g, None
 
     monkeypatch.setattr("mlcolvar.cli.delta_g.compute_deltaG", fake_compute_deltaG)
 
@@ -183,3 +193,4 @@ def test_delta_g_cli_writes_2d_outputs_and_plot(tmp_path, monkeypatch):
 
     text = colvar_output.read_text()
     assert text.startswith("#! FIELDS time deltaG")
+    assert "error" not in text.splitlines()[0]

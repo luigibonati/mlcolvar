@@ -48,12 +48,12 @@ def test_compute_fes():
 
 def test_compute_deltaG():
     np.random.seed(42)
-    
+
     # test 1D
     # make two fake states with gaussian distribution, to have deltaG=0
     X_a = np.random.rand(200) - 5
     X_b = np.random.rand(200) + 5
-    
+
     X = np.concatenate((X_a, X_b))
     X = np.random.permutation(X)
 
@@ -61,58 +61,68 @@ def test_compute_deltaG():
     weights = np.random.rand(len(X))
 
     # test vanilla
-    grid, deltaG = compute_deltaG(X=X,
-                                  stateA_bounds=[-6, -4],
-                                  stateB_bounds=[4, 6], 
-                                  kbt=1,
-                                  intervals=10, 
-                                  weights=None,
-                                  reverse=False,
-                                  time=None,
-                                  plot=False,
-                                  plot_color="fessa6",
-                                  ax=None,
-                                  )
+    grid, deltaG, error = compute_deltaG(X=X,
+                                         stateA_bounds=[-6, -4],
+                                         stateB_bounds=[4, 6],
+                                         kbt=1,
+                                         intervals=10,
+                                         weights=None,
+                                         reverse=False,
+                                         time=None,
+                                         plot=False,
+                                         plot_color="fessa6",
+                                         ax=None,
+                                         )
     assert np.allclose(deltaG[-1], 0, atol=0.5)
+    assert error is None
 
-    # test keywords
-    grid, deltaG = compute_deltaG(X=X,
-                                  stateA_bounds=[-6, -4],
-                                  stateB_bounds=[4, 6], 
-                                  kbt=1,
-                                  intervals=10, 
-                                  weights=weights,
-                                  reverse=True,
-                                  time=time,
-                                  plot=False,
-                                  plot_color="fessa6",
-                                  ax=None,
-                                  )
+    # test keywords and blocks
+    grid, deltaG, error = compute_deltaG(X=X,
+                                         stateA_bounds=[-6, -4],
+                                         stateB_bounds=[4, 6],
+                                         kbt=1,
+                                         intervals=10,
+                                         blocks=4,
+                                         weights=weights,
+                                         reverse=True,
+                                         time=time,
+                                         plot=False,
+                                         plot_color="fessa6",
+                                         ax=None,
+                                         )
     assert np.allclose(deltaG[-1], 0, atol=0.5)
+    assert error is not None
+    assert error.shape == deltaG.shape
+    assert np.all(np.isfinite(error))
+    assert np.all(error >= 0)
 
     # test 2D
     # make two fake states with gaussian distribution, to have deltaG=0
     X_a = np.random.rand(200, 2) - 5
     X_b = np.random.rand(200, 2) + 5
-    
+
     X = np.concatenate((X_a, X_b), axis=0)
     X = np.random.permutation(X)
 
     time = np.arange(len(X))
     weights = np.random.rand(len(X))
-    grid, deltaG = compute_deltaG(X=X,
-                                  stateA_bounds=[[-6, -4], [-6, -4]],
-                                  stateB_bounds=[[4, 6], [4, 6]], 
-                                  kbt=1,
-                                  intervals=10, 
-                                  weights=weights,
-                                  reverse=True,
-                                  time=time,
-                                  plot=False,
-                                  plot_color="fessa6",
-                                  ax=None,
-                                  )
+
+    grid, deltaG, error = compute_deltaG(X=X,
+                                         stateA_bounds=[[-6, -4], [-6, -4]],
+                                         stateB_bounds=[[4, 6], [4, 6]],
+                                         kbt=1,
+                                         intervals=10,
+                                         blocks=4,
+                                         weights=weights,
+                                         reverse=True,
+                                         time=time,
+                                         plot=False,
+                                         plot_color="fessa6",
+                                         ax=None,
+                                         )
     assert np.allclose(deltaG[-1], 0, atol=0.5)
+    assert error is not None
+    assert error.shape == deltaG.shape
     
     
 def test_fes():
@@ -225,12 +235,13 @@ def test_delta_g():
     weights = rng.random(len(x))
 
     fig1, ax1 = plt.subplots()
-    grid, delta_g = compute_deltaG(
+    grid, delta_g, error = compute_deltaG(
         X=x,
         stateA_bounds=[-6, -4],
         stateB_bounds=[4, 6],
         kbt=1.0,
         intervals=10,
+        blocks=4,
         weights=weights,
         reverse=True,
         time=time,
@@ -240,6 +251,10 @@ def test_delta_g():
     )
     assert grid.shape == (10,)
     assert delta_g.shape == (10,)
+    assert error is not None
+    assert error.shape == (10,)
+    assert np.all(np.isfinite(error))
+    assert np.all(error >= 0)
     assert np.allclose(delta_g[-1], 0.0, atol=0.8)
     assert ax1.get_xlabel() == "Time"
     assert "$\\Delta$G" in ax1.get_ylabel()
@@ -247,53 +262,80 @@ def test_delta_g():
 
     # Case 1b: bias-derived weights should match explicitly supplied weights.
     positive_weights = weights + 0.1
-    grid_w, delta_g_w = compute_deltaG(
+
+    grid_w, delta_g_w, error_w = compute_deltaG(
         X=x,
         stateA_bounds=[-6, -4],
         stateB_bounds=[4, 6],
         kbt=1.0,
         intervals=10,
+        blocks=4,
         weights=positive_weights,
         plot=False,
     )
-    grid_b, delta_g_b = compute_deltaG(
+
+    grid_b, delta_g_b, error_b = compute_deltaG(
         X=x,
         stateA_bounds=[-6, -4],
         stateB_bounds=[4, 6],
         kbt=1.0,
         intervals=10,
+        blocks=4,
         bias=np.log(positive_weights),
         plot=False,
     )
+
     np.testing.assert_allclose(grid_b, grid_w)
     np.testing.assert_allclose(delta_g_b, delta_g_w)
+    np.testing.assert_allclose(error_b, error_w)
 
-    # Case 2: 2D deltaG branch with plot disabled.
+    # Case 2: 2D deltaG branch with block uncertainty.
     x2_a = rng.normal(loc=-5.0, scale=0.2, size=(200, 2))
     x2_b = rng.normal(loc=5.0, scale=0.2, size=(200, 2))
     x2 = np.concatenate((x2_a, x2_b), axis=0)
     rng.shuffle(x2)
     w2 = rng.random(len(x2))
 
-    grid2, delta_g2 = compute_deltaG(
+    grid2, delta_g2, error2 = compute_deltaG(
         X=x2,
         stateA_bounds=[[-6, -4], [-6, -4]],
         stateB_bounds=[[4, 6], [4, 6]],
         kbt=1.0,
         intervals=10,
+        blocks=4,
         weights=w2,
         reverse=False,
         time=None,
         plot=False,
     )
+
     assert grid2.shape == (10,)
     assert delta_g2.shape == (10,)
+    assert error2 is not None
+    assert error2.shape == (10,)
+    assert np.all(np.isfinite(error2))
+    assert np.all(error2 >= 0)
     assert np.allclose(delta_g2[-1], 0.0, atol=0.8)
+
+    # Case 3: blocks=1 should disable uncertainty estimation.
+    grid3, delta_g3, error3 = compute_deltaG(
+        X=x,
+        stateA_bounds=[-6, -4],
+        stateB_bounds=[4, 6],
+        kbt=1.0,
+        intervals=10,
+        blocks=1,
+        weights=weights,
+        plot=False,
+    )
+
+    assert grid3.shape == (10,)
+    assert delta_g3.shape == (10,)
+    assert error3 is None
     
 def test_funnel_delta_g():
     rng = np.random.default_rng(123)
 
-    # Case 1: 1D funnel deltaG with plotting enabled and explicit time axis.
     x_bound = rng.normal(loc=0.6, scale=0.05, size=200)
     x_unbound = rng.normal(loc=1.6, scale=0.05, size=200)
     x = np.concatenate((x_bound, x_unbound))
@@ -311,8 +353,9 @@ def test_funnel_delta_g():
     bound_region = [bounds[0], bat]
     unbound_region = [uat, bounds[1]]
 
+    # Case 1: funnel deltaG with block uncertainty and plotting.
     fig1, ax1 = plt.subplots()
-    grid, delta_g = compute_deltaG(
+    grid, delta_g, error = compute_deltaG(
         X=x,
         stateA_bounds=bound_region,
         stateB_bounds=unbound_region,
@@ -320,6 +363,7 @@ def test_funnel_delta_g():
         c0=c0,
         kbt=1.0,
         intervals=5,
+        blocks=4,
         weights=weights,
         reverse=True,
         time=time,
@@ -330,15 +374,19 @@ def test_funnel_delta_g():
 
     assert grid.shape == (5,)
     assert delta_g.shape == (5,)
+    assert error is not None
+    assert error.shape == (5,)
     assert np.all(np.isfinite(delta_g))
+    assert np.all(np.isfinite(error))
+    assert np.all(error >= 0)
     assert ax1.get_xlabel() == "Time"
     assert "$\\Delta G_{funnel}$" in ax1.get_ylabel()
     plt.close(fig1)
 
-    # Case 1b: bias-derived weights should match explicitly supplied weights.
+    # Case 1b: bias-derived weights should match explicit weights.
     positive_weights = weights + 0.1
 
-    grid_w, delta_g_w = compute_deltaG(
+    grid_w, delta_g_w, error_w = compute_deltaG(
         X=x,
         stateA_bounds=bound_region,
         stateB_bounds=unbound_region,
@@ -346,11 +394,12 @@ def test_funnel_delta_g():
         c0=c0,
         kbt=1.0,
         intervals=5,
+        blocks=4,
         weights=positive_weights,
         plot=False,
     )
 
-    grid_b, delta_g_b = compute_deltaG(
+    grid_b, delta_g_b, error_b = compute_deltaG(
         X=x,
         stateA_bounds=bound_region,
         stateB_bounds=unbound_region,
@@ -358,30 +407,62 @@ def test_funnel_delta_g():
         c0=c0,
         kbt=1.0,
         intervals=5,
+        blocks=4,
         bias=np.log(positive_weights),
         plot=False,
     )
 
     np.testing.assert_allclose(grid_b, grid_w)
     np.testing.assert_allclose(delta_g_b, delta_g_w)
+    np.testing.assert_allclose(error_b, error_w)
 
-    # Case 1c: final value should match the direct population-based formula.
-    mask_bound = np.logical_and(x > bound_region[0], x < bound_region[1])
-    mask_unbound = np.logical_and(x > unbound_region[0], x < unbound_region[1])
-
-    # Reproduce the same interval construction used internally by compute_deltaG.
-    interval_len = len(x) / 5
-    interval_bounds = np.arange(0, len(x), interval_len)
-    interval_bounds = np.ceil(interval_bounds).astype("int")
-    interval_bounds = np.concatenate((interval_bounds, np.array([len(x) - 1])))
-
-    # compute_deltaG uses Python slicing [start:end], so the final index is excluded.
-    end = interval_bounds[-1]
-
-    p_bound = 1e-8 + np.sum(positive_weights[:end][mask_bound[:end]])
-    p_unbound = 1e-8 + np.sum(positive_weights[:end][mask_unbound[:end]])
-
+    # Case 1c: final value should match the mean of the block estimates.
     volume_correction = np.pi * rfunnel**2 * c0 / 1.66
-    expected_delta_g = -np.log((p_bound / p_unbound) * volume_correction)
+    delta_g_blocks = []
 
-    np.testing.assert_allclose(delta_g_w[-1], expected_delta_g)
+    for x_block, w_block in zip(
+        np.array_split(x, 4),
+        np.array_split(positive_weights, 4),
+    ):
+        mask_bound = np.logical_and(
+            x_block > bound_region[0],
+            x_block < bound_region[1],
+        )
+        mask_unbound = np.logical_and(
+            x_block > unbound_region[0],
+            x_block < unbound_region[1],
+        )
+
+        p_bound = 1e-8 + np.sum(w_block[mask_bound])
+        p_unbound = 1e-8 + np.sum(w_block[mask_unbound])
+
+        delta_g_blocks.append(
+            -np.log((p_bound / p_unbound) * volume_correction)
+        )
+
+    np.testing.assert_allclose(
+        delta_g_w[-1],
+        np.mean(delta_g_blocks),
+    )
+    np.testing.assert_allclose(
+        error_w[-1],
+        np.std(delta_g_blocks, ddof=1) / np.sqrt(4),
+    )
+
+    # Case 2: blocks=1 should disable uncertainty estimation.
+    grid2, delta_g2, error2 = compute_deltaG(
+        X=x,
+        stateA_bounds=bound_region,
+        stateB_bounds=unbound_region,
+        rfunnel=rfunnel,
+        c0=c0,
+        kbt=1.0,
+        intervals=5,
+        blocks=1,
+        weights=weights,
+        plot=False,
+    )
+
+    assert grid2.shape == (5,)
+    assert delta_g2.shape == (5,)
+    assert error2 is None

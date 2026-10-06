@@ -8,7 +8,8 @@ After installing the package in editable mode::
     mlcolvar-deltag COLVAR --cvs cv --state-a-bounds -2 -1 --state-b-bounds 1 2 --kbt 2.494
 
 The command writes a NumPy ``.npz`` archive, a COLVAR-like text file
-containing the interval coordinate and ``deltaG``, and a plot image.
+containing the interval coordinate, ``deltaG`` and, when available,
+its uncertainty, and a plot image.
 """
 
 import argparse
@@ -41,6 +42,7 @@ from mlcolvar.utils.fes import compute_deltaG
 def _save_output(path: Path,
                  grid,
                  delta_g,
+                 error,
                  fields: Sequence[str],
                  state_a_bounds,
                  state_b_bounds,
@@ -49,6 +51,7 @@ def _save_output(path: Path,
     # Store both numerical results and enough metadata to identify the input fields.
     arrays = {"grid": np.asarray(grid),
               "deltaG": np.asarray(delta_g),
+              "error": np.asarray(error) if error is not None else np.array([]),
               "fields": np.asarray(fields),
               "state_a_bounds": np.asarray(state_a_bounds),
               "state_b_bounds": np.asarray(state_b_bounds),
@@ -59,6 +62,21 @@ def _save_output(path: Path,
     np.savez(path, **arrays)
 
 
+def _save_colvar_output(path: Path,
+                        grid,
+                        delta_g,
+                        error,
+                        coordinate_field: str):
+    columns = [np.asarray(grid), np.asarray(delta_g)]
+    output_fields = [coordinate_field, "deltaG"]
+
+    if error is not None:
+        columns.append(np.asarray(error))
+        output_fields.append("error")
+
+    save_colvar_table(path, columns, output_fields)
+
+
 def build_parser() -> argparse.ArgumentParser:
     # Keep argparse setup separate from main so tests can inspect the CLI without running it.
     parser = argparse.ArgumentParser(description=textwrap.dedent("""\
@@ -67,7 +85,7 @@ def build_parser() -> argparse.ArgumentParser:
                                     1. Writing the input as a YAML file and passed as --config. A template YAML file with all the options can be generated with --yaml-template [PATH].
                                     2. Passing the options as keywords, which can be listed with --help.
                                 Whatever the mode, the used options are saved as a YAML file.
-                                The function returns the interval coordinates and deltaG  as a COLVAR-like text file (.dat), a plot (.png), and a NumPy archive (.npz).
+                                The function returns the interval coordinates, deltaG and error as a COLVAR-like text file (.dat), a plot (.png), and a NumPy archive (.npz).
                                 """),
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
 
@@ -130,6 +148,9 @@ def build_parser() -> argparse.ArgumentParser:
                                 "[x_min, x_max, y_min, y_max] for 2D.")
     delta_g_options.add_argument("--intervals", "--ints", "--n-ints", dest="intervals", type=int, default=10,
                                  help="Number of intervals for progressive deltaG estimates. Default: 10.")
+    delta_g_options.add_argument("--blocks", type=int, default=1,
+                                 help=("Number of equally sized independent trajectory blocks (e.g., walkers) "
+                                       "concatenated in the input data, used for uncertainty estimation. Default: 1."))
     delta_g_options.add_argument("--reverse", action="store_true", help="Reverse the input data. Default: false.")
     delta_g_options.add_argument("--eps", type=float, default=1e-8,
                                  help="Regularization for empty state counts. Default: 1e-8.")
@@ -182,27 +203,28 @@ def main(argv: Sequence[str] | None = None) -> int:
     plot_output = None if args.no_plot else get_output_path_with_suffix(output_prefix, suffix='png')
 
     # This is the only scientific computation done by the CLI wrapper.
-    grid, delta_g = compute_deltaG(X=data,
-                                   stateA_bounds=state_a_bounds,
-                                   stateB_bounds=state_b_bounds,
-                                   temp=args.temp,
-                                   units=args.units,
-                                   kbt=args.kbt,
-                                   intervals=args.intervals,
-                                   bias=bias,
-                                   reverse=args.reverse,
-                                   time=time,
-                                   plot=plot_output is not None,
-                                   plot_color=args.plot_color,
-                                   eps=args.eps)
+    grid, delta_g, error = compute_deltaG(X=data,
+                                          stateA_bounds=state_a_bounds,
+                                          stateB_bounds=state_b_bounds,
+                                          temp=args.temp,
+                                          units=args.units,
+                                          kbt=args.kbt,
+                                          intervals=args.intervals,
+                                          blocks=args.blocks,
+                                          bias=bias,
+                                          reverse=args.reverse,
+                                          time=time,
+                                          plot=plot_output is not None,
+                                          plot_color=args.plot_color,
+                                          eps=args.eps)
 
     # Always save the raw result arrays and a COLVAR-like text table; plotting is enabled by default.
-    _save_output(data_output, grid, delta_g, fields, state_a_bounds, state_b_bounds, bias_fields, args.time_field)
-    
+    _save_output(data_output, grid, delta_g, error, fields, state_a_bounds, state_b_bounds, bias_fields, args.time_field)
+
     # colvar output
     coordinate_field = args.time_field if args.time_field is not None else "frame"
-    save_colvar_table(colvar_output, [grid, delta_g], [coordinate_field, "deltaG"])
-    
+    _save_colvar_output(colvar_output, grid, delta_g, error, coordinate_field)
+
     # Record the effective options after defaults, YAML, and automatic bias-field detection.
     save_yaml_config(yaml_output, {"config": args.config,
                                    "input": args.input,
@@ -219,6 +241,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                                    "state_a_bounds": None if state_a_bounds is None else np.asarray(state_a_bounds).ravel().tolist(),
                                    "state_b_bounds": None if state_b_bounds is None else np.asarray(state_b_bounds).ravel().tolist(),
                                    "intervals": args.intervals,
+                                   "blocks": args.blocks,
                                    "reverse": args.reverse,
                                    "eps": args.eps,
                                    "no_plot": args.no_plot,
