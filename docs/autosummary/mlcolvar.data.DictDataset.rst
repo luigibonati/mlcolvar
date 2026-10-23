@@ -20,8 +20,10 @@
       ~DictDataset.from_colvars
       ~DictDataset.get_graph_inputs
       ~DictDataset.get_stats
+      ~DictDataset.graph_from_ase
       ~DictDataset.graph_from_configurations
       ~DictDataset.graph_from_trajectories
+      ~DictDataset.to_ase
    
    
 

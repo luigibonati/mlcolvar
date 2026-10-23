@@ -251,22 +251,6 @@ def _configurations_from_ase_trajectory(
             for index in subsystem_indices
         ]
 
-    atomic_numbers = (
-        sliced_trajectory[0]
-        .get_atomic_numbers()
-        .tolist()
-    )
-
-    pbc = sliced_trajectory[0].get_pbc().tolist()
-
-    if any(pbc):
-        frame_cells = [
-            frame.get_cell()
-            for frame in sliced_trajectory
-        ]
-    else:
-        frame_cells = [None] * len(sliced_trajectory)
-
     configurations = []
 
     for i, frame in enumerate(sliced_trajectory):
@@ -282,18 +266,12 @@ def _configurations_from_ase_trajectory(
             else None
         )
 
-        cell_i = (
-            frame_cells[i] * lengths_conversion
-            if frame_cells[i] is not None
-            else None
-        )
-
         configurations.append(
             Configuration(
-                atomic_numbers=atomic_numbers,
+                atomic_numbers=frame.get_atomic_numbers().tolist(),
                 positions=frame.get_positions() * lengths_conversion,
-                cell=cell_i,
-                pbc=pbc,
+                cell=frame.get_cell().array * lengths_conversion,
+                pbc=frame.get_pbc().tolist(),
                 graph_labels=label_i,
                 node_labels=node_i,
                 system=selected_atoms["system"],
@@ -322,6 +300,39 @@ def _names_from_ase_atoms(
     )
 
     return first[indices].get_chemical_symbols()
+
+
+def _ase_from_graphs(
+    graphs,
+    atomic_numbers,
+) -> List[Atoms]:
+    """Convert mlcolvar graphs to ASE Atoms."""
+
+    atomic_numbers = np.asarray(
+        atomic_numbers,
+        dtype=int,
+    )
+
+    atoms_list = []
+
+    for graph in graphs:
+        species = (
+            graph["node_attrs"]
+            .argmax(dim=-1)
+            .cpu()
+            .numpy()
+        )
+
+        atoms_list.append(
+            Atoms(
+                numbers=atomic_numbers[species],
+                positions=graph["positions"].cpu().numpy(),
+                cell=graph["cell"].cpu().numpy(),
+                pbc=graph["pbc"].cpu().numpy().reshape(-1),
+            )
+        )
+
+    return atoms_list
 
 
 def create_pdb_from_xyz(input_filename: str, output_filename: str) -> str:
