@@ -11,26 +11,17 @@ from mlcolvar.core.loss.utils.smart_derivatives import SmartDerivatives
 from mlcolvar.utils._code import scatter_sum
 
 class GeneratorLoss(torch.nn.Module):
-    """
-    Loss function used to learn a representation of the eigenspace of the
-    infinitesimal generator.
+    """Loss function for learning eigenfunction representations of the infinitesimal generator.
 
-    The loss jointly optimizes:
+    The loss jointly optimizes the neural-network representation and trainable spectral parameters associated with the shifted resolvent operator.
 
-    1. A representation produced by the neural network.
-    2. A set of trainable parameters ``lambdas`` that approximate the
-       eigenvalues of the shifted resolvent operator.
-
-    The objective combines:
-
-    - a variational term enforcing consistency with the generator dynamics;
-    - an orthonormality penalty on the learned representation.
+    The objective combines a variational representation loss and an orthonormality regularization term.
 
     References
     ----------
-    T. Devergne, V. Kostic, M. Pontil, M. Parrinello,
+    .. [*] T. Devergne, V. Kostic, M. Pontil, M. Parrinello,
     "Slow dynamical modes from static averages",
-    J. Chem. Phys., 2025.
+    J. Chem. Phys., 2025, DOI: 10.1063/5.0246248
     """
 
     def __init__(self,
@@ -43,57 +34,26 @@ class GeneratorLoss(torch.nn.Module):
                  split: bool = True,
                  softmax_postproc=True,
                  ):
-        """
-        Initialize the generator loss.
+        r"""Initialize the generator loss.
 
         Parameters
         ----------
         r : int
-            Number of latent functions (network outputs) used to represent the
-            generator eigenspace.
-
+            Number of output components in the learned representation.
         eta : float
-            Resolvent shift parameter defining the operator
-
-            .. math::
-
-                (\eta I - \mathcal{L})^{-1}
-
-            where :math:`\mathcal{L}` is the infinitesimal generator.
-
+            Resolvent shift parameter defining ``(I - L/eta)^-1``, where L is the infinitesimal generator.
         friction : torch.Tensor
-            Langevin prefactor associated with each atom. The tensor is used to
-            weight coordinate gradients when constructing the Dirichlet form.
-
+            Per-atom diffusion prefactors used to weight coordinate gradients, typically ``k_B*T/(gamma*m_i)``.
         alpha : float
-            Weight of the orthonormality regularization term:
-
-            .. math::
-
-                L = L_{\mathrm{var}} + \alpha L_{\mathrm{ortho}}
-
+            Weight of the orthonormality regularization term in the total loss.
         descriptors_derivatives : SmartDerivatives or torch.Tensor, optional
-            Descriptor derivatives with respect to atomic coordinates.
-
-            Providing these derivatives avoids recomputing descriptor Jacobians
-            during training.
-
-            Supported formats are:
-
-            - ``SmartDerivatives`` for memory-efficient sparse evaluation.
-            - ``torch.Tensor`` containing the full descriptor Jacobian.
-
+            Derivatives of descriptors with respect to atomic positions, provided to avoid recomputing descriptor Jacobians.
         n_dim : int, default=3
             Number of spatial dimensions.
-
         split : bool, default=True
-            Whether to use the split-batch estimator when computing
-            covariance matrices.
-
+            Whether to use the split-batch estimator. Currently, only ``split=True`` is supported.
         softmax_postproc : bool, default=True
-            Whether the model output has been augmented by the softmax
-            post-processing layer. When enabled, a constant basis function is
-            appended internally before constructing the loss.
+            Whether to append a constant basis function to the representation when computing the loss.
         """
        
         super().__init__()
@@ -112,7 +72,28 @@ class GeneratorLoss(torch.nn.Module):
                 weights : torch.Tensor,
                 ref_idx : torch.Tensor = None
                 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        
+        """Compute the generator loss from the learned representation.
+
+        Parameters
+        ----------
+        input : torch.Tensor
+            Input configurations, descriptors, or graph data.
+        output : torch.Tensor
+            Learned representation evaluated on the input samples.
+        weights : torch.Tensor
+            Statistical weights associated with each sample.
+        ref_idx : torch.Tensor, optional
+            Reference indices mapping batch entries to the original dataset when descriptor derivatives are provided.
+
+        Returns
+        -------
+        loss : torch.Tensor
+            Total loss combining the variational and orthonormality terms.
+        loss_var : torch.Tensor
+            Detached variational loss contribution.
+        loss_ortho : torch.Tensor
+            Detached orthonormality loss contribution, including its weight ``alpha``.
+        """
         # preload descriptors matrix on device
         if isinstance(self.descriptors_derivatives, torch.Tensor):
             if self.descriptors_derivatives.device != input.device:
@@ -134,6 +115,24 @@ class GeneratorLoss(torch.nn.Module):
 
 
 def compute_covariance(X, weights):
+    """Compute a weighted, uncentered second-moment matrix.
+
+    Parameters
+    ----------
+    X : torch.Tensor
+        Input features or gradients with shape ``(n_samples, d)`` or ``(n_samples, d, k)``.
+    weights : torch.Tensor
+        Statistical weights associated with each sample.
+
+    Returns
+    -------
+    torch.Tensor
+        Weighted second-moment matrix with shape ``(d, d)``.
+
+    Notes
+    -----
+    The calculation applies a factor of ``1/(n_samples - 1)`` to the weighted sum and does not subtract the feature mean.
+    """
     n = X.size(0)
     pre_factor = n / (n - 1)
     if X.ndim == 2:
@@ -157,60 +156,52 @@ def generator_loss(input : torch.Tensor,
                    split : bool = True,
                    softmax_postproc=True,
                    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """
-    Compute the variational objective used to learn generator eigenfunctions.
+    r"""Compute the variational loss for learning generator eigenfunctions.
 
-    The neural-network outputs define a low-dimensional representation on which
-    the shifted resolvent operator is approximated. The loss jointly optimizes
-    the representation and a set of trainable eigenvalue parameters.
-
-    The objective consists of:
-
-    1. A variational term involving covariance matrices of the learned
-    representation and its gradients.
-    2. An orthonormality penalty that encourages independent eigenfunctions.
-
-    When ``split=True``, unbiased covariance estimates are obtained using a
-    two-way batch split
-
+    The loss combines a variational representation objective with an orthonormality regularization term. When ``split=True``, the batch is divided into two subsets to construct the loss estimator.
 
     Parameters
     ----------
-    input : torch.Tensor
-        Input of the (set of) neural networks
+    input : torch.Tensor or torch_geometric.data.Batch
+        Input configurations, descriptors, or graph data.
     output : torch.Tensor
-        Output of the (set of) neural networks
+        Learned representation evaluated on the input samples.
     weights : torch.Tensor
-        Statistical weights of the samples, this could be from reweighting.
+        Statistical or reweighting weights associated with each sample.
     eta : float
-        Hyperparameter for the shift to define the resolvent, i.e., $(\eta I-_mathcal{L})^{-1}$
+        Resolvent shift parameter defining ``(I - L/eta)^-1``.
     alpha : float
-        Hyperparamer that scales the contribution of orthonormality loss to the total loss, i.e., L = L_ef + alpha*L_ortho
+        Weight of the orthonormality regularization term.
     friction : torch.Tensor
-        Langevin friction, i.e., $\sqrt{k_B*T/(gamma*m_i)}$
+        Per-atom diffusion prefactors, typically ``k_B*T/(gamma*m_i)``, whose square roots scale coordinate gradients.
     lambdas : torch.Tensor
-        Trainable parameters. After training, they should correspond to the resolvent eigenvalues.
-
-    descriptors_derivatives : Union[SmartDerivatives, torch.Tensor], optional
-        Derivatives of descriptors wrt atomic positions (if used) to speed up calculation of gradients, by default None. 
-        Can be either:
-            - A `SmartDerivatives` object to save both memory and time, see also mlcolvar.core.loss.committor_loss.SmartDerivatives
-            - A torch.Tensor with the derivatives to save time, memory-wise could be less efficient
-    ref_idx: torch.Tensor, optional
-        Reference indeces for the unshuffled dataset for properly handling batching/splitting/shuffling
-        when descriptors derivatives are provided, by default None. 
-        Ref_idx can be generated automatically using SmartDerivatives or by setting create_ref_idx=True when initializing a DictDataset.
-        See also mlcolvar.core.loss.utils.smart_derivatives.SmartDerivatives
-    n_dim : int
-        Number of dimensions, by default 3.
-    split : bool
-        Do we use split the batch to compute the loss
+        Trainable spectral parameters whose squares are used in the variational objective.
+    descriptors_derivatives : SmartDerivatives or torch.Tensor, optional
+        Derivatives of descriptors with respect to atomic positions.
+    ref_idx : torch.Tensor, optional
+        Reference indices mapping batch entries to the original dataset. Required when descriptor derivatives are provided.
+    n_dim : int, default=3
+        Number of spatial dimensions.
+    split : bool, default=True
+        Whether to use the split-batch estimator. Currently, only ``split=True`` is supported.
+    softmax_postproc : bool, default=True
+        Whether to append a constant basis function to the representation.
 
     Returns
     -------
-    Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
-        Total loss, eigenfunctions loss, orthonormality loss 
-    """    
+    loss : torch.Tensor
+        Total loss combining the variational and orthonormality terms.
+    loss_var : torch.Tensor
+        Detached variational loss contribution.
+    loss_ortho : torch.Tensor
+        Detached orthonormality loss contribution, including its weight ``alpha``.
+
+    Notes
+    -----
+    When ``softmax_postproc=True``, a constant basis function is appended to the representation and an additional fixed spectral coefficient is included.
+
+    The total loss is computed as ``loss_var + alpha * loss_ortho_raw``, where ``loss_ortho_raw`` denotes the unweighted orthonormality term.
+    """
     if descriptors_derivatives is not None and ref_idx is None:
         raise ValueError ("Descriptors derivatives need reference indeces from the dataset! Use a dataset with the ref_idx, see docstrign for details")
 

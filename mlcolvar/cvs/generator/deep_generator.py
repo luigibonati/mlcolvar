@@ -11,27 +11,24 @@ from mlcolvar.core.estimators import Generator
 __all__ = ["DeepGenerator"]
 
 class DeepGenerator(BaseCV):
-    """
-    Baseclass for learning a representation for the eigenfunctions of the infinitesimal generator.
-    The representation is expressed as a concatenation of the output of r neural networks.
-    
-    **Data**: for training it requires a DictDataset with the keys 'data', and 'weights'
-    
-    **Loss**: Minimize the representation loss and the orthonormalization loss
+    """Learn eigenfunctions of the infinitesimal generator.
+
+    The model learns a neural-network representation of the eigenspace of the infinitesimal generator from weighted configurations and their spatial derivatives, without requiring time-lagged data.
+    **Data**: Training requires a DictDataset containing ``"data"`` and ``"weights"``.
+    **Loss**: Minimize the variational representation loss together with an orthonormality regularization term.
 
     References
     ----------
     .. [*] T. Devergne, V. Kostic, M. Pontil, M. Parrinello, "Slow dynamical modes from static averages", J. Chem. Phys., 2025, DOI: 10.1063/5.0246248
 
-    See also
+    See Also
     --------
-    mlcolvar.core.loss.generator_loss
-        Loss function to learn a representation for the infinitesimal generator
-    mlcolvar.cvs.generator.utils.compute_eigenfunctions
-        Computes eigenfunctions and eigenvalues from a learned representation
-    mlcolvar.cvs.generator.utils.forecast_state_occupation
-        Computes the time evolution of state occupation probabilities in a dynamical system from the learned eigenfunctions
-
+    mlcolvar.core.loss.generator_loss.GeneratorLoss
+        Loss function for learning generator eigenfunction representations.
+    mlcolvar.core.estimators.utils_generator.compute_eigenfunctions
+        Compute generator eigenfunctions and eigenvalues from a representation.
+    mlcolvar.core.estimators.utils_generator.forecast_observable_evolution
+        Forecast the time evolution of observables from generator eigenfunctions.
     """
 
     DEFAULT_BLOCKS = ["nn"]
@@ -55,29 +52,25 @@ class DeepGenerator(BaseCV):
         Parameters
         ----------
         r : int
-            Number of eigenfunctions to learn.
+            Number of output components in the learned representation.
         model : list[int] or FeedForward or BaseGNN
-            Neural-network architecture. If a list is provided, it is used as the
-            layer sizes for a :class:`FeedForward` model. If a model instance is
-            provided, it is used directly.
+            Neural-network architecture. If a list is provided, it defines the layer sizes of a :class:`FeedForward` model. Otherwise, the supplied model instance is used directly.
         eta : float
-            Resolvent shift parameter used in ``( I - L/eta)^-1``.
+            Resolvent shift parameter used in ``(I - L/eta)^-1``.
         alpha : float
-            Weight of the orthonormality penalty in the total loss,
-            ``loss = loss_ef + alpha * loss_ortho``.
+            Weight of the orthonormality regularization term in the loss.
         friction : torch.Tensor
-            Langevin friction-related prefactor, usually one value per atom.
+            Per-atom diffusion prefactors used to weight coordinate gradients.
         descriptors_derivatives : SmartDerivatives or torch.Tensor, optional
-            Derivatives of descriptors with respect to atomic positions. Supplying
-            this can avoid recomputing descriptor derivatives during loss evaluation.
+            Derivatives of descriptors with respect to atomic positions. Providing these derivatives avoids recomputing descriptor Jacobians.
         n_dim : int, default=3
             Number of spatial dimensions.
         split : bool, default=True
-            Whether to split the data internally when computing the loss.
+            Whether to use the split-batch estimator for the loss. Currently, only ``split=True`` is supported.
         softmax_postproc : bool, default=True
-            Whether to apply softmax-based post-processing to the network output.
+            Whether to apply softmax-based post-processing to the learned representation.
         options : dict, optional
-            Options passed to model blocks and optimizer configuration.
+            Options for the neural network and optimizer configuration.
         **kwargs
             Additional keyword arguments passed to :class:`BaseCV`.
         """
@@ -132,35 +125,34 @@ class DeepGenerator(BaseCV):
                                ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Compute generator eigenfunctions from the learned representation.
 
-        If eigenvectors have already been computed and ``recompute=False``, this
-        method reuses the cached eigenvectors and eigenvalues and only evaluates the
-        current model on ``dataset``.
+        The method computes the eigenfunctions and eigenvalues of the infinitesimal generator using the learned representation and weighted configurations from the training dataloader.
 
         Parameters
         ----------
         datamodule : DictModule
-            Datamodule containing at least ``"data"`` and ``"weights"``. If the model
-            uses runtime-cell preprocessing, the dataset must also contain ``"cell"``.
+            Datamodule containing at least ``"data"`` and ``"weights"``. If runtime-cell preprocessing is used, the dataset must also provide the required cell information.
         eta : float, optional
-            Resolvent shift used for this computation. Defaults to the value used at
-            initialization.
+            Resolvent shift parameter. Defaults to the value used at initialization.
         friction : torch.Tensor, optional
-            Friction prefactor used for this computation. Defaults to the value used
-            at initialization.
-        tikhonov_reg : float, default=1e-4 
-            Tikhonov regularization parameter used when solving the linear problem.
+            Per-atom diffusion prefactors. Defaults to the values provided at initialization.
+        tikhonov_reg : float, default=1e-4
+            Tikhonov regularization strength added to the shifted covariance matrix before solving the eigenvalue problem.
         descriptors_derivatives : SmartDerivatives or torch.Tensor, optional
-            Descriptor derivatives used to compute gradients efficiently.
+            Descriptor derivatives used to compute coordinate gradients.
 
         Returns
         -------
         eigenfunctions : torch.Tensor
-            Eigenfunctions evaluated on the dataset, with shape ``(n_samples, r)``.
+            Eigenfunctions evaluated on the processed samples, with shape ``(n_samples, n_modes)``.
         evals : torch.Tensor
-            Generator eigenvalues, with shape ``(r,)``.
+            Generator eigenvalues, with shape ``(n_modes,)``.
         evecs : torch.Tensor
-            Eigenvectors mapping the learned representation to eigenfunctions, with
-            shape ``(r, r)``.
+            Eigenvectors mapping the learned representation to eigenfunctions, with shape ``(n_basis, n_modes)``.
+
+        Notes
+        -----
+        When ``softmax_postproc=True``, a constant basis function is appended, giving ``n_basis = r + 1``. Otherwise, ``n_basis = r``.
+        The number of returned modes may be smaller than the number of basis functions due to numerical filtering.
         """
         # inherit friction and eta from the model if not provided
         if friction is None:
@@ -191,15 +183,47 @@ class DeepGenerator(BaseCV):
 
         return eigenfunctions, evals, evecs
 
-        
     def forward_nn(self, x, cell=None):
+        """Compute the neural-network representation before eigenfunction projection.
+
+        Parameters
+        ----------
+        x : torch.Tensor or torch_geometric.data.Batch
+            Input configurations, descriptors, or graph data.
+        cell : torch.Tensor, optional
+            Simulation cell used by preprocessing when required.
+
+        Returns
+        -------
+        torch.Tensor
+            Learned representation with shape ``(n_samples, r)``.
+        """
         if self.preprocessing is not None:
             x = self._apply_module(self.preprocessing, x, cell=cell)
         z = self.nn(x)
         return z
+
     def forward(self, x, cell=None):
+        """Evaluate the learned representation or generator eigenfunctions.
+
+        Before calling ``compute_eigenfunctions()``, returns the raw neural-network representation.
+        After eigenfunction computation, projects the representation onto the learned eigenfunctions.
+
+        Parameters
+        ----------
+        x : torch.Tensor or torch_geometric.data.Batch
+            Input configurations, descriptors, or graph data.
+        cell : torch.Tensor, optional
+            Simulation cell used by preprocessing when required.
+
+        Returns
+        -------
+        torch.Tensor
+            Raw representation with shape ``(n_samples, r)`` before eigenfunction computation,
+            or projected eigenfunctions with shape ``(n_samples, n_modes)`` afterward.
+        """
         if self.generator.evecs is not None:
-            
+
             output = self.forward_nn(x, cell=cell)
             if self.softmax_postproc:
                 output = torch.nn.functional.softmax(output,dim=-1)
@@ -208,7 +232,7 @@ class DeepGenerator(BaseCV):
             eigenfunctions = output @ self.generator.evecs.to(output.device)
             return eigenfunctions
         else: #This should only be called upon initialization
-            return self.forward_nn(x, cell=cell) 
+            return self.forward_nn(x, cell=cell)
 
     def training_step(self, 
                       train_batch, 
