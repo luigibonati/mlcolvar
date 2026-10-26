@@ -55,7 +55,7 @@ class _CVInferenceModel(torch.nn.Module):
             cell_list.append(cell)
             pbc_list.append(system.pbc.to(device=positions.device))
             node_attrs_list.append(
-                (types.reshape(-1, 1) == self.atomic_numbers.reshape(1, -1)).to(
+                (types[:, None] == self.atomic_numbers[None, :]).to(
                     dtype=positions.dtype, device=positions.device
                 )
             )
@@ -69,13 +69,9 @@ class _CVInferenceModel(torch.nn.Module):
             )
 
             samples = system.get_neighbor_list(self.neighbor_options).samples.values
-            first_atom = samples[:, 0].to(dtype=torch.long, device=positions.device)
-            second_atom = samples[:, 1].to(dtype=torch.long, device=positions.device)
             edge_index_list.append(
-                torch.stack(
-                    (first_atom + atom_offset, second_atom + atom_offset),
-                    dim=0,
-                )
+                samples[:, :2].to(dtype=torch.long, device=positions.device).transpose(0, 1)
+                + atom_offset
             )
 
             unit_shifts = samples[:, 2:5].to(

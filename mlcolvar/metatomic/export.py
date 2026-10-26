@@ -68,8 +68,7 @@ def _get_neighbor_options(
 
 
 def _prepare_network(network: nn.Module) -> nn.Module:
-    """Prepare an atomistic network for TorchScript export."""
-    network = deepcopy(network).eval()
+    """Prepare an already-copied network for TorchScript export."""
     for module in network.modules():
         prepare = getattr(module, "prepare_for_torchscript", None)
         if callable(prepare):
@@ -92,12 +91,12 @@ def _build_postprocessing(model: nn.Module, network: nn.Module) -> nn.Module:
             if block is network:
                 include = True
             continue
-        modules.append(deepcopy(block))
+        modules.append(block)
 
     postprocessing = getattr(model, "postprocessing", None)
     if postprocessing is not None:
-        modules.append(deepcopy(postprocessing))
-    return nn.Sequential(*modules).eval() if modules else nn.Identity()
+        modules.append(postprocessing)
+    return nn.Sequential(*modules) if modules else nn.Identity()
 
 
 def _make_inference_model(
@@ -107,11 +106,19 @@ def _make_inference_model(
 ) -> _CVInferenceModel:
     """Build the complete Metatomic inference pipeline."""
     network = _network(model)
+    neighbor_options = _get_neighbor_options(network, interaction_range)
+
+    # Copy the inference components together to preserve shared parameters.
+    components = deepcopy(nn.ModuleList([
+        network,
+        _build_postprocessing(model, network),
+    ])).eval()
+
     return _CVInferenceModel(
-        network=_prepare_network(network),
-        postprocessing=_build_postprocessing(model, network),
+        network=_prepare_network(components[0]),
+        postprocessing=components[1],
         atomic_numbers=torch.as_tensor(atomic_types, dtype=torch.long),
-        neighbor_options=_get_neighbor_options(network, interaction_range),
+        neighbor_options=neighbor_options,
     ).eval()
 
 
