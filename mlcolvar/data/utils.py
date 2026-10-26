@@ -110,4 +110,3 @@ def save_dataset_configurations_as_extyz(dataset: DictDataset,
             print('', file=fp)
             
     fp.close()
-        
