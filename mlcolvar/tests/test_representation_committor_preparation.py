@@ -1,3 +1,4 @@
+
 import pytest
 import torch
 from torch import nn
@@ -39,7 +40,10 @@ class DescriptorDerivatives(nn.Module):
     def forward(self, gradient, ref_idx=None):
         if ref_idx is None:
             raise ValueError("`ref_idx` is required.")
-        output = torch.zeros(gradient.shape[0], 1, 3, gradient.shape[-1])
+        output = torch.zeros(
+            gradient.shape[0], 1, 3, gradient.shape[-1],
+            device=gradient.device, dtype=gradient.dtype,
+        )
         output[:, 0, :2] = gradient
         return output
 
@@ -66,7 +70,8 @@ def test_vector_committor_preparation(derivatives, expected):
     dataset = DictDataset(data)
     representation = VectorRepresentation()
     features = evaluate_dataset(representation, dataset)
-    prepared, transform = prepare_committor(
+
+    prepared, jacobian = prepare_committor(
         representation,
         dataset,
         features,
@@ -78,10 +83,13 @@ def test_vector_committor_preparation(derivatives, expected):
         prepared["ref_idx"],
         torch.tensor([-1, 0, -1, 1], dtype=prepared["ref_idx"].dtype),
     )
-    torch.testing.assert_close(
-        transform(torch.ones(2, 2), torch.tensor([0, 1])),
-        expected,
-    )
+
+    assert jacobian.shape == (2, expected[0].numel(), 2)
+
+    gradient = torch.ones(2, 2)
+    result = torch.einsum("bl,bdl->bd", gradient, jacobian)
+
+    torch.testing.assert_close(result.reshape_as(expected), expected)
 
 
 def test_graph_committor_preparation():
@@ -107,7 +115,9 @@ def test_graph_committor_preparation():
 
     representation = GraphRepresentation()
     features = evaluate_dataset(representation, dataset)
-    prepared, transform = prepare_committor(representation, dataset, features)
+    prepared, jacobian = prepare_committor(
+        representation, dataset, features
+    )
 
     torch.testing.assert_close(
         features,
@@ -118,9 +128,12 @@ def test_graph_committor_preparation():
         torch.tensor([1., 2.]),
     )
 
+    assert jacobian.shape == (2, 6, 2)
+
+    gradient = torch.ones(2, 2)
+    result = torch.einsum("bl,bdl->bd", gradient, jacobian)
+
     expected = torch.full((2, 2, 3), 0.5)
     expected[:, :, 2] = 0.0
-    torch.testing.assert_close(
-        transform(torch.ones(2, 2), torch.tensor([0, 1])),
-        expected,
-    )
+
+    torch.testing.assert_close(result.reshape(2, 2, 3), expected)

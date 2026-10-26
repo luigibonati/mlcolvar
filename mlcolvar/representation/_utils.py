@@ -1,4 +1,6 @@
+
 from collections.abc import Sequence
+from itertools import chain
 from typing import Any
 
 import torch
@@ -13,26 +15,27 @@ __all__ = [
 ]
 
 
-def as_int(value: Any, name: str) -> int:
-    """Convert a scalar value to a Python integer."""
+def _scalar(value: Any, name: str):
+    """Convert a scalar tensor to a Python scalar."""
     if isinstance(value, torch.Tensor):
         if value.numel() != 1:
             raise ValueError(f"`{name}` must be scalar.")
-        value = value.detach().cpu().item()
-    return int(value)
+        return value.item()
+    return value
+
+
+def as_int(value: Any, name: str) -> int:
+    """Convert a scalar value to an integer."""
+    return int(_scalar(value, name))
 
 
 def as_float(value: Any, name: str) -> float:
-    """Convert a scalar value to a Python float."""
-    if isinstance(value, torch.Tensor):
-        if value.numel() != 1:
-            raise ValueError(f"`{name}` must be scalar.")
-        value = value.detach().cpu().item()
-    return float(value)
+    """Convert a scalar value to a float."""
+    return float(_scalar(value, name))
 
 
 def as_positive_int(value: Any, name: str) -> int:
-    """Convert a scalar value to a positive Python integer."""
+    """Convert a scalar value to a positive integer."""
     value = as_int(value, name)
     if value <= 0:
         raise ValueError(f"`{name}` must be positive. Found {value}.")
@@ -40,24 +43,10 @@ def as_positive_int(value: Any, name: str) -> int:
 
 
 def module_reference_tensor(module: nn.Module) -> torch.Tensor:
-    """Return a scalar tensor matching the module floating dtype and device.
-
-    Parameters
-    ----------
-    module : torch.nn.Module
-        Module used to determine the reference dtype and device.
-
-    Returns
-    -------
-    torch.Tensor
-        Scalar tensor matching the first floating or complex parameter or buffer.
-    """
-    for tensor in module.parameters():
+    """Return a scalar tensor matching the module dtype and device."""
+    for tensor in chain(module.parameters(), module.buffers()):
         if tensor.is_floating_point() or tensor.is_complex():
-            return torch.empty((), dtype=tensor.dtype, device=tensor.device)
-    for tensor in module.buffers():
-        if tensor.is_floating_point() or tensor.is_complex():
-            return torch.empty((), dtype=tensor.dtype, device=tensor.device)
+            return tensor.new_empty(())
     return torch.empty(())
 
 
@@ -65,24 +54,15 @@ def _as_atomic_number_list(
     atomic_numbers: Sequence[int] | torch.Tensor,
     name: str,
 ) -> list[int]:
-    """Convert and validate an atomic-number table."""
-    values = (
-        torch.as_tensor(atomic_numbers, dtype=torch.long)
-        .detach()
-        .cpu()
-        .reshape(-1)
-        .tolist()
-    )
-    if not values:
-        raise ValueError(f"The {name} atomic-number table cannot be empty.")
-    if any(number <= 0 for number in values):
-        raise ValueError(
-            f"The {name} atomic-number table must contain positive integers."
-        )
-    if len(set(values)) != len(values):
-        raise ValueError(
-            f"The {name} atomic-number table contains duplicates: {values}."
-        )
+    """Convert and validate atomic numbers."""
+    values = torch.as_tensor(
+        atomic_numbers, dtype=torch.long
+    ).flatten().tolist()
+
+    if not values or any(z <= 0 for z in values):
+        raise ValueError(f"The {name} atomic numbers must be positive and non-empty.")
+    if len(values) != len(set(values)):
+        raise ValueError(f"The {name} atomic numbers contain duplicates: {values}.")
     return values
 
 
@@ -90,48 +70,32 @@ def align_node_attrs(
     dataset,
     target_atomic_numbers: Sequence[int] | torch.Tensor,
 ):
-    """Align graph node attributes with a target atomic-number table.
-
-    The one-hot ``node_attrs`` of each graph are reordered to match
-    ``target_atomic_numbers`` and the dataset metadata are updated accordingly.
-    The dataset is modified in place.
-
-    Parameters
-    ----------
-    dataset
-        Graph dataset containing ``data_list`` and ``metadata["atomic_numbers"]``.
-    target_atomic_numbers : Sequence[int] or torch.Tensor
-        Atomic-number ordering expected by the representation.
-
-    Returns
-    -------
-    dataset
-        Dataset with aligned node attributes.
-    """
+    """Align graph node attributes with the target atomic-number ordering."""
     if not hasattr(dataset, "metadata"):
         raise TypeError("The dataset must expose a `metadata` attribute.")
     if "atomic_numbers" not in dataset.metadata:
         raise KeyError("The dataset metadata must contain `atomic_numbers`.")
 
-    source_values = _as_atomic_number_list(dataset.metadata["atomic_numbers"], "source")
-    target_values = _as_atomic_number_list(target_atomic_numbers, "target")
-    if source_values == target_values:
+    source = _as_atomic_number_list(dataset.metadata["atomic_numbers"], "source")
+    target = _as_atomic_number_list(target_atomic_numbers, "target")
+
+    if source == target:
         return dataset
 
-    target_indices = {number: index for index, number in enumerate(target_values)}
-    missing = [number for number in source_values if number not in target_indices]
+    missing = set(source) - set(target)
     if missing:
-        raise ValueError(f"The target representation does not support atomic numbers {missing}.")
+        raise ValueError(f"Unsupported atomic numbers: {sorted(missing)}.")
 
-    source_to_target = torch.tensor([target_indices[number] for number in source_values], dtype=torch.long)
+    indices = [target.index(z) for z in source]
+
     for graph in dataset["data_list"]:
-        node_attrs = graph["node_attrs"]
-        if node_attrs.size(1) != len(source_values):
-            raise ValueError("`node_attrs` width does not match `dataset.metadata['atomic_numbers']`.")
-        species = source_to_target.to(node_attrs.device)[node_attrs.argmax(dim=-1)]
-        aligned = node_attrs.new_zeros(node_attrs.size(0), len(target_values))
-        aligned.scatter_(1, species.unsqueeze(1), 1)
+        attrs = graph["node_attrs"]
+        if attrs.ndim != 2 or attrs.shape[1] != len(source):
+            raise ValueError("Invalid `node_attrs` dimensions.")
+
+        aligned = attrs.new_zeros(len(attrs), len(target))
+        aligned[:, indices] = attrs
         graph["node_attrs"] = aligned
 
-    dataset.metadata["atomic_numbers"] = target_values
+    dataset.metadata["atomic_numbers"] = target
     return dataset

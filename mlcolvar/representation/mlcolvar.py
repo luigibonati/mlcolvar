@@ -1,3 +1,4 @@
+
 import torch
 from torch import nn
 
@@ -10,98 +11,76 @@ __all__ = ["MLColvarRepresentation"]
 
 
 class MLColvarRepresentation(Representation):
-    """Reusable latent representation from a pretrained mlcolvar model.
+    """Extract reusable latent features from a pretrained mlcolvar model.
 
-    The representation reuses the model ``.nn`` encoder together with its preprocessing
-    and input normalization, when present. Both vector- and graph-based models are supported.
+    Reuses the encoder, preprocessing, and input normalization while
+    excluding the original task-specific output layers.
 
     Parameters
     ----------
-    model : torch.nn.Module
-        Pretrained mlcolvar model exposing an ``.nn`` encoder.
-    freeze : bool, optional
-        Whether the encoder, preprocessing, and input normalization are frozen and kept
-        in evaluation mode. Default is ``True``.
+    model : nn.Module
+        Pretrained model exposing an `.nn` encoder.
+    freeze : bool, default=True
+        Whether to freeze the pretrained modules.
     """
 
-    def __init__(
-        self,
-        model: nn.Module,
-        *,
-        freeze: bool = True,
-    ) -> None:
+    def __init__(self, model: nn.Module, *, freeze: bool = True) -> None:
         if not isinstance(model, nn.Module):
             raise TypeError("`model` must be a torch.nn.Module.")
 
         encoder = getattr(model, "nn", None)
         if encoder is None:
-            raise TypeError(f"{model.__class__.__name__} does not expose an `.nn` encoder.")
+            raise TypeError(f"{type(model).__name__} does not expose an `.nn` encoder.")
 
-        out_features = as_positive_int(encoder.out_features, "encoder.out_features")
+        is_graph = isinstance(encoder, BaseGNN)
 
-        if isinstance(encoder, BaseGNN):
-            super().__init__(
-                out_features=out_features,
-                input_kind="graph",
-                output_kind="atom" if encoder.pooling_operation is None else "system",
+        if is_graph:
+            kwargs = dict(
                 atomic_numbers=encoder.atomic_numbers,
                 cutoff=as_float(encoder.cutoff, "encoder.cutoff"),
                 pooling_operation=encoder.pooling_operation,
                 buffer=as_float(encoder.buffer, "encoder.buffer"),
                 long_range_cutoff=as_float(
-                    encoder.long_range_cutoff,
-                    "encoder.long_range_cutoff",
+                    encoder.long_range_cutoff, "encoder.long_range_cutoff"
                 ),
-                freeze=freeze,
             )
         else:
-            super().__init__(
-                out_features=out_features,
-                input_kind="vector",
-                output_kind="system",
-                in_features=as_positive_int(model.in_features, "model.in_features"),
-                freeze=freeze,
+            kwargs = dict(
+                in_features=as_positive_int(model.in_features, "model.in_features")
             )
+
+        super().__init__(
+            out_features=as_positive_int(encoder.out_features, "encoder.out_features"),
+            input_kind="graph" if is_graph else "vector",
+            output_kind=(
+                "atom" if is_graph and encoder.pooling_operation is None else "system"
+            ),
+            freeze=freeze,
+            **kwargs,
+        )
 
         self.encoder = encoder
         self.preprocessing = getattr(model, "preprocessing", None)
         self.norm_in = getattr(model, "norm_in", None)
 
-        self._freeze_module(self.encoder)
-
-        if isinstance(self.preprocessing, nn.Module):
-            self._freeze_module(self.preprocessing)
-
-        if isinstance(self.norm_in, nn.Module):
-            self._freeze_module(self.norm_in)
+        for module in (self.encoder, self.preprocessing, self.norm_in):
+            if isinstance(module, nn.Module):
+                self._freeze_module(module)
 
     def forward(
         self,
         data,
         cell: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        """Evaluate the latent representation.
-
-        Parameters
-        ----------
-        data
-            Vector or graph input expected by the pretrained model.
-        cell : torch.Tensor, optional
-            Simulation cell forwarded to preprocessing when provided.
-
-        Returns
-        -------
-        torch.Tensor
-            Latent representation produced by the pretrained encoder.
-        """
+        """Evaluate the pretrained latent representation."""
         if self.input_kind == "graph" and self.norm_in is not None:
-            raise ValueError("Input normalization cannot be applied directly to graph dictionaries.")
+            raise ValueError("Input normalization is not supported for graph inputs.")
 
         if self.preprocessing is not None:
             data = (
-                self.preprocessing(data)
-                if cell is None
-                else self.preprocessing(data, cell=cell)
+                self.preprocessing(data, cell=cell)
+                if cell is not None
+                else self.preprocessing(data)
             )
 
         if self.norm_in is not None:
