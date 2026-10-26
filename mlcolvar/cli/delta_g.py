@@ -148,9 +148,6 @@ def build_parser() -> argparse.ArgumentParser:
                                 "[x_min, x_max, y_min, y_max] for 2D.")
     delta_g_options.add_argument("--intervals", "--ints", "--n-ints", dest="intervals", type=int, default=10,
                                  help="Number of intervals for progressive deltaG estimates. Default: 10.")
-    delta_g_options.add_argument("--blocks", type=int, default=1,
-                                 help=("Number of equally sized independent trajectory blocks (e.g., walkers) "
-                                       "concatenated in the input data, used for uncertainty estimation. Default: 1."))
     delta_g_options.add_argument("--reverse", action="store_true", help="Reverse the input data. Default: false.")
     delta_g_options.add_argument("--eps", type=float, default=1e-8,
                                  help="Regularization for empty state counts. Default: 1e-8.")
@@ -181,18 +178,34 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--state-b-bounds is required, either as command-line argument or in --config.")
 
     try:
-        # Load and validate COLVAR fields before calling the numerical routine.
-        data, bias, time, fields, bias_fields = load_colvar_data(args.input,
-                                                                 args.fields,
-                                                                 args.bias_fields,
-                                                                 args.start,
-                                                                 args.stop,
-                                                                 args.stride,
-                                                                 time_field=args.time_field,
-                                                                 flatten_single_cv=True)
-        dimensions = 1 if np.ndim(data) == 1 else data.shape[1]
+        # Load each COLVAR file independently for multi-trajectory statistics.
+        data_list, bias_list, time_list = [], [], []
+        fields, bias_fields = None, None
+        dimensions = None
+        for filename in args.input:
+            data_i, bias_i, time_i, fields_i, bias_fields_i = load_colvar_data([filename],
+                                                                               args.fields,
+                                                                               args.bias_fields,
+                                                                               args.start,
+                                                                               args.stop,
+                                                                               args.stride,
+                                                                               time_field=args.time_field,
+                                                                               flatten_single_cv=True)
+            dim_i = 1 if np.ndim(data_i) == 1 else data_i.shape[1]
+            if fields is None:
+                fields, bias_fields = fields_i, bias_fields_i
+                dimensions = dim_i
+            elif fields_i != fields or bias_fields_i != bias_fields or dim_i != dimensions:
+                raise ValueError("All COLVAR files must contain the same CV and bias fields.")
+            data_list.append(data_i)
+            bias_list.append(bias_i)
+            time_list.append(time_i)
+
         state_a_bounds = parse_min_max_bounds(args.state_a_bounds, dimensions, "state A bounds")
         state_b_bounds = parse_min_max_bounds(args.state_b_bounds, dimensions, "state B bounds")
+        data = data_list if len(data_list) > 1 else data_list[0]
+        bias = bias_list if bias_fields is not None and len(data_list) > 1 else bias_list[0]
+        time = (time_list if len(data_list) > 1 else time_list[0]) if args.time_field is not None else None
     except ValueError as exc:
         parser.error(str(exc))
 
@@ -210,7 +223,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                                           units=args.units,
                                           kbt=args.kbt,
                                           intervals=args.intervals,
-                                          blocks=args.blocks,
                                           bias=bias,
                                           reverse=args.reverse,
                                           time=time,
@@ -222,7 +234,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     _save_output(data_output, grid, delta_g, error, fields, state_a_bounds, state_b_bounds, bias_fields, args.time_field)
 
     # colvar output
-    coordinate_field = args.time_field if args.time_field is not None else "frame"
+    coordinate_field = args.time_field if args.time_field is not None else ("fraction" if len(args.input) > 1 else "frame")
     _save_colvar_output(colvar_output, grid, delta_g, error, coordinate_field)
 
     # Record the effective options after defaults, YAML, and automatic bias-field detection.
@@ -241,7 +253,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                                    "state_a_bounds": None if state_a_bounds is None else np.asarray(state_a_bounds).ravel().tolist(),
                                    "state_b_bounds": None if state_b_bounds is None else np.asarray(state_b_bounds).ravel().tolist(),
                                    "intervals": args.intervals,
-                                   "blocks": args.blocks,
                                    "reverse": args.reverse,
                                    "eps": args.eps,
                                    "no_plot": args.no_plot,

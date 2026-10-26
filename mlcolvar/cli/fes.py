@@ -134,6 +134,8 @@ def build_parser() -> argparse.ArgumentParser:
                              help="Scale input variables before KDE. Default: none.")
     fes_options.add_argument("--blocks", type=int, default=1,
                              help="Number of blocks for uncertainty estimates. Default: 1.")
+    fes_options.add_argument("--multi-traj", action="store_true",
+                             help="Treat each input COLVAR file as an independent trajectory. Default: false.")
     fes_options.add_argument("--backend", choices=("KDEpy", "sklearn"), help="KDE backend. Default: best available.")
     fes_options.add_argument("--eps", type=float,
                              help="Regularization added before taking the logarithm. Default: auto-tuned.")
@@ -162,16 +164,38 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     validate_common_args(parser, args)
+    if args.multi_traj and args.blocks != 1:
+        parser.error("--multi-traj cannot be combined with --blocks > 1.")
 
     try:
         # Load and validate COLVAR fields before calling the numerical routine.
-        data, bias, _time, fields, bias_fields = load_colvar_data(args.input,
-                                                                  args.fields,
-                                                                  args.bias_fields,
-                                                                  args.start,
-                                                                  args.stop,
-                                                                  args.stride)
-        dimensions = 1 if data.ndim == 1 else data.shape[1]
+        if args.multi_traj:
+            data, bias = [], []
+            fields, bias_fields = None, None
+            for filename in args.input:
+                data_i, bias_i, _time, fields_i, bias_fields_i = load_colvar_data([filename],
+                                                                                  args.fields,
+                                                                                  args.bias_fields,
+                                                                                  args.start,
+                                                                                  args.stop,
+                                                                                  args.stride)
+                if fields is None:
+                    fields, bias_fields = fields_i, bias_fields_i
+                elif fields_i != fields or bias_fields_i != bias_fields:
+                    raise ValueError("All COLVAR files must use the same CV and bias fields.")
+                data.append(data_i)
+                bias.append(bias_i)
+            if bias_fields is None:
+                bias = None
+        else:
+            data, bias, _time, fields, bias_fields = load_colvar_data(args.input,
+                                                                      args.fields,
+                                                                      args.bias_fields,
+                                                                      args.start,
+                                                                      args.stop,
+                                                                      args.stride)
+        example_data = data[0] if args.multi_traj else data
+        dimensions = 1 if example_data.ndim == 1 else example_data.shape[1]
         bounds = None if args.bounds is None else parse_min_max_bounds(args.bounds, dimensions, "bounds")
     except ValueError as exc:
         parser.error(str(exc))
@@ -183,7 +207,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     plot_output = None if args.no_plot else get_output_path_with_suffix(output_prefix, suffix='png')
 
     # This is the only scientific computation done by the CLI wrapper.
-    fes, grid, used_bounds, error = compute_fes(X=data,
+    fes, grid, used_bounds, error = compute_fes(X=None if args.multi_traj else data,
                                                 temp=args.temp,
                                                 units=args.units,
                                                 kbt=args.kbt,
@@ -199,7 +223,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                                                 plot_max_fes=args.plot_max_fes,
                                                 plot_levels=args.plot_levels,
                                                 backend=args.backend,
-                                                eps=args.eps)
+                                                eps=args.eps,
+                                                trajectories=data if args.multi_traj else None)
 
     # Always save the raw result arrays and a COLVAR-like text table; plotting is optional.
     _save_output(data_output, fes, grid, used_bounds, error, fields, bias_fields)
@@ -222,6 +247,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                                    "kernel": args.kernel,
                                    "scale_by": args.scale_by,
                                    "blocks": args.blocks,
+                                   "multi_traj": args.multi_traj,                           
                                    "backend": args.backend,
                                    "eps": args.eps,
                                    "no_plot": args.no_plot,
