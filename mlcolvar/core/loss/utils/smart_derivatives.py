@@ -1,7 +1,6 @@
 import torch
 import gc
 import numpy as np
-import inspect
 from torch import nn
 from torch_geometric.loader import DataLoader as GraphDataLoader
 from mlcolvar.utils._code import scatter_sum
@@ -203,10 +202,15 @@ class SmartDerivatives(torch.nn.Module):
                 raise ValueError("Source reference indices must be non-negative.")
             jacobian = descriptor_derivatives(jacobian, ref_idx).reshape(len(jacobian), -1, features.shape[-1])
 
-        source = DictDataset({"data": features, "labels": labels, "weights": weights})
-        prepared = create_smart_dataset(features, source, separate_boundary_dataset)
-        for key in ("labels", "weights", "ref_idx"):
-            prepared[key] = prepared[key].to(output_device)
+        ref_idx = torch.full((len(labels),), -1, dtype=torch.long)
+        ref_idx[mask] = torch.arange(int(mask.sum()))
+
+        prepared = DictDataset({
+            "data": features.detach(),
+            "labels": labels.to(output_device),
+            "weights": weights.to(output_device),
+            "ref_idx": ref_idx.to(output_device),
+        })
 
         self._dense_jacobian = jacobian.detach()
         self._check_setup = True

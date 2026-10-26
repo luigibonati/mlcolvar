@@ -9,8 +9,8 @@ from mlcolvar.representation._utils import (
     _as_atomic_number_list,
     as_float,
     as_positive_int,
-    module_reference_tensor,
 )
+from mlcolvar.utils.evaluation import module_reference_tensor
 from ._compat import (
     MetatomicAtomisticModel,
     ModelCapabilities,
