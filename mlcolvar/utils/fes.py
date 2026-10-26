@@ -86,7 +86,7 @@ def compute_fes(
     scale_by : str or list, optional
         Standardize each variable before KDE. Use "std" to scale by standard deviation, "range" for range normalization, or provide a list of scaling factors.
     blocks : int, optional
-        Number of equally sized independent trajectory blocks (e.g., walkers) concatenated consecutively in the input data. The blocks are used for uncertainty estimation. Default is 1 (no error estimate).
+        Number of data blocks to use for uncertainty estimation. Default is 1 (no error estimate).
     fes_to_zero : int or tuple, optional
         Index (or multi-index) in the grid where FES is shifted to zero. If None, minimum value is subtracted.
     plot : bool, optional
