@@ -363,12 +363,7 @@ class _RemoveIsolatedNodes(BaseTransform):
             for key, value in node_store.items():
                 if key == 'num_nodes':
                     out.num_nodes = n_id_dict[node_store._key].numel()
-                elif node_store.is_node_attr(key) and key not in [
-                    'shifts',
-                    'unit_shifts',
-                    'cell',
-                    'pbc',
-                ]:
+                elif node_store.is_node_attr(key) and key not in ['shifts', 'unit_shifts', 'cell', 'pbc']:
                     out[key] = value[n_id_dict[node_store._key]]
 
         return data

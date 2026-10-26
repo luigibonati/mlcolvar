@@ -293,13 +293,9 @@ class DictDataset(Dataset):
             Graph dataset constructed from ASE Atoms objects.
         """
         from ase import Atoms
-
         from mlcolvar.io.graphs._utils import _check_atom_selection
-        from mlcolvar.io.graphs.ase_ import (
-            _prepare_configurations_from_ase_trajectories,
-        )
+        from mlcolvar.io.graphs.ase_ import _prepare_configurations_from_ase_trajectories
 
-        # Accept both a single Atoms object and a list of Atoms objects.
         if isinstance(atoms, Atoms):
             atoms = [atoms]
 
@@ -323,7 +319,6 @@ class DictDataset(Dataset):
                 atom_names=atom_names,
             )
         )
-
         return cls.graph_from_configurations(
             config=configurations,
             atomic_numbers=atomic_numbers,
@@ -514,24 +509,12 @@ class DictDataset(Dataset):
         return dataset
     
     def to_ase(self):
-        """Convert a graph dataset to ASE Atoms objects.
-
-        Returns
-        -------
-        list[ase.Atoms]
-            ASE Atoms objects reconstructed from the graph dataset.
-        """
+        """Convert a graph dataset to a list of ASE Atoms objects."""
         if self.metadata.get("data_type") != "graphs":
-            raise ValueError(
-                "`to_ase` is only supported for graph-based datasets."
-            )
+            raise ValueError("`to_ase` is only supported for graph-based datasets.")
 
         from mlcolvar.io.graphs.ase_ import _ase_from_graphs
-
-        return _ase_from_graphs(
-            graphs=self["data_list"],
-            atomic_numbers=self.metadata["atomic_numbers"],
-        )
+        return _ase_from_graphs(self["data_list"], self.metadata["atomic_numbers"])
 
     def __getitem__(self, index):
         """Return a field, one sample, or a sliced DictDataset."""

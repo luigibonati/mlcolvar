@@ -302,27 +302,13 @@ def _names_from_ase_atoms(
     return first[indices].get_chemical_symbols()
 
 
-def _ase_from_graphs(
-    graphs,
-    atomic_numbers,
-) -> List[Atoms]:
+def _ase_from_graphs(graphs, atomic_numbers) -> List[Atoms]:
     """Convert mlcolvar graphs to ASE Atoms."""
-
-    atomic_numbers = np.asarray(
-        atomic_numbers,
-        dtype=int,
-    )
-
+    atomic_numbers = np.asarray(atomic_numbers, dtype=int)
     atoms_list = []
 
     for graph in graphs:
-        species = (
-            graph["node_attrs"]
-            .argmax(dim=-1)
-            .cpu()
-            .numpy()
-        )
-
+        species = graph["node_attrs"].argmax(dim=-1).cpu().numpy()
         atoms_list.append(
             Atoms(
                 numbers=atomic_numbers[species],
