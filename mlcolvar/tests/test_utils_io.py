@@ -9,15 +9,18 @@ from mlcolvar.data import DictDataset
 from mlcolvar.tests import data_dir
 
 
-PDB_TEXT = """
+PDB_TEXT = """\
 CRYST1    2.000    2.000    2.000  90.00  90.00  90.00 P 1           1
+MODEL        1
 ATOM      1  OH2 TIP3W   1       0.000   0.000   0.000  1.00  0.00      WT1  O
 ATOM      2  H1  TIP3W   1       0.700   0.700   0.000  1.00  0.00      WT1  H
 ATOM      3  H2  TIP3W   1       0.700  -0.700   0.000  1.00  0.00      WT1  H
-ENDMODEL
+ENDMDL
+MODEL        2
 ATOM      1  OH2 TIP3W   1       0.000   0.000   0.000  1.00  0.00      WT1  O
 ATOM      2  H1  TIP3W   1       0.700   0.700   0.000  1.00  0.00      WT1  H
 ATOM      3  H2  TIP3W   1       0.700  -0.700   0.000  1.00  0.00      WT1  H
+ENDMDL
 END
 """
 
