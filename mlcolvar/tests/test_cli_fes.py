@@ -15,6 +15,8 @@ def test_fes_cli_prints_yaml_template(capsys, tmp_path):
     assert "plot: null" not in text
     assert "no_plot: false" in text
     assert "plot_color: fessa6" in text
+    assert "blocks: 1" in text
+    assert "multi_traj: false" in text
 
     template = tmp_path / "template_fes.yaml"
     assert main(["--yaml-template", str(template)]) == 0
@@ -43,6 +45,9 @@ def test_fes_cli_writes_outputs(tmp_path, monkeypatch):
         # The test data points are inside these bounds, so this checks the CLI
         # parses and forwards a valid 1D bounds specification.
         assert kwargs["bounds"] == (0.0, 3.0)
+        
+        assert kwargs["blocks"] == 1
+        assert kwargs["trajectories"] is None
 
         # Because --bias is omitted, all COLVAR fields containing "bias" should be summed.
         assert kwargs["bias"].tolist() == [2.5, 3.5]
@@ -190,3 +195,146 @@ def test_fes_cli_writes_2d_outputs_with_error(tmp_path, monkeypatch):
     # With block errors available, the COLVAR-like text output should expose an error column.
     text = colvar_output.read_text()
     assert text.startswith("#! FIELDS cv1 cv2 fes error")
+
+
+
+def test_fes_cli_reads_independent_trajectories(tmp_path, monkeypatch):
+    # Independent trajectories must be passed separately without concatenation.
+    colvar1 = tmp_path / "COLVAR_1"
+    colvar2 = tmp_path / "COLVAR_2"
+
+    colvar1.write_text(
+        "#! FIELDS time cv opes.bias wall.bias\n"
+        "0 1.0 2.0 0.5\n"
+        "1 2.0 3.0 0.5\n"
+        "2 1.5 4.0 0.5\n"
+    )
+    colvar2.write_text(
+        "#! FIELDS time cv opes.bias wall.bias\n"
+        "0 2.0 5.0 0.5\n"
+        "1 1.0 6.0 0.5\n"
+        "2 2.5 7.0 0.5\n"
+        "3 1.5 8.0 0.5\n"
+        "4 2.0 9.0 0.5\n"
+    )
+
+    def fake_compute_fes(**kwargs):
+        # Multi-trajectory mode should preserve the independent input files.
+        assert kwargs["X"] is None
+        assert isinstance(kwargs["trajectories"], list)
+        assert len(kwargs["trajectories"]) == 2
+
+        np.testing.assert_allclose(kwargs["trajectories"][0], np.array([[1.0], [2.0], [1.5]]))
+        np.testing.assert_allclose(kwargs["trajectories"][1], np.array([[2.0], [1.0], [2.5], [1.5], [2.0]]))
+
+        # Each trajectory should retain its own bias values.
+        assert isinstance(kwargs["bias"], list)
+        assert len(kwargs["bias"]) == 2
+        np.testing.assert_allclose(kwargs["bias"][0], [2.5, 3.5, 4.5])
+        np.testing.assert_allclose(kwargs["bias"][1], [5.5, 6.5, 7.5, 8.5, 9.5])
+
+        assert kwargs["blocks"] == 1
+        assert kwargs["bounds"] == (0.0, 3.0)
+        assert kwargs["plot"] is False
+
+        grid = np.array([0.0, 1.0, 2.0])
+        fes = np.array([1.2, 0.5, 0.0])
+        error = np.array([0.1, 0.2, 0.1])
+        return fes, grid, [(0.0, 3.0)], error
+
+    monkeypatch.setattr("mlcolvar.cli.fes.compute_fes", fake_compute_fes)
+
+    output = tmp_path / "fes_multi"
+
+    assert main([
+        str(colvar1), str(colvar2),
+        "--cvs", "cv",
+        "--kbt", "1.0",
+        "--bounds", "0.0", "3.0",
+        "--multi-traj",
+        "--output", str(output),
+        "--no-plot",
+    ]) == 0
+
+    with np.load(output.with_suffix(".npz")) as data:
+        np.testing.assert_allclose(data["grid"], [0.0, 1.0, 2.0])
+        np.testing.assert_allclose(data["fes"], [1.2, 0.5, 0.0])
+        np.testing.assert_allclose(data["error"], [0.1, 0.2, 0.1])
+
+    colvar_output = tmp_path / "fes_multi.dat"
+    assert colvar_output.exists()
+    assert colvar_output.read_text().startswith("#! FIELDS cv fes error")
+
+    yaml_text = (tmp_path / "fes_multi.yaml").read_text()
+    assert "multi_traj: true" in yaml_text
+    assert "blocks: 1" in yaml_text
+
+
+def test_fes_cli_rejects_blocks_with_multi_traj(tmp_path):
+    # Block averaging and independent trajectory averaging are alternative modes.
+    colvar = tmp_path / "COLVAR"
+    colvar.write_text(
+        "#! FIELDS time cv\n"
+        "0 1.0\n"
+        "1 2.0\n"
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        main([
+            str(colvar),
+            "--cvs", "cv",
+            "--kbt", "1.0",
+            "--blocks", "2",
+            "--multi-traj",
+            "--no-plot",
+        ])
+
+    assert exc.value.code == 2
+
+
+def test_fes_cli_multi_traj_without_bias(tmp_path, monkeypatch):
+    # Unbiased independent trajectories should be passed without bias arrays.
+    colvar1 = tmp_path / "COLVAR_1"
+    colvar2 = tmp_path / "COLVAR_2"
+
+    colvar1.write_text(
+        "#! FIELDS time cv\n"
+        "0 1.0\n"
+        "1 2.0\n"
+        "2 1.5\n"
+    )
+    colvar2.write_text(
+        "#! FIELDS time cv\n"
+        "0 2.0\n"
+        "1 1.0\n"
+        "2 2.5\n"
+        "3 1.5\n"
+    )
+
+    def fake_compute_fes(**kwargs):
+        assert kwargs["X"] is None
+        assert len(kwargs["trajectories"]) == 2
+        assert kwargs["bias"] is None
+        assert kwargs["blocks"] == 1
+
+        grid = np.array([0.0, 1.0])
+        fes = np.array([0.5, 0.0])
+        error = np.array([0.1, 0.2])
+        return fes, grid, [(0.0, 3.0)], error
+
+    monkeypatch.setattr("mlcolvar.cli.fes.compute_fes", fake_compute_fes)
+
+    output = tmp_path / "fes_unbiased_multi"
+
+    assert main([
+        str(colvar1), str(colvar2),
+        "--cvs", "cv",
+        "--kbt", "1.0",
+        "--multi-traj",
+        "--output", str(output),
+        "--no-plot",
+    ]) == 0
+
+    with np.load(output.with_suffix(".npz")) as data:
+        np.testing.assert_allclose(data["fes"], [0.5, 0.0])
+        np.testing.assert_allclose(data["error"], [0.1, 0.2])

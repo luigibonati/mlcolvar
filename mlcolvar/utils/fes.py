@@ -37,7 +37,7 @@ else:
     kdelib = None
 
 def compute_fes(
-    X: np.ndarray,
+    X: np.ndarray = None,
     temp: float = None,
     units: str = "kJ/mol",
     kbt: float = None,
@@ -58,6 +58,7 @@ def compute_fes(
     ax: matplotlib.axes = None,
     backend: str = None,
     eps: float = None,
+    trajectories: List[np.ndarray] = None,
 ):
     """Compute the Free Energy Surface using a kernel density estimation (KDE) along the given variables. See notes below.
 
@@ -87,6 +88,11 @@ def compute_fes(
         Standardize each variable before KDE. Use "std" to scale by standard deviation, "range" for range normalization, or provide a list of scaling factors.
     blocks : int, optional
         Number of data blocks to use for uncertainty estimation. Default is 1 (no error estimate).
+    trajectories : list of arrays, optional
+        Independent trajectories, each of shape (n_frames,) or (n_frames, n_features).
+        Each trajectory is analyzed independently on the same KDE grid.
+        The mean and standard error are computed across trajectories.
+        Cannot be combined with blocks > 1.
     fes_to_zero : int or tuple, optional
         Index (or multi-index) in the grid where FES is shifted to zero. If None, minimum value is subtracted.
     plot : bool, optional
@@ -116,7 +122,7 @@ def compute_fes(
     bounds : list of tuples
         Bounds used for each variable, after optional rescaling.
     error : ndarray or None
-        Standard error estimate from block averaging (only if `blocks` > 1). Same shape as `fes`.
+        Standard error estimate from block averaging or independent trajectories. Same shape as `fes`.
 
     Notes
     -----
@@ -124,6 +130,7 @@ def compute_fes(
     - Either `temp` or `kbt` must be provided (not both). If using `temp`, ensure `units` is set correctly.
     - If `scale_by` is used, input variables are rescaled before KDE. This means that if using ``scale_by='range'`` a bandwidth of 0.01 corresponds to a 1/100 of the range of values assumed by the variable.
     - If `blocks > 1`, the function performs block averaging to estimate uncertainty [1].
+    - If `trajectories` is provided, the function computes the mean and standard error across independent trajectories.
     - The FES is computed on a regular grid; the grid ordering is consistent with `numpy.meshgrid(..., indexing='xy')`, so no manual transpose is needed for plotting.
 
     References
@@ -151,7 +158,59 @@ def compute_fes(
 
     # check temperature / units
     kbt, temp, units = _check_kbt_units(kbt, temp, units)
-        
+
+    # independent trajectories
+    multi_traj = trajectories is not None
+    if multi_traj:
+        if X is not None:
+            raise ValueError("Use either X or trajectories, not both.")
+        if blocks != 1:
+            raise ValueError("blocks and trajectories cannot be used together.")
+        if len(trajectories) == 0:
+            raise ValueError("trajectories must not be empty.")
+
+        traj_arrays = []
+        for item in trajectories:
+            if PANDAS_IS_INSTALLED and isinstance(item, pd.DataFrame):
+                item = item.values
+            if isinstance(item, torch.Tensor):
+                item = item.detach().cpu().numpy()
+            item = np.asarray(item)
+            if item.ndim == 1:
+                item = item[:, None]
+            if item.ndim != 2 or item.shape[1] not in (1, 2) or len(item) == 0:
+                raise ValueError("Each trajectory must have shape (n,), (n, 1), or (n, 2).")
+            traj_arrays.append(item)
+
+        if len({arr.shape[1] for arr in traj_arrays}) != 1:
+            raise ValueError("All trajectories must have the same CV dimension.")
+
+        traj_lengths = [len(a) for a in traj_arrays]
+        traj_breaks = np.cumsum(traj_lengths)[:-1]
+        X = np.concatenate(traj_arrays, axis=0)
+
+        if weights is not None and bias is not None:
+            raise ValueError("The weights and bias keywords cannot be defined together, use only one of them!")
+
+        if weights is not None or bias is not None:
+            name = "weights" if weights is not None else "bias"
+            values = weights if weights is not None else bias
+
+            if not isinstance(values, (list, tuple)) or len(values) != len(traj_lengths):
+                raise ValueError(f"{name} must contain one array per trajectory.")
+
+            converted = [np.asarray(v) for v in values]
+            if any(v.ndim != 1 or len(v) != n for v, n in zip(converted, traj_lengths)):
+                raise ValueError(f"{name} arrays must match their trajectory lengths.")
+
+            if weights is not None:
+                weights = np.concatenate(converted)
+            else:
+                bias = np.concatenate(converted)
+
+    elif X is None:
+        raise ValueError("Either X or trajectories must be provided.")
+
     # dataset
     if PANDAS_IS_INSTALLED:
         if type(X) == pd.DataFrame:
@@ -182,7 +241,7 @@ def compute_fes(
             weights = np.exp(bias / kbt)
     else:
         assert weights.ndim == 1
-        assert weights.shape[0] == nsamples                                                
+        assert weights.shape[0] == nsamples
 
     # rescale
     if scale_by is not None:
@@ -211,13 +270,19 @@ def compute_fes(
         grid = list(np.meshgrid(*grid_list))
         positions = np.vstack([g.ravel() for g in grid]).T
 
-    # divide in blocks
-    X_b = np.array_split(X, blocks)
-    w_b = np.array_split(weights, blocks)
+    # divide in blocks or independent trajectories
+    if multi_traj:
+        X_b = np.split(X, traj_breaks)
+        w_b = np.split(weights, traj_breaks)
+    else:
+        X_b = np.array_split(X, blocks)
+        w_b = np.array_split(weights, blocks)
+
+    n_estimates = len(X_b)
 
     fes_blocks, W_blocks = [], []  # values per block
     # block average
-    for i in range(blocks):
+    for i in range(n_estimates):
         # data of each block
         X_i = X_b[i]
         w_i = w_b[i]
@@ -242,7 +307,7 @@ def compute_fes(
             else:
                 # automatically adjust eps to avoid nans
                 eps_values = [0] +np.logspace(-15,-6,10).tolist()
-                for e in eps_values:    
+                for e in eps_values:
                     fes_i = (
                         -kbt
                         * np.log(kde.evaluate(cartesian(pos)) + e)
@@ -265,13 +330,13 @@ def compute_fes(
 
         # result for each block
         fes_blocks.append(fes_i)
-        W_blocks.append(np.sum(w_i))
+        W_blocks.append(1.0 if multi_traj else np.sum(w_i))
 
     fes_blocks = np.asarray(fes_blocks)
     W_blocks = np.asarray(W_blocks)
 
     # compute avg and std
-    if blocks > 1:
+    if n_estimates > 1:
         # weighted average
         fes = (np.nansum(fes_blocks.T * W_blocks, axis=-1) / np.nansum(W_blocks)).T
         # weighted std
@@ -286,7 +351,7 @@ def compute_fes(
     else:
         fes = fes_blocks[0]
         error = None
-    
+
     if fes_to_zero is not None:
         fes -= fes[fes_to_zero]
     else:
@@ -312,9 +377,9 @@ def compute_fes(
             fes2 = np.copy(fes)
             if plot_max_fes is not None:
                 fes2[fes2 > plot_max_fes] = np.nan
-            if blocks > 1:
+            if n_estimates > 1:
                 if plot_error_style is not None:
-                    if plot_error_style == "errorbar":  
+                    if plot_error_style == "errorbar":
                         ax.errorbar(grid, fes2, error,color=plot_color,alpha=0.5)
                     elif plot_error_style == "fill_between":
                         ax.plot(grid, fes2, color=plot_color)
@@ -335,276 +400,222 @@ def compute_fes(
             cbar = plt.colorbar(pp, ax=ax)
             cbar.set_label(f"FES [{units}]" if units is not None else "FES")
 
-    return fes, grid, bounds, error 
+    return fes, grid, bounds, error
 
-def compute_deltaG(X: np.ndarray,
+def compute_deltaG(X: Union[np.ndarray, List[np.ndarray]],
                    stateA_bounds: Union[List[float], List[List[float]], np.ndarray],
                    stateB_bounds: Union[List[float], List[List[float]], np.ndarray],
                    temp=None,
                    units="kJ/mol",
                    kbt: float = None,
                    intervals: int = 10,
-                   weights: np.ndarray = None,
-                   bias: np.ndarray = None,
+                   weights=None,
+                   bias=None,
                    reverse: bool = False,
-                   time: np.ndarray = None,
+                   time=None,
                    plot: bool = False,
                    plot_color: str = "fessa6",
+                   plot_error_style: str = "fill_between",
                    ax: matplotlib.axes = None,
                    eps: float = 1e-8,
                    rfunnel: float = None,
-                   c0: float = 1.0,
-                  ):
-    """Compute the difference in free energy (deltaG) between two states A and B.
+                   c0: float = 1.0):
+    """Compute progressive free-energy differences from independent trajectories.
 
-    If `rfunnel` is provided, the function computes the funnel-corrected
-    binding free energy. In this case, `stateA_bounds` defines the bound
-    region and `stateB_bounds` defines the unbound region. The correction
-    is computed directly from reweighted populations without KDE/FES estimation.
+    ``X`` can be one 1D/2D NumPy array or a list of independent trajectory
+    arrays (which may have different lengths). ``weights``, ``bias`` and
+    ``time`` follow the same structure as ``X``. Separate trajectories are
+    averaged *after* calculating their own free-energy differences; input
+    samples are never split into artificial blocks.
 
-    Parameters
-    ----------
-    X : np.ndarray
-        Input data with the values of the CV used to define the state.
-    stateA_bounds : List[float]
-        Bounds of state A along the CV. If `rfunnel` is provided, this defines
-        the bound region.
-    stateB_bounds : List[float]
-        Bounds of state B along the CV. If `rfunnel` is provided, this defines
-        the unbound region.
-    temp : float, optional
-        Temperature in Kelvin. Required if `kbt` is not provided.
-    units : str, optional
-        Units of the free energy if using `temp`, by default "kJ/mol".
-    kbt : float, optional
-        Thermal energy in the same units as the free energy. Required if `temp`
-        is not provided.
-    intervals : int, optional
-        Number of intervals on which the deltaG is progressively computed,
-        by default 10.
-    weights : np.ndarray, optional
-        Weights associated with the data points, shape (n_samples,), by default None.
-    bias : np.ndarray, optional
-        Bias values to be used to compute the weights as exp(bias / kbt),
-        shape (n_samples,), by default None.
-    reverse : bool, optional
-        Switch to reverse the data, by default False.
-    time : np.ndarray, optional
-        Time reference for the input data, by default None.
-    plot : bool, optional
-        Whether to plot the deltaG, by default False.
-    plot_color : str, optional
-        Color for the deltaG plot, by default "fessa6".
-    ax : matplotlib.axes, optional
-        Axis object to plot into. If None, a new figure is created, by default None.
-    eps : float, optional
-        Small regularization term to prevent logarithm from having zero argument,
-        by default 1e-8.
-    rfunnel : float, optional
-        Funnel radius in nm. If provided, the funnel-volume correction is applied,
-        by default None.
-    c0 : float, optional
-        Standard-state concentration in mol/L used for the funnel-volume
-        correction, by default 1.0. The default corresponds to the standard
-        1 M state and gives the same correction as using a standard volume
-        of 1.66 nm^3.
+    ``intervals`` controls the number of progressive estimates. For multiple
+    trajectories without ``time``, the grid is fractional trajectory progress
+    from 1/intervals to 1. With time arrays, times are converted to elapsed
+    time relative to the first frame, and all trajectories are compared on the
+    common time window up to the shortest trajectory duration.
+
+    With two or more trajectories, ``error`` is the standard error of the
+    independent deltaG estimates (sample std / sqrt(n_trajectories)). With
+    one trajectory, ``error`` is None. For funnel correction, state A denotes
+    the bound region and state B the unbound region.
 
     Returns
     -------
     grid : np.ndarray
-        Bounds of the intervals used for computing the deltaG, shape is (n_blocks,).
-        If `time` is provided, the time bounds are returned.
+        Frame index (single trajectory without time), fractional progress
+        (multiple trajectories without time), or time coordinate.
     deltaG : np.ndarray
-        DeltaG values computed up to each block, shape is (n_blocks,).
-        
-    References
-    ----------
-    [1] Limongelli, Bonomi, and Parrinello, Proc. Natl. Acad. Sci. U.S.A.
-        110, 6358-6363 (2013).
+        Progressive deltaG, averaged over trajectories when applicable.
+    error : np.ndarray or None
+        Standard error across independent trajectories, or None.
     """
+    if intervals < 1:
+        raise ValueError("intervals must be at least 1.")
+    if eps < 0:
+        raise ValueError("eps must be nonnegative.")
+    if weights is not None and bias is not None:
+        raise ValueError("Specify either weights or bias, not both.")
+    if rfunnel is not None and rfunnel <= 0:
+        raise ValueError("rfunnel must be positive.")
+    if rfunnel is not None and c0 <= 0:
+        raise ValueError("c0 must be positive.")
 
-    # ensure to have np.ndarrays
-    X = np.asarray(X)
+    # A list of arrays means independent simulations. A list of scalar CV
+    # values, like [0.1, 0.2], still denotes a single 1D trajectory.
+    multiple = (isinstance(X, (list, tuple)) and len(X) > 0
+                and all(np.asarray(item).ndim >= 1 for item in X))
+    trajectories = [np.asarray(item) for item in X] if multiple else [np.asarray(X)]
+    if not trajectories or any(len(item) == 0 for item in trajectories):
+        raise ValueError("Each trajectory must contain at least one frame.")
 
-    if weights is not None:
-        weights = np.asarray(weights)
+    n_traj = len(trajectories)
 
-    if bias is not None:
-        bias = np.asarray(bias)
+    def _series(arg, name):
+        if arg is None:
+            return [None] * n_traj
+        if multiple:
+            if not isinstance(arg, (list, tuple)) or len(arg) != n_traj:
+                raise ValueError(f"{name} must contain one array per trajectory.")
+            return [None if item is None else np.asarray(item) for item in arg]
+        return [np.asarray(arg)]
 
-    if time is not None:
-        time = np.asarray(time)
+    weight_list = _series(weights, "weights")
+    bias_list = _series(bias, "bias")
+    time_list = _series(time, "time")
+    if multiple and time is not None and any(t is None for t in time_list):
+        raise ValueError("All independent trajectories must provide time arrays.")
+    if multiple and bias is not None and any(b is None for b in bias_list):
+        raise ValueError("Bias is missing for an input trajectory.")
+    if multiple and weights is not None and any(w is None for w in weight_list):
+        raise ValueError("Weights are missing for an input trajectory.")
 
+    kbt, temp, units = _check_kbt_units(kbt, temp, units)
     stateA_bounds = np.asarray(stateA_bounds)
     stateB_bounds = np.asarray(stateB_bounds)
-
     use_funnel = rfunnel is not None
 
-    if use_funnel:
-        if rfunnel <= 0:
-            raise ValueError("rfunnel must be positive.")
-
-        if X.ndim > 1 and X.shape[-1] != 1:
+    records = []
+    for x, w, b, t in zip(trajectories, weight_list, bias_list, time_list):
+        if x.ndim == 1:
+            dim = 1
+        elif x.ndim == 2 and x.shape[1] in (1, 2):
+            dim = x.shape[1]
+        else:
+            raise ValueError("Each trajectory must have shape (n,), (n, 1), or (n, 2).")
+        if use_funnel and dim != 1:
             raise ValueError("Funnel correction only supports 1D data.")
 
-        X = X.reshape(-1)
+        n = len(x)
+        for name, arg in (("weights", w), ("bias", b), ("time", t)):
+            if arg is not None and (arg.ndim != 1 or len(arg) != n):
+                raise ValueError(f"{name} must be a 1D array of length {n}.")
 
-    # check that inputs are consistent with each other
-    if weights is not None and bias is not None:
-        raise ValueError(
-            "The weights and bias keywords cannot be defined together, use only one of them!"
-        )
-
-    if weights is not None and len(X) != len(weights):
-        raise ValueError(
-            f"Input data and weights must have the same number of entries! "
-            f"Found {len(X)} and {len(weights)}."
-        )
-
-    if bias is not None and len(X) != len(bias):
-        raise ValueError(
-            f"Input data and bias must have the same number of entries! "
-            f"Found {len(X)} and {len(bias)}."
-        )
-
-    if time is not None and len(X) != len(time):
-        raise ValueError(
-            f"Input data and time must have the same number of entries! "
-            f"Found {len(X)} and {len(time)}."
-        )
-
-    n_dim = 1
-    if not use_funnel and X.ndim > 1 and X.shape[-1] == 2:
-        n_dim = 2
-        if stateA_bounds.shape[-1] != n_dim or stateB_bounds.shape[-1] != n_dim:
-            raise ValueError("Input data are 2D, state bounds must be 2D as well!")
-
-    # check temperature / units
-    kbt, temp, units = _check_kbt_units(kbt, temp, units)
-
-    # initialize unitary weights if not provided
-    if weights is None:
-        if bias is None:
-            weights = np.ones(len(X))
+        if w is None:
+            w = np.ones(n) if b is None else np.exp(b / kbt)
+        if not np.all(np.isfinite(w)) or np.any(w < 0):
+            raise ValueError("Weights must be finite and nonnegative.")
+        if dim == 1:
+            if stateA_bounds.shape != (2,) or stateB_bounds.shape != (2,):
+                raise ValueError("1D state bounds must each have shape (2,).")
+            xx = x.reshape(-1)
+            mask_a = (xx > stateA_bounds[0]) & (xx < stateA_bounds[1])
+            mask_b = (xx > stateB_bounds[0]) & (xx < stateB_bounds[1])
         else:
-            weights = np.exp(bias / kbt)
+            if stateA_bounds.shape != (2, 2) or stateB_bounds.shape != (2, 2):
+                raise ValueError("2D state bounds must each have shape (2, 2).")
+            mask_a = np.all((x > stateA_bounds[:, 0]) &
+                            (x < stateA_bounds[:, 1]), axis=1)
+            mask_b = np.all((x > stateB_bounds[:, 0]) &
+                            (x < stateB_bounds[:, 1]), axis=1)
 
-    deltaG = []
+        if reverse:
+            w, mask_a, mask_b = w[::-1], mask_a[::-1], mask_b[::-1]
+            if t is not None:
+                # Use increasing elapsed time for the reversed trajectory.
+                t = (t[-1] - t[::-1])
+        elif t is not None:
+            t = t - t[0]
 
-    if reverse:
-        X = np.flip(X, axis=0)
-        weights = np.flip(weights, axis=0)
+        if t is not None and (not np.all(np.isfinite(t)) or
+                              np.any(np.diff(t) <= 0)):
+            raise ValueError("Trajectory time arrays must be strictly increasing.")
+        records.append((w, mask_a, mask_b, t))
 
-        if time is not None:
-            time = np.flip(time, axis=0)
-
-    # compute the estimate by reweighting the energy in the two basins
-    if n_dim == 1:
-        X_1d = X.reshape(-1)
-
-        mask_A = np.logical_and(
-            X_1d > stateA_bounds[0],
-            X_1d < stateA_bounds[1],
-        )
-        mask_B = np.logical_and(
-            X_1d > stateB_bounds[0],
-            X_1d < stateB_bounds[1],
-        )
-
+    if n_traj > 1 and time is not None:
+        # A true common elapsed-time axis, without interpolating deltaG values.
+        max_time = min(t[-1] for _, _, _, t in records)
+        if max_time <= 0:
+            raise ValueError("Each trajectory needs at least two time points.")
+        grid = np.linspace(max_time / intervals, max_time, intervals)
+    elif n_traj > 1:
+        grid = np.arange(1, intervals + 1, dtype=float) / intervals
     else:
-        mask_A = np.logical_and(
-            np.logical_and(
-                X[:, 0] > stateA_bounds[0, 0],
-                X[:, 0] < stateA_bounds[0, 1],
-            ),
-            np.logical_and(
-                X[:, 1] > stateA_bounds[1, 0],
-                X[:, 1] < stateA_bounds[1, 1],
-            ),
-        )
+        n = len(trajectories[0])
+        if intervals > n:
+            raise ValueError("intervals cannot exceed the number of frames.")
+        indices = np.ceil(np.arange(1, intervals + 1) * n / intervals).astype(int) - 1
+        grid = records[0][3][indices] if time is not None else indices
 
-        mask_B = np.logical_and(
-            np.logical_and(
-                X[:, 0] > stateB_bounds[0, 0],
-                X[:, 0] < stateB_bounds[0, 1],
-            ),
-            np.logical_and(
-                X[:, 1] > stateB_bounds[1, 0],
-                X[:, 1] < stateB_bounds[1, 1],
-            ),
-        )
-
-    # build intervals
-    interval_len = len(X) / intervals
-    interval_bounds = np.arange(0, len(X), interval_len)
-    interval_bounds = np.ceil(interval_bounds).astype("int")
-    interval_bounds = np.concatenate((interval_bounds, np.array([len(X) - 1])))
-
-    # we progressively store the data
-    tot_A = eps
-    tot_B = eps
-
-    if use_funnel:
-        if c0 <= 0:
-            raise ValueError("c0 must be positive.")
-
-        standard_volume = 1.66 / c0
-        volume_correction = np.pi * rfunnel**2 / standard_volume
-
-    # iterate over intervals
-    for i in range(intervals):
-        start = interval_bounds[i]
-        end = interval_bounds[i + 1]
-
-        aux_A = weights[start:end][mask_A[start:end]]
-        aux_B = weights[start:end][mask_B[start:end]]
-
-        tot_A += np.sum(aux_A)
-        tot_B += np.sum(aux_B)
-
-        G_A = -kbt * np.log(tot_A)
-        G_B = -kbt * np.log(tot_B)
-
-        if use_funnel:
-            # stateA_bounds = bound region
-            # stateB_bounds = unbound region
-            population_ratio = tot_A / tot_B
-            deltaG.append(
-                -kbt * np.log(population_ratio * volume_correction)
-            )
+    correction = (np.pi * rfunnel**2 * c0 / 1.66) if use_funnel else None
+    estimates = []
+    for w, mask_a, mask_b, t in records:
+        n = len(w)
+        if n_traj > 1 and time is not None:
+            # Include frames at or before each common physical time point.
+            ends = np.searchsorted(t, grid, side="right")
+        elif n_traj > 1:
+            ends = np.ceil(grid * n).astype(int)
         else:
-            deltaG.append(G_B - G_A)
+            ends = indices + 1
+    
+        cum_a = np.concatenate(([0.0], np.cumsum(np.where(mask_a, w, 0.0))))
+        cum_b = np.concatenate(([0.0], np.cumsum(np.where(mask_b, w, 0.0))))
+        pa = cum_a[ends]
+        pb = cum_b[ends]
+        # Do not treat a basin that has never been visited as a physical
+        # estimate: eps prevents log(0), but cannot create missing samples.
+        with np.errstate(divide="ignore", invalid="ignore"):
+            dg = kbt * np.log((pa + eps) / (pb + eps))
+        if use_funnel:
+            dg = -kbt * np.log((pa + eps) / (pb + eps) * correction)
+        else:
+            dg = kbt * np.log((pa + eps) / (pb + eps))
+        dg = np.where((pa > 0) & (pb > 0), dg, np.nan)
+        estimates.append(dg)
 
-    # switch to time if needed
-    if time is not None:
-        interval_bounds = time[interval_bounds]
+    estimates = np.stack(estimates)
+    # Only report mean/SEM where all runs supplied valid estimates, so the
+    # uncertainty always refers to the same n independent trajectories.
+    valid = np.all(np.isfinite(estimates), axis=0)
+    deltaG = np.full(intervals, np.nan)
+    error = np.full(intervals, np.nan) if n_traj > 1 else None
+    if np.any(valid):
+        deltaG[valid] = np.mean(estimates[:, valid], axis=0)
+        if error is not None:
+            error[valid] = np.std(estimates[:, valid], axis=0, ddof=1) / np.sqrt(n_traj)
 
-    # prepare for return
-    deltaG = np.array(deltaG)
-    grid = interval_bounds[1:]
-
-    # plot if needed
     if plot:
         if ax is None:
-            fig, ax = plt.subplots()
-
-        ax.plot(grid, deltaG, color=plot_color)
-        ax.set_xlabel("Time" if time is not None else "Frame")
-
-        if use_funnel:
-            ax.set_ylabel(
-                f"$\\Delta G_{{funnel}}$ [{units}]"
-                if units is not None
-                else "$\\Delta G_{funnel}$"
-            )
+            _, ax = plt.subplots()
+        if error is not None and plot_error_style is not None:
+            if plot_error_style == "fill_between":
+                ax.plot(grid, deltaG, color=plot_color)
+                ax.fill_between(grid, deltaG - error, deltaG + error,
+                                color=plot_color, alpha=0.3)
+            elif plot_error_style == "errorbar":
+                ax.errorbar(grid, deltaG, yerr=error,
+                            color=plot_color, alpha=0.5)
+            else:
+                raise ValueError("plot_error_style must be 'errorbar', 'fill_between', or None.")
         else:
-            ax.set_ylabel(
-                f"$\\Delta$G [{units}]"
-                if units is not None
-                else "$\\Delta$G"
-            )
+            ax.plot(grid, deltaG, color=plot_color)
+        xlabel = ("Time" if time is not None else
+                  "Trajectory fraction" if n_traj > 1 else "Frame")
+        ax.set_xlabel(xlabel)
+        label = r"$\Delta G_{funnel}$" if use_funnel else r"$\Delta G$"
+        ax.set_ylabel(f"{label} [{units}]" if units is not None else label)
+    return grid, deltaG, error
 
-    return grid, deltaG
 
 def _check_kbt_units(kbt, temp, units):
     "Helper function to handle inputs to specify free energy units in free energy utils"

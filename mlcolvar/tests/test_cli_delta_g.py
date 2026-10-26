@@ -18,6 +18,7 @@ def test_delta_g_cli_prints_yaml_template(capsys, tmp_path):
     assert "state_b_bounds:" in text
     assert "\n  - 1\n  - 2\nintervals:" in text
     assert "state_b_bounds: null" not in text
+    assert "blocks:" not in text
     assert "plot: null" not in text
     assert "yaml_template" not in text
 
@@ -51,13 +52,14 @@ def test_delta_g_cli_writes_outputs(tmp_path, monkeypatch):
         # Because --bias is omitted, all COLVAR fields containing "bias" should be summed.
         np.testing.assert_allclose(kwargs["bias"], np.array([2.5, 3.5]))
         assert kwargs["intervals"] == 4
+        assert "blocks" not in kwargs
         assert kwargs["time"] is None
         assert kwargs["plot"] is True
         assert kwargs["plot_color"] == "fessa6"
 
         grid = np.array([0, 1])
         delta_g = np.array([0.2, 0.0])
-        return grid, delta_g
+        return grid, delta_g, None
 
     monkeypatch.setattr("mlcolvar.cli.delta_g.compute_deltaG", fake_compute_deltaG)
 
@@ -82,17 +84,23 @@ def test_delta_g_cli_writes_outputs(tmp_path, monkeypatch):
     assert (tmp_path / "deltaG.png").exists()
     assert (tmp_path / "deltaG.yaml").exists()
 
+    with np.load(output.with_suffix(".npz")) as data:
+        np.testing.assert_allclose(data["deltaG"], np.array([0.2, 0.0]))
+        assert data["error"].size == 0
+
     # The CLI also writes a COLVAR-like text file next to the .npz output by default.
     colvar_output = tmp_path / "deltaG.dat"
     assert colvar_output.exists()
 
     text = colvar_output.read_text()
     assert text.startswith("#! FIELDS frame deltaG")
+    assert "error" not in text.splitlines()[0]
 
     yaml_text = (tmp_path / "deltaG.yaml").read_text()
     assert f"output: {output}" in yaml_text
     assert "cvs:" in yaml_text
     assert "state_a_bounds:" in yaml_text
+    assert "blocks:" not in yaml_text
     assert "\nplot:" not in yaml_text
 
 
@@ -107,7 +115,7 @@ def test_delta_g_cli_warns_periodic_cv_from_colvar_header(tmp_path, monkeypatch)
     )
 
     def fake_compute_deltaG(**_kwargs):
-        return np.array([0, 1]), np.array([0.0, 0.1])
+        return np.array([0, 1]), np.array([0.0, 0.1]), None
 
     monkeypatch.setattr("mlcolvar.cli.delta_g.compute_deltaG", fake_compute_deltaG)
 
@@ -151,11 +159,12 @@ def test_delta_g_cli_writes_2d_outputs_and_plot(tmp_path, monkeypatch):
         assert kwargs["plot"] is True
         assert kwargs["plot_color"] == "C0"
         assert kwargs["reverse"] is True
+        assert "blocks" not in kwargs
         assert kwargs["eps"] == 1e-6
 
         grid = np.array([0, 10])
         delta_g = np.array([0.4, 0.0])
-        return grid, delta_g
+        return grid, delta_g, None
 
     monkeypatch.setattr("mlcolvar.cli.delta_g.compute_deltaG", fake_compute_deltaG)
 
@@ -183,3 +192,119 @@ def test_delta_g_cli_writes_2d_outputs_and_plot(tmp_path, monkeypatch):
 
     text = colvar_output.read_text()
     assert text.startswith("#! FIELDS time deltaG")
+    assert "error" not in text.splitlines()[0]
+    
+
+
+def test_delta_g_cli_reads_independent_trajectories(tmp_path, monkeypatch):
+    # Independent trajectories must not be concatenated or split into artificial blocks.
+    colvar1 = tmp_path / "COLVAR_1"
+    colvar2 = tmp_path / "COLVAR_2"
+    colvar1.write_text(
+        "#! FIELDS time cv opes.bias wall.bias\n"
+        "0 -1.0 2.0 0.5\n"
+        "1 1.0 3.0 0.5\n"
+        "2 -1.0 4.0 0.5\n"
+    )
+    colvar2.write_text(
+        "#! FIELDS time cv opes.bias wall.bias\n"
+        "0 1.0 5.0 0.5\n"
+        "1 -1.0 6.0 0.5\n"
+        "2 1.0 7.0 0.5\n"
+        "3 -1.0 8.0 0.5\n"
+        "4 1.0 9.0 0.5\n"
+    )
+
+    def fake_compute_deltaG(**kwargs):
+        assert isinstance(kwargs["X"], list)
+        assert len(kwargs["X"]) == 2
+        np.testing.assert_allclose(kwargs["X"][0], [-1.0, 1.0, -1.0])
+        np.testing.assert_allclose(kwargs["X"][1], [1.0, -1.0, 1.0, -1.0, 1.0])
+        assert [len(b) for b in kwargs["bias"]] == [3, 5]
+        np.testing.assert_allclose(kwargs["bias"][0], [2.5, 3.5, 4.5])
+        np.testing.assert_allclose(kwargs["bias"][1], [5.5, 6.5, 7.5, 8.5, 9.5])
+        assert kwargs["time"] is None
+        assert kwargs["intervals"] == 2
+        assert "blocks" not in kwargs
+
+        grid = np.array([0.5, 1.0])
+        delta_g = np.array([0.4, 0.2])
+        error = np.array([0.1, 0.05])
+        return grid, delta_g, error
+
+    monkeypatch.setattr("mlcolvar.cli.delta_g.compute_deltaG", fake_compute_deltaG)
+
+    output = tmp_path / "deltaG_multi"
+
+    assert main([
+        str(colvar1), str(colvar2),
+        "--cvs", "cv",
+        "--kbt", "1.0",
+        "--state-a-bounds", "-1.5", "-0.5",
+        "--state-b-bounds", "0.5", "1.5",
+        "--intervals", "2",
+        "--output", str(output),
+        "--no-plot",
+    ]) == 0
+
+    with np.load(output.with_suffix(".npz")) as data:
+        np.testing.assert_allclose(data["grid"], [0.5, 1.0])
+        np.testing.assert_allclose(data["deltaG"], [0.4, 0.2])
+        np.testing.assert_allclose(data["error"], [0.1, 0.05])
+
+    colvar_output = tmp_path / "deltaG_multi.dat"
+    assert colvar_output.exists()
+    assert colvar_output.read_text().startswith("#! FIELDS fraction deltaG error")
+
+
+
+def test_delta_g_cli_multi_traj_mean_sem(tmp_path):
+    # Two independent trajectories with different lengths.
+    colvar1 = tmp_path / "COLVAR_1"
+    colvar2 = tmp_path / "COLVAR_2"
+
+    colvar1.write_text(
+        "#! FIELDS time cv\n"
+        "0 -1.0\n"
+        "1 1.0\n"
+        "2 -1.0\n"
+        "3 1.0\n"
+        "4 -1.0\n"
+        "5 1.0\n"
+    )
+    colvar2.write_text(
+        "#! FIELDS time cv\n"
+        "0 -1.0\n"
+        "1 -1.0\n"
+        "2 1.0\n"
+        "3 -1.0\n"
+        "4 -1.0\n"
+        "5 1.0\n"
+        "6 -1.0\n"
+        "7 -1.0\n"
+    )
+
+    output = tmp_path / "deltaG_multi"
+
+    assert main([
+        str(colvar1), str(colvar2),
+        "--cvs", "cv",
+        "--kbt", "1.0",
+        "--state-a-bounds", "-1.5", "-0.5",
+        "--state-b-bounds", "0.5", "1.5",
+        "--intervals", "1",
+        "--output", str(output),
+        "--no-plot",
+    ]) == 0
+
+    # Each trajectory is analyzed independently.
+    delta_g1 = np.log(3 / 3)
+    delta_g2 = np.log(6 / 2)
+
+    expected_mean = np.mean([delta_g1, delta_g2])
+    expected_error = np.std([delta_g1, delta_g2], ddof=1) / np.sqrt(2)
+
+    with np.load(output.with_suffix(".npz")) as data:
+        np.testing.assert_allclose(data["grid"], [1.0])
+        np.testing.assert_allclose(data["deltaG"][-1], expected_mean)
+        np.testing.assert_allclose(data["error"][-1], expected_error)

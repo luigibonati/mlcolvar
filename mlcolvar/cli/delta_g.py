@@ -8,7 +8,8 @@ After installing the package in editable mode::
     mlcolvar-deltag COLVAR --cvs cv --state-a-bounds -2 -1 --state-b-bounds 1 2 --kbt 2.494
 
 The command writes a NumPy ``.npz`` archive, a COLVAR-like text file
-containing the interval coordinate and ``deltaG``, and a plot image.
+containing the interval coordinate, ``deltaG`` and, when available,
+its uncertainty, and a plot image.
 """
 
 import argparse
@@ -41,6 +42,7 @@ from mlcolvar.utils.fes import compute_deltaG
 def _save_output(path: Path,
                  grid,
                  delta_g,
+                 error,
                  fields: Sequence[str],
                  state_a_bounds,
                  state_b_bounds,
@@ -49,6 +51,7 @@ def _save_output(path: Path,
     # Store both numerical results and enough metadata to identify the input fields.
     arrays = {"grid": np.asarray(grid),
               "deltaG": np.asarray(delta_g),
+              "error": np.asarray(error) if error is not None else np.array([]),
               "fields": np.asarray(fields),
               "state_a_bounds": np.asarray(state_a_bounds),
               "state_b_bounds": np.asarray(state_b_bounds),
@@ -59,6 +62,21 @@ def _save_output(path: Path,
     np.savez(path, **arrays)
 
 
+def _save_colvar_output(path: Path,
+                        grid,
+                        delta_g,
+                        error,
+                        coordinate_field: str):
+    columns = [np.asarray(grid), np.asarray(delta_g)]
+    output_fields = [coordinate_field, "deltaG"]
+
+    if error is not None:
+        columns.append(np.asarray(error))
+        output_fields.append("error")
+
+    save_colvar_table(path, columns, output_fields)
+
+
 def build_parser() -> argparse.ArgumentParser:
     # Keep argparse setup separate from main so tests can inspect the CLI without running it.
     parser = argparse.ArgumentParser(description=textwrap.dedent("""\
@@ -67,7 +85,7 @@ def build_parser() -> argparse.ArgumentParser:
                                     1. Writing the input as a YAML file and passed as --config. A template YAML file with all the options can be generated with --yaml-template [PATH].
                                     2. Passing the options as keywords, which can be listed with --help.
                                 Whatever the mode, the used options are saved as a YAML file.
-                                The function returns the interval coordinates and deltaG  as a COLVAR-like text file (.dat), a plot (.png), and a NumPy archive (.npz).
+                                The function returns the interval coordinates, deltaG and error as a COLVAR-like text file (.dat), a plot (.png), and a NumPy archive (.npz).
                                 """),
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
 
@@ -160,18 +178,34 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--state-b-bounds is required, either as command-line argument or in --config.")
 
     try:
-        # Load and validate COLVAR fields before calling the numerical routine.
-        data, bias, time, fields, bias_fields = load_colvar_data(args.input,
-                                                                 args.fields,
-                                                                 args.bias_fields,
-                                                                 args.start,
-                                                                 args.stop,
-                                                                 args.stride,
-                                                                 time_field=args.time_field,
-                                                                 flatten_single_cv=True)
-        dimensions = 1 if np.ndim(data) == 1 else data.shape[1]
+        # Load each COLVAR file independently for multi-trajectory statistics.
+        data_list, bias_list, time_list = [], [], []
+        fields, bias_fields = None, None
+        dimensions = None
+        for filename in args.input:
+            data_i, bias_i, time_i, fields_i, bias_fields_i = load_colvar_data([filename],
+                                                                               args.fields,
+                                                                               args.bias_fields,
+                                                                               args.start,
+                                                                               args.stop,
+                                                                               args.stride,
+                                                                               time_field=args.time_field,
+                                                                               flatten_single_cv=True)
+            dim_i = 1 if np.ndim(data_i) == 1 else data_i.shape[1]
+            if fields is None:
+                fields, bias_fields = fields_i, bias_fields_i
+                dimensions = dim_i
+            elif fields_i != fields or bias_fields_i != bias_fields or dim_i != dimensions:
+                raise ValueError("All COLVAR files must contain the same CV and bias fields.")
+            data_list.append(data_i)
+            bias_list.append(bias_i)
+            time_list.append(time_i)
+
         state_a_bounds = parse_min_max_bounds(args.state_a_bounds, dimensions, "state A bounds")
         state_b_bounds = parse_min_max_bounds(args.state_b_bounds, dimensions, "state B bounds")
+        data = data_list if len(data_list) > 1 else data_list[0]
+        bias = bias_list if bias_fields is not None and len(data_list) > 1 else bias_list[0]
+        time = (time_list if len(data_list) > 1 else time_list[0]) if args.time_field is not None else None
     except ValueError as exc:
         parser.error(str(exc))
 
@@ -182,27 +216,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     plot_output = None if args.no_plot else get_output_path_with_suffix(output_prefix, suffix='png')
 
     # This is the only scientific computation done by the CLI wrapper.
-    grid, delta_g = compute_deltaG(X=data,
-                                   stateA_bounds=state_a_bounds,
-                                   stateB_bounds=state_b_bounds,
-                                   temp=args.temp,
-                                   units=args.units,
-                                   kbt=args.kbt,
-                                   intervals=args.intervals,
-                                   bias=bias,
-                                   reverse=args.reverse,
-                                   time=time,
-                                   plot=plot_output is not None,
-                                   plot_color=args.plot_color,
-                                   eps=args.eps)
+    grid, delta_g, error = compute_deltaG(X=data,
+                                          stateA_bounds=state_a_bounds,
+                                          stateB_bounds=state_b_bounds,
+                                          temp=args.temp,
+                                          units=args.units,
+                                          kbt=args.kbt,
+                                          intervals=args.intervals,
+                                          bias=bias,
+                                          reverse=args.reverse,
+                                          time=time,
+                                          plot=plot_output is not None,
+                                          plot_color=args.plot_color,
+                                          eps=args.eps)
 
     # Always save the raw result arrays and a COLVAR-like text table; plotting is enabled by default.
-    _save_output(data_output, grid, delta_g, fields, state_a_bounds, state_b_bounds, bias_fields, args.time_field)
-    
+    _save_output(data_output, grid, delta_g, error, fields, state_a_bounds, state_b_bounds, bias_fields, args.time_field)
+
     # colvar output
-    coordinate_field = args.time_field if args.time_field is not None else "frame"
-    save_colvar_table(colvar_output, [grid, delta_g], [coordinate_field, "deltaG"])
-    
+    coordinate_field = args.time_field if args.time_field is not None else ("fraction" if len(args.input) > 1 else "frame")
+    _save_colvar_output(colvar_output, grid, delta_g, error, coordinate_field)
+
     # Record the effective options after defaults, YAML, and automatic bias-field detection.
     save_yaml_config(yaml_output, {"config": args.config,
                                    "input": args.input,
