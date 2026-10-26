@@ -10,6 +10,20 @@ import gc
 
 
 def sqrtmh(A: torch.Tensor):
+    """Compute the matrix square root of a symmetric positive semidefinite matrix.
+
+    The square root is computed via eigendecomposition. Eigenvalues below a numerical precision threshold are set to zero.
+
+    Parameters
+    ----------
+    A : torch.Tensor
+        Symmetric positive semidefinite matrix with shape ``(..., n, n)``.
+
+    Returns
+    -------
+    torch.Tensor
+        Matrix square root of ``A``, with the same shape as the input.
+    """
     L, Q = torch.linalg.eigh(A)
     zero = torch.zeros((), device=L.device, dtype=L.dtype)
     threshold = L.max(-1).values * L.size(-1) * torch.finfo(L.dtype).eps
@@ -17,51 +31,45 @@ def sqrtmh(A: torch.Tensor):
     return (Q * L.sqrt().unsqueeze(-2)) @ Q.mH
 
 def compute_covariances(input,output,weights,r,friction,n_dim=3,descriptors_derivatives : Union[SmartDerivatives, torch.Tensor] = None, ref_idx=None, softmax_postproc=True):
-    """Compute covariance of features and covariance of gradient matrices.
+    """Compute weighted feature and gradient covariance matrices.
 
-    The function evaluates two weighted matrices:
+    The function computes the weighted second-moment matrices of the learned representation and its gradients with respect to atomic positions.
 
-    - the covariance of the learned representation;
-    - the covariance of its gradients with respect to atomic positions.
-
-    If the model input is a descriptor rather than atomic coordinates,
-    ``descriptors_derivatives`` is used to map descriptor gradients back to
-    position gradients.
+    If the input consists of descriptors rather than atomic coordinates, ``descriptors_derivatives`` is used to transform descriptor gradients into coordinate gradients.
 
     Parameters
     ----------
     input : torch.Tensor or torch_geometric.data.Batch
-        Model input. Can be atomic positions, descriptors, or graph data.
+        Model input, containing atomic coordinates, descriptors, or graph data.
     output : torch.Tensor
-        Model output with shape ``(n_samples, r)``.
+        Learned representation with shape ``(n_samples, r)``.
     weights : torch.Tensor
         Statistical weights associated with each sample.
     r : int
-        Number of learned representation components.
+        Number of representation components.
     friction : torch.Tensor
-        Langevin friction-related prefactor used to weight position
-        gradients.
+        Per-atom diffusion prefactors used to weight coordinate gradients.
     n_dim : int, default=3
         Number of spatial dimensions.
     descriptors_derivatives : SmartDerivatives or torch.Tensor, optional
-        Descriptor derivatives with respect to atomic positions. Required
-        when ``input`` contains descriptors instead of positions.
+        Derivatives of descriptors with respect to atomic positions.
     ref_idx : torch.Tensor, optional
-        Reference indices mapping the batch entries to the original dataset.
-        Required when using ``SmartDerivatives``.
+        Reference indices mapping batch entries to the original dataset. Required when using ``SmartDerivatives``.
+    softmax_postproc : bool, default=True
+        Whether to append a constant basis function to the representation.
 
     Returns
     -------
     cov_X : torch.Tensor
-        Weighted covariance matrix of the augmented representation, with
-        shape ``(r + 1, r + 1)``.
+        Weighted feature second-moment matrix with shape ``(n_basis, n_basis)``.
     dcov_X : torch.Tensor
-        Weighted gradient covariance matrix, with shape ``(r + 1, r + 1)``.
+        Weighted gradient covariance matrix with shape ``(n_basis, n_basis)``.
 
     Notes
     -----
-    A constant column is appended internally to ``output`` before covariance
-    computation.
+    When ``softmax_postproc=True``, a constant basis function is appended, giving ``n_basis = r + 1``. Otherwise, ``n_basis = r``.
+
+    The returned matrices are weighted sums and are not normalized by the total number of samples.
     """
     if isinstance(input, torch_geometric.data.batch.Batch):
         _is_graph_data = True
@@ -155,65 +163,59 @@ def compute_eigenfunctions(dataloader : Union[DictLoader, torch_geometric.loader
                            is_graph=False,
                            cell=None
                            ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Compute generator eigenfunctions from a learned representation.
+    r"""Compute generator eigenfunctions from a learned representation.
 
-    The function estimates the covariance and gradient covariance matrices of
-    the learned representation, constructs the shifted generator-resolvent
-    problem, and solves the resulting generalized eigenvalue problem.
+    The function estimates weighted covariance and gradient covariance matrices and solves the corresponding generalized eigenvalue problem.
 
-    The returned eigenvalues correspond to the infinitesimal generator, not
-    directly to the resolvent. If ``mu`` is a resolvent eigenvalue, the
-    generator eigenvalue is computed as:
+    The returned eigenvalues correspond to the infinitesimal generator, rather than the resolvent. Given a resolvent eigenvalue ``mu``, the generator eigenvalue is computed as:
 
     .. math::
 
-        \\lambda = \\eta \\left(1 - \\frac{1}{\\mu}\\right)
+        \lambda = \eta \left(1 - \frac{1}{\mu}\right)
 
     Parameters
     ----------
-    dataset : DictDataset
-        Dataset containing ``"data"`` and ``"weights"``. For graph models,
-        the dataset must provide graph inputs through ``get_graph_inputs``.
-    feature_method : 
-        Method to compute the features, usually the forward_nn of a DeepGenerator class
+    dataloader : DictLoader or torch_geometric.loader.DataLoader
+        Dataloader providing input configurations and statistical weights. For non-graph models, batches must contain ``"data"`` and ``"weights"``.
+    feature_method : callable
+        Function used to compute the learned representation from the input.
     r : int
-        Number of learned representation components.
+        Number of representation components.
     eta : float
         Resolvent shift parameter.
     friction : torch.Tensor
-        Langevin friction-related prefactor used to weight gradients.
+        Per-atom diffusion prefactors used to weight coordinate gradients.
     tikhonov_reg : float, default=1e-4
-        Regularization parameter kept for API compatibility. Currently the
-        implementation uses a pseudo-inverse of the matrix square root.
+        Tikhonov regularization strength added to the shifted covariance matrix before solving the eigenvalue problem.
     descriptors_derivatives : SmartDerivatives or torch.Tensor, optional
-        Descriptor derivatives with respect to atomic positions.
+        Derivatives of descriptors with respect to atomic positions.
     n_dim : int, default=3
         Number of spatial dimensions.
-    batch_size : int, optional
-        Batch size used to estimate covariances. Defaults to the full dataset.
-    soft_max_postproc : bool, default=True
-        Whether to apply softmax to the model output before covariance
-        estimation.
+    softmax_postproc : bool, default=True
+        Whether to apply softmax to the learned representation and append a constant basis function.
     is_graph : bool, default=False
-        Whether the dataset contains graph samples.
+        Whether the input data consists of molecular graphs.
+    cell : torch.Tensor, optional
+        Simulation cell passed to the feature method when provided.
 
     Returns
     -------
     eigenfunctions : torch.Tensor
-        Eigenfunctions evaluated on the dataset.
+        Eigenfunctions evaluated on the dataset, with shape ``(n_samples, n_modes)``.
     evals : torch.Tensor
-        Generator eigenvalues sorted in descending order.
+        Generator eigenvalues, with shape ``(n_modes,)``.
     evecs : torch.Tensor
-        Eigenvectors mapping the augmented learned representation to
-        eigenfunctions.
+        Eigenvectors mapping the representation to eigenfunctions, with shape ``(n_basis, n_modes)``.
     output : torch.Tensor
-        Augmented model output used to compute the eigenfunctions.
+        Representation used for eigenfunction computation, with shape ``(n_samples, n_basis)``.
 
     Notes
     -----
-    A constant basis function is appended internally to the learned
-    representation. The eigenvectors therefore have dimension ``r + 1`` in
-    the augmented basis.
+    When ``softmax_postproc=True``, a constant basis function is appended, giving ``n_basis = r + 1``. Otherwise, ``n_basis = r``.
+
+    The number of returned modes may be smaller than the number of basis functions due to numerical filtering.
+
+    The Tikhonov regularization is applied to the shifted covariance matrix before computing its inverse square root.
     """
 
     # ------------------------ SETUP ------------------------
@@ -323,36 +325,37 @@ def forecast_observable_evolution(eigenfunctions: torch.Tensor,
                               weights: torch.Tensor,
                               reg_first_mode: bool = True,
                               ) -> torch.Tensor:
-    """
-    Computes the time evolution of an observable in a dynamical system from the learned eigenfunctions.
+    """Forecast the time evolution of an observable from generator eigenfunctions.
 
-    
+    The function projects an initial-state distribution and an observable onto the learned eigenfunctions and propagates them in time using the corresponding generator eigenvalues.
 
-    Parameters:
-    -----------
-    eigenfunctions : torch.Tensor, shape (N, r)
-        The eigenfunctions evaluated at each sample point, where N is the number of samples
-        and r is the number of eigenfunctions.
-    eigenvalues : torch.Tensor, shape (r,)
-        The eigenvalues associated with the eigenfunctions.
-    times : torch.Tensor, shape (n_times,)
-        A 1D tensor containing the time points at which to evaluate the occupation probabilities.
-    observable : torch.Tensor, shape (N,d)
-        The observable you want to compute the time evolution of
-    initial_state : torch.Tensor, shape (N,)
-        A tensor assigning each sample point a value for the initial state (0 this frame does not correspond to the initial state, 1 this frame does).
-    weights : torch.Tensor, shape (N,)
-        Biasing weights
-.
-    reg_first_mode : bool
-        Whether to regularize the first mode to have eigenfunction equal to 1 and eigenvalue equal to 0 to stabilize the calculation, by default True. 
+    Parameters
+    ----------
+    eigenfunctions : torch.Tensor
+        Eigenfunctions evaluated at each sample, with shape ``(n_samples, n_modes)``.
+    eigenvalues : torch.Tensor
+        Generator eigenvalues with shape ``(n_modes,)``.
+    times : torch.Tensor
+        Time points at which to evaluate the observable, with shape ``(n_times,)``.
+    observable : torch.Tensor
+        Observable values at each sample, with shape ``(n_samples, d)``.
+    initial_state : torch.Tensor
+        Initial-state indicator or weighting function, with shape ``(n_samples,)``.
+    weights : torch.Tensor
+        Statistical or reweighting weights associated with each sample.
+    reg_first_mode : bool, default=True
+        Whether to enforce a constant first eigenfunction with eigenvalue zero to stabilize the calculation.
 
-    Returns:
-    --------
-    observable_time : torch.Tensor, shape (n_states, n_states, n_times)
-        A tensor where `observable_time[t]` represents the evolution of the observable
-         at time `times[t]`.
+    Returns
+    -------
+    observable_time : torch.Tensor
+        Time evolution of the observable, with shape ``(n_times, d)``.
 
+    Notes
+    -----
+    When ``reg_first_mode=True``, the first eigenfunction is set to one and its eigenvalue is set to zero. These operations modify the input tensors ``eigenfunctions`` and ``eigenvalues`` in place.
+
+    When the observable consists of state indicator functions, the result can be interpreted as the time evolution of state occupation probabilities for the specified initial distribution.
     """
     if reg_first_mode:
         eigenfunctions[:, 0] = 1
@@ -377,4 +380,3 @@ def forecast_observable_evolution(eigenfunctions: torch.Tensor,
     observable_time = torch.einsum("i, id,ti->td", initial_state_on_basis, observable_on_basis, time_evolution.real)  
 
     return observable_time  # Shape: (n_states, n_states, n_times)
-

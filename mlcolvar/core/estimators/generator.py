@@ -1,4 +1,4 @@
-"""Time-lagged independent component analysis"""
+"""Estimators for the infinitesimal generator"""
 
 __all__ = ["Generator"]
 
@@ -14,13 +14,19 @@ from mlcolvar.core.estimators.utils_generator import compute_eigenfunctions
 
 
 class Generator(Estimator):
-    """
-    Estimator for eigenfunctions of the infinitesimal generator.
-    """
+    """Estimator for eigenfunctions of the infinitesimal generator."""
 
     def __init__(self, in_features, out_features=None, feature_method=None):
-        """
-        Initialize a generator object.
+        """Initialize the generator estimator.
+
+        Parameters
+        ----------
+        in_features : int
+            Number of input features in the learned representation.
+        out_features : int, optional
+            Number of representation components used for eigenfunction computation. Defaults to ``in_features``.
+        feature_method : callable, optional
+            Function mapping model inputs to the learned representation. If None, the identity mapping is used.
         """
         super().__init__()
 
@@ -44,6 +50,7 @@ class Generator(Estimator):
     
     def _forward_dummy(self,x):
         return x
+    
     def extra_repr(self) -> str:
         repr = f"in_features={self.in_features}, out_features={self.out_features}"
         return repr
@@ -61,37 +68,47 @@ class Generator(Estimator):
                 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Compute generator eigenfunctions from the learned representation.
 
-        If eigenvectors have already been computed and ``recompute=False``, this
-        method reuses the cached eigenvectors and eigenvalues and only evaluates the
-        current model on ``dataset``.
+        The method estimates weighted covariance and gradient covariance matrices and solves the corresponding generalized eigenvalue problem. The computed eigenvalues and eigenvectors are stored in ``self.evals`` and ``self.evecs``, respectively.
 
         Parameters
         ----------
-        dataset : DictDataset
-            Dataset containing at least ``"data"`` and ``"weights"``. If the model
-            uses runtime-cell preprocessing, the dataset must also contain ``"cell"``.
+        dataloader : DictLoader or torch_geometric.loader.DataLoader
+            Dataloader providing input configurations and statistical weights. For non-graph models, batches must contain ``"data"`` and ``"weights"``.
         eta : float, optional
-            Resolvent shift used for this computation. Defaults to the value used at
-            initialization.
+            Resolvent shift parameter. If None, the method attempts to use ``self.eta``.
         friction : torch.Tensor, optional
-            Friction prefactor used for this computation. Defaults to the value used
-            at initialization.
+            Per-atom diffusion prefactors used to weight coordinate gradients. If None, the method attempts to use ``self.friction``.
         tikhonov_reg : float, default=1e-4
-            Tikhonov regularization parameter used when solving the linear problem.
+            Tikhonov regularization strength added to the shifted covariance matrix before solving the eigenvalue problem.
+        is_graph : bool, default=False
+            Whether the input data consists of molecular graphs.
         descriptors_derivatives : SmartDerivatives or torch.Tensor, optional
-            Descriptor derivatives used to compute gradients efficiently.
-        batch_size : int, default=100
-            Batch size used during eigenfunction computation.
+            Derivatives of descriptors with respect to atomic positions.
+        n_dim : int, default=3
+            Number of spatial dimensions.
+        softmax_postproc : bool, default=True
+            Whether to apply softmax to the learned representation and append a constant basis function.
+        cell : torch.Tensor, optional
+            Simulation cell passed to the feature method when provided.
 
         Returns
         -------
         eigenfunctions : torch.Tensor
-            Eigenfunctions evaluated on the dataset, with shape ``(n_samples, r)``.
+            Eigenfunctions evaluated on the dataset, with shape ``(n_samples, n_modes)``.
         evals : torch.Tensor
-            Generator eigenvalues, with shape ``(r,)``.
+            Generator eigenvalues, with shape ``(n_modes,)``.
         evecs : torch.Tensor
-            Eigenvectors mapping the learned representation to eigenfunctions, with
-            shape ``(r, r)``.
+            Eigenvectors mapping the learned representation to eigenfunctions, with shape ``(n_basis, n_modes)``.
+        output : torch.Tensor
+            Representation used for eigenfunction computation, with shape ``(n_samples, n_basis)``.
+
+        Notes
+        -----
+        When ``softmax_postproc=True``, a constant basis function is appended, giving ``n_basis = out_features + 1``. Otherwise, ``n_basis = out_features``.
+
+        The number of returned modes may be smaller than the number of basis functions due to numerical filtering.
+
+        The current implementation requires ``eta`` and ``friction`` to be provided unless the corresponding estimator attributes exist.
         """
         if friction is None:
             friction = self.friction
@@ -118,18 +135,21 @@ class Generator(Estimator):
         return eigenfunctions, evals, evecs, output
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Compute linear combination with saved eigenvectors
+        """Project input features onto the learned eigenfunctions.
 
         Parameters
         ----------
-        x: torch.Tensor
-            input
+        x : torch.Tensor
+            Input representation with shape ``(n_samples, n_basis)``.
 
         Returns
         -------
-        out : torch.Tensor
-            output
+        torch.Tensor
+            Projected eigenfunctions with shape ``(n_samples, n_modes)``.
+
+        Notes
+        -----
+        The eigenvectors must first be computed using ``compute()``.
         """
 
         return torch.matmul(x, self.evecs)
