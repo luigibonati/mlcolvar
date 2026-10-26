@@ -1,10 +1,8 @@
 
 from collections.abc import Sequence
-from itertools import chain
 from typing import Any
 
 import torch
-from torch import nn
 
 __all__ = [
     "as_int",
@@ -40,14 +38,6 @@ def as_positive_int(value: Any, name: str) -> int:
     if value <= 0:
         raise ValueError(f"`{name}` must be positive. Found {value}.")
     return value
-
-
-def module_reference_tensor(module: nn.Module) -> torch.Tensor:
-    """Return a scalar tensor matching the module dtype and device."""
-    for tensor in chain(module.parameters(), module.buffers()):
-        if tensor.is_floating_point() or tensor.is_complex():
-            return tensor.new_empty(())
-    return torch.empty(())
 
 
 def _as_atomic_number_list(

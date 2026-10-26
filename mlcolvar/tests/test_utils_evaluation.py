@@ -1,8 +1,9 @@
+
 import torch
 from torch import nn
 
 from mlcolvar.data import DictDataset
-from mlcolvar.representation import evaluate_dataset
+from mlcolvar.utils.evaluation import evaluate_dataset
 
 
 def test_evaluate_dataset():

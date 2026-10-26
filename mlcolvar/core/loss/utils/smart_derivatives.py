@@ -2,8 +2,11 @@ import torch
 import gc
 import numpy as np
 import inspect
+from torch import nn
+from torch_geometric.loader import DataLoader as GraphDataLoader
 from mlcolvar.utils._code import scatter_sum
-from mlcolvar.data import DictDataset
+from mlcolvar.data import DictDataset, DictLoader
+from mlcolvar.utils.evaluation import evaluate_dataset, module_reference_tensor
 from mlcolvar.core.transform import Transform
 from mlcolvar.core.transform.descriptors.utils import sanitize_positions_shape, resolve_cell
 
@@ -58,6 +61,7 @@ class SmartDerivatives(torch.nn.Module):
 
         # auxiliary variable to check if elements have been loaded on computation device
         self._device_preload = False
+        self._dense_jacobian = None
 
     def setup(self,
               dataset: DictDataset, 
@@ -89,6 +93,9 @@ class SmartDerivatives(torch.nn.Module):
             Updated dataset with the computed descriptors as 'data'.
         """
         
+        self._dense_jacobian = None
+        self._device_preload = False
+        self._check_setup = False
         self.n_atoms = n_atoms
         # compute descriptors and their derivatives from original dataset
         pos, desc, d_desc_d_x = compute_descriptors_derivatives(dataset=dataset, 
@@ -108,7 +115,104 @@ class SmartDerivatives(torch.nn.Module):
         self._check_setup = True
 
         return smart_dataset
-       
+   
+
+    def setup_from_model(
+        self, dataset: DictDataset, model: nn.Module, *,
+        batch_size: int | None = None,
+        device: torch.device | str | None = None,
+        output_device: torch.device | str = "cpu",
+        separate_boundary_dataset: bool = True,
+        descriptor_derivatives: nn.Module | None = None,
+    ) -> DictDataset:
+        """Precompute model outputs and input Jacobians for committor training."""
+        if len(dataset) == 0:
+            raise ValueError("Dataset must not be empty.")
+
+        is_graph = dataset.metadata.get("data_type") == "graphs"
+        if is_graph and descriptor_derivatives is not None:
+            raise ValueError("Descriptor derivatives are not supported for graphs.")
+
+        if is_graph:
+            labels = torch.cat([g["graph_labels"].reshape(-1) for g in dataset["data_list"]]).cpu()
+            weights = torch.cat([g["weight"].reshape(-1) for g in dataset["data_list"]]).cpu()
+        else:
+            labels, weights = dataset["labels"].reshape(-1).cpu(), dataset["weights"].reshape(-1).cpu()
+
+        if len(labels) != len(dataset) or len(weights) != len(dataset):
+            raise ValueError("Expected one label and weight per sample.")
+        if descriptor_derivatives is not None and "ref_idx" not in dataset.keys:
+            raise KeyError("`ref_idx` is required for descriptor derivatives.")
+
+        mask = labels > 1 if separate_boundary_dataset else torch.ones_like(labels, dtype=torch.bool)
+        if not mask.any():
+            raise ValueError("No variational samples available.")
+
+        batch_size = (256 if is_graph else 1024) if batch_size is None else batch_size
+        if batch_size <= 0:
+            raise ValueError("`batch_size` must be positive.")
+
+        self._dense_jacobian = None
+        self._check_setup = False
+        features = evaluate_dataset(model, dataset, batch_size=batch_size, device=device, output_device=output_device)
+        loader = (GraphDataLoader if is_graph else DictLoader)(dataset[mask], batch_size=batch_size, shuffle=False)
+
+        original_device = module_reference_tensor(model).device
+        training = model.training
+        device = original_device if device is None else torch.device(device)
+        jacobians, n_atoms_ref = [], None
+
+        try:
+            model.to(device).eval()
+            with torch.enable_grad():
+                for batch in loader:
+                    data = batch["data_list" if is_graph else "data"].to(device)
+                    n = data.num_graphs if is_graph else len(data)
+
+                    if is_graph:
+                        counts = data.ptr[1:] - data.ptr[:-1]
+                        n_atoms = int(counts[0])
+                        if not torch.all(counts == n_atoms) or (n_atoms_ref is not None and n_atoms != n_atoms_ref):
+                            raise ValueError("Graphs must have equal atom counts.")
+                        n_atoms_ref = n_atoms
+                        x = data.positions.detach().requires_grad_(True)
+                        data.positions = x
+                        output = model(data)
+                    else:
+                        x = data.detach().requires_grad_(True)
+                        cell = batch.get("cell")
+                        output = model(x, cell=cell.to(device)) if cell is not None else model(x)
+
+                    if not isinstance(output, torch.Tensor) or output.ndim == 0 or output.shape[0] != n:
+                        raise ValueError("Model must return one tensor row per sample.")
+
+                    output = output.reshape(n, -1)
+                    grads = [
+                        torch.autograd.grad(output[:, i].sum(), x, retain_graph=i < output.shape[1] - 1)[0].reshape(n, -1)
+                        for i in range(output.shape[1])
+                    ]
+                    jacobians.append(torch.stack(grads, dim=-1).detach().to(self.setup_device))
+        finally:
+            model.to(original_device).train(training)
+
+        jacobian = torch.cat(jacobians)
+        if descriptor_derivatives is not None:
+            ref_idx = dataset["ref_idx"].reshape(-1)
+            ref_idx = ref_idx[mask.to(ref_idx.device)].to(jacobian.device)
+            if (ref_idx < 0).any():
+                raise ValueError("Source reference indices must be non-negative.")
+            jacobian = descriptor_derivatives(jacobian, ref_idx).reshape(len(jacobian), -1, features.shape[-1])
+
+        source = DictDataset({"data": features, "labels": labels, "weights": weights})
+        prepared = create_smart_dataset(features, source, separate_boundary_dataset)
+        for key in ("labels", "weights", "ref_idx"):
+            prepared[key] = prepared[key].to(output_device)
+
+        self._dense_jacobian = jacobian.detach()
+        self._check_setup = True
+        return prepared
+    
+
     def _setup_left(self, 
                     left_input : torch.Tensor, 
                     setup_device : str = 'cpu'):
@@ -134,7 +238,7 @@ class SmartDerivatives(torch.nn.Module):
                                                                                atom_ind=self.atom_ind, 
                                                                                dim_ind=self.dim_ind)
             self.scatter_indeces = self.scatter_indeces.long().detach()
-    
+
 
     def _create_nonzero_left(self, x):
         """Find the indeces of the non-zero elements of the left input (i.e., derivatives of descriptors wrt positions)
@@ -252,6 +356,9 @@ class SmartDerivatives(torch.nn.Module):
 
     def move_to_cpu(self):
         """Moves the tensors used in the forward pass onto the cpu."""
+        if self._dense_jacobian is not None:
+            self._dense_jacobian = self._dense_jacobian.cpu()
+            return
         for attr in ["left", "batch_ind", "desc_ind", "scatter_indeces", "batch_shift"]:
             print(f"[SmartDerivatives] Moving {attr} to cpu")
             self.__setattr__(attr, self.__dict__[attr].to(torch.device("cpu")))
@@ -273,6 +380,22 @@ class SmartDerivatives(torch.nn.Module):
         torch.Tensor
             Derivatives of the output wrt atomic positions, shape (N, n_atoms, n_dim, (n_out)))
         """
+        if self._dense_jacobian is not None:
+            if ref_idx is None:
+                ref_idx = torch.arange(x.size(0), device=x.device)
+            indices = ref_idx.long().to(self._dense_jacobian.device)
+            if torch.any(indices < 0) or torch.any(
+                indices >= len(self._dense_jacobian)
+            ):
+                raise IndexError("Jacobian reference index out of range.")
+            jacobian = self._dense_jacobian.index_select(0, indices)
+            jacobian = jacobian.to(device=x.device, dtype=x.dtype)
+            if x.ndim == 2:
+                return torch.bmm(jacobian, x.unsqueeze(-1)).squeeze(-1)
+            if x.ndim == 3:
+                return torch.bmm(jacobian, x)
+            raise ValueError("Expected gradients with shape (batch, features[, outputs]).")
+
         if not self._device_preload:
             self._preload_on_device(device=x.device)
 
@@ -530,10 +653,9 @@ def compute_descriptors_derivatives(dataset,
                 desc_not_var = descriptor_function(pos[~mask_var])
             else:
                 desc_not_var = descriptor_function(pos[~mask_var], cell=cell_not_var)
-            desc = torch.zeros((len(dataset), desc_not_var.shape[-1]))
-
-            desc[mask_var] = desc_var
-            desc[~mask_var] = desc_not_var
+        desc = desc_var.new_zeros((len(dataset), desc_var.shape[-1]))
+        desc[mask_var] = desc_var
+        desc[~mask_var] = desc_not_var.to(device=desc.device, dtype=desc.dtype)
     else:
         desc = desc_var
 

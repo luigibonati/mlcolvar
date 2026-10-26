@@ -1,12 +1,21 @@
-# TODO: Move this module to `mlcolvar.utils.evaluation`, as dataset evaluation is not specific to representations?
+
+from itertools import chain
+
 import torch
 from torch import nn
 from torch_geometric.loader import DataLoader as GraphDataLoader
 
 from mlcolvar.data import DictDataset, DictLoader
-from .._utils import module_reference_tensor
 
 __all__ = ["evaluate_dataset"]
+
+
+def module_reference_tensor(module: nn.Module) -> torch.Tensor:
+    """Return a scalar tensor matching the module dtype and device."""
+    for tensor in chain(module.parameters(), module.buffers()):
+        if tensor.is_floating_point() or tensor.is_complex():
+            return tensor.new_empty(())
+    return torch.empty(())
 
 
 def evaluate_dataset(
@@ -26,6 +35,9 @@ def evaluate_dataset(
     loader_cls = GraphDataLoader if is_graph else DictLoader
     if batch_size is None:
         batch_size = 256 if is_graph else 1024
+    if batch_size <= 0:
+        raise ValueError("`batch_size` must be positive.")
+
     loader = loader_cls(dataset, batch_size=batch_size, shuffle=False)
 
     outputs = []

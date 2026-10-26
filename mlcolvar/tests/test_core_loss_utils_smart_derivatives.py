@@ -1,5 +1,8 @@
 import lightning
 import torch
+from torch import nn
+from torch_geometric.data import Batch, Data
+from torch_geometric.nn import GCNConv, global_mean_pool
 
 from mlcolvar.core.loss.utils.smart_derivatives import (
     SmartDerivatives,
@@ -641,3 +644,107 @@ def test_train_with_smart_derivatives():
 
     # check that sensitivity works
     sensitivity_analysis(model=model, dataset=smart_dataset)
+
+
+def test_setup_from_model_vector():
+    torch.manual_seed(42)
+    model = nn.Sequential(nn.Linear(2, 4), nn.Tanh(), nn.Linear(4, 2))
+    head = nn.Linear(2, 1)
+    dataset = DictDataset({
+        "data": torch.randn(4, 2),
+        "labels": torch.tensor([0, 2, 1, 3]),
+        "weights": torch.ones(4),
+    })
+    derivatives = SmartDerivatives()
+    prepared = derivatives.setup_from_model(dataset, model, batch_size=2)
+
+    mask = dataset["labels"] > 1
+    torch.testing.assert_close(prepared["data"], model(dataset["data"]))
+    torch.testing.assert_close(
+        prepared["ref_idx"],
+        torch.tensor([-1, 0, -1, 1], dtype=prepared["ref_idx"].dtype),
+    )
+    assert model.training  # setup must restore the model state
+
+    features = prepared["data"][mask].detach().requires_grad_(True)
+    grad_h = torch.autograd.grad(head(features).sum(), features, create_graph=True)[0]
+    x = dataset["data"][mask].detach().requires_grad_(True)
+    expected = torch.autograd.grad(head(model(x)).sum(), x)[0]
+
+    order = torch.tensor([1, 0])  # Verify that ref_idx handles shuffled samples
+    actual = derivatives(grad_h[order], prepared["ref_idx"][mask][order])
+    torch.testing.assert_close(actual, expected[order])
+    actual.square().sum().backward()
+    assert head.weight.grad is not None
+
+
+def test_setup_from_model_graph():
+    torch.manual_seed(42)
+
+    class GraphCV(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.gnn = GCNConv(3, 2)
+
+        def forward(self, graph):
+            return global_mean_pool(
+                self.gnn(graph.positions, graph.edge_index), graph.batch
+            )
+
+    labels = torch.tensor([0, 2, 1, 3])
+    edge_index = torch.tensor([[0, 1, 1, 2], [1, 0, 2, 1]])
+    graphs = [
+        Data(positions=torch.randn(3, 3), edge_index=edge_index,
+             graph_labels=labels[i].reshape(1), weight=torch.ones(1), num_nodes=3)
+        for i in range(4)
+    ]
+    dataset = DictDataset({"data_list": graphs}, data_type="graphs")
+    model, head = GraphCV(), nn.Linear(2, 1)
+    derivatives = SmartDerivatives()
+    prepared = derivatives.setup_from_model(dataset, model, batch_size=2)
+
+    assert derivatives._dense_jacobian.shape == (2, 9, 2)
+    torch.testing.assert_close(
+        prepared["ref_idx"],
+        torch.tensor([-1, 0, -1, 1], dtype=prepared["ref_idx"].dtype),
+    )
+
+    features = prepared["data"][labels > 1].detach().requires_grad_(True)
+    grad_h = torch.autograd.grad(head(features).sum(), features)[0]
+    actual = derivatives(grad_h, prepared["ref_idx"][labels > 1])
+
+    graph = Batch.from_data_list([graphs[1], graphs[3]])
+    graph.positions = graph.positions.detach().requires_grad_(True)
+    expected = torch.autograd.grad(head(model(graph)).sum(), graph.positions)[0]
+    torch.testing.assert_close(actual, expected.reshape(2, -1), atol=1e-6, rtol=1e-5)
+
+
+def test_setup_from_model_with_smart_derivatives():
+    torch.manual_seed(42)
+    pos = torch.randn(4, 9, dtype=torch.float64)
+    labels = torch.tensor([0, 2, 1, 3])
+    dataset = DictDataset({"data": pos, "labels": labels, "weights": torch.ones(4)})
+    distances = PairwiseDistances(
+        n_atoms=3, PBC=True, cell=torch.tensor([10.0]), scaled_coords=False
+    ).double()
+
+    descriptor_derivatives = SmartDerivatives()
+    descriptor_dataset = descriptor_derivatives.setup(
+        dataset, distances, n_atoms=3, separate_boundary_dataset=True
+    )
+    model, head = nn.Linear(3, 2, bias=False).double(), nn.Linear(2, 1).double()
+    derivatives = SmartDerivatives()
+    prepared = derivatives.setup_from_model(
+        descriptor_dataset, model, descriptor_derivatives=descriptor_derivatives,
+        batch_size=2,
+    )
+
+    mask = labels > 1
+    assert derivatives._dense_jacobian.shape == (2, 9, 2)
+    features = prepared["data"][mask].detach().requires_grad_(True)
+    grad_h = torch.autograd.grad(head(features).sum(), features)[0]
+    actual = derivatives(grad_h, prepared["ref_idx"][mask])
+
+    x = pos[mask].detach().requires_grad_(True)
+    expected = torch.autograd.grad(head(model(distances(x))).sum(), x)[0]
+    torch.testing.assert_close(actual, expected.reshape(2, -1), atol=1e-6, rtol=1e-5)
