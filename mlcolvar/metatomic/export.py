@@ -1,10 +1,13 @@
 from collections.abc import Sequence
 from copy import deepcopy
 from pathlib import Path
+from typing import Optional
 
 import torch
 from torch import nn
 
+from mlcolvar.core.nn.graph import SchNetModel
+from mlcolvar.representation import MACERepresentation, MLColvarRepresentation
 from mlcolvar.representation._utils import _as_atomic_number_list, as_float, as_positive_int
 from mlcolvar.utils.evaluation import module_reference_tensor
 from ._compat import (
@@ -12,7 +15,6 @@ from ._compat import (
     ModelOutput, NeighborListOptions,
 )
 from .wrapper import _CVInferenceModel, _MetatomicCVWrapper
-from typing import Optional
 
 __all__ = ["create_metatomic_model", "export_metatomic_model"]
 
@@ -80,6 +82,39 @@ def _get_neighbor_options(
     if not short.full_list or not short.strict or (long is not None and (not long.full_list or not long.strict)):
         raise ValueError("The mlcolvar graph adapter requires strict, full neighbor lists.")
     return short, long
+
+
+def _message_passing_steps(network: nn.Module) -> int | None:
+    """Return the known message-passing depth; None for unknown architectures."""
+    if isinstance(network, MLColvarRepresentation):
+        network = network.encoder
+    if isinstance(network, SchNetModel):
+        return len(network.layers)
+    if isinstance(network, MACERepresentation):
+        return as_positive_int(network.model.num_interactions, "num_interactions")
+    return None
+
+
+def _resolve_interaction_range(
+    network: nn.Module, interaction_range: float | None,
+    short_cutoff: float, long_cutoff: float | None, buffer: float,
+) -> float:
+    """Calculate a conservative spatial dependency range for Metatomic."""
+    cutoff = max(short_cutoff, long_cutoff or 0.0)
+    minimum = max(cutoff, short_cutoff + buffer)
+    steps = _message_passing_steps(network)
+    if steps is not None:
+        minimum = max(minimum, steps * cutoff)
+    if interaction_range is None:
+        # Unknown architectures may involve non-local operations. Never silently
+        # advertise only a single neighbor-list cutoff as their receptive field.
+        return minimum if steps is not None else float("inf")
+    interaction_range = as_float(interaction_range, "interaction_range")
+    if not interaction_range >= minimum:
+        raise ValueError(
+            f"`interaction_range` must be at least {minimum:g} for this model."
+        )
+    return interaction_range
 
 
 def _prepare_network(network: nn.Module) -> nn.Module:
@@ -162,6 +197,8 @@ def create_metatomic_model(
     is recomputed from distances at every forward call using cutoff + buffer.
     ``subsystem_indices``/``subsystem_atomic_numbers`` define long-range endpoints.
     Indices are LOCAL to each System and require consistent atom ordering.
+    ``interaction_range`` is inferred for SchNet and MACE. For unknown models,
+    it defaults conservatively to infinity; provide it explicitly if known.
     """
     network = _network(model)
     if sample_kind is None:
@@ -212,12 +249,10 @@ def create_metatomic_model(
         raise ValueError("`buffer` must be non-negative.")
     out_features = as_positive_int(out_features, "out_features")
     atomic_types = _as_atomic_number_list(atomic_types, "atomic_types")
-    if interaction_range is None:
-        # This is a LOWER BOUND, not necessarily enough for multi-layer GNNs.
-        interaction_range = max(short_cutoff + buffer * (system_indices is not None), long_cutoff or 0.0)
-    interaction_range = as_float(interaction_range, "interaction_range")
-    if interaction_range < max(short_cutoff + buffer * (system_indices is not None), long_cutoff or 0.0):
-        raise ValueError("`interaction_range` must cover the requested neighbor lists.")
+    interaction_range = _resolve_interaction_range(
+        network, interaction_range, short_cutoff, long_cutoff,
+        buffer if system_indices is not None else 0.0,
+    )
     if length_unit is None:
         length_unit = _model_attribute(model, network, "length_unit") or "angstrom"
     if dtype is None:

@@ -10,7 +10,9 @@ pytest.importorskip("metatomic.torch")
 from metatensor.torch import Labels  # noqa: E402
 from metatomic.torch import ModelOutput, NeighborListOptions  # noqa: E402
 from mlcolvar.metatomic import create_metatomic_model, export_metatomic_model  # noqa: E402
-from mlcolvar.metatomic.export import _get_neighbor_options  # noqa: E402
+from mlcolvar.metatomic.export import _get_neighbor_options, _resolve_interaction_range  # noqa: E402
+from mlcolvar.core.nn.graph import SchNetModel  # noqa: E402
+from mlcolvar.representation import MACERepresentation, MLColvarRepresentation  # noqa: E402
 from mlcolvar.metatomic.wrapper import _CVInferenceModel, _MetatomicCVWrapper  # noqa: E402
 
 
@@ -314,3 +316,39 @@ def test_metatomic_dual_neighbor_export(tmp_path):
         subsystem_indices=[0, 1], supported_devices=["cpu"],
     ) == path
     assert path.exists()
+
+
+def test_interaction_range_inference():
+    schnet = SchNetModel(
+        n_out=2, dataset_for_initialization=None, cutoff=5.0,
+        atomic_numbers=[1, 8], n_layers=2,
+    )
+    assert _resolve_interaction_range(schnet, None, 5.0, None, 0.0) == 10.0
+    assert _resolve_interaction_range(schnet, None, 5.0, 8.0, 0.0) == 16.0
+
+    class PretrainedCV(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.nn = schnet
+
+    representation = MLColvarRepresentation(PretrainedCV())
+    assert _resolve_interaction_range(representation, None, 5.0, 8.0, 0.0) == 16.0
+
+    class PretrainedMACE(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.register_buffer("atomic_numbers", torch.tensor([1, 8]))
+            self.register_buffer("r_max", torch.tensor(5.0))
+            self.register_buffer("num_interactions", torch.tensor(3))
+
+    mace = MACERepresentation(
+        PretrainedMACE(), num_layers=2, num_features=2, l_max=1,
+    )
+    assert _resolve_interaction_range(mace, None, 5.0, None, 0.0) == 15.0
+
+    with pytest.raises(ValueError, match="interaction_range"):
+        _resolve_interaction_range(schnet, 8.0, 5.0, None, 0.0)
+
+    # Unknown networks are conservatively treated as having non-local reach.
+    assert _resolve_interaction_range(DummyNetwork(), None, 5.0, None, 0.0) == float("inf")
+    assert _resolve_interaction_range(DummyNetwork(), 5.0, 5.0, None, 0.0) == 5.0
