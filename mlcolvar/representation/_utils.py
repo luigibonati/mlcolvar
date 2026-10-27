@@ -4,13 +4,7 @@ from typing import Any
 
 import torch
 
-__all__ = [
-    "as_int",
-    "as_float",
-    "as_positive_int",
-    "module_reference_tensor",
-    "align_node_attrs",
-]
+__all__ = ["as_int", "as_float", "as_positive_int", "align_node_attrs"]
 
 
 def _scalar(value: Any, name: str):

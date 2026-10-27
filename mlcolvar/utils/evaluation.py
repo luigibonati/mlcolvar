@@ -35,7 +35,7 @@ def evaluate_dataset(
         raise ValueError("Dataset must not be empty.")
 
     is_graph = dataset.metadata.get("data_type") == "graphs"
-    batch_size = batch_size or (256 if is_graph else 1024)
+    batch_size = (256 if is_graph else 1024) if batch_size is None else batch_size
     if batch_size <= 0:
         raise ValueError("`batch_size` must be positive.")
 

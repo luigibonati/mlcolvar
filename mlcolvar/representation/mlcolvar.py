@@ -23,7 +23,6 @@ class MLColvarRepresentation(Representation):
     freeze : bool, default=True
         Whether to freeze the pretrained modules.
     """
-
     def __init__(self, model: nn.Module, *, freeze: bool = True) -> None:
         if not isinstance(model, nn.Module):
             raise TypeError("`model` must be a torch.nn.Module.")
@@ -62,6 +61,9 @@ class MLColvarRepresentation(Representation):
         self.encoder = encoder
         self.preprocessing = getattr(model, "preprocessing", None)
         self.norm_in = getattr(model, "norm_in", None)
+        
+        if self.input_kind == "graph" and self.norm_in is not None:
+            raise ValueError("Input normalization is not supported for graph inputs.")
 
         for module in (self.encoder, self.preprocessing, self.norm_in):
             if isinstance(module, nn.Module):
@@ -73,9 +75,6 @@ class MLColvarRepresentation(Representation):
         cell: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Evaluate the pretrained latent representation."""
-        if self.input_kind == "graph" and self.norm_in is not None:
-            raise ValueError("Input normalization is not supported for graph inputs.")
-
         if self.preprocessing is not None:
             data = (
                 self.preprocessing(data, cell=cell)
