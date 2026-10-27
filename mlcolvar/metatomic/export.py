@@ -109,10 +109,7 @@ def _make_inference_model(
     neighbor_options = _get_neighbor_options(network, interaction_range)
 
     # Copy the inference components together to preserve shared parameters.
-    components = deepcopy(nn.ModuleList([
-        network,
-        _build_postprocessing(model, network),
-    ])).eval()
+    components = deepcopy(nn.ModuleList([network, _build_postprocessing(model, network)])).eval()
 
     return _CVInferenceModel(
         network=_prepare_network(components[0]),
@@ -128,6 +125,7 @@ def create_metatomic_model(
     atomic_types: Sequence[int] | None = None,
     interaction_range: float | None = None,
     *,
+    sample_kind: str | None = None,
     length_unit: str | None = None,
     dtype: str | None = None,
     supported_devices: Sequence[str] | None = None,
@@ -135,31 +133,30 @@ def create_metatomic_model(
     description: str = "Collective variable model exported from mlcolvar.",
     authors: Sequence[str] | None = None,
 ) -> MetatomicAtomisticModel:
-    """Create an exportable Metatomic model."""
+    """Create an exportable Metatomic model with system- or atom-level features."""
     network = _network(model)
+
+    if sample_kind is None:
+        sample_kind = getattr(model, "output_kind", "system")
+    if sample_kind not in {"system", "atom"}:
+        raise ValueError("`sample_kind` must be 'system' or 'atom'.")
 
     if out_features is None:
         out_features = getattr(model, "n_cvs", None)
         if out_features is None:
             out_features = getattr(network, "out_features", None)
         if out_features is None:
-            raise ValueError(
-                "Could not infer `out_features`; provide it explicitly."
-            )
+            raise ValueError("Could not infer `out_features`; provide it explicitly.")
 
     if atomic_types is None:
         atomic_types = _model_attribute(model, network, "atomic_numbers")
         if atomic_types is None:
-            raise ValueError(
-                "Could not infer `atomic_types`; provide them explicitly."
-            )
+            raise ValueError("Could not infer `atomic_types`; provide them explicitly.")
 
     if interaction_range is None:
         interaction_range = _model_attribute(model, network, "cutoff")
         if interaction_range is None:
-            raise ValueError(
-                "Could not infer `interaction_range`; provide it explicitly."
-            )
+            raise ValueError("Could not infer `interaction_range`; provide it explicitly.")
 
     if length_unit is None:
         length_unit = _model_attribute(model, network, "length_unit") or "angstrom"
@@ -183,12 +180,8 @@ def create_metatomic_model(
     authors = () if authors is None else authors
 
     wrapper = _MetatomicCVWrapper(
-        model=_make_inference_model(
-            model,
-            atomic_types,
-            interaction_range,
-        ),
-        out_features=out_features,
+        model=_make_inference_model(model, atomic_types, interaction_range),
+        out_features=out_features, sample_kind=sample_kind,
     ).eval()
 
     return MetatomicAtomisticModel(
@@ -200,7 +193,7 @@ def create_metatomic_model(
         ),
         capabilities=ModelCapabilities(
             length_unit=length_unit,
-            outputs={"feature": ModelOutput(sample_kind="system")},
+            outputs={"feature": ModelOutput(sample_kind=sample_kind)},
             atomic_types=atomic_types,
             interaction_range=interaction_range,
             supported_devices=list(supported_devices),
@@ -216,6 +209,7 @@ def export_metatomic_model(
     atomic_types: Sequence[int] | None = None,
     interaction_range: float | None = None,
     *,
+    sample_kind: str | None = None,
     length_unit: str | None = None,
     dtype: str | None = None,
     supported_devices: Sequence[str] | None = None,
@@ -235,6 +229,7 @@ def export_metatomic_model(
         out_features=out_features,
         atomic_types=atomic_types,
         interaction_range=interaction_range,
+        sample_kind=sample_kind,
         length_unit=length_unit,
         dtype=dtype,
         supported_devices=supported_devices,
@@ -248,8 +243,5 @@ def export_metatomic_model(
     else:
         extensions = Path(collect_extensions)
         extensions.mkdir(parents=True, exist_ok=True)
-        metatomic_model.save(
-            str(path),
-            collect_extensions=str(extensions),
-        )
+        metatomic_model.save(str(path), collect_extensions=str(extensions))
     return path
