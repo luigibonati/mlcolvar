@@ -243,6 +243,9 @@ def committor_loss(x: torch.Tensor,
             raise ValueError ("atomic_masses must be None when using approximated variational principle (use_gradients_wrt_positions is False)")
         if descriptors_derivatives is not None:
             raise ValueError ("descriptors_derivatives must be None when using approximated variational principle (use_gradients_wrt_positions is False)")
+
+    if isinstance(descriptors_derivatives, torch.Tensor) and separate_boundary_dataset:
+        raise ValueError ("Descriptors derivatives via explicit tensor are not implemented with separate_boundary_dataset key! Either use SmartDerivatives or deactivate separate_boundary_dataset")
     
     if (z_threshold is not None and (z_regularization == 0 or z_threshold <= 0)) or (z_threshold is None and z_regularization != 0) or z_regularization < 0:
         raise ValueError(f"To apply the regularization on z space both z_threshold and z_regularization key must be positive. Found {z_threshold} and {z_regularization}!")
@@ -349,18 +352,10 @@ def committor_loss(x: torch.Tensor,
             gradient_positions = descriptors_derivatives(grad, ref_idx[mask_var]).view(x[mask_var].shape[0], -1)
         
         # --> If we directly pass the matrix d_desc/d_pos
-
-        elif use_gradients_wrt_positions and isinstance(descriptors_derivatives, torch.Tensor):
-            indices = ref_idx[mask_var].long().to(descriptors_derivatives.device)
-            jacobian = descriptors_derivatives[indices].to(device=grad.device, dtype=grad.dtype)
-            if jacobian.ndim == 3:
-                # Shape: (batch, coordinates, features)
-                gradient_positions = torch.bmm(jacobian, grad.unsqueeze(-1)).squeeze(-1)
-            elif jacobian.ndim == 4:
-                # Legacy shape: (batch, atoms, descriptors, dimensions)
-                gradient_positions = torch.einsum("bd,badx->bax", grad, jacobian).reshape(grad.shape[0], -1)
-            else:
-                raise ValueError("Expected a 3D or 4D Jacobian tensor.")
+        elif use_gradients_wrt_positions and isinstance(descriptors_derivatives, torch.Tensor): 
+            descriptors_derivatives = descriptors_derivatives.to(device)
+            gradient_positions = torch.einsum("bd,badx->bax", grad, descriptors_derivatives[ref_idx[mask_var]]).contiguous()
+            gradient_positions = gradient_positions.view(x[mask_var].shape[0], -1)
     else:
         # we get the square of grad(q) and we multiply by the weight
         gradient_positions = grad
