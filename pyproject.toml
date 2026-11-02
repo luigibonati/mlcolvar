@@ -36,7 +36,7 @@ dependencies = [
     "scipy",
     "KDEpy",
     "scikit-learn<1.8", 
-    "pydantic<2"
+    "pydantic"
 ]
 
 [project.urls]
