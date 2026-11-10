@@ -167,6 +167,26 @@ def compute_fes(
     nsamples = X.shape[0]
     dim = X.shape[1]
 
+    # Select the default backend based on dimensionality.
+    if not KDEPY_IS_INSTALLED and not SKLEARN_IS_INSTALLED:
+        raise NotImplementedError(
+            "compute_fes requires either KDEpy or scikit-learn."
+        )
+    if backend is None:
+        if dim == 1:
+            backend = "sklearn" if SKLEARN_IS_INSTALLED else "KDEpy"
+        else:
+            backend = "KDEpy" if KDEPY_IS_INSTALLED else "sklearn"
+    if backend == "sklearn":
+        if not SKLEARN_IS_INSTALLED:
+            raise ImportError("scikit-learn is not installed.")
+        from sklearn.neighbors import KernelDensity
+    elif backend == "KDEpy":
+        if not KDEPY_IS_INSTALLED:
+            raise ImportError("KDEpy is not installed.")
+    else:
+        raise ValueError("Invalid KDE backend.")
+
     # weights
     if weights is not None and bias is not None:
         raise ValueError("The weights and bias keywords cannot be defined together, use only one of them!")
